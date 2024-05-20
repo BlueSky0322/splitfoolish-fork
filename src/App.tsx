@@ -23,7 +23,6 @@ function App() {
         value={activeTab}
         onChange={setActiveTab}
       >
-        swagawgasg
         <Tabs.List>
           <Tabs.Tab
             value="0"
