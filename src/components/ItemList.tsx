@@ -9,25 +9,26 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconMinus, IconTrashX } from '@tabler/icons-react';
+import { IconEdit, IconMinus, IconTrashX } from '@tabler/icons-react';
 import { evaluate } from 'mathjs';
 import React, { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IItem } from '../interfaces/app-reducer';
+import { modals } from '@mantine/modals';
+import EditItemModal from './EditItemModal';
 
 const ItemList = () => {
+  const maxShownParticipants = 3;
   const { state, dispatch } = useContext(AppContext);
   const itemForm = useForm({
     mode: 'uncontrolled',
     initialValues: {
-      strategy: 'equally',
       participants: state.people.map((p) => p.name),
     },
   });
 
   useEffect(() => {
     itemForm.setValues({
-      strategy: 'equally',
       participants: state.people.map((p) => p.name),
     });
   }, [state]);
@@ -152,27 +153,44 @@ const ItemList = () => {
               <Table.Td className="hidden md:table-cell">
                 <span>
                   {i.participants
-                    .slice(0, 2)
+                    .slice(0, maxShownParticipants)
                     .map((p) => p.name)
                     .join(', ')}{' '}
-                  {i.participants.length > 2 ? (
+                  {i.participants.length > maxShownParticipants ? (
                     <Tooltip
                       label={i.participants
-                        .slice(2)
+                        .slice(maxShownParticipants)
                         .map((p) => p.name)
                         .join(', ')}
                     >
                       <span className="text-blue-900 underline">
-                        and {i.participants.length - 2} others
+                        and {i.participants.length - maxShownParticipants} others
                       </span>
                     </Tooltip>
                   ) : null}
                 </span>
               </Table.Td>
               <Table.Td>
-                <ActionIcon color="red">
-                  <IconMinus onClick={() => handleItemRemove(ix)} />
-                </ActionIcon>
+                <div className="flex gap-2">
+                  <ActionIcon>
+                    <IconEdit
+                      onClick={() => {
+                        modals.open({
+                          title: 'Edit Item',
+                          children: (
+                            <EditItemModal
+                              item={i}
+                              itemIndex={ix}
+                            />
+                          ),
+                        });
+                      }}
+                    />
+                  </ActionIcon>
+                  <ActionIcon color="red">
+                    <IconMinus onClick={() => handleItemRemove(ix)} />
+                  </ActionIcon>
+                </div>
               </Table.Td>
             </Table.Tr>
           ))}

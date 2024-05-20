@@ -502,10 +502,10 @@
   resolved "https://registry.yarnpkg.com/@mantine/hooks/-/hooks-7.9.1.tgz#9946432d017d56afe28f3980d1c64af0153a2128"
   integrity sha512-nb2Ar+2HfGxLjGZgObapeUeqcQsUWJ+rvj4X2KNTUy3+YpvLIMD3CqREowWHF7/5OTGh4BCyBqQNZ9JFpnMeHQ==
 
-"@mantine/modals@^7.9.1":
-  version "7.9.1"
-  resolved "https://registry.yarnpkg.com/@mantine/modals/-/modals-7.9.1.tgz#1a36193e8c76b6e53c9bebdddb14bfc36e028f7e"
-  integrity sha512-HvDJ3XLnNuYpFFuJ3SNPbRnM2kATKaIFmgsN9zt8ZkYD7GgvfYXyZ+jctwNBaR6atAbWyFboDklJ4AIc+0w8aw==
+"@mantine/modals@^7.9.2":
+  version "7.9.2"
+  resolved "https://registry.yarnpkg.com/@mantine/modals/-/modals-7.9.2.tgz#c675e6066373c59d5d65d227b33ad10990084ee3"
+  integrity sha512-ViXo6wCsvxYz0XEKUP2wQZwPgUkTGqqeyqS11axhzZbDmbxvXC2uUX9jl1mlDNj83b/ynVqjKms5mW2p81+AuA==
 
 "@mantine/notifications@^7.9.2":
   version "7.9.2"

@@ -52,7 +52,12 @@ export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draf
       draft.owings = calculateOwings(draft);
       saveToLocalStorage(draft);
       break;
+    case 'UPDATE_ITEM':
+      draft.items.splice(action.payload.oldItemIndex, 1, action.payload.newItem);
 
+      draft.owings = calculateOwings(draft);
+      saveToLocalStorage(draft);
+      break;
     case 'REMOVE_ITEM':
       draft.items.splice(action.payload, 1);
 

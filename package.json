@@ -15,7 +15,7 @@
     "@mantine/core": "^7.9.1",
     "@mantine/form": "^7.9.1",
     "@mantine/hooks": "^7.9.1",
-    "@mantine/modals": "^7.9.1",
+    "@mantine/modals": "^7.9.2",
     "@mantine/notifications": "^7.9.2",
     "@tabler/icons-react": "^3.4.0",
     "immer": "^10.1.1",

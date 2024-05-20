@@ -18,7 +18,7 @@ function App() {
   }, []);
 
   return (
-    <div className="max-w-screen-sm m-auto bg-white min-h-screen">
+    <div className="max-w-screen-md m-auto bg-white min-h-screen">
       <Tabs
         value={activeTab}
         onChange={setActiveTab}

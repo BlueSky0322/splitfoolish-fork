@@ -9,6 +9,7 @@ import ErrorBoundary from './components/ErrorBoundary.tsx';
 import { AppContextProvider } from './context/AppContext/AppContext.Provider.tsx';
 import { appReducer } from './context/AppContext/app-reducer.ts';
 import './index.css';
+import { ModalsProvider } from '@mantine/modals';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -19,7 +20,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       >
         <MantineProvider>
           <Notifications />
-          <App />
+          <ModalsProvider>
+            <App />
+          </ModalsProvider>
         </MantineProvider>
       </AppContextProvider>
     </ErrorBoundary>
