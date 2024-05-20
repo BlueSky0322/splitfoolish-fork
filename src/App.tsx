@@ -40,7 +40,7 @@ function App() {
             value="2"
             leftSection={<IconArrowsSplit />}
           >
-            Split
+            Settlements
           </Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel
