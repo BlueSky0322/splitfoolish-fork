@@ -43,27 +43,29 @@ const ShareModal = ({ owings }: ShareModalProps) => {
   }, []);
 
   return (
-    <div
-      className="p-4 min-w-[550px]"
-      ref={shareRef}
-    >
-      <Title
-        className="mb-4"
-        order={2}
+    <div className="overflow-auto">
+      <div
+        ref={shareRef}
+        className="p-4 min-w-[550px]"
       >
-        Items
-      </Title>
-      <ItemTable
-        showActions={false}
-        alwaysShowParticipants={true}
-      />
-      <Title
-        className="mb-4 mt-6"
-        order={2}
-      >
-        Split
-      </Title>
-      <SplitTable owings={owings} />
+        <Title
+          className="mb-4"
+          order={2}
+        >
+          Items
+        </Title>
+        <ItemTable
+          showActions={false}
+          alwaysShowParticipants={true}
+        />
+        <Title
+          className="mb-4 mt-6"
+          order={2}
+        >
+          Split
+        </Title>
+        <SplitTable owings={owings} />
+      </div>
     </div>
   );
 };
