@@ -10,12 +10,11 @@ import ErrorBoundary from './components/ErrorBoundary.tsx';
 import { AppContextProvider } from './context/AppContext/AppContext.tsx';
 import { appReducer } from './context/AppContext/app-reducer.ts';
 import './index.css';
-import { IDBContextProvider } from './context/IDBContext/IDBContext.tsx';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary fallback={<p>Something went wrong</p>}>
-      <IDBContextProvider
+      {/* <IDBContextProvider
         dbName="splitfoolish"
         schema={{
           people: { keyPath: 'id', autoIncrement: true },
@@ -31,19 +30,19 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             { keyPath: 'cost', name: 'cost', options: { unique: false } },
           ],
         }}
+      > */}
+      <AppContextProvider
+        reducer={appReducer}
+        initialState={{ items: [], people: [], owings: [] }}
       >
-        <AppContextProvider
-          reducer={appReducer}
-          initialState={{ items: [], people: [], owings: [] }}
-        >
-          <MantineProvider>
-            <Notifications />
-            <ModalsProvider>
-              <App />
-            </ModalsProvider>
-          </MantineProvider>
-        </AppContextProvider>
-      </IDBContextProvider>
+        <MantineProvider>
+          <Notifications />
+          <ModalsProvider>
+            <App />
+          </ModalsProvider>
+        </MantineProvider>
+      </AppContextProvider>
+      {/* </IDBContextProvider> */}
     </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -1,13 +1,16 @@
-import { Button, List, Select, Table, Title } from '@mantine/core';
+import { ActionIcon, Button, List, Select, Title, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { IconCopy } from '@tabler/icons-react';
+import { IconCopy, IconShare } from '@tabler/icons-react';
 import { produce } from 'immer';
 import _ from 'lodash';
 import { FormEvent, useContext, useEffect } from 'react';
 import { useImmer } from 'use-immer';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IOwing } from '../interfaces/app-reducer';
+import ShareModal from './ShareModal';
+import SplitTable from './SplitTable';
 
 const SplitPage = () => {
   const { state } = useContext(AppContext);
@@ -33,7 +36,7 @@ const SplitPage = () => {
 
           const duplicates = localOwing.filter(
             (o) =>
-              o !== owing && o.payee.name === owing.payee.name && o.payer.name === owing.payer.name
+              o !== owing && o.payee.name === owing.payee.name && o.payer.name === owing.payer.name,
           );
 
           settledOwings.push(...duplicates);
@@ -60,7 +63,7 @@ const SplitPage = () => {
           settledOwings.push(owing);
 
           const counters = localOwing.filter(
-            (o) => o.payee.name === owing.payer.name && o.payer.name === owing.payee.name
+            (o) => o.payee.name === owing.payer.name && o.payer.name === owing.payee.name,
           );
 
           settledOwings.push(...counters);
@@ -94,7 +97,7 @@ const SplitPage = () => {
 
   const handleSinglePayerSubmit = (
     values: Record<string, any>,
-    _e: FormEvent<HTMLFormElement> | undefined
+    _e: FormEvent<HTMLFormElement> | undefined,
   ) => {
     const distributor = values['person'];
     if (distributor === null) {
@@ -152,53 +155,27 @@ const SplitPage = () => {
       </form>
 
       <div className="my-4">
-        <Button
-          onClick={() => copyCsv()}
-          leftSection={<IconCopy size="14" />}
-          size="xs"
-        >
-          Copy CSV
-        </Button>
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Payer</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th>Payee</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {owings.length === 0 ? (
-              <Table.Tr>
-                <Table.Td
-                  className="text-center text-gray-400"
-                  colSpan={5}
-                >
-                  There are no items to show.
-                </Table.Td>
-              </Table.Tr>
-            ) : null}
-            {owings.map((o, ix) => (
-              <Table.Tr key={ix}>
-                <Table.Td>{o.payer.name}</Table.Td>
-                <Table.Td align="right">RM {o.amount.toFixed(2)}</Table.Td>
-                <Table.Td>{o.payee.name}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-          <Table.Tfoot className="border-double border-t-4">
-            <Table.Tr>
-              <Table.Td></Table.Td>
-              <Table.Td
-                className="font-bold"
-                align="right"
-              >
-                RM {owings.reduce((sum, o) => sum + o.amount, 0).toFixed(2)}
-              </Table.Td>
-              <Table.Td></Table.Td>
-            </Table.Tr>
-          </Table.Tfoot>
-        </Table>
+        <div className="flex gap-2">
+          <Tooltip label="Copy CSV">
+            <ActionIcon onClick={() => copyCsv()}>
+              <IconCopy size="16px" />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Share">
+            <ActionIcon
+              onClick={() => {
+                modals.open({
+                  size: 'xl',
+                  title: 'Share',
+                  children: <ShareModal owings={owings} />,
+                });
+              }}
+            >
+              <IconShare size="16px" />
+            </ActionIcon>
+          </Tooltip>
+        </div>
+        <SplitTable owings={owings} />
       </div>
 
       <Title
@@ -212,14 +189,17 @@ const SplitPage = () => {
         listStyleType="disc"
       >
         {(() => {
-          const summary = owings.reduce((acc, o) => {
-            if (acc[o.payee.name] == null) {
-              acc[o.payee.name] = 0;
-            }
-            acc[o.payee.name] += o.amount;
+          const summary = owings.reduce(
+            (acc, o) => {
+              if (acc[o.payee.name] == null) {
+                acc[o.payee.name] = 0;
+              }
+              acc[o.payee.name] += o.amount;
 
-            return acc;
-          }, {} as Record<string, number>);
+              return acc;
+            },
+            {} as Record<string, number>,
+          );
 
           return Object.keys(summary).map((k) => (
             <List.Item key={`${k}-${summary[k]}`}>
