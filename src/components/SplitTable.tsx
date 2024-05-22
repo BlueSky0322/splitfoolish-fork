@@ -30,7 +30,7 @@ const SplitTable = ({ owings }: SplitTableProps) => {
           <Table.Tr key={ix}>
             <Table.Td>{o.payer.name}</Table.Td>
             <Table.Td
-              className="font-mono"
+              className="font-mono whitespace-nowrap"
               align="right"
             >
               RM {o.amount.toFixed(2)}

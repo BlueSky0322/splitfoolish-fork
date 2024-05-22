@@ -49,10 +49,10 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
         ) : null}
         {state.items.map((i, ix) => (
           <Table.Tr key={ix}>
-            <Table.Td>{i.name}</Table.Td>
+            <Table.Td className="whitespace-nowrap">{i.name}</Table.Td>
             <Table.Td
               align="right"
-              className="font-mono"
+              className="font-mono whitespace-nowrap"
             >
               RM {i.cost.toFixed(2)}
             </Table.Td>
@@ -111,7 +111,7 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
         <Table.Tr>
           <Table.Td></Table.Td>
           <Table.Td
-            className="font-bold font-mono"
+            className="font-bold font-mono whitespace-nowrap"
             align="right"
           >
             RM {state.items.reduce((sum, o) => sum + o.cost, 0).toFixed(2)}

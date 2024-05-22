@@ -3,23 +3,22 @@ import { useForm } from '@mantine/form';
 import { IconMinus, IconPlus, IconTrashX } from '@tabler/icons-react';
 import React, { useContext, useRef } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
-import { useIndexedDb } from '../context/IDBContext/useIndexedDb.hook';
 
 const PersonList = () => {
   const { state, dispatch } = useContext(AppContext);
   const personForm = useForm({ mode: 'uncontrolled' });
   const personInputRef = useRef<HTMLInputElement>(null);
-  const { getObjectStore } = useIndexedDb();
+  // const { getObjectStore } = useIndexedDb();
 
   const handlePersonSubmit = (
     values: Record<string, any>,
     _e: React.FormEvent<HTMLFormElement> | undefined,
   ) => {
     dispatch({ type: 'ADD_PERSON', payload: values['name'] });
-    getObjectStore('people', 'readwrite').add({ name: values['name'] });
-    getObjectStore('people').getAll().onsuccess = (ev) => {
-      console.log((ev.target as IDBRequest).result);
-    };
+    // getObjectStore('people', 'readwrite').add({ name: values['name'] });
+    // getObjectStore('people').getAll().onsuccess = (ev) => {
+    //   console.log((ev.target as IDBRequest).result);
+    // };
 
     personForm.reset();
   };
