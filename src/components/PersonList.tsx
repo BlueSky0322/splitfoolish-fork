@@ -1,6 +1,8 @@
 import { ActionIcon, TextInput, Title, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconMinus, IconPlus, IconTrashX } from '@tabler/icons-react';
+import IconMinus from '~icons/tabler/minus';
+import IconPlus from '~icons/tabler/plus';
+import IconTrashX from '~icons/tabler/trash-x';
 import React, { useContext, useRef } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 

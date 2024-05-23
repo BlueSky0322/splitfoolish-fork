@@ -2,7 +2,8 @@ import { ActionIcon, Button, List, Select, Title, Tooltip } from '@mantine/core'
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { IconCopy, IconShare } from '@tabler/icons-react';
+import IconCopy from '~icons/tabler/copy';
+import IconShare from '~icons/tabler/share';
 import { produce } from 'immer';
 import _ from 'lodash';
 import { FormEvent, useContext, useEffect } from 'react';
@@ -158,7 +159,7 @@ const SplitPage = () => {
         <div className="flex gap-2">
           <Tooltip label="Copy CSV">
             <ActionIcon onClick={() => copyCsv()}>
-              <IconCopy size="16px" />
+              <IconCopy fontSize={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Share">
@@ -171,7 +172,7 @@ const SplitPage = () => {
                 });
               }}
             >
-              <IconShare size="16px" />
+              <IconShare fontSize={16} />
             </ActionIcon>
           </Tooltip>
         </div>

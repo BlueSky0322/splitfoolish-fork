@@ -1,6 +1,7 @@
 import { ActionIcon, Table, Tooltip } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { IconEdit, IconMinus } from '@tabler/icons-react';
+import IconEdit from '~icons/tabler/edit';
+import IconMinus from '~icons/tabler/minus';
 import { useContext } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { cn } from '../utils/cn';

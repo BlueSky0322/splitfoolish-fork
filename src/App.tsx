@@ -1,5 +1,7 @@
 import { Button, Tabs } from '@mantine/core';
-import { IconArrowsSplit, IconListDetails, IconUser } from '@tabler/icons-react';
+import IconArrowsSplit from '~icons/tabler/arrows-split';
+import IconListDetails from '~icons/tabler/list-details';
+import IconUser from '~icons/tabler/user';
 import { useContext, useEffect, useState } from 'react';
 import './App.css';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -26,19 +28,19 @@ function App() {
         <Tabs.List>
           <Tabs.Tab
             value="0"
-            leftSection={<IconUser />}
+            leftSection={<IconUser fontSize={20} />}
           >
             People
           </Tabs.Tab>
           <Tabs.Tab
             value="1"
-            leftSection={<IconListDetails />}
+            leftSection={<IconListDetails fontSize={20} />}
           >
             Items
           </Tabs.Tab>
           <Tabs.Tab
             value="2"
-            leftSection={<IconArrowsSplit />}
+            leftSection={<IconArrowsSplit fontSize={20} />}
           >
             Settlements
           </Tabs.Tab>

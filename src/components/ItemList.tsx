@@ -1,6 +1,6 @@
 import { ActionIcon, Button, MultiSelect, Select, TextInput, Title, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconTrashX } from '@tabler/icons-react';
+import IconTrashX from '~icons/tabler/trash-x';
 import { evaluate } from 'mathjs';
 import React, { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
