@@ -55,8 +55,11 @@ const PersonList = () => {
             readOnly
             value={p.name}
             rightSection={
-              <ActionIcon color="red">
-                <IconMinus onClick={() => handlePersonRemove(p.name)} />
+              <ActionIcon
+                onClick={() => handlePersonRemove(p.name)}
+                color="red"
+              >
+                <IconMinus />
               </ActionIcon>
             }
           ></TextInput>

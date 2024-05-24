@@ -6,6 +6,7 @@ import {
   IOwing,
   IPerson,
 } from '../../interfaces/app-reducer.ts';
+import Big from 'big.js';
 
 const saveToLocalStorage = (draft: WritableDraft<AppReducerState>) => {
   localStorage.setItem('people', JSON.stringify(draft.people));
@@ -140,11 +141,11 @@ function calculateOwings(draft: WritableDraft<AppReducerState>): WritableDraft<I
   for (let i = 0; i < draft.items.length; i++) {
     const item = draft.items[i];
 
-    const pricePerPerson = item.cost / item.participants.length;
+    const pricePerPerson = Big(item.cost).div(item.participants.length).toNumber();
 
     item.participants.forEach((p) => {
       const existingOwing = draft.owings.find(
-        (o) => p.name === o.payer.name && item.payer.name === o.payee.name
+        (o) => p.name === o.payer.name && item.payer.name === o.payee.name,
       );
 
       if (existingOwing != null) {

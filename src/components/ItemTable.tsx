@@ -6,6 +6,7 @@ import { useContext } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { cn } from '../utils/cn';
 import EditItemModal from './EditItemModal';
+import Big from 'big.js';
 
 interface ItemTableProps {
   showActions?: boolean;
@@ -85,23 +86,26 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
             </Table.Td>
             <Table.Td className={cn({ hidden: !showActions })}>
               <div className="flex gap-2">
-                <ActionIcon>
-                  <IconEdit
-                    onClick={() => {
-                      modals.open({
-                        title: 'Edit Item',
-                        children: (
-                          <EditItemModal
-                            item={i}
-                            itemIndex={ix}
-                          />
-                        ),
-                      });
-                    }}
-                  />
+                <ActionIcon
+                  onClick={() => {
+                    modals.open({
+                      title: 'Edit Item',
+                      children: (
+                        <EditItemModal
+                          item={i}
+                          itemIndex={ix}
+                        />
+                      ),
+                    });
+                  }}
+                >
+                  <IconEdit />
                 </ActionIcon>
-                <ActionIcon color="red">
-                  <IconMinus onClick={() => handleItemRemove(ix)} />
+                <ActionIcon
+                  onClick={() => handleItemRemove(ix)}
+                  color="red"
+                >
+                  <IconMinus />
                 </ActionIcon>
               </div>
             </Table.Td>
@@ -115,7 +119,7 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
             className="font-bold font-mono whitespace-nowrap"
             align="right"
           >
-            RM {state.items.reduce((sum, o) => sum + o.cost, 0).toFixed(2)}
+            RM {state.items.reduce((sum, o) => sum.add(o.cost), Big(0)).toFixed(2)}
           </Table.Td>
           <Table.Td></Table.Td>
           <Table.Td

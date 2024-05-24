@@ -12,6 +12,7 @@ import { AppContext } from '../context/AppContext/AppContext';
 import { IOwing } from '../interfaces/app-reducer';
 import ShareModal from './ShareModal';
 import SplitTable from './SplitTable';
+import Big from 'big.js';
 
 const SplitPage = () => {
   const { state } = useContext(AppContext);
@@ -42,7 +43,9 @@ const SplitPage = () => {
 
           settledOwings.push(...duplicates);
 
-          const sumOfDuplicates = duplicates.reduce((sum, o) => sum + o.amount, 0);
+          const sumOfDuplicates = duplicates
+            .reduce((sum, o) => sum.add(o.amount), Big(0))
+            .toNumber();
 
           owing.amount += sumOfDuplicates;
 
@@ -69,7 +72,7 @@ const SplitPage = () => {
 
           settledOwings.push(...counters);
 
-          const sumOfCounters = counters.reduce((sum, o) => sum + o.amount, 0);
+          const sumOfCounters = counters.reduce((sum, o) => sum.add(o.amount), Big(0)).toNumber();
 
           if (owing.amount > sumOfCounters) {
             owing.amount -= sumOfCounters;
