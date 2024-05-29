@@ -1,18 +1,16 @@
 import { ActionIcon, Button, List, Select, Title, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
-import { notifications } from '@mantine/notifications';
-import IconCopy from '~icons/tabler/copy';
-import IconShare from '~icons/tabler/share';
+import Big from 'big.js';
 import { produce } from 'immer';
 import _ from 'lodash';
 import { FormEvent, useContext, useEffect } from 'react';
 import { useImmer } from 'use-immer';
+import IconShare from '~icons/tabler/share';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IOwing } from '../interfaces/app-reducer';
 import ShareModal from './ShareModal';
 import SplitTable from './SplitTable';
-import Big from 'big.js';
 
 const SplitPage = () => {
   const { state } = useContext(AppContext);
@@ -125,22 +123,6 @@ const SplitPage = () => {
     setOwings(optimizeOwings(newOwings));
   };
 
-  function copyCsv(): void {
-    const csvData = [
-      ['Payer', 'Payee', 'Amount'].join('\t'), // CSV header row
-      ...owings.map((owing) => `"${owing.payer.name}"\t"${owing.payee.name}"\t"${owing.amount}"`),
-    ].join('\n');
-
-    navigator.clipboard
-      .writeText(csvData)
-      .then(() => {
-        notifications.show({ message: 'Owings copied to clipboard as CSV' });
-      })
-      .catch((_err) => {
-        notifications.show({ message: 'Failed to copy owings to clipboard as CSV:' });
-      });
-  }
-
   return (
     <>
       <Title order={2}>Settlements</Title>
@@ -159,29 +141,21 @@ const SplitPage = () => {
       </form>
 
       <div className="my-4">
-        <div className="flex gap-2">
-          <Tooltip label="Copy CSV">
-            <ActionIcon onClick={() => copyCsv()}>
-              <IconCopy fontSize={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Share">
-            <ActionIcon
-              onClick={() => {
-                modals.open({
-                  size: 'xl',
-                  title: 'Share',
-                  children: <ShareModal owings={owings} />,
-                });
-              }}
-            >
-              <IconShare fontSize={16} />
-            </ActionIcon>
-          </Tooltip>
-        </div>
         <SplitTable owings={owings} />
       </div>
-
+      <Tooltip label="Share">
+        <ActionIcon
+          onClick={() => {
+            modals.open({
+              size: 'xl',
+              title: 'Share',
+              children: <ShareModal owings={owings} />,
+            });
+          }}
+        >
+          <IconShare fontSize={16} />
+        </ActionIcon>
+      </Tooltip>
       <Title
         order={3}
         className=""

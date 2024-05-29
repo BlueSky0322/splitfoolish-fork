@@ -52,7 +52,7 @@ const ShareModal = ({ owings }: ShareModalProps) => {
           className="mb-4"
           order={2}
         >
-          Items
+          Item List
         </Title>
         <ItemTable
           showActions={false}
@@ -62,7 +62,7 @@ const ShareModal = ({ owings }: ShareModalProps) => {
           className="mb-4 mt-6"
           order={2}
         >
-          Split
+          Who Pays Who
         </Title>
         <SplitTable owings={owings} />
       </div>
