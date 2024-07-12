@@ -156,22 +156,19 @@ const SplitPage = () => {
           <IconShare fontSize={16} />
         </ActionIcon>
       </Tooltip>
-      <Title
-        order={3}
-        className=""
-      >
-        Summary
-      </Title>
+      <Title order={3}>Summary</Title>
+      <Title order={4}>Total Owed</Title>
       <List
         withPadding
         listStyleType="disc"
       >
         {(() => {
-          const summary = owings.reduce(
+          const totalOwed = owings.reduce(
             (acc, o) => {
               if (acc[o.payee.name] == null) {
                 acc[o.payee.name] = 0;
               }
+
               acc[o.payee.name] += o.amount;
 
               return acc;
@@ -179,9 +176,35 @@ const SplitPage = () => {
             {} as Record<string, number>,
           );
 
-          return Object.keys(summary).map((k) => (
-            <List.Item key={`${k}-${summary[k]}`}>
-              {k} is owed RM {summary[k].toFixed(2)}
+          return Object.keys(totalOwed).map((k) => (
+            <List.Item key={`${k}-${totalOwed[k]}`}>
+              {k} is owed RM {totalOwed[k].toFixed(2)}
+            </List.Item>
+          ));
+        })()}
+      </List>
+      <Title order={4}>Total Spent</Title>
+      <List
+        withPadding
+        listStyleType="disc"
+      >
+        {(() => {
+          const totalSpent = state.items.reduce(
+            (acc, i) => {
+              if (acc[i.payer.name] == null) {
+                acc[i.payer.name] = 0;
+              }
+
+              acc[i.payer.name] += i.cost;
+
+              return acc;
+            },
+            {} as Record<string, number>,
+          );
+
+          return Object.keys(totalSpent).map((k) => (
+            <List.Item key={`${k}-${totalSpent[k]}`}>
+              {k} spent RM {totalSpent[k].toFixed(2)}
             </List.Item>
           ));
         })()}
