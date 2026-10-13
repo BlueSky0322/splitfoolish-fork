@@ -375,7 +375,7 @@ const ItemForm = ({
             onClick={() =>
               photos.length > 0 && !confirmDelete ? setConfirmDelete(true) : onDelete()
             }
-            className="mr-auto"
+            className="sf-danger mr-auto"
           >
             {confirmDelete
               ? `Delete with ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}?`

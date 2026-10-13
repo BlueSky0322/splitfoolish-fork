@@ -372,10 +372,12 @@
   z-index: 1;
 }
 
+/* Keyboard focus only: a dialog closed with the mouse hands focus back to the Edit
+   button, which shouldn't keep the actions showing */
 .itemRow:hover .rowActions,
-.itemRow:focus-within .rowActions,
+.itemRow:has(:focus-visible) .rowActions,
 .tableRow:hover .rowActions,
-.tableRow:focus-within .rowActions {
+.tableRow:has(:focus-visible) .rowActions {
   opacity: 1;
   pointer-events: auto;
 }

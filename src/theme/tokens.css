@@ -94,6 +94,14 @@ body {
   background: transparent;
 }
 
+/* Destructive text buttons use the app's red in both themes */
+.sf-danger.mantine-Button-root {
+  color: var(--sf-negative);
+}
+.sf-danger.mantine-Button-root:where(:not(:disabled, [data-disabled])):hover {
+  background: color-mix(in srgb, var(--sf-negative) 12%, transparent);
+}
+
 /* Text helpers */
 .sf-tabular {
   font-variant-numeric: tabular-nums;

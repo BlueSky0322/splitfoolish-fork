@@ -2,7 +2,7 @@ import { Button, CopyButton, TextInput, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Check, Copy } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { SplitInvite, api, invitesPageUrl, inviteUrl } from '../api';
+import { api, inviteUrl } from '../api';
 import { reloadHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
 import { SplitMeta } from '../hooks/useSplit';
@@ -19,10 +19,6 @@ interface SplitMembersProps {
   setMeta: (update: (meta: SplitMeta | null) => SplitMeta | null) => void;
 }
 
-// Owners send this themselves until the app can email invites
-const inviteMessage = (splitName: string) =>
-  `I've invited you to "${splitName}" on Splitfoolish. Sign in with this email to accept: ${invitesPageUrl()}`;
-
 const shortDate = (time: number) =>
   new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'numeric' });
 
@@ -32,13 +28,10 @@ const showError = (err: unknown) =>
     message: err instanceof Error ? err.message : 'Something went wrong',
   });
 
-// Sharing and members (F8): invite by email, the share link, who has access, and
+// Sharing and members (F8): the share link, who has access, and
 // deleting or leaving the split
 const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) => {
   const [busy, setBusy] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [justInvited, setJustInvited] = useState<SplitInvite | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const isOwner = meta.role === 'owner';
 
@@ -76,84 +69,8 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
     }
   };
 
-  const sendInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = inviteEmail.trim().toLowerCase();
-    setInviteError(null);
-    // Listed straight away with a stand-in id; swapped for the real one when it arrives
-    const now = Date.now();
-    const pending: SplitInvite = {
-      id: `pending-${now}`,
-      email,
-      createdAt: now,
-      expiresAt: now + 14 * 24 * 60 * 60 * 1000,
-    };
-    setInviteEmail('');
-    setJustInvited(pending);
-    setMeta((m) =>
-      m ? { ...m, invites: [...(m.invites ?? []).filter((i) => i.email !== email), pending] } : m,
-    );
-    try {
-      const invite = await api.inviteByEmail(meta.id, email);
-      setJustInvited(invite);
-      setMeta((m) =>
-        m ? { ...m, invites: m.invites?.map((i) => (i.id === pending.id ? invite : i)) } : m,
-      );
-    } catch (err) {
-      setJustInvited(null);
-      setInviteEmail(email);
-      setInviteError(err instanceof Error ? err.message : String(err));
-      setMeta((m) => (m ? { ...m, invites: m.invites?.filter((i) => i.id !== pending.id) } : m));
-    }
-  };
-
   return (
     <div className="flex flex-col gap-5">
-      {isOwner && (
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={sendInvite}
-        >
-          <div className="flex gap-2 items-start">
-            <TextInput
-              className="flex-1"
-              type="email"
-              label="Invite by email"
-              placeholder="friend@example.com"
-              value={inviteEmail}
-              error={inviteError}
-              onChange={(e) => setInviteEmail(e.currentTarget.value)}
-              rightSectionWidth={0}
-            />
-            <Button
-              type="submit"
-              className="mt-[25px]"
-              disabled={busy || inviteEmail.trim() === ''}
-            >
-              Invite
-            </Button>
-          </div>
-          {justInvited && (
-            <div className={classes.note}>
-              <span className="flex-1">
-                Invited {justInvited.email}. We don't send emails yet, so send them the link.
-              </span>
-              <CopyButton value={inviteMessage(meta.name)}>
-                {({ copied, copy }) => (
-                  <Button
-                    size="compact-sm"
-                    variant="subtle"
-                    onClick={copy}
-                  >
-                    {copied ? 'Copied' : 'Copy message'}
-                  </Button>
-                )}
-              </CopyButton>
-            </div>
-          )}
-        </form>
-      )}
-
       {isOwner && meta.inviteToken && (
         <div className="flex flex-col gap-2">
           <div className="flex gap-2 items-end">
@@ -241,7 +158,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
               </div>
               <UnstyledButton
                 className={classes.textAction}
-                disabled={busy || i.id.startsWith('pending-')}
+                disabled={busy}
                 aria-label={`Revoke invite for ${i.email}`}
                 onClick={() =>
                   optimistic(
