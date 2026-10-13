@@ -270,7 +270,7 @@ const SettingsPage = () => {
           variant="default"
           fullWidth
           size="md"
-          className={classes.signOut}
+          className={`${classes.signOut} ${classes.signOutButton}`}
           onClick={signOut}
         >
           Sign out
@@ -378,6 +378,7 @@ const SettingsPage = () => {
                 variant="default"
                 size="compact-md"
                 leftSection={<SignOut size={16} />}
+                className={classes.signOutButton}
                 onClick={signOut}
               >
                 Sign out

@@ -1,5 +1,4 @@
 .page {
-  max-width: 980px;
   padding: 32px 40px 110px;
   display: flex;
   flex-direction: column;
@@ -53,7 +52,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 12px;
 }
 
