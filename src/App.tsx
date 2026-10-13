@@ -2,22 +2,19 @@ import { Button, Tabs } from '@mantine/core';
 import IconArrowsSplit from '~icons/tabler/arrows-split';
 import IconListDetails from '~icons/tabler/list-details';
 import IconUser from '~icons/tabler/user';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useState } from 'react';
 import './App.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import ItemList from './components/ItemList';
 import PersonList from './components/PersonList';
 import SplitPage from './components/SplitPage';
 import { AppContext } from './context/AppContext/AppContext';
+import { useRemoteSync } from './hooks/useRemoteSync';
 
 function App() {
   const { dispatch } = useContext(AppContext);
   const [activeTab, setActiveTab] = useState<string | null>('0');
-
-  useEffect(() => {
-    dispatch({ type: 'LOAD_FROM_LOCALSTORAGE', payload: null });
-    dispatch({ type: 'SETTLE', payload: null });
-  }, []);
+  const { status } = useRemoteSync();
 
   return (
     <div className="max-w-screen-md m-auto bg-white min-h-screen">
@@ -70,6 +67,12 @@ function App() {
           </ErrorBoundary>
         </Tabs.Panel>
       </Tabs>
+      <div className="text-xs text-center text-gray-500 py-1">
+        {status === 'loading' && 'Loading…'}
+        {status === 'saving' && 'Saving…'}
+        {status === 'saved' && 'Saved'}
+        {status === 'error' && 'Sync failed, changes not saved'}
+      </div>
       <div className="flex gap-2 items-center justify-center">
         <div className="text-xs">Are you testing?</div>
         <Button
