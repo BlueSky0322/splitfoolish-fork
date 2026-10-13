@@ -1,16 +1,7 @@
 import { notifications } from '@mantine/notifications';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ApiError, ItemInput, SplitDetail, api } from '../api';
 import { AppContext } from '../context/AppContext/AppContext';
-import { IPerson } from '../interfaces/app-reducer';
 
 export type SyncStatus = 'loading' | 'saving' | 'saved' | 'error' | 'notfound';
 
@@ -24,7 +15,6 @@ export interface SplitActions {
   updateItem: (itemId: string, item: ItemInput) => Promise<boolean>;
   removeItem: (itemId: string) => Promise<boolean>;
   clearItems: () => Promise<boolean>;
-  loadTestData: () => Promise<boolean>;
 }
 
 /** Provided by the split page. Null outside it, e.g. in modals opened from elsewhere. */
@@ -32,15 +22,11 @@ export const SplitActionsContext = createContext<SplitActions | null>(null);
 
 export const useSplitActions = () => useContext(SplitActionsContext);
 
-const TEST_PEOPLE = ['Sean', 'Fei', 'Joshua', 'Naquib', 'Ghuf'];
-
 // Loads a split and sends each change to the server, applying it locally once accepted
 export function useSplit(splitId: string) {
-  const { state, dispatch } = useContext(AppContext);
+  const { dispatch } = useContext(AppContext);
   const [status, setStatus] = useState<SyncStatus>('loading');
   const [meta, setMeta] = useState<SplitMeta | null>(null);
-  const people = useRef(state.people);
-  people.current = state.people;
 
   const load = useCallback(async () => {
     const { people, items, ...rest } = await api.getSplit(splitId);
@@ -135,29 +121,6 @@ export function useSplit(splitId: string) {
         run(
           () => api.clearItems(splitId),
           () => dispatch({ type: 'CLEAR_ITEMS', payload: null }),
-        ),
-      // Adds sample people (reusing any already there) and items
-      loadTestData: () =>
-        run(
-          async () => {
-            const byName = new Map(people.current.map((p) => [p.name, p]));
-            const ids: string[] = [];
-            for (const name of TEST_PEOPLE) {
-              const person: IPerson = byName.get(name) ?? (await api.addPerson(splitId, name));
-              ids.push(person.id);
-            }
-            const [sean, fei, joshua, naquib] = ids;
-            for (const item of [
-              { name: 'Golf Balls', cost: 48, payerId: sean, participantIds: ids },
-              { name: 'Golf Balls', cost: 48, payerId: fei, participantIds: ids },
-              { name: 'Golf Balls', cost: 16, payerId: joshua, participantIds: [joshua, naquib] },
-              { name: 'Water 1.5L', cost: 4, payerId: sean, participantIds: [fei] },
-            ]) {
-              await api.addItem(splitId, item);
-            }
-            await load();
-          },
-          () => undefined,
         ),
     }),
     [run, load, splitId, dispatch],

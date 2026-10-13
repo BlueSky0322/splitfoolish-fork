@@ -131,20 +131,6 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
         {status === 'saved' && 'Saved'}
         {status === 'error' && 'Sync failed, changes not saved'}
       </div>
-      <div className="flex gap-2 items-center justify-center">
-        <div className="text-xs">Are you testing?</div>
-        <Button
-          className="p-0"
-          size="compact-xs"
-          radius="xs"
-          variant="transparent"
-          onClick={() => {
-            actions.loadTestData();
-          }}
-        >
-          Load test data.
-        </Button>
-      </div>
     </SplitActionsContext.Provider>
   );
 };
