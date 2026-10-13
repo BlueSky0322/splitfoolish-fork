@@ -43,7 +43,7 @@ const ItemList = () => {
       return;
     }
 
-    if (await actions.addItem(input)) itemForm.reset();
+    if (actions.addItem(input)) itemForm.reset();
   };
 
   return (
