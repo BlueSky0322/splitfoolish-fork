@@ -83,6 +83,9 @@
 }
 
 .cardTitle {
+  flex: 1;
+  min-width: 0;
+  align-self: center;
   font-size: 17px;
 }
 

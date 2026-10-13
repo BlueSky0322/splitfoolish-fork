@@ -13,6 +13,8 @@ export interface SplitSummary {
   totalCents: number;
   /** Null when no one in the split is linked to this account */
   myBalanceCents: number | null;
+  /** Null when the split has no picture */
+  pictureVersion: number | null;
   updatedAt: number;
 }
 
@@ -95,6 +97,7 @@ export interface SplitDetail {
   currency: string;
   /** Everyone settles up through this person; null for the fewest transfers */
   distributorId: string | null;
+  pictureVersion: number | null;
   role: Role;
   members: SplitMember[];
   /** Pending email invites; only sent to the owner */
@@ -184,6 +187,12 @@ export const api = {
       'DELETE',
       `${splitPath(id)}/attachments/${encodeURIComponent(attachmentId)}`,
     ),
+  setSplitPicture: (id: string, picture: Blob) =>
+    request<{ pictureVersion: number }>('PUT', `${splitPath(id)}/picture`, undefined, {
+      body: picture,
+      headers: { 'Content-Type': picture.type || 'image/jpeg' },
+    }),
+  removeSplitPicture: (id: string) => request<{ ok: true }>('DELETE', `${splitPath(id)}/picture`),
   deleteSplit: (id: string) => request<{ ok: true }>('DELETE', splitPath(id)),
   resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
@@ -203,6 +212,9 @@ export const api = {
 
 export const photoUrl = (splitId: string, attachmentId: string) =>
   `${splitPath(splitId)}/attachments/${encodeURIComponent(attachmentId)}`;
+
+export const splitPictureUrl = (splitId: string, version: number) =>
+  `${splitPath(splitId)}/picture?v=${version}`;
 
 export const avatarUrl = (email: string, version: number) =>
   `/api/avatars/${encodeURIComponent(email)}?v=${version}`;

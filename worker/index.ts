@@ -22,6 +22,9 @@ import {
   getAvatar,
   listAttachmentsStatement,
   putAvatar,
+  putSplitPicture,
+  deleteSplitPicture,
+  getSplitPicture,
   uploadAttachment,
 } from './photos';
 
@@ -45,6 +48,7 @@ const CHANGES_PATH = new RegExp(`^/api/splits/${ID}/changes$`);
 const ATTACHMENTS_PATH = new RegExp(`^/api/splits/${ID}/attachments$`);
 const ATTACHMENT_PATH = new RegExp(`^/api/splits/${ID}/attachments/${ID}$`);
 const AVATAR_PATH = /^\/api\/avatars\/([^/]+)$/;
+const SPLIT_PICTURE_PATH = new RegExp(`^/api/splits/${ID}/picture$`);
 const JOIN_PATH = new RegExp(`^/api/join/${ID}$`);
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -197,9 +201,9 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
             .bind(id, email),
           db
             .prepare(
-              `SELECT name, currency, invite_token AS inviteToken,
-                 distributor_person_id AS distributorId
-               FROM splits WHERE id = ?`,
+              `SELECT s.name, s.currency, s.invite_token AS inviteToken,
+                 s.distributor_person_id AS distributorId, p.version AS pictureVersion
+               FROM splits s LEFT JOIN split_pictures p ON p.split_id = s.id WHERE s.id = ?`,
             )
             .bind(id),
           ...memberProfileStatements(db, id),
@@ -214,7 +218,13 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
         ]);
       const role = (roleRows.results[0] as { role: Role } | undefined)?.role;
       const split = splitRows.results[0] as
-        | { name: string; currency: string; inviteToken: string; distributorId: string | null }
+        | {
+            name: string;
+            currency: string;
+            inviteToken: string;
+            distributorId: string | null;
+            pictureVersion: number | null;
+          }
         | undefined;
       // Non-members get the same 404 as a missing split, so ids can't be probed
       if (role == null || split == null) return notFound();
@@ -224,6 +234,7 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
         name: split.name,
         currency: split.currency,
         distributorId: split.distributorId,
+        pictureVersion: split.pictureVersion,
         role,
         members: assembleMembers([memberRows, methodRows]),
         invites: role === 'owner' ? inviteRows.results : undefined,
@@ -297,6 +308,17 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
   }
 
   // Photos can be added by any member, and removed by whoever added them or the owner
+  if ((match = pathname.match(SPLIT_PICTURE_PATH))) {
+    const id = match[1];
+    const role = await getRole(db, id, email);
+    if (role == null) return notFound();
+    if (req.method === 'GET') return getSplitPicture(db, id);
+    if (role !== 'owner') return json({ error: 'Only the owner can change the picture' }, 403);
+    if (req.method === 'PUT') return putSplitPicture(req, db, id);
+    if (req.method === 'DELETE') return deleteSplitPicture(db, id);
+    return json({ error: 'Method not allowed' }, 405);
+  }
+
   if ((match = pathname.match(ATTACHMENTS_PATH) ?? pathname.match(ATTACHMENT_PATH))) {
     const [, id, attachmentId] = match;
     const role = await getRole(db, id, email);

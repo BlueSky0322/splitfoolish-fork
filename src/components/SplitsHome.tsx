@@ -10,6 +10,7 @@ import { nameFor, useProfile } from '../profile/ProfileContext';
 import { formatMoney } from '../utils/money';
 import { useOpenNewSplit } from './NewSplitDialog';
 import Fab from './ui/Fab';
+import SplitAvatar from './ui/SplitAvatar';
 import UserAvatar from './ui/UserAvatar';
 import classes from './SplitsHome.module.css';
 
@@ -271,6 +272,12 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
                   onClick={() => navigate(`?s=${s.id}`)}
                 >
                   <div className={classes.cardTop}>
+                    <SplitAvatar
+                      splitId={s.id}
+                      name={s.name}
+                      pictureVersion={s.pictureVersion}
+                      size={40}
+                    />
                     <span className={`${classes.rowTitle} ${classes.cardTitle}`}>{s.name}</span>
                     <span className="sf-tag">{roleLabel(s)}</span>
                   </div>
@@ -290,6 +297,12 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
                   className={classes.splitRow}
                   onClick={() => navigate(`?s=${s.id}`)}
                 >
+                  <SplitAvatar
+                    splitId={s.id}
+                    name={s.name}
+                    pictureVersion={s.pictureVersion}
+                    size={36}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className={classes.rowTitle}>{s.name}</div>
                     <div className={classes.rowMeta}>

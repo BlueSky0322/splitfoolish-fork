@@ -26,7 +26,7 @@ import { Attachment, ItemInput } from '../../api';
 import { AppContext } from '../../context/AppContext/AppContext';
 import { toApiItem } from '../../context/AppContext/app-reducer';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { updateHomeData } from '../../hooks/useHomeData';
+import { updateHomeData, useHomeDataSnapshot } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../hooks/useSplit';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
@@ -47,6 +47,7 @@ import { usePhotos } from '../photos/usePhotos';
 import SplitMembers from '../SplitMembers';
 import Fab from '../ui/Fab';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
+import SplitAvatar from '../ui/SplitAvatar';
 import StateCard from '../ui/StateCard';
 import PersonAvatar, { AvatarVersionsContext } from './PersonAvatar';
 import BalancePanel, { BalanceHero } from './BalancePanel';
@@ -198,6 +199,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     [state.people, state.items, distributorId],
   );
   const me = findMe(state.people, myEmail);
+  // My splits hears about a new picture first (it may be uploaded from New split)
+  const listed = useHomeDataSnapshot().splits?.find((s) => s.id === splitId);
+  const pictureVersion = listed ? listed.pictureVersion : meta?.pictureVersion ?? null;
   const avatarVersions = useMemo(
     () => new Map((meta?.members ?? []).map((m) => [m.email, m.avatarVersion])),
     [meta?.members],
@@ -626,6 +630,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             splitId={splitId}
             name={meta.name}
             currency={meta.currency}
+            pictureVersion={pictureVersion}
             canEdit={meta.role === 'owner'}
             onSaved={(changes) => {
               setMeta((m) => (m ? { ...m, ...changes } : m));
@@ -649,6 +654,14 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               <div className={classes.titleRow}>
                 <div className={classes.titleBlock}>
                   <div className={classes.title}>
+                    {meta && (
+                      <SplitAvatar
+                        splitId={splitId}
+                        name={meta.name}
+                        pictureVersion={pictureVersion}
+                        size={40}
+                      />
+                    )}
                     <Title order={2}>{meta?.name ?? ' '}</Title>
                     {meta && (
                       <span className="sf-tag">
@@ -796,6 +809,14 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
           </div>
 
           <div className={classes.mobileHero}>
+            {meta && (
+              <SplitAvatar
+                splitId={splitId}
+                name={meta.name}
+                pictureVersion={pictureVersion}
+                size={40}
+              />
+            )}
             <BalanceHero
               summary={summary}
               currency={currency}
