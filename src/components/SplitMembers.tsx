@@ -174,6 +174,7 @@ const SplitMembers = ({ meta, myEmail, onChange }: SplitMembersProps) => {
                 email={m.email}
                 avatarVersion={m.avatarVersion}
                 size={30}
+                preview
               />
               <div className="min-w-0 flex-1">
                 <div className={classes.email}>

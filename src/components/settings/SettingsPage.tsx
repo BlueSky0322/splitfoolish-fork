@@ -7,27 +7,22 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { CaretLeft, Check, LockSimple, SignOut } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { CaretLeft, Check, LockSimple, Plus, SignOut } from '@phosphor-icons/react';
+import { useEffect, useRef, useState } from 'react';
 import { PaymentMethod, ThemeSetting, api } from '../../api';
-import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { clearCache } from '../../split-cache';
-import { ACCENTS, Accent } from '../../theme/accents';
+import { ACCENTS, Accent, isAccent } from '../../theme/accents';
 import { AVATAR, shrinkImage } from '../../utils/image';
 import UserAvatar from '../ui/UserAvatar';
 import PayHint from './PayHint';
 import PaymentMethods from './PaymentMethods';
 import classes from './Settings.module.css';
 
-const THEMES: { value: ThemeSetting; label: string }[] = [
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
-  { value: 'auto', label: 'Match device' },
-];
-
 const MAX_DISPLAY_NAME = 32;
+const SAVED_FOR_MS = 2000;
 
 export async function signOut() {
   await clearCache();
@@ -37,13 +32,54 @@ export async function signOut() {
 const fail = (err: unknown, fallback: string) =>
   notifications.show({ color: 'red', message: err instanceof Error ? err.message : fallback });
 
-// Settings (2a). Everything saves as it changes; "Saved" shows once it has.
+/** "Saving" while changes are on their way, then "Saved" for a moment */
+function useSaveIndicator() {
+  const [pending, setPending] = useState(0);
+  const [justSaved, setJustSaved] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const track = async <T,>(work: Promise<T>) => {
+    clearTimeout(timer.current);
+    setJustSaved(false);
+    setPending((n) => n + 1);
+    try {
+      return await work;
+    } finally {
+      setPending((n) => n - 1);
+      setJustSaved(true);
+      timer.current = setTimeout(() => setJustSaved(false), SAVED_FOR_MS);
+    }
+  };
+
+  const note = (
+    <span
+      className={classes.saved}
+      data-visible={pending > 0 || justSaved || undefined}
+      aria-live="polite"
+    >
+      {pending > 0 ? (
+        'Saving'
+      ) : justSaved ? (
+        <>
+          <Check size={14} /> Saved
+        </>
+      ) : null}
+    </span>
+  );
+
+  return { track, note };
+}
+
+// Settings (2a). Everything saves as it changes.
 const SettingsPage = () => {
   const { profile, update, updateSettings, replace } = useProfile();
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const [name, setName] = useState(profile?.displayName ?? '');
-  const [saving, setSaving] = useState(0);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const { track, note } = useSaveIndicator();
 
   // Fill the name in once the profile arrives
   useEffect(() => {
@@ -52,15 +88,7 @@ const SettingsPage = () => {
 
   if (profile == null) return null;
   const myName = nameFor(profile.email, profile.displayName);
-
-  const track = async <T,>(work: Promise<T>) => {
-    setSaving((n) => n + 1);
-    try {
-      return await work;
-    } finally {
-      setSaving((n) => n - 1);
-    }
-  };
+  const accent: Accent = isAccent(profile.settings.accent) ? profile.settings.accent : 'blurple';
 
   const saveName = () => {
     const trimmed = name.trim();
@@ -104,80 +132,87 @@ const SettingsPage = () => {
     }
   };
 
-  const savedNote = (
-    <span className={classes.saved}>
-      {saving > 0 ? (
-        'Saving'
-      ) : (
-        <>
-          <Check size={14} /> Saved
-        </>
+  const pictureButtons = (
+    <div className={classes.pictureButtons}>
+      <FileButton
+        onChange={changeAvatar}
+        accept="image/*"
+      >
+        {(props) => (
+          <UnstyledButton
+            className={classes.textAction}
+            disabled={avatarBusy}
+            {...props}
+          >
+            {profile.avatarVersion ? 'Change picture' : 'Add picture'}
+          </UnstyledButton>
+        )}
+      </FileButton>
+      {profile.avatarVersion && (
+        <UnstyledButton
+          className={`${classes.textAction} ${classes.quiet}`}
+          disabled={avatarBusy}
+          onClick={removeAvatar}
+        >
+          Remove
+        </UnstyledButton>
       )}
-    </span>
+    </div>
   );
 
-  const profileSection = (
-    <section className={classes.section}>
-      <h3 className={classes.heading}>Profile</h3>
-      <div className={classes.avatarRow}>
-        <div className={classes.avatarRing}>
-          <UserAvatar
-            name={myName}
-            email={profile.email}
-            avatarVersion={profile.avatarVersion}
-            size={60}
-            active
+  const nameField = (
+    <TextInput
+      label="Display name"
+      description={isMobile ? undefined : 'Shown to people in your splits instead of your email.'}
+      placeholder={profile.email.split('@')[0]}
+      value={name}
+      maxLength={MAX_DISPLAY_NAME}
+      onChange={(e) => setName(e.target.value)}
+      onBlur={saveName}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+    />
+  );
+
+  const themeField = (
+    <div className={classes.field}>
+      <div className={classes.fieldLabel}>Theme</div>
+      <SegmentedControl
+        className={isMobile ? undefined : classes.themeControl}
+        fullWidth={isMobile}
+        data={[
+          { value: 'dark', label: 'Dark' },
+          { value: 'light', label: 'Light' },
+          { value: 'auto', label: isMobile ? 'Device' : 'Match device' },
+        ]}
+        value={profile.settings.theme}
+        onChange={(theme) => track(updateSettings({ theme: theme as ThemeSetting }))}
+      />
+    </div>
+  );
+
+  const accentField = (
+    <div className={classes.field}>
+      <div className={classes.fieldLabel}>Accent colour · {ACCENTS[accent].label}</div>
+      <div
+        className={classes.swatches}
+        role="radiogroup"
+        aria-label="Accent colour"
+      >
+        {(Object.keys(ACCENTS) as Accent[]).map((key) => (
+          <UnstyledButton
+            key={key}
+            role="radio"
+            aria-checked={accent === key}
+            aria-label={ACCENTS[key].label}
+            title={ACCENTS[key].label}
+            className={classes.swatch}
+            data-selected={accent === key || undefined}
+            style={{ '--swatch': ACCENTS[key].ramp[4] } as React.CSSProperties}
+            onClick={() => track(updateSettings({ accent: key }))}
           />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <FileButton
-            onChange={changeAvatar}
-            accept="image/*"
-          >
-            {(props) => (
-              <Button
-                variant="default"
-                loading={avatarBusy}
-                {...props}
-              >
-                {profile.avatarVersion ? 'Change picture' : 'Add picture'}
-              </Button>
-            )}
-          </FileButton>
-          {profile.avatarVersion && (
-            <Button
-              variant="subtle"
-              color="gray"
-              disabled={avatarBusy}
-              onClick={removeAvatar}
-            >
-              Remove
-            </Button>
-          )}
-        </div>
+        ))}
       </div>
-      <TextInput
-        label="Display name"
-        description="Shown to people in your splits instead of your email."
-        placeholder={profile.email.split('@')[0]}
-        value={name}
-        maxLength={MAX_DISPLAY_NAME}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={saveName}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-      />
-      <TextInput
-        label="Email"
-        value={profile.email}
-        readOnly
-        rightSection={
-          <LockSimple
-            size={16}
-            className="sf-muted"
-          />
-        }
-      />
-    </section>
+    </div>
   );
 
   const preferred = profile.paymentMethods.find((m) => m.id === profile.preferredPaymentMethodId);
@@ -185,133 +220,173 @@ const SettingsPage = () => {
     ? [preferred, ...profile.paymentMethods.filter((m) => m !== preferred)]
     : profile.paymentMethods;
 
-  const paymentSection = (
-    <section className={classes.section}>
-      <h3 className={classes.heading}>Getting paid</h3>
-      <p className="sf-muted text-sm">
-        Shown to people who owe you, next to their transfer in Settle up.
-      </p>
-      <PaymentMethods
-        methods={profile.paymentMethods}
-        preferredId={profile.preferredPaymentMethodId}
-        onChange={savePayments}
-      />
-      {orderedMethods.length > 0 && (
-        <div className={classes.preview}>
-          <div className="sf-label">What someone who owes you sees</div>
-          <PayHint
-            name={myName}
-            amountCents={10250}
-            currency={profile.settings.lastCurrency ?? 'MYR'}
-            methods={orderedMethods}
-          />
-        </div>
-      )}
-    </section>
+  const payments = (
+    <PaymentMethods
+      methods={profile.paymentMethods}
+      preferredId={profile.preferredPaymentMethodId}
+      onChange={savePayments}
+      grouped={Boolean(isMobile)}
+    />
   );
 
-  const appearanceSection = (
-    <section className={classes.section}>
-      <h3 className={classes.heading}>Appearance</h3>
-      <div className={classes.field}>
-        <div className={classes.label}>Theme</div>
-        <SegmentedControl
-          fullWidth
-          data={THEMES}
-          value={profile.settings.theme}
-          onChange={(theme) => track(updateSettings({ theme: theme as ThemeSetting }))}
-        />
-      </div>
-      <div className={classes.field}>
-        <div className={classes.label}>Accent colour</div>
-        <div
-          className={classes.swatches}
-          role="radiogroup"
-          aria-label="Accent colour"
-        >
-          {(Object.keys(ACCENTS) as Accent[]).map((key) => {
-            const selected = profile.settings.accent === key;
-            return (
-              <UnstyledButton
-                key={key}
-                role="radio"
-                aria-checked={selected}
-                aria-label={ACCENTS[key].label}
-                title={ACCENTS[key].label}
-                className={classes.swatch}
-                data-selected={selected || undefined}
-                style={{ '--swatch': ACCENTS[key].ramp[4] } as React.CSSProperties}
-                onClick={() => track(updateSettings({ accent: key }))}
-              >
-                {selected && (
-                  <Check
-                    size={16}
-                    weight="bold"
-                  />
-                )}
-              </UnstyledButton>
-            );
-          })}
+  if (!isDesktop) {
+    return (
+      <div className={classes.mobilePage}>
+        <div className={classes.topBar}>
+          <UnstyledButton
+            className={classes.back}
+            onClick={() => navigate('')}
+            aria-label="Back to My splits"
+          >
+            <CaretLeft size={20} />
+            <span>Settings</span>
+          </UnstyledButton>
+          {note}
         </div>
-      </div>
-    </section>
-  );
 
-  const accountSection = (
-    <section className={classes.section}>
-      <h3 className={classes.heading}>Account</h3>
-      <div>
+        <div className={classes.identity}>
+          <div className={classes.avatarRing}>
+            <UserAvatar
+              name={myName}
+              email={profile.email}
+              avatarVersion={profile.avatarVersion}
+              size={60}
+            />
+          </div>
+          <div className={classes.identityName}>{myName}</div>
+          <div className={classes.identityEmail}>{profile.email}</div>
+          {pictureButtons}
+        </div>
+
+        {nameField}
+        {themeField}
+        {accentField}
+        <div className={classes.field}>
+          <div className={classes.fieldLabel}>Getting paid</div>
+          {payments}
+        </div>
+
         <Button
           variant="default"
-          leftSection={<SignOut size={16} />}
+          fullWidth
+          size="md"
+          className={`${classes.signOut} ${classes.signOutButton}`}
           onClick={signOut}
         >
           Sign out
         </Button>
       </div>
-    </section>
-  );
+    );
+  }
 
   return (
     <div className={classes.page}>
-      {isDesktop ? (
-        <div className={classes.header}>
-          <Title order={2}>Settings</Title>
-          {savedNote}
-        </div>
-      ) : (
-        <div className={classes.topBar}>
-          <Button
-            variant="subtle"
-            color="gray"
-            leftSection={<CaretLeft size={16} />}
-            onClick={() => navigate('')}
-          >
-            Settings
-          </Button>
-          {savedNote}
-        </div>
-      )}
+      <div className={classes.header}>
+        <Title order={1}>Settings</Title>
+        {note}
+      </div>
 
-      {isDesktop ? (
-        <div className={classes.columns}>
-          <div className={classes.column}>
-            {profileSection}
-            {paymentSection}
-          </div>
-          <div className={classes.column}>
-            {appearanceSection}
-            {accountSection}
-          </div>
-        </div>
-      ) : (
+      <div className={classes.columns}>
         <div className={classes.column}>
-          {profileSection}
-          {paymentSection}
-          {appearanceSection}
-          {accountSection}
+          <section className={classes.section}>
+            <h2 className="sf-label">Profile</h2>
+            <div className={classes.pictureRow}>
+              <UserAvatar
+                name={myName}
+                email={profile.email}
+                avatarVersion={profile.avatarVersion}
+                size={44}
+              />
+              {pictureButtons}
+            </div>
+            <div className={classes.narrow}>{nameField}</div>
+            <div className={classes.narrow}>
+              <TextInput
+                label="Email"
+                value={profile.email}
+                readOnly
+                classNames={{ input: classes.readOnly }}
+                rightSection={<LockSimple size={14} />}
+              />
+            </div>
+          </section>
+
+          <section className={classes.section}>
+            <h2 className="sf-label">Getting paid</h2>
+            <p className={classes.help}>
+              Shown to people who owe you, next to their transfer in Settle up.
+            </p>
+            {payments}
+            {orderedMethods.length > 0 && (
+              <div className={classes.preview}>
+                <div className={classes.previewLabel}>What someone who owes you sees</div>
+                <PayHint
+                  name={myName}
+                  amountCents={10250}
+                  currency={profile.settings.lastCurrency ?? 'MYR'}
+                  methods={orderedMethods}
+                />
+              </div>
+            )}
+          </section>
         </div>
-      )}
+
+        <div className={classes.column}>
+          <section className={classes.section}>
+            <h2 className="sf-label">Appearance</h2>
+            {themeField}
+            {accentField}
+            <div className={classes.appearancePreview}>
+              <div className={classes.previewLabel}>Preview</div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className={classes.chip}>
+                  <UserAvatar
+                    name={myName}
+                    email={profile.email}
+                    avatarVersion={profile.avatarVersion}
+                    size={24}
+                  />
+                  {myName} <span className="sf-muted">(you)</span>
+                  <span className="sf-positive sf-tabular">+140.10</span>
+                </span>
+                {/* Just a sample of the accent; it does nothing */}
+                <Button
+                  component="span"
+                  size="compact-sm"
+                  leftSection={<Plus size={14} />}
+                  tabIndex={-1}
+                  aria-hidden
+                >
+                  Add item
+                </Button>
+                <span className={classes.previewBadge}>1</span>
+              </div>
+              <div className={classes.previewBar}>
+                <span>{myName}</span>
+                <span className={classes.previewTrack}>
+                  <span />
+                </span>
+                <span className="sf-positive sf-tabular">+140.10</span>
+              </div>
+            </div>
+          </section>
+
+          <section className={classes.section}>
+            <h2 className="sf-label">Account</h2>
+            <div>
+              <Button
+                variant="default"
+                size="compact-md"
+                leftSection={<SignOut size={16} />}
+                className={classes.signOutButton}
+                onClick={signOut}
+              >
+                Sign out
+              </Button>
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   );
 };

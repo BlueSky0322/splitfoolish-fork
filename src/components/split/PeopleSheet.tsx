@@ -23,7 +23,17 @@ interface PeopleSheetProps {
   onShowItems: (personId: string) => void;
 }
 
-function BalanceText({ cents, currency }: { cents: number; currency: string }) {
+function BalanceText({
+  cents,
+  currency,
+  hasItems,
+}: {
+  cents: number;
+  currency: string;
+  hasItems: boolean;
+}) {
+  // Before anything is added nobody owes anything, but they aren't "settled" either
+  if (!hasItems) return <span className={`${classes.balance} sf-muted`}>{'\u2014'}</span>;
   return (
     <span
       className={`${classes.balance} ${
@@ -94,6 +104,7 @@ function PersonPage({
           person={person}
           size={56}
           active={isMe}
+          preview
         />
         <div className="min-w-0 flex-1">
           <div className={classes.heroName}>
@@ -120,6 +131,7 @@ function PersonPage({
           <BalanceText
             cents={balance?.balanceCents ?? 0}
             currency={currency}
+            hasItems={summary.hasItems}
           />
         </div>
       </div>
@@ -339,6 +351,7 @@ const PeopleSheet = ({
                 <BalanceText
                   cents={summary.balances.get(p.id)?.balanceCents ?? 0}
                   currency={currency}
+                  hasItems={summary.hasItems}
                 />
                 <CaretRight
                   size={14}

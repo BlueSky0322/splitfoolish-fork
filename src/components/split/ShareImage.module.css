@@ -8,7 +8,7 @@
   width: 100%;
   border-radius: 14px;
   overflow: hidden;
-  background: #161826;
+  background: var(--sf-bg);
   box-shadow: var(--sf-shadow-sm);
 }
 
@@ -25,18 +25,11 @@
   pointer-events: none;
 }
 
-/* Plain colours only: the image renderer doesn't understand color-mix() */
+/* Colours come from shareImagePalette in plain hex: the image renderer doesn't
+   understand color-mix() */
 .card {
-  --sf-bg: #161826;
-  --sf-surface: #232532;
-  --sf-text: #e9e9ed;
-  --sf-tint: #22243a;
-  --sf-avatar: #39365a;
-  --sf-text-muted: #9a9cab;
-  --sf-text-label: #8c8e9d;
-  --sf-accent: #9184d9;
-  background: #161826;
-  color: #e9e9ed;
+  background: var(--sf-bg);
+  color: var(--sf-text);
   font-family: Inter, system-ui, sans-serif;
   padding: 88px 96px;
   overflow: hidden;
@@ -51,7 +44,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #9184d9;
+  color: var(--sf-accent);
   font-size: 28px;
   font-weight: 500;
 }
@@ -64,13 +57,13 @@
 }
 
 .meta {
-  color: #9a9cab;
+  color: var(--sf-text-muted);
   font-size: 26px;
 }
 
 .heading {
   margin-top: 32px;
-  color: #9184d9;
+  color: var(--sf-accent);
   font-size: 24px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -88,8 +81,8 @@
   background: linear-gradient(
     to right,
     transparent,
-    #3f424d 96px,
-    #3f424d calc(100% - 96px),
+    var(--sf-rule) 96px,
+    var(--sf-rule) calc(100% - 96px),
     transparent
   );
 }
@@ -115,7 +108,7 @@
 }
 
 .itemPayer {
-  color: #9a9cab;
+  color: var(--sf-text-muted);
 }
 
 .itemAmount {

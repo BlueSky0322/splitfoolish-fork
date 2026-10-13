@@ -612,16 +612,16 @@
 }
 
 .transfer[data-size='xl'] .transferArrow {
-  color: #8c8e9d;
+  color: var(--sf-text-label);
 }
 
 .transferText {
   flex: 1;
   min-width: 0;
   font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
+  /* Wrap long names onto a second line rather than cutting them off */
+  overflow-wrap: anywhere;
 }
 
 .transferAmount {
@@ -642,20 +642,22 @@
 /* ---------- Balance bars ---------- */
 
 .bars {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.barRow {
+  /* One grid for every row, so the name column is as wide as the longest name
+     (up to half the panel) and the bars still line up */
   display: grid;
-  grid-template-columns: 52px 1fr 72px;
+  grid-template-columns: minmax(0, max-content) minmax(56px, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 8px;
   font-size: 13px;
 }
 
+.barRow {
+  display: contents;
+}
+
 .barName {
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

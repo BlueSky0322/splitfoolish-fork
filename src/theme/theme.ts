@@ -29,6 +29,18 @@ export const buildTheme = (accent: Accent) =>
     components: {
       // Spelled out so the outlined primary style in tokens.css can find them
       Button: { defaultProps: { variant: 'filled' } },
+      // Helper text sits under the field, as in the design
+      TextInput: {
+        defaultProps: { inputWrapperOrder: ['label', 'input', 'description', 'error'] },
+      },
+      Select: { defaultProps: { inputWrapperOrder: ['label', 'input', 'description', 'error'] } },
+      Autocomplete: {
+        defaultProps: { inputWrapperOrder: ['label', 'input', 'description', 'error'] },
+      },
+      NumberInput: {
+        defaultProps: { inputWrapperOrder: ['label', 'input', 'description', 'error'] },
+      },
+      SegmentedControl: { defaultProps: { withItemsBorders: true, radius: 'md' } },
       ActionIcon: { defaultProps: { variant: 'filled' } },
       Paper: { defaultProps: { bg: 'var(--sf-surface)' } },
       Modal: {

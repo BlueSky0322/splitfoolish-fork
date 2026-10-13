@@ -29,6 +29,13 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 function Balance({ split }: { split: SplitSummary }) {
   const cents = split.myBalanceCents;
   if (cents == null) return null;
+  if (split.totalCents === 0) {
+    return (
+      <div className={classes.balance}>
+        <div className={classes.balanceLabel}>No items yet</div>
+      </div>
+    );
+  }
   return (
     <div className={classes.balance}>
       <div className={classes.balanceLabel}>
@@ -258,14 +265,14 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
                   className={`sf-card ${classes.splitCard}`}
                   onClick={() => navigate(`?s=${s.id}`)}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={classes.rowTitle}>{s.name}</span>
-                      <span className="sf-tag">{roleLabel(s)}</span>
-                    </div>
-                    <div className={classes.rowMeta}>{splitMeta(s)}</div>
+                  <div className={classes.cardTop}>
+                    <span className={`${classes.rowTitle} ${classes.cardTitle}`}>{s.name}</span>
+                    <span className="sf-tag">{roleLabel(s)}</span>
                   </div>
-                  <Balance split={s} />
+                  <div className={classes.cardBottom}>
+                    <div className={classes.rowMeta}>{splitMeta(s)}</div>
+                    <Balance split={s} />
+                  </div>
                 </UnstyledButton>
               ))}
             </div>

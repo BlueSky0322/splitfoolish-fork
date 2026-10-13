@@ -11,10 +11,12 @@ const PersonAvatar = ({
   person,
   size,
   active,
+  preview,
 }: {
   person: IPerson;
   size?: number;
   active?: boolean;
+  preview?: boolean;
 }) => {
   const versions = useContext(AvatarVersionsContext);
   const email = person.memberEmail ?? null;
@@ -25,6 +27,7 @@ const PersonAvatar = ({
       avatarVersion={email ? versions.get(email) : null}
       size={size}
       active={active}
+      preview={preview}
     />
   );
 };

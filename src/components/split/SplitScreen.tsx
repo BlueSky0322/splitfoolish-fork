@@ -147,6 +147,7 @@ function SaveStatus({
 
 /** "Chen and Dev owe you", for the phone's people summary */
 function oweLine(people: IPerson[], summary: ReturnType<typeof summarise>, me: IPerson | null) {
+  if (!summary.hasItems) return 'No items yet';
   if (me == null) return 'Tap to edit or pick yourself';
   const owe = summary.transfers.filter((t) => t.toId === me.id).map((t) => t.fromId);
   const youOwe = summary.transfers.filter((t) => t.fromId === me.id).map((t) => t.toId);
@@ -551,7 +552,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       >
         <div className="sf-muted text-sm mb-4">
           {summary.transfers.length === 0
-            ? 'Nothing to settle'
+            ? summary.hasItems
+              ? 'Everyone is settled up'
+              : 'No items yet'
             : `${summary.transfers.length} ${
                 summary.transfers.length === 1 ? 'transfer clears' : 'transfers clear'
               } every balance`}
@@ -808,7 +811,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               <Button
                 variant="default"
                 onClick={() => setDialog({ kind: 'share' })}
-                disabled={noPeople || !loaded}
+                disabled={!summary.hasItems}
               >
                 Share image
               </Button>

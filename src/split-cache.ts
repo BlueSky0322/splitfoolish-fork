@@ -67,6 +67,8 @@ export async function clearCache(): Promise<void> {
   try {
     localStorage.removeItem(LAST_EMAIL_KEY);
     await clear();
+    // Pictures and photos the service worker kept, so the next person can't see them
+    if ('caches' in window) await caches.delete('splitfoolish-images-v1');
   } catch {
     // ignore
   }
