@@ -1,8 +1,10 @@
 import { Button, Select } from '@mantine/core';
 import { ShareNetwork } from '@phosphor-icons/react';
+import { SplitMember } from '../../api';
 import { IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
+import PayHint from '../settings/PayHint';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
 import classes from './Split.module.css';
@@ -16,6 +18,8 @@ interface BalancePanelProps {
   onDistributorChange: (id: string | null) => void;
   onShareImage: () => void;
   onLinkMe: () => void;
+  /** The split's accounts, for showing how to pay someone you owe */
+  members: SplitMember[];
   /** Settle up sheet on phones: larger rows and no outer card */
   variant?: 'panel' | 'sheet';
 }
@@ -81,8 +85,12 @@ const BalancePanel = ({
   onDistributorChange,
   onShareImage,
   onLinkMe,
+  members,
   variant = 'panel',
 }: BalancePanelProps) => {
+  // When you owe someone linked to an account, show how they like to be paid
+  const methodsFor = (person: IPerson) =>
+    members.find((m) => m.email === person.memberEmail)?.paymentMethods ?? [];
   const byId = new Map(people.map((p) => [p.id, p]));
   const mine = me ? summary.balances.get(me.id) : null;
   const count = summary.transfers.length;
@@ -120,16 +128,32 @@ const BalancePanel = ({
           <div className="sf-muted text-sm">Everyone is settled up.</div>
         ) : (
           <div className="flex flex-col gap-2">
-            {summary.transfers.map((t) => (
-              <TransferRow
-                key={`${t.fromId}-${t.toId}`}
-                from={byId.get(t.fromId)!}
-                to={byId.get(t.toId)!}
-                amountCents={t.amountCents}
-                currency={currency}
-                size={variant === 'sheet' ? 'lg' : 'md'}
-              />
-            ))}
+            {summary.transfers.map((t) => {
+              const to = byId.get(t.toId)!;
+              const yours = me != null && t.fromId === me.id;
+              return (
+                <div
+                  key={`${t.fromId}-${t.toId}`}
+                  className="flex flex-col gap-2"
+                >
+                  <TransferRow
+                    from={byId.get(t.fromId)!}
+                    to={to}
+                    amountCents={t.amountCents}
+                    currency={currency}
+                    size={variant === 'sheet' ? 'lg' : 'md'}
+                  />
+                  {yours && (
+                    <PayHint
+                      name={to.name}
+                      amountCents={t.amountCents}
+                      currency={currency}
+                      methods={methodsFor(to)}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

@@ -12,7 +12,7 @@ import {
   memberProfileStatements,
   patchProfile,
   putPaymentMethods,
-  setProfileField,
+  settingsStatements,
 } from './profiles';
 import { listSplitSummaries } from './summaries';
 import {
@@ -161,7 +161,7 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
           )
           .bind(id, name, currency, newInviteToken(), now),
         // New splits default to the currency used last
-        setProfileField(db, email, 'last_currency', currency),
+        ...settingsStatements(db, email, { lastCurrency: currency }),
         db
           .prepare(
             `INSERT INTO split_members (split_id, email, role, joined_at) VALUES (?, ?, 'owner', ?)`,
@@ -185,7 +185,11 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
             .prepare('SELECT role FROM split_members WHERE split_id = ? AND email = ?')
             .bind(id, email),
           db
-            .prepare('SELECT name, currency, invite_token AS inviteToken FROM splits WHERE id = ?')
+            .prepare(
+              `SELECT name, currency, invite_token AS inviteToken,
+                 distributor_person_id AS distributorId
+               FROM splits WHERE id = ?`,
+            )
             .bind(id),
           ...memberProfileStatements(db, id),
           db
@@ -199,7 +203,7 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
         ]);
       const role = (roleRows.results[0] as { role: Role } | undefined)?.role;
       const split = splitRows.results[0] as
-        | { name: string; currency: string; inviteToken: string }
+        | { name: string; currency: string; inviteToken: string; distributorId: string | null }
         | undefined;
       // Non-members get the same 404 as a missing split, so ids can't be probed
       if (role == null || split == null) return notFound();
@@ -208,6 +212,7 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
         id,
         name: split.name,
         currency: split.currency,
+        distributorId: split.distributorId,
         role,
         members: assembleMembers([memberRows, methodRows]),
         invites: role === 'owner' ? inviteRows.results : undefined,

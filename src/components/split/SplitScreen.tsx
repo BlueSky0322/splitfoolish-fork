@@ -1,5 +1,4 @@
 import { ActionIcon, Button, Menu, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
-import { useLocalStorage } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
@@ -40,6 +39,7 @@ import {
   SortKey,
   groupItems,
 } from '../../split/grouping';
+import { useProfile } from '../../profile/ProfileContext';
 import { currencySymbol } from '../../utils/money';
 import ErrorBoundary from '../ErrorBoundary';
 import PhotoStrip from '../photos/PhotoStrip';
@@ -169,14 +169,15 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     photo.uploadedBy === myEmail || meta?.role === 'owner';
   const { state } = useContext(AppContext);
   const isDesktop = useIsDesktop();
-  const [prefs, setPrefs] = useLocalStorage<ViewPrefs>({
-    key: 'sf-split-view',
-    defaultValue: DEFAULT_PREFS,
-  });
-  const [distributor, setDistributor] = useLocalStorage<string>({
-    key: `sf-distributor:${splitId}`,
-    defaultValue: '',
-  });
+  // How items are shown, saved with the account
+  const { profile, updateSettings } = useProfile();
+  const settings = profile?.settings;
+  const prefs: ViewPrefs = {
+    view: settings?.itemsView ?? DEFAULT_PREFS.view,
+    groupBy: settings?.itemsGroupBy ?? DEFAULT_PREFS.groupBy,
+    sortKey: settings?.itemsSortKey ?? DEFAULT_PREFS.sortKey,
+    sortDir: settings?.itemsSortDir ?? DEFAULT_PREFS.sortDir,
+  };
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const close = () => setDialog(null);
@@ -187,7 +188,10 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const splitPhotoCount = meta?.attachments.filter((a) => a.itemId == null).length ?? 0;
 
   const currency = meta?.currency ?? 'MYR';
-  const distributorId = state.people.some((p) => p.id === distributor) ? distributor : null;
+  // Shared by everyone in the split; ignored if that person was just removed
+  const distributorId = state.people.some((p) => p.id === meta?.distributorId)
+    ? meta?.distributorId ?? null
+    : null;
   const summary = useMemo(
     () => summarise(state.people, state.items, distributorId),
     [state.people, state.items, distributorId],
@@ -215,7 +219,12 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   }
 
   const setPref = (patch: Partial<ViewPrefs>) =>
-    setPrefs((p) => ({ ...DEFAULT_PREFS, ...p, ...patch }));
+    updateSettings({
+      ...(patch.view && { itemsView: patch.view }),
+      ...(patch.groupBy && { itemsGroupBy: patch.groupBy }),
+      ...(patch.sortKey && { itemsSortKey: patch.sortKey }),
+      ...(patch.sortDir && { itemsSortDir: patch.sortDir }),
+    });
   const sortBy = (key: SortKey) =>
     setPref(
       prefs.sortKey === key
@@ -461,9 +470,10 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       currency={currency}
       me={me}
       distributorId={distributorId}
-      onDistributorChange={(id) => setDistributor(id ?? '')}
+      onDistributorChange={(id) => actions.setDistributor(id)}
       onShareImage={() => setDialog({ kind: 'share' })}
       onLinkMe={linkMe}
+      members={meta?.members ?? []}
       variant={isDesktop ? 'panel' : 'sheet'}
     />
   );
@@ -566,9 +576,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
         title={meta ? `Share ${meta.name}` : 'Share'}
         width={520}
       >
-        {dialog?.kind === 'members' && myEmail && (
+        {dialog?.kind === 'members' && myEmail && meta && (
           <SplitMembers
-            splitId={splitId}
+            meta={meta}
             myEmail={myEmail}
             onChange={refreshMeta}
           />

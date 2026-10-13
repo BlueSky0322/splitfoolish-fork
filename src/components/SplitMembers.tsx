@@ -1,14 +1,19 @@
-import { Minus } from '@phosphor-icons/react';
-import { ActionIcon, Button, CopyButton, Loader, TextInput, Title, Tooltip } from '@mantine/core';
-import { modals } from '@mantine/modals';
-import { useCallback, useEffect, useState } from 'react';
+import { Button, CopyButton, TextInput, UnstyledButton } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { Check, Copy } from '@phosphor-icons/react';
+import { useState } from 'react';
 import { SplitInvite, api, invitesPageUrl, inviteUrl } from '../api';
+import { reloadHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
 import { SplitMeta } from '../hooks/useSplit';
+import { nameFor } from '../profile/ProfileContext';
+import UserAvatar from './ui/UserAvatar';
+import classes from './SplitMembers.module.css';
 
 interface SplitMembersProps {
-  splitId: string;
+  meta: SplitMeta;
   myEmail: string;
+  /** Reloads members and invites after a change */
   onChange: () => Promise<void>;
 }
 
@@ -16,35 +21,32 @@ interface SplitMembersProps {
 const inviteMessage = (splitName: string) =>
   `I've invited you to "${splitName}" on Splitfoolish. Sign in with this email to accept: ${invitesPageUrl()}`;
 
-// Modal contents: invites (owner) and who has access. Loads its own copy of
-// the split's sharing details, since modal contents don't re-render with the page.
-const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
-  const [meta, setMeta] = useState<SplitMeta | null>(null);
+const shortDate = (time: number) =>
+  new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'numeric' });
+
+const showError = (err: unknown) =>
+  notifications.show({
+    color: 'red',
+    message: err instanceof Error ? err.message : 'Something went wrong',
+  });
+
+// Sharing and members (F8): invite by email, the share link, who has access, and
+// deleting or leaving the split
+const SplitMembers = ({ meta, myEmail, onChange }: SplitMembersProps) => {
   const [busy, setBusy] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [justInvited, setJustInvited] = useState<SplitInvite | null>(null);
-
-  const load = useCallback(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { people, items, ...rest } = await api.getSplit(splitId);
-    setMeta(rest);
-  }, [splitId]);
-
-  useEffect(() => {
-    load().catch((err) => alert(err instanceof Error ? err.message : err));
-  }, [load]);
-
-  if (meta == null) return <Loader size="sm" />;
+  const [confirmEnd, setConfirmEnd] = useState(false);
   const isOwner = meta.role === 'owner';
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     try {
       await action();
-      await Promise.all([load(), onChange()]);
+      await onChange();
     } catch (err) {
-      alert(err instanceof Error ? err.message : err);
+      showError(err);
     } finally {
       setBusy(false);
     }
@@ -55,10 +57,10 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
     setBusy(true);
     try {
       await action();
-      modals.closeAll();
+      reloadHomeData();
       navigate('');
     } catch (err) {
-      alert(err instanceof Error ? err.message : err);
+      showError(err);
       setBusy(false);
     }
   };
@@ -68,10 +70,10 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
     setInviteError(null);
     setBusy(true);
     try {
-      const invite = await api.inviteByEmail(meta.id, inviteEmail);
+      const invite = await api.inviteByEmail(meta.id, inviteEmail.trim());
       setJustInvited(invite);
       setInviteEmail('');
-      await load();
+      await onChange();
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -79,49 +81,42 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
     }
   };
 
-  const leave = () => exit(() => api.removeMember(meta.id, myEmail));
-
-  const deleteSplit = () => {
-    if (!confirm(`Delete "${meta.name}" for everyone? This cannot be undone.`)) return;
-    exit(() => api.deleteSplit(meta.id));
-  };
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       {isOwner && (
         <form
           className="flex flex-col gap-2"
           onSubmit={sendInvite}
         >
-          <Title order={5}>Invite by email</Title>
-          <div className="text-xs sf-muted">
-            They'll see the invite after signing in with that email, and can accept or decline.
-          </div>
           <div className="flex gap-2 items-start">
             <TextInput
               className="flex-1"
               type="email"
+              label="Invite by email"
               placeholder="friend@example.com"
-              aria-label="Email to invite"
               value={inviteEmail}
               error={inviteError}
               onChange={(e) => setInviteEmail(e.currentTarget.value)}
+              rightSectionWidth={0}
             />
             <Button
               type="submit"
+              className="mt-[25px]"
               disabled={busy || inviteEmail.trim() === ''}
             >
               Invite
             </Button>
           </div>
           {justInvited && (
-            <div className="text-xs bg-[var(--sf-tint)] rounded p-2 flex flex-wrap gap-2 items-center justify-between">
-              <span>Invited {justInvited.email}. We don't send emails yet, so let them know:</span>
+            <div className={classes.note}>
+              <span className="flex-1">
+                Invited {justInvited.email}. We don't send emails yet, so send them the link.
+              </span>
               <CopyButton value={inviteMessage(meta.name)}>
                 {({ copied, copy }) => (
                   <Button
-                    size="compact-xs"
-                    variant="light"
+                    size="compact-sm"
+                    variant="subtle"
                     onClick={copy}
                   >
                     {copied ? 'Copied' : 'Copy message'}
@@ -130,120 +125,139 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
               </CopyButton>
             </div>
           )}
-          {meta.invites != null && meta.invites.length > 0 && (
-            <ul className="flex flex-col gap-1">
-              {meta.invites.map((i) => (
-                <li
-                  key={i.id}
-                  className="flex justify-between items-center"
-                >
-                  <span>
-                    {i.email}
-                    <span className="text-xs sf-muted">
-                      {' '}
-                      · invited, expires {new Date(i.expiresAt).toLocaleDateString()}
-                    </span>
-                  </span>
-                  <Button
-                    size="compact-xs"
-                    variant="subtle"
-                    color="red"
-                    disabled={busy}
-                    aria-label={`Revoke invite for ${i.email}`}
-                    onClick={() => run(() => api.revokeInvite(meta.id, i.id))}
-                  >
-                    Revoke
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
         </form>
       )}
 
       {isOwner && meta.inviteToken && (
         <div className="flex flex-col gap-2">
-          <Title order={5}>Or share a link</Title>
-          <div className="text-xs sf-muted">
-            Anyone who opens this link and signs in can view and edit this split.
-          </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-end">
             <TextInput
               className="flex-1"
               readOnly
+              label="Share link"
+              description="Anyone who opens it and signs in can view and edit this split."
               value={inviteUrl(meta.inviteToken)}
-              aria-label="Invite link"
+              onFocus={(e) => e.currentTarget.select()}
             />
             <CopyButton value={inviteUrl(meta.inviteToken)}>
               {({ copied, copy }) => (
                 <Button
+                  variant="default"
                   onClick={copy}
-                  color={copied ? 'teal' : 'blue'}
+                  leftSection={copied ? <Check size={16} /> : <Copy size={16} />}
                 >
                   {copied ? 'Copied' : 'Copy'}
                 </Button>
               )}
             </CopyButton>
           </div>
-          <Button
-            variant="subtle"
-            size="compact-sm"
-            className="self-start"
+          <UnstyledButton
+            className={`${classes.textAction} self-start`}
             disabled={busy}
             onClick={() => run(() => api.resetInvite(meta.id))}
           >
             Reset link (the old one stops working)
-          </Button>
+          </UnstyledButton>
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        <Title order={5}>People with access</Title>
-        <ul className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1">
+        <h6 className="sf-label">People with access</h6>
+        <div className={classes.rows}>
           {meta.members.map((m) => (
-            <li
+            <div
               key={m.email}
-              className="flex justify-between items-center"
+              className={classes.row}
             >
-              <span>
-                {m.email}
-                {m.email === myEmail && ' (you)'}
-                <span className="text-xs sf-muted"> · {m.role}</span>
-              </span>
+              <UserAvatar
+                name={nameFor(m.email, m.displayName)}
+                email={m.email}
+                avatarVersion={m.avatarVersion}
+                size={30}
+              />
+              <div className="min-w-0 flex-1">
+                <div className={classes.email}>
+                  {m.displayName ? `${m.displayName} · ${m.email}` : m.email}
+                  {m.email === myEmail && <span className="sf-muted"> (you)</span>}
+                </div>
+                <div className={classes.role}>{m.role === 'owner' ? 'Owner' : 'Editor'}</div>
+              </div>
               {isOwner && m.role !== 'owner' && (
-                <Tooltip label="Remove access">
-                  <ActionIcon
-                    color="red"
-                    disabled={busy}
-                    aria-label={`Remove ${m.email}`}
-                    onClick={() => run(() => api.removeMember(meta.id, m.email))}
-                  >
-                    <Minus size={18} />
-                  </ActionIcon>
-                </Tooltip>
+                <UnstyledButton
+                  className={classes.textAction}
+                  disabled={busy}
+                  aria-label={`Remove ${m.email}`}
+                  onClick={() => run(() => api.removeMember(meta.id, m.email))}
+                >
+                  Remove
+                </UnstyledButton>
               )}
-            </li>
+            </div>
           ))}
-        </ul>
+          {meta.invites?.map((i) => (
+            <div
+              key={i.id}
+              className={classes.row}
+            >
+              <UserAvatar
+                name={i.email}
+                size={30}
+              />
+              <div className="min-w-0 flex-1">
+                <div className={classes.email}>{i.email}</div>
+                <div className={classes.role}>Invited · expires {shortDate(i.expiresAt)}</div>
+              </div>
+              <UnstyledButton
+                className={classes.textAction}
+                disabled={busy}
+                aria-label={`Revoke invite for ${i.email}`}
+                onClick={() => run(() => api.revokeInvite(meta.id, i.id))}
+              >
+                Revoke
+              </UnstyledButton>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {isOwner ? (
-        <Button
-          color="red"
-          variant="light"
-          disabled={busy}
-          onClick={deleteSplit}
+      {confirmEnd ? (
+        <div
+          className={classes.confirm}
+          role="alertdialog"
+          aria-label={isOwner ? 'Delete split?' : 'Leave split?'}
         >
-          Delete split
-        </Button>
+          <p className="text-sm">
+            {isOwner
+              ? `Delete "${meta.name}" for everyone? Its items and photos go too. This can't be undone.`
+              : `Leave "${meta.name}"? You'll need a new invite to get back in.`}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="default"
+              onClick={() => setConfirmEnd(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              loading={busy}
+              onClick={() =>
+                exit(() =>
+                  isOwner ? api.deleteSplit(meta.id) : api.removeMember(meta.id, myEmail),
+                )
+              }
+            >
+              {isOwner ? 'Delete for everyone' : 'Leave split'}
+            </Button>
+          </div>
+        </div>
       ) : (
         <Button
-          color="red"
-          variant="light"
+          variant="default"
           disabled={busy}
-          onClick={leave}
+          onClick={() => setConfirmEnd(true)}
         >
-          Leave split
+          {isOwner ? 'Delete split for everyone' : 'Leave split'}
         </Button>
       )}
     </div>

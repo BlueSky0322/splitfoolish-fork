@@ -1,16 +1,19 @@
 import { AppShell } from '@mantine/core';
-import { useHotkeys, useLocalStorage } from '@mantine/hooks';
+import { useHotkeys } from '@mantine/hooks';
 import { ReactNode } from 'react';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { Route } from '../../hooks/useRoute';
+import { useProfile } from '../../profile/ProfileContext';
 import Sidebar from './Sidebar';
 
 // Desktop gets a sidebar (collapsible to a rail with the button or "["); phones and
 // tablets get the page alone, each with its own top bar
 const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) => {
   const isDesktop = useIsDesktop();
-  const [open, setOpen] = useLocalStorage({ key: 'sf-sidebar-open', defaultValue: true });
-  const toggle = () => setOpen((o) => !o);
+  const { profile, updateSettings } = useProfile();
+  // Saved with the account, so it's the same on every computer
+  const open = profile?.settings.sidebarOpen ?? true;
+  const toggle = () => updateSettings({ sidebarOpen: !open });
   useHotkeys([['[', toggle]]);
 
   if (!isDesktop) return <main className="min-h-dvh">{children}</main>;

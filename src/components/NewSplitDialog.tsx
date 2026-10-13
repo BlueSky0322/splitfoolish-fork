@@ -22,7 +22,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const currencies = useMemo(listCurrencies, []);
   const form = useForm({
-    initialValues: { name: '', currency: profile?.lastCurrency ?? DEFAULT_CURRENCY },
+    initialValues: { name: '', currency: profile?.settings.lastCurrency ?? DEFAULT_CURRENCY },
     validate: {
       name: (value) => (value.trim() ? null : 'Give the split a name'),
       currency: (value) => (value ? null : 'Pick a currency'),
@@ -34,7 +34,9 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       const { id } = await api.createSplit(name.trim(), currency);
-      if (profile != null) replace({ ...profile, lastCurrency: currency });
+      if (profile != null) {
+        replace({ ...profile, settings: { ...profile.settings, lastCurrency: currency } });
+      }
       reloadHomeData();
       onDone();
       navigate(`?s=${id}`);
