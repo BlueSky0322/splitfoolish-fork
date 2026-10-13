@@ -1,71 +1,47 @@
-import { Loader } from '@mantine/core';
-import { useEffect, useState } from 'react';
-import './App.css';
-import { api } from './api';
-import { clearCache, setCacheUser } from './split-cache';
+import { Button } from '@mantine/core';
+import { SignIn } from '@phosphor-icons/react';
 import JoinSplit from './components/JoinSplit';
-import SplitView from './components/SplitView';
+import StateCard from './components/ui/StateCard';
+import { NewSplitProvider } from './components/NewSplitDialog';
+import SettingsPage from './components/settings/SettingsPage';
+import SplitScreen from './components/split/SplitScreen';
 import SplitsHome from './components/SplitsHome';
+import AppLayout from './components/shell/AppLayout';
 import { useRoute } from './hooks/useRoute';
+import { useProfile } from './profile/ProfileContext';
 
 // Signing in happens in front of the app (Cloudflare Access), so by the time this
 // runs the user is known; /api/me just tells us who. Pages load alongside it.
 function App() {
   const route = useRoute();
-  const [email, setEmail] = useState<string | null>(null);
-  const [signedOut, setSignedOut] = useState(false);
+  const { profile, signedOut } = useProfile();
 
-  useEffect(() => {
-    api
-      .me()
-      .then(async ({ email }) => {
-        await setCacheUser(email);
-        setEmail(email);
-      })
-      .catch(() => setSignedOut(true));
-  }, []);
+  if (signedOut) {
+    return (
+      <StateCard
+        icon={<SignIn size={36} />}
+        title="You're signed out"
+        body="Sign in again to see your splits."
+        action={<Button onClick={() => window.location.reload()}>Sign in</Button>}
+      />
+    );
+  }
 
   return (
-    <div className="max-w-screen-md m-auto bg-white min-h-screen">
-      {signedOut && (
-        <div className="p-8 text-center">
-          You're signed out. <a href={window.location.href}>Reload</a> to sign in again.
-        </div>
-      )}
-      {!signedOut && (
-        <>
-          {route.view === 'home' && <SplitsHome tab={route.tab} />}
-          {route.view === 'join' && <JoinSplit token={route.token} />}
-          {route.view === 'split' && (
-            <SplitView
-              key={route.id}
-              splitId={route.id}
-              myEmail={email}
-            />
-          )}
-          {email == null ? (
-            <div className="py-4 flex justify-center">
-              <Loader size="xs" />
-            </div>
-          ) : (
-            <div className="text-xs text-center text-gray-500 py-4">
-              Signed in as {email} ·{' '}
-              <a
-                className="underline"
-                href="/cdn-cgi/access/logout"
-                onClick={async (e) => {
-                  e.preventDefault();
-                  await clearCache();
-                  window.location.href = '/cdn-cgi/access/logout';
-                }}
-              >
-                Sign out
-              </a>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+    <NewSplitProvider>
+      <AppLayout route={route}>
+        {route.view === 'home' && <SplitsHome tab={route.tab} />}
+        {route.view === 'join' && <JoinSplit token={route.token} />}
+        {route.view === 'settings' && <SettingsPage />}
+        {route.view === 'split' && (
+          <SplitScreen
+            key={route.id}
+            splitId={route.id}
+            myEmail={profile?.email ?? null}
+          />
+        )}
+      </AppLayout>
+    </NewSplitProvider>
   );
 }
 
