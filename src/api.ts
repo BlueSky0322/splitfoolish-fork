@@ -15,11 +15,29 @@ export interface SplitMember {
   role: Role;
 }
 
+export interface SplitInvite {
+  id: string;
+  email: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface MyInvite {
+  id: string;
+  splitId: string;
+  splitName: string;
+  invitedBy: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface SplitDetail {
   id: string;
   name: string;
   role: Role;
   members: SplitMember[];
+  /** Pending email invites; only sent to the owner */
+  invites?: SplitInvite[];
   inviteToken?: string;
   people: IPerson[];
   items: IItem[];
@@ -58,9 +76,21 @@ export const api = {
   resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
     request<{ ok: true }>('DELETE', `${splitPath(id)}/members/${encodeURIComponent(email)}`),
+  inviteByEmail: (id: string, email: string) =>
+    request<SplitInvite>('POST', `${splitPath(id)}/invites`, { email }),
+  revokeInvite: (id: string, inviteId: string) =>
+    request<{ ok: true }>('DELETE', `${splitPath(id)}/invites/${encodeURIComponent(inviteId)}`),
+  myInvites: () => request<{ invites: MyInvite[] }>('GET', '/api/invites'),
+  acceptInvite: (inviteId: string) =>
+    request<{ id: string }>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
+  declineInvite: (inviteId: string) =>
+    request<{ ok: true }>('POST', `/api/invites/${encodeURIComponent(inviteId)}/decline`),
   joinSplit: (token: string) =>
     request<{ id: string }>('POST', `/api/join/${encodeURIComponent(token)}`),
 };
 
 export const inviteUrl = (token: string) =>
   `${window.location.origin}/?join=${encodeURIComponent(token)}`;
+
+/** Where an emailed-in invitee goes to find their pending invites */
+export const invitesPageUrl = () => `${window.location.origin}/?tab=invites`;

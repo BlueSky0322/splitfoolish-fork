@@ -35,7 +35,7 @@ function App() {
       )}
       {email != null && (
         <>
-          {route.view === 'home' && <SplitsHome />}
+          {route.view === 'home' && <SplitsHome tab={route.tab} />}
           {route.view === 'join' && <JoinSplit token={route.token} />}
           {route.view === 'split' && (
             <SplitView
