@@ -17,7 +17,7 @@ const UserAvatar = ({ name, email, avatarVersion, size = 26, active }: UserAvata
     src={email && avatarVersion ? avatarUrl(email, avatarVersion) : null}
     alt={name}
     size={size}
-    radius="xl"
+    radius={9999}
     styles={{
       placeholder: {
         background: 'var(--sf-avatar)',

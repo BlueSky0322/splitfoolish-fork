@@ -81,6 +81,8 @@ export interface MyInvite {
   splitId: string;
   splitName: string;
   invitedBy: string;
+  /** The inviter's display name, if they set one */
+  invitedByName: string | null;
   createdAt: number;
   expiresAt: number;
 }

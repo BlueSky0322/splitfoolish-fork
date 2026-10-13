@@ -364,8 +364,9 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     const { results } = await db
       .prepare(
         `SELECT i.id, i.split_id AS splitId, s.name AS splitName, i.invited_by AS invitedBy,
-           i.created_at AS createdAt, i.expires_at AS expiresAt
+           p.display_name AS invitedByName, i.created_at AS createdAt, i.expires_at AS expiresAt
          FROM split_invites i JOIN splits s ON s.id = i.split_id
+         LEFT JOIN profiles p ON p.email = i.invited_by
          WHERE i.email = ? AND i.expires_at > ?
          ORDER BY i.created_at DESC`,
       )

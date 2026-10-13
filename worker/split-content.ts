@@ -53,8 +53,10 @@ const toCents = (amount: number) => Math.round(amount * 100);
 export const contentStatements = (db: D1Database, splitId: string) => [
   db
     .prepare(
-      `SELECT id, name, member_email AS memberEmail FROM people
-       WHERE split_id = ? ORDER BY position, rowid`,
+      // Someone linked to an account goes by that account's display name, if they set one
+      `SELECT p.id, coalesce(pr.display_name, p.name) AS name, p.member_email AS memberEmail
+       FROM people p LEFT JOIN profiles pr ON pr.email = p.member_email
+       WHERE p.split_id = ? ORDER BY p.position, p.rowid`,
     )
     .bind(splitId),
   db
@@ -336,6 +338,10 @@ function plan(
     case 'renamePerson': {
       const person = model.people.get(change.id);
       if (person == null) throw new Refused('That person was removed by someone else');
+      // Their name comes from their account; only they can change it, in Settings
+      if (person.memberEmail != null) {
+        throw new Refused('Their name comes from their account, so only they can change it');
+      }
       const name = readName(change.name);
       if (name == null) throw new Refused(`Name must be 1-${MAX_NAME_LENGTH} characters`);
       if (nameTaken(model, name, change.id)) throw new Refused(`${name} is already in this split`);

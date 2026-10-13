@@ -17,7 +17,7 @@ import { CATEGORIES } from '../../split/categories';
 import { currencySymbol, formatMoney } from '../../utils/money';
 import { loadMath } from '../../utils/math';
 import PhotoStrip from '../photos/PhotoStrip';
-import UserAvatar from '../ui/UserAvatar';
+import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
 
 interface ItemFormProps {
@@ -246,8 +246,8 @@ const ItemForm = ({
               data-selected={payerId === p.id || undefined}
               onClick={() => setPayerId(p.id)}
             >
-              <UserAvatar
-                name={p.name}
+              <PersonAvatar
+                person={p}
                 size={22}
               />
               {p.name}

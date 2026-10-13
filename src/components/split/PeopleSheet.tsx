@@ -1,15 +1,15 @@
 import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
-import { CaretDown, CaretRight, UserCheck } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { SplitMember, SplitInvite } from '../../api';
+import { SplitInvite, SplitMember } from '../../api';
 import { removeBlocker, useSplitActions } from '../../hooks/useSplit';
 import { AppReducerState, IPerson } from '../../interfaces/app-reducer';
 import { nameFor } from '../../profile/ProfileContext';
 import { SplitSummary } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
-import UserAvatar from '../ui/UserAvatar';
+import PersonAvatar from './PersonAvatar';
 import TransferRow from './TransferRow';
-import classes from './Split.module.css';
+import classes from './PeopleSheet.module.css';
 
 interface PeopleSheetProps {
   state: AppReducerState;
@@ -18,18 +18,31 @@ interface PeopleSheetProps {
   myEmail: string | null;
   members: SplitMember[];
   invites: SplitInvite[];
-  /** Opens with this person's details showing */
+  /** Opens on this person's page */
   initialPersonId?: string | null;
   onShowItems: (personId: string) => void;
 }
 
-function PersonDetail({
+function BalanceText({ cents, currency }: { cents: number; currency: string }) {
+  return (
+    <span
+      className={`${classes.balance} ${
+        cents > 0 ? 'sf-positive' : cents < 0 ? 'sf-negative' : 'sf-muted'
+      }`}
+    >
+      {cents === 0 ? 'Settled' : `${cents > 0 ? 'Gets' : 'Owes'} ${formatMoney(cents, currency)}`}
+    </span>
+  );
+}
+
+function PersonPage({
   person,
   state,
   summary,
   currency,
   myEmail,
   meId,
+  onBack,
   onShowItems,
 }: {
   person: IPerson;
@@ -38,24 +51,25 @@ function PersonDetail({
   currency: string;
   myEmail: string | null;
   meId: string | null;
+  onBack: () => void;
   onShowItems: (personId: string) => void;
 }) {
   const actions = useSplitActions()!;
   const [name, setName] = useState(person.name);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const byId = new Map(state.people.map((p) => [p.id, p]));
+  const balance = summary.balances.get(person.id);
   const theirs = summary.transfers.filter((t) => t.fromId === person.id || t.toId === person.id);
   const itemCount = state.items.filter(
     (i) => i.payer.id === person.id || i.participants.some((p) => p.id === person.id),
   ).length;
   const isMe = myEmail != null && person.memberEmail === myEmail;
-
-  // Set when they're on items they only share, to confirm taking them off those
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const hasAccount = person.memberEmail != null;
 
   const remove = () => {
     const plain = removeBlocker(state, person.id, false);
     if (plain == null) {
-      actions.removePerson(person.id);
+      if (actions.removePerson(person.id)) onBack();
       return;
     }
     // Can't go even from shared items (they paid, or it would empty an item): explain why
@@ -67,51 +81,48 @@ function PersonDetail({
   };
 
   return (
-    <div className={classes.personDetail}>
-      <TextInput
-        label="Name"
-        value={name}
-        maxLength={80}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={() => {
-          if (!actions.renamePerson(person.id, name)) setName(person.name);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        }}
-      />
+    <div className="flex flex-col gap-5">
+      <UnstyledButton
+        className={classes.back}
+        onClick={onBack}
+      >
+        <CaretLeft size={14} /> People
+      </UnstyledButton>
 
-      {myEmail != null &&
-        (isMe ? (
-          <div className="flex items-center gap-2 text-sm">
-            <UserCheck
-              size={16}
-              className="sf-muted"
-            />
-            <span className="flex-1">This is you</span>
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              onClick={() => actions.linkPerson(person.id, null)}
-            >
-              Not me
-            </Button>
+      <div className={classes.hero}>
+        <PersonAvatar
+          person={person}
+          size={56}
+          active={isMe}
+        />
+        <div className="min-w-0 flex-1">
+          <div className={classes.heroName}>
+            {person.name}
+            {isMe && <span className="sf-tag">You</span>}
           </div>
-        ) : (
-          meId == null &&
-          person.memberEmail == null && (
-            <Button
-              variant="default"
-              leftSection={<UserCheck size={16} />}
-              onClick={() => actions.linkPerson(person.id, myEmail)}
-            >
-              This is me
-            </Button>
-          )
-        ))}
-      {!isMe && person.memberEmail && (
-        <div className="sf-muted text-xs">Linked to {person.memberEmail}</div>
-      )}
+          <div className={classes.heroSub}>
+            {hasAccount ? person.memberEmail : 'Guest, without an account'}
+          </div>
+        </div>
+      </div>
+
+      <div className={classes.stats}>
+        <div>
+          <div className={classes.statLabel}>Paid</div>
+          <div className={classes.statValue}>{formatMoney(balance?.paidCents ?? 0, currency)}</div>
+        </div>
+        <div>
+          <div className={classes.statLabel}>Share</div>
+          <div className={classes.statValue}>{formatMoney(balance?.shareCents ?? 0, currency)}</div>
+        </div>
+        <div>
+          <div className={classes.statLabel}>Balance</div>
+          <BalanceText
+            cents={balance?.balanceCents ?? 0}
+            currency={currency}
+          />
+        </div>
+      </div>
 
       {theirs.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -125,6 +136,27 @@ function PersonDetail({
             />
           ))}
         </div>
+      )}
+
+      {hasAccount ? (
+        <p className="sf-muted text-sm">
+          {isMe
+            ? 'Your name and picture come from your Settings.'
+            : 'Their name and picture come from their account.'}
+        </p>
+      ) : (
+        <TextInput
+          label="Name"
+          value={name}
+          maxLength={80}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => {
+            if (!actions.renamePerson(person.id, name)) setName(person.name);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+        />
       )}
 
       {confirming ? (
@@ -145,36 +177,57 @@ function PersonDetail({
             </Button>
             <Button
               color="red"
-              onClick={() => actions.removePerson(person.id, true)}
+              onClick={() => actions.removePerson(person.id, true) && onBack()}
             >
               Remove {person.name}
             </Button>
           </div>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div className={classes.actionList}>
+          {isMe && (
+            <UnstyledButton
+              className={classes.action}
+              onClick={() => actions.linkPerson(person.id, null)}
+            >
+              <UserCheck size={18} />
+              <span className="flex-1">This isn't me</span>
+            </UnstyledButton>
+          )}
+          {myEmail != null && meId == null && !hasAccount && (
+            <UnstyledButton
+              className={classes.action}
+              onClick={() => actions.linkPerson(person.id, myEmail)}
+            >
+              <UserCheck size={18} />
+              <span className="flex-1">This is me</span>
+            </UnstyledButton>
+          )}
           {itemCount > 0 && (
-            <Button
-              variant="default"
+            <UnstyledButton
+              className={classes.action}
               onClick={() => onShowItems(person.id)}
             >
-              Show their items ({itemCount})
-            </Button>
+              <ListBullets size={18} />
+              <span className="flex-1">Show their items</span>
+              <span className="sf-muted">{itemCount}</span>
+            </UnstyledButton>
           )}
-          <Button
-            variant="subtle"
-            color="red"
+          <UnstyledButton
+            className={`${classes.action} ${classes.danger}`}
             onClick={remove}
           >
-            Remove from split
-          </Button>
+            <UserMinus size={18} />
+            <span className="flex-1">Remove from split</span>
+          </UnstyledButton>
         </div>
       )}
     </div>
   );
 }
 
-// Everyone in the bill: who they are, what they paid and owe, and editing them
+// Everyone in the bill. People with an account go by their own name and picture;
+// guests (no account) are named by whoever adds them. Tap someone for their page.
 const PeopleSheet = ({
   state,
   summary,
@@ -186,9 +239,26 @@ const PeopleSheet = ({
   onShowItems,
 }: PeopleSheetProps) => {
   const actions = useSplitActions()!;
-  const [open, setOpen] = useState<string | null>(initialPersonId ?? null);
+  const [openId, setOpenId] = useState<string | null>(initialPersonId ?? null);
   const [newName, setNewName] = useState('');
   const meId = state.people.find((p) => myEmail != null && p.memberEmail === myEmail)?.id ?? null;
+  const open = state.people.find((p) => p.id === openId);
+
+  if (open) {
+    return (
+      <PersonPage
+        key={open.id}
+        person={open}
+        state={state}
+        summary={summary}
+        currency={currency}
+        myEmail={myEmail}
+        meId={meId}
+        onBack={() => setOpenId(null)}
+        onShowItems={onShowItems}
+      />
+    );
+  }
 
   // Members and invitees not yet in the bill, offered first when adding someone
   const linked = new Set(state.people.map((p) => p.memberEmail).filter(Boolean));
@@ -205,6 +275,12 @@ const PeopleSheet = ({
     if (actions.addPerson(value, match?.email ?? undefined)) setNewName('');
   };
 
+  // You first, then everyone in the order they were added
+  const ordered = [
+    ...state.people.filter((p) => p.id === meId),
+    ...state.people.filter((p) => p.id !== meId),
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <form
@@ -217,13 +293,13 @@ const PeopleSheet = ({
         <Autocomplete
           className="flex-1"
           label="Add someone"
-          placeholder="Name"
+          placeholder="Name, or pick someone in the split"
           value={newName}
           onChange={setNewName}
           onOptionSubmit={add}
           data={suggestions.map((s) => s.label)}
           maxLength={80}
-          // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
+          // Inside a dialog, so screen readers can reach the options
           comboboxProps={{ withinPortal: false }}
         />
         <Button
@@ -234,63 +310,43 @@ const PeopleSheet = ({
         </Button>
       </form>
 
-      {state.people.length === 0 ? (
+      {ordered.length === 0 ? (
         <div className="sf-muted text-sm text-center py-4">
           Add everyone who's splitting, including yourself.
         </div>
       ) : (
-        <div className={`sf-card ${classes.peopleList}`}>
-          {state.people.map((p) => {
-            const b = summary.balances.get(p.id);
-            const cents = b?.balanceCents ?? 0;
-            const expanded = open === p.id;
-            return (
-              <div key={p.id}>
-                <UnstyledButton
-                  className={classes.personRow}
-                  onClick={() => setOpen(expanded ? null : p.id)}
-                  aria-expanded={expanded}
-                >
-                  <UserAvatar
-                    name={p.name}
-                    size={30}
-                    active={p.id === meId}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className={classes.personName}>
-                      {p.name}
-                      {p.id === meId && <span className="sf-muted"> (you)</span>}
-                    </div>
-                    <div className={classes.personMeta}>
-                      Paid {formatMoney(b?.paidCents ?? 0, currency)} · share{' '}
-                      {formatMoney(b?.shareCents ?? 0, currency)}
-                    </div>
+        <div className="flex flex-col gap-2">
+          <div className="sf-label">In this split · {ordered.length}</div>
+          <div className={classes.list}>
+            {ordered.map((p) => (
+              <UnstyledButton
+                key={p.id}
+                className={classes.row}
+                onClick={() => setOpenId(p.id)}
+              >
+                <PersonAvatar
+                  person={p}
+                  size={34}
+                  active={p.id === meId}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className={classes.name}>
+                    {p.name}
+                    {p.id === meId && <span className="sf-tag">You</span>}
                   </div>
-                  <span
-                    className={`${classes.personBalance} ${
-                      cents > 0 ? 'sf-positive' : cents < 0 ? 'sf-negative' : 'sf-muted'
-                    }`}
-                  >
-                    {cents === 0
-                      ? 'Settled'
-                      : `${cents > 0 ? 'Gets' : 'Owes'} ${formatMoney(cents, currency)}`}
-                  </span>
-                  {expanded ? <CaretDown size={16} /> : <CaretRight size={16} />}
-                </UnstyledButton>
-                {expanded && (
-                  <PersonDetail
-                    person={p}
-                    state={state}
-                    summary={summary}
-                    currency={currency}
-                    myEmail={myEmail}
-                    meId={meId}
-                    onShowItems={onShowItems}
-                  />
-                )}
-              </div>
-            );
-          })}
+                  <div className={classes.sub}>{p.memberEmail ?? 'Guest'}</div>
+                </div>
+                <BalanceText
+                  cents={summary.balances.get(p.id)?.balanceCents ?? 0}
+                  currency={currency}
+                />
+                <CaretRight
+                  size={14}
+                  className="sf-muted"
+                />
+              </UnstyledButton>
+            ))}
+          </div>
         </div>
       )}
     </div>
