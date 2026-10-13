@@ -1,4 +1,5 @@
-import { IItem, IPerson } from './interfaces/app-reducer';
+import { ApiItem } from './context/AppContext/app-reducer';
+import { IPerson } from './interfaces/app-reducer';
 
 export type Role = 'owner' | 'editor';
 
@@ -40,8 +41,10 @@ export interface SplitDetail {
   invites?: SplitInvite[];
   inviteToken?: string;
   people: IPerson[];
-  items: IItem[];
+  items: ApiItem[];
 }
+
+export type ItemInput = Omit<ApiItem, 'id'>;
 
 export class ApiError extends Error {
   constructor(
@@ -70,8 +73,18 @@ export const api = {
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
   createSplit: (name: string) => request<{ id: string }>('POST', '/api/splits', { name }),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
-  saveSplit: (id: string, data: { people: IPerson[]; items: IItem[] }) =>
-    request<{ ok: true }>('PUT', splitPath(id), data),
+  addPerson: (id: string, name: string, memberEmail?: string) =>
+    request<IPerson>('POST', `${splitPath(id)}/people`, { name, memberEmail }),
+  removePerson: (id: string, personId: string) =>
+    request<{ ok: true }>('DELETE', `${splitPath(id)}/people/${encodeURIComponent(personId)}`),
+  clearPeople: (id: string) => request<{ ok: true }>('DELETE', `${splitPath(id)}/people`),
+  addItem: (id: string, item: ItemInput) =>
+    request<ApiItem>('POST', `${splitPath(id)}/items`, item),
+  updateItem: (id: string, itemId: string, item: ItemInput) =>
+    request<ApiItem>('PUT', `${splitPath(id)}/items/${encodeURIComponent(itemId)}`, item),
+  removeItem: (id: string, itemId: string) =>
+    request<{ ok: true }>('DELETE', `${splitPath(id)}/items/${encodeURIComponent(itemId)}`),
+  clearItems: (id: string) => request<{ ok: true }>('DELETE', `${splitPath(id)}/items`),
   deleteSplit: (id: string) => request<{ ok: true }>('DELETE', splitPath(id)),
   resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
