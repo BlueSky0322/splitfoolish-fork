@@ -4,7 +4,7 @@ import JoinSplit from './components/JoinSplit';
 import StateCard from './components/ui/StateCard';
 import { NewSplitProvider } from './components/NewSplitDialog';
 import SettingsPage from './components/SettingsPage';
-import SplitView from './components/SplitView';
+import SplitScreen from './components/split/SplitScreen';
 import SplitsHome from './components/SplitsHome';
 import AppLayout from './components/shell/AppLayout';
 import { useRoute } from './hooks/useRoute';
@@ -34,7 +34,7 @@ function App() {
         {route.view === 'join' && <JoinSplit token={route.token} />}
         {route.view === 'settings' && <SettingsPage />}
         {route.view === 'split' && (
-          <SplitView
+          <SplitScreen
             key={route.id}
             splitId={route.id}
             myEmail={profile?.email ?? null}

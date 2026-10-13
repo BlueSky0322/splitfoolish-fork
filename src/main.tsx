@@ -45,7 +45,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ErrorBoundary fallback={<p>Something went wrong</p>}>
       <AppContextProvider
         reducer={appReducer}
-        initialState={{ items: [], people: [], owings: [] }}
+        initialState={{ items: [], people: [] }}
       >
         <Root />
       </AppContextProvider>

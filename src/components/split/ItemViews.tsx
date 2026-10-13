@@ -1,0 +1,354 @@
+import { ActionIcon, UnstyledButton } from '@mantine/core';
+import { ArrowDown, ArrowUp, PencilSimple, Trash } from '@phosphor-icons/react';
+import { IItem, IPerson } from '../../interfaces/app-reducer';
+import { SplitSummary } from '../../split/derive';
+import { categoryIcon } from '../../split/categories';
+import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
+import { currencySymbol, formatMoney } from '../../utils/money';
+import UserAvatar from '../ui/UserAvatar';
+import classes from './Split.module.css';
+
+interface ItemViewProps {
+  groups: ItemGroup[];
+  /** Hide group headers when there's only the one "all items" group */
+  grouped: boolean;
+  summary: SplitSummary;
+  me: IPerson | null;
+  people: IPerson[];
+  currency: string;
+  mobile: boolean;
+  onEdit: (item: IItem) => void;
+  onDelete: (item: IItem) => void;
+}
+
+const MODE_LABELS = { equal: 'Equal', shares: 'Shares', exact: 'Exact' } as const;
+
+const cents = (amount: number) => Math.round(amount * 100);
+
+const who = (item: IItem, people: IPerson[]) =>
+  item.participants.length === people.length && people.length > 1
+    ? 'everyone'
+    : item.participants.map((p) => p.name).join(', ');
+
+function useMyShare(summary: SplitSummary, me: IPerson | null) {
+  return (item: IItem) => (me == null ? null : summary.sharesByItem.get(item.id)?.get(me.id) ?? 0);
+}
+
+function RowActions({
+  item,
+  onEdit,
+  onDelete,
+}: { item: IItem } & Pick<ItemViewProps, 'onEdit' | 'onDelete'>) {
+  return (
+    <div className={classes.rowActions}>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size={28}
+        aria-label={`Edit ${item.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit(item);
+        }}
+      >
+        <PencilSimple size={16} />
+      </ActionIcon>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size={28}
+        aria-label={`Delete ${item.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(item);
+        }}
+      >
+        <Trash size={16} />
+      </ActionIcon>
+    </div>
+  );
+}
+
+export function ItemCards({
+  groups,
+  grouped,
+  summary,
+  me,
+  people,
+  currency,
+  mobile,
+  onEdit,
+  onDelete,
+}: ItemViewProps) {
+  const myShare = useMyShare(summary, me);
+  return (
+    <div className={classes.groups}>
+      {groups.map((group) => (
+        <section
+          key={group.key}
+          className={classes.group}
+        >
+          {grouped && (
+            <div className={classes.groupHeader}>
+              <span>{group.label}</span>
+              <span>{formatMoney(group.subtotalCents, currency)}</span>
+            </div>
+          )}
+          <div className={classes.itemCard}>
+            {group.items.map((item) => {
+              const share = myShare(item);
+              const Icon = categoryIcon(item.category);
+              return (
+                <div
+                  key={item.id}
+                  className={classes.itemRow}
+                >
+                  {Icon && !mobile && (
+                    <Icon
+                      size={18}
+                      className={classes.categoryIcon}
+                    />
+                  )}
+                  {/* The whole row opens the item; edit and delete sit above it */}
+                  <UnstyledButton
+                    className={`${classes.itemText} ${classes.stretched}`}
+                    onClick={() => onEdit(item)}
+                  >
+                    <div className={classes.itemName}>{item.name}</div>
+                    <div className={classes.itemMeta}>
+                      {mobile
+                        ? `${item.payer.name} paid${share != null ? ` · yours ${formatMoney(share, currency)}` : ''}`
+                        : `${item.payer.name} paid · ${MODE_LABELS[item.splitMode]} between ${who(item, people)}`}
+                    </div>
+                  </UnstyledButton>
+                  {!mobile && share != null && (
+                    <span className={classes.itemShare}>
+                      Your share {formatMoney(share, currency)}
+                    </span>
+                  )}
+                  <span className={classes.itemAmount}>
+                    {formatMoney(cents(item.cost), currency)}
+                  </span>
+                  {!mobile && (
+                    <RowActions
+                      item={item}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+interface ItemTableProps extends ItemViewProps {
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
+  totalCents: number;
+}
+
+function SortHeader({
+  label,
+  column,
+  sortKey,
+  sortDir,
+  onSort,
+  align,
+}: {
+  label: string;
+  column: SortKey;
+  align?: 'right';
+} & Pick<ItemTableProps, 'sortKey' | 'sortDir' | 'onSort'>) {
+  const active = sortKey === column;
+  return (
+    <UnstyledButton
+      className={`${classes.sortButton} ${align === 'right' ? classes.right : ''}`}
+      data-active={active || undefined}
+      onClick={() => onSort(column)}
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+    >
+      {label}
+      {active &&
+        (sortDir === 'asc' ? (
+          <ArrowUp
+            size={12}
+            weight="bold"
+          />
+        ) : (
+          <ArrowDown
+            size={12}
+            weight="bold"
+          />
+        ))}
+    </UnstyledButton>
+  );
+}
+
+export function ItemTable({
+  groups,
+  grouped,
+  summary,
+  me,
+  people,
+  currency,
+  mobile,
+  onEdit,
+  onDelete,
+  sortKey,
+  sortDir,
+  onSort,
+  totalCents,
+}: ItemTableProps) {
+  const myShare = useMyShare(summary, me);
+  const sort = { sortKey, sortDir, onSort };
+
+  return (
+    <div
+      className={classes.table}
+      role="table"
+    >
+      <div
+        className={classes.tableHead}
+        role="row"
+      >
+        <SortHeader
+          label="Item"
+          column="name"
+          {...sort}
+        />
+        {mobile ? (
+          <>
+            <span className={classes.right}>Yours</span>
+            <span className={classes.right}>{currencySymbol(currency)}</span>
+          </>
+        ) : (
+          <>
+            <SortHeader
+              label="Paid by"
+              column="payer"
+              {...sort}
+            />
+            <span>Split</span>
+            <span className={classes.right}>Your share</span>
+            <SortHeader
+              label="Amount"
+              column="amount"
+              align="right"
+              {...sort}
+            />
+          </>
+        )}
+      </div>
+
+      {groups.map((group) => (
+        <div
+          key={group.key}
+          role="rowgroup"
+        >
+          {grouped && (
+            <div className={classes.tableGroup}>
+              <span className={classes.tableGroupLabel}>{group.label}</span>
+              <span className={classes.tableGroupCount}>
+                {group.items.length} {group.items.length === 1 ? 'item' : 'items'}
+              </span>
+              <span className={classes.tableGroupTotal}>
+                {formatMoney(group.subtotalCents, currency)}
+              </span>
+            </div>
+          )}
+          {group.items.map((item) => {
+            const share = myShare(item);
+            const shareText = share == null ? '—' : formatMoney(share, currency);
+            if (mobile) {
+              return (
+                <UnstyledButton
+                  key={item.id}
+                  className={classes.tableRow}
+                  role="row"
+                  onClick={() => onEdit(item)}
+                >
+                  <span className={classes.payerCell}>
+                    <UserAvatar
+                      name={item.payer.name}
+                      size={26}
+                    />
+                    <span className="min-w-0">
+                      <span className={`${classes.cellEllipsis} block text-[14px]`}>
+                        {item.name}
+                      </span>
+                      <span className={`${classes.cellEllipsis} block text-[11px] sf-muted`}>
+                        {MODE_LABELS[item.splitMode]} · {who(item, people)}
+                      </span>
+                    </span>
+                  </span>
+                  <span className={`${classes.num} sf-muted text-[13px]`}>
+                    {share == null ? '—' : (share / 100).toFixed(2)}
+                  </span>
+                  <span className={classes.num}>{item.cost.toFixed(2)}</span>
+                </UnstyledButton>
+              );
+            }
+            return (
+              <div
+                key={item.id}
+                className={classes.tableRow}
+                role="row"
+                onDoubleClick={() => onEdit(item)}
+              >
+                <span className={classes.cellEllipsis}>{item.name}</span>
+                <span className={classes.payerCell}>
+                  <UserAvatar
+                    name={item.payer.name}
+                    size={22}
+                  />
+                  <span className={classes.cellEllipsis}>{item.payer.name}</span>
+                </span>
+                <span className={classes.cellEllipsis}>
+                  <span className={classes.modePill}>{MODE_LABELS[item.splitMode]}</span>
+                  {who(item, people)}
+                </span>
+                <span className={`${classes.num} sf-muted`}>{shareText}</span>
+                <span className={classes.num}>{formatMoney(cents(item.cost), currency)}</span>
+                <RowActions
+                  item={item}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      <div
+        className={classes.tableFoot}
+        role="row"
+      >
+        <span>Total</span>
+        {mobile ? (
+          <>
+            <span className={classes.num}>
+              {me ? ((summary.balances.get(me.id)?.shareCents ?? 0) / 100).toFixed(2) : ''}
+            </span>
+            <span className={classes.num}>{(totalCents / 100).toFixed(2)}</span>
+          </>
+        ) : (
+          <>
+            <span />
+            <span />
+            <span className={`${classes.num} sf-muted`}>
+              {me ? formatMoney(summary.balances.get(me.id)?.shareCents ?? 0, currency) : ''}
+            </span>
+            <span className={classes.num}>{formatMoney(totalCents, currency)}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

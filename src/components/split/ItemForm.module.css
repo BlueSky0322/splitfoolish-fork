@@ -1,0 +1,168 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--sf-divider);
+}
+
+.symbol {
+  font-size: 20px;
+  color: var(--sf-text-muted);
+}
+
+.amountInput {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--sf-text);
+  font-size: 38px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.amountInput::placeholder {
+  color: color-mix(in srgb, var(--sf-text) 30%, transparent);
+}
+
+.evaluated {
+  font-size: 15px;
+  color: var(--sf-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.error {
+  font-size: 12px;
+  color: var(--mantine-color-error);
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--sf-border);
+  font-size: 14px;
+}
+
+.pill[data-selected] {
+  border-color: var(--sf-accent);
+  color: var(--sf-accent);
+}
+
+.people {
+  display: flex;
+  flex-direction: column;
+}
+
+.personRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+}
+
+.personRow + .personRow {
+  border-top: 1px solid var(--sf-divider);
+}
+
+.personRow[data-off] .checkLabel {
+  opacity: 0.5;
+}
+
+.check {
+  flex: 1;
+  min-width: 0;
+}
+
+.checkLabel {
+  font-size: 15px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepCount {
+  min-width: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.part {
+  width: 72px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.exactInput {
+  width: 140px;
+}
+
+.exactInput input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.left {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sf-divider);
+  font-variant-numeric: tabular-nums;
+}
+
+.left > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.leftDone {
+  color: var(--sf-accent);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  /* Stays reachable however long the list of people gets */
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -4px -4px;
+  padding: 12px 4px 4px;
+  background: var(--sf-surface);
+}

@@ -1,13 +1,6 @@
-import { WritableDraft } from 'immer';
 import { ImmerReducer } from 'use-immer';
-import {
-  AppReducerAction,
-  AppReducerState,
-  IItem,
-  IOwing,
-  IPerson,
-} from '../../interfaces/app-reducer.ts';
-import Big from 'big.js';
+import { SplitMode } from '../../../shared/settle';
+import { AppReducerAction, AppReducerState, IItem, IPerson } from '../../interfaces/app-reducer.ts';
 
 /** An item as the API returns it, referring to people by id */
 export interface ApiItem {
@@ -16,6 +9,11 @@ export interface ApiItem {
   cost: number;
   payerId: string;
   participantIds: string[];
+  splitMode: SplitMode;
+  shares?: Record<string, number>;
+  exact?: Record<string, number>;
+  category: string | null;
+  createdAt: number;
 }
 
 export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
@@ -26,6 +24,12 @@ export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
     cost: item.cost,
     payer: byId.get(item.payerId)!,
     participants: item.participantIds.map((id) => byId.get(id)!).filter(Boolean),
+    // Copies cached before split modes existed have none
+    splitMode: item.splitMode ?? 'equal',
+    shares: item.shares,
+    exact: item.exact,
+    category: item.category ?? null,
+    createdAt: item.createdAt ?? 0,
   };
 };
 
@@ -35,52 +39,69 @@ export const toApiItem = (item: IItem): ApiItem => ({
   cost: item.cost,
   payerId: item.payer.id,
   participantIds: item.participants.map((p) => p.id),
+  splitMode: item.splitMode,
+  shares: item.shares,
+  exact: item.exact,
+  category: item.category,
+  createdAt: item.createdAt,
 });
 
-// Every action applies a change the server has already accepted
+// Every action is a change made on this device, applied straight away and saved after
 export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draft, action) => {
   switch (action.type) {
     case 'ADD_PERSON':
       draft.people.push(action.payload as IPerson);
       break;
 
-    case 'REMOVE_PERSON':
-      draft.people = draft.people.filter((p) => p.id !== action.payload);
-      draft.owings = calculateOwings(draft);
+    case 'UPDATE_PERSON': {
+      const { id, ...changes } = action.payload as Partial<IPerson> & { id: string };
+      const person = draft.people.find((p) => p.id === id);
+      if (person == null) break;
+      Object.assign(person, changes);
+      // Items hold copies of the person, so they show the change too
+      for (const item of draft.items) {
+        if (item.payer.id === id) Object.assign(item.payer, changes);
+        for (const p of item.participants) if (p.id === id) Object.assign(p, changes);
+      }
       break;
+    }
+
+    case 'REMOVE_PERSON': {
+      const id = action.payload as string;
+      draft.people = draft.people.filter((p) => p.id !== id);
+      for (const item of draft.items) {
+        item.participants = item.participants.filter((p) => p.id !== id);
+        if (item.shares) delete item.shares[id];
+      }
+      break;
+    }
 
     case 'CLEAR_PEOPLE':
       draft.people = [];
-      draft.owings = calculateOwings(draft);
       break;
 
     case 'ADD_ITEM':
       draft.items.push(toClientItem(action.payload, draft.people));
-      draft.owings = calculateOwings(draft);
       break;
 
     case 'UPDATE_ITEM': {
       const updated = toClientItem(action.payload, draft.people);
       draft.items = draft.items.map((i) => (i.id === updated.id ? updated : i));
-      draft.owings = calculateOwings(draft);
       break;
     }
 
     case 'REMOVE_ITEM':
       draft.items = draft.items.filter((i) => i.id !== action.payload);
-      draft.owings = calculateOwings(draft);
       break;
 
     case 'CLEAR_ITEMS':
       draft.items = [];
-      draft.owings = calculateOwings(draft);
       break;
 
     case 'LOAD_STATE': {
       const people: IPerson[] = action.payload.people ?? [];
       draft.people = people;
       draft.items = (action.payload.items ?? []).map((i: ApiItem) => toClientItem(i, people));
-      draft.owings = calculateOwings(draft);
       break;
     }
 
@@ -88,35 +109,3 @@ export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draf
       throw new Error(`Unsupported action type '${action.type}'`);
   }
 };
-
-function calculateOwings(draft: WritableDraft<AppReducerState>): WritableDraft<IOwing>[] {
-  // clear previous owings
-  draft.owings.length = 0;
-
-  for (let i = 0; i < draft.items.length; i++) {
-    const item = draft.items[i];
-
-    // Guards against a payer or participant missing from the people list
-    if (item.payer == null || item.participants.length === 0) continue;
-
-    const pricePerPerson = Big(item.cost).div(item.participants.length).toNumber();
-
-    item.participants.forEach((p) => {
-      const existingOwing = draft.owings.find(
-        (o) => p.name === o.payer.name && item.payer.name === o.payee.name,
-      );
-
-      if (existingOwing != null) {
-        existingOwing.amount += pricePerPerson;
-      } else {
-        draft.owings.push({
-          amount: pricePerPerson,
-          payer: p,
-          payee: item.payer,
-        });
-      }
-    });
-  }
-
-  return draft.owings;
-}
