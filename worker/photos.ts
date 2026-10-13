@@ -200,3 +200,32 @@ export async function getAvatar(db: D1Database, viewer: string, email: string) {
   if (row == null) return json({ error: 'Not found' }, 404);
   return imageResponse(row.data, row.contentType);
 }
+
+/** A split's picture; set and removed by its owner, seen by its members */
+export async function putSplitPicture(req: Request, db: D1Database, splitId: string) {
+  const image = await readImage(req, MAX_AVATAR_BYTES);
+  if (image instanceof Response) return image;
+  const version = Date.now();
+  await db
+    .prepare(
+      `INSERT INTO split_pictures (split_id, content_type, version, data) VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT (split_id) DO UPDATE SET content_type = ?2, version = ?3, data = ?4`,
+    )
+    .bind(splitId, image.contentType, version, image.bytes)
+    .run();
+  return json({ pictureVersion: version });
+}
+
+export async function deleteSplitPicture(db: D1Database, splitId: string) {
+  await db.prepare('DELETE FROM split_pictures WHERE split_id = ?').bind(splitId).run();
+  return json({ ok: true });
+}
+
+export async function getSplitPicture(db: D1Database, splitId: string) {
+  const row = await db
+    .prepare('SELECT content_type AS contentType, data FROM split_pictures WHERE split_id = ?')
+    .bind(splitId)
+    .first<{ contentType: string; data: ArrayBuffer | number[] }>();
+  if (row == null) return json({ error: 'Not found' }, 404);
+  return imageResponse(row.data, row.contentType);
+}

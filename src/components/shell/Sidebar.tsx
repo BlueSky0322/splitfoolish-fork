@@ -14,6 +14,7 @@ import { Route, navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { useOpenNewSplit } from '../NewSplitDialog';
 import BalanceTag from '../ui/BalanceTag';
+import SplitAvatar from '../ui/SplitAvatar';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
 
@@ -129,7 +130,13 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
                 onClick={() => navigate(`?s=${s.id}`)}
                 aria-label={s.name}
               >
-                {s.name.charAt(0).toUpperCase()}
+                <SplitAvatar
+                  splitId={s.id}
+                  name={s.name}
+                  pictureVersion={s.pictureVersion}
+                  size={36}
+                  active={s.id === activeSplitId}
+                />
               </UnstyledButton>
             </Tooltip>
           ))}
@@ -214,6 +221,13 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
                   aria-current={s.id === activeSplitId ? 'page' : undefined}
                   onClick={() => navigate(`?s=${s.id}`)}
                 >
+                  <SplitAvatar
+                    splitId={s.id}
+                    name={s.name}
+                    pictureVersion={s.pictureVersion}
+                    size={22}
+                    active={s.id === activeSplitId}
+                  />
                   <span className={classes.splitName}>{s.name}</span>
                   <BalanceTag
                     cents={s.myBalanceCents}

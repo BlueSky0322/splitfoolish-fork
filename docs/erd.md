@@ -12,6 +12,7 @@ erDiagram
     splits ||--o{ items : "bought"
     splits ||--o{ attachments : "photos"
     splits |o--o| people : "settle up through"
+    splits ||--o| split_pictures : "pictured by"
     people ||--o{ items : "paid for"
     items ||--|{ item_participants : "split between"
     people ||--o{ item_participants : "shares in"
@@ -81,6 +82,12 @@ erDiagram
         text id PK, FK
         blob data
     }
+    split_pictures {
+        text split_id PK, FK
+        text content_type
+        int version "changes with each picture"
+        blob data
+    }
     profiles {
         text email PK
         text display_name
@@ -124,12 +131,13 @@ erDiagram
   splits see: your display name, with your picture in `avatars` and how to pay you in
   `payment_methods`. `user_settings` holds private preferences (theme, accent, the
   default currency, how items are shown), which follow you between devices.
-- **Large values live apart.** Picture and photo bytes sit in `avatars` and
-  `attachment_data`, so reading names or listing photos never loads images.
+- **Large values live apart.** Picture and photo bytes sit in `avatars`,
+  `split_pictures` and `attachment_data`, so reading names or listing splits and
+  photos never loads images.
 - **Shared, not per person.** Who to route payments through is a property of the split
   (`splits.distributor_person_id`), so everyone in it sees the same transfers.
 - **Deleting cleans up.** Deleting a split removes its members, invites, people, items,
-  photos and photo bytes. Deleting an item removes its receipts. Removing a person who
+  picture, photos and photo bytes. Deleting an item removes its receipts. Removing a person who
   was the settle-up route sets the route back to none.
 - **Lazy profiles.** A profile row is made the first time someone saves a setting,
   name, picture or payment method; until then the defaults apply. Emails in
