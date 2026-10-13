@@ -1,79 +1,67 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { ApiError, SplitDetail, api } from '../api';
 import { AppContext } from '../context/AppContext/AppContext';
 
-export type SyncStatus = 'loading' | 'saving' | 'saved' | 'error';
+export type SyncStatus = 'loading' | 'saving' | 'saved' | 'error' | 'notfound';
 
 const SAVE_DEBOUNCE_MS = 500;
 
-// Each split lives at ?s=<id>. Anyone with the link can view and edit it.
-function getOrCreateSplitId(): string {
-  const params = new URLSearchParams(window.location.search);
-  let id = params.get('s');
-  if (!id) {
-    id = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-    params.set('s', id);
-    window.history.replaceState(null, '', `${window.location.pathname}?${params}`);
-  }
-  return id;
-}
+export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
 
-export function useRemoteSync() {
+export function useRemoteSync(splitId: string) {
   const { state, dispatch } = useContext(AppContext);
   const [status, setStatus] = useState<SyncStatus>('loading');
-  const splitId = useRef(getOrCreateSplitId());
+  const [meta, setMeta] = useState<SplitMeta | null>(null);
   const loaded = useRef(false);
   const lastSaved = useRef<string>('');
 
-  // Load once on mount
+  const load = useCallback(async () => {
+    const { people, items, ...rest } = await api.getSplit(splitId);
+    const data = { people, items };
+    lastSaved.current = JSON.stringify(data);
+    setMeta(rest);
+    return data;
+  }, [splitId]);
+
+  // Load whenever the split changes, clearing the previous split's data first
   useEffect(() => {
     let cancelled = false;
+    loaded.current = false;
+    setStatus('loading');
+    setMeta(null);
+    dispatch({ type: 'LOAD_STATE', payload: { people: [], items: [] } });
 
     (async () => {
       try {
-        const res = await fetch(`/api/splits/${splitId.current}`);
+        const data = await load();
         if (cancelled) return;
-
-        if (res.ok) {
-          const data = await res.json();
-          lastSaved.current = JSON.stringify(data);
-          dispatch({ type: 'LOAD_STATE', payload: data });
-        } else if (res.status === 404) {
-          // New split: seed from old browser-only data, if any
-          dispatch({ type: 'LOAD_FROM_LOCALSTORAGE', payload: null });
-          dispatch({ type: 'SETTLE', payload: null });
-        } else {
-          throw new Error(`GET failed: ${res.status}`);
-        }
-
+        dispatch({ type: 'LOAD_STATE', payload: data });
         loaded.current = true;
         setStatus('saved');
       } catch (err) {
+        if (cancelled) return;
         console.error(err);
-        if (!cancelled) setStatus('error');
+        setStatus(err instanceof ApiError && err.status === 404 ? 'notfound' : 'error');
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [dispatch]);
+  }, [load, dispatch]);
 
   // Debounced save whenever people/items change
   useEffect(() => {
     if (!loaded.current) return;
 
-    const body = JSON.stringify({ people: state.people, items: state.items });
+    const data = { people: state.people, items: state.items };
+    const body = JSON.stringify(data);
     if (body === lastSaved.current) return;
 
     setStatus('saving');
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/splits/${splitId.current}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        });
-        if (!res.ok) throw new Error(`PUT failed: ${res.status}`);
+        await api.saveSplit(splitId, data);
         lastSaved.current = body;
         setStatus('saved');
       } catch (err) {
@@ -83,7 +71,14 @@ export function useRemoteSync() {
     }, SAVE_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [state.people, state.items]);
+  }, [state.people, state.items, splitId]);
 
-  return { status, splitId: splitId.current };
+  // Refresh members and invite link after sharing changes, without touching people/items
+  const refreshMeta = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { people, items, ...rest } = await api.getSplit(splitId);
+    setMeta(rest);
+  }, [splitId]);
+
+  return { status, meta, refreshMeta };
 }

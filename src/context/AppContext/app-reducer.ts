@@ -8,18 +8,6 @@ import {
 } from '../../interfaces/app-reducer.ts';
 import Big from 'big.js';
 
-const loadFromLocalStorage = (draft: WritableDraft<AppReducerState>) => {
-  const people = localStorage.getItem('people');
-  if (people != null) {
-    draft.people = JSON.parse(people);
-  }
-
-  const items = localStorage.getItem('items');
-  if (items != null) {
-    draft.items = JSON.parse(items);
-  }
-};
-
 export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draft, action) => {
   switch (action.type) {
     case 'ADD_PERSON':
@@ -68,10 +56,6 @@ export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draf
       draft.people = action.payload.people ?? [];
       draft.items = action.payload.items ?? [];
       draft.owings = calculateOwings(draft);
-      break;
-
-    case 'LOAD_FROM_LOCALSTORAGE':
-      loadFromLocalStorage(draft);
       break;
 
     case 'LOAD_TEST_DATA':
