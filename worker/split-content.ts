@@ -3,9 +3,12 @@
 // current contents and applied all-or-nothing, touching only the rows involved, so
 // people editing the same split don't overwrite each other.
 
+import { SplitMode } from '../shared/settle';
+
 export interface Person {
   id: string;
   name: string;
+  /** The account this person is, when linked */
   memberEmail: string | null;
 }
 
@@ -16,10 +19,19 @@ export interface Item {
   cost: number;
   payerId: string;
   participantIds: string[];
+  splitMode: SplitMode;
+  /** Shares per participant, when split by shares */
+  shares?: Record<string, number>;
+  /** Amount per participant in currency units, when split by exact amounts */
+  exact?: Record<string, number>;
+  category: string | null;
+  createdAt: number;
 }
 
 const MAX_NAME_LENGTH = 80;
+const MAX_CATEGORY_LENGTH = 32;
 const MAX_COST = 1_000_000_000;
+const MAX_SHARES = 999;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -35,6 +47,8 @@ const readName = (value: unknown) => {
   return name.length > 0 && name.length <= MAX_NAME_LENGTH ? name : null;
 };
 
+const toCents = (amount: number) => Math.round(amount * 100);
+
 /** Reads a split's people and items; run as part of a larger batch, then pass to assembleContent */
 export const contentStatements = (db: D1Database, splitId: string) => [
   db
@@ -45,13 +59,15 @@ export const contentStatements = (db: D1Database, splitId: string) => [
     .bind(splitId),
   db
     .prepare(
-      `SELECT id, name, cost_cents AS costCents, payer_id AS payerId FROM items
-       WHERE split_id = ? ORDER BY position, rowid`,
+      `SELECT id, name, cost_cents AS costCents, payer_id AS payerId, split_mode AS splitMode,
+         category, created_at AS createdAt
+       FROM items WHERE split_id = ? ORDER BY position, rowid`,
     )
     .bind(splitId),
   db
     .prepare(
-      `SELECT ip.item_id AS itemId, ip.person_id AS personId
+      `SELECT ip.item_id AS itemId, ip.person_id AS personId, ip.shares,
+         ip.exact_cents AS exactCents
        FROM item_participants ip
        JOIN items i ON i.id = ip.item_id
        JOIN people p ON p.id = ip.person_id
@@ -60,33 +76,64 @@ export const contentStatements = (db: D1Database, splitId: string) => [
     .bind(splitId),
 ];
 
+interface ItemRow {
+  id: string;
+  name: string;
+  costCents: number;
+  payerId: string;
+  splitMode: SplitMode;
+  category: string | null;
+  createdAt: number;
+}
+
+interface ParticipantRow {
+  itemId: string;
+  personId: string;
+  shares: number;
+  exactCents: number | null;
+}
+
 export function assembleContent([people, items, participants]: D1Result<
   Record<string, unknown>
 >[]) {
-  const participantIds = new Map<string, string[]>();
-  for (const row of participants.results as { itemId: string; personId: string }[]) {
-    participantIds.set(row.itemId, [...(participantIds.get(row.itemId) ?? []), row.personId]);
+  const byItem = new Map<string, ParticipantRow[]>();
+  for (const row of participants.results as unknown as ParticipantRow[]) {
+    byItem.set(row.itemId, [...(byItem.get(row.itemId) ?? []), row]);
   }
 
   return {
     people: people.results as unknown as Person[],
-    items: (
-      items.results as { id: string; name: string; costCents: number; payerId: string }[]
-    ).map(
-      (i): Item => ({
+    items: (items.results as unknown as ItemRow[]).map((i): Item => {
+      const rows = byItem.get(i.id) ?? [];
+      return {
         id: i.id,
         name: i.name,
         cost: i.costCents / 100,
         payerId: i.payerId,
-        participantIds: participantIds.get(i.id) ?? [],
-      }),
-    ),
+        participantIds: rows.map((r) => r.personId),
+        splitMode: i.splitMode,
+        shares:
+          i.splitMode === 'shares'
+            ? Object.fromEntries(rows.map((r) => [r.personId, r.shares]))
+            : undefined,
+        exact:
+          i.splitMode === 'exact'
+            ? Object.fromEntries(rows.map((r) => [r.personId, (r.exactCents ?? 0) / 100]))
+            : undefined,
+        category: i.category,
+        createdAt: i.createdAt,
+      };
+    }),
   };
 }
 
 export type Change =
   | { op: 'addPerson'; id: string; name: string; memberEmail?: string | null }
-  | { op: 'removePerson'; id: string }
+  | { op: 'renamePerson'; id: string; name: string }
+  /** Link a person to a member's account ("This is me"), or unlink with null */
+  | { op: 'linkPerson'; id: string; memberEmail: string | null }
+  /** fromItems: also take them off items they share (never items they paid for) */
+  | { op: 'removePerson'; id: string; fromItems?: boolean }
   | { op: 'clearPeople' }
   | { op: 'addItem'; item: Item }
   | { op: 'updateItem'; item: Item }
@@ -101,40 +148,54 @@ class Refused extends Error {}
 
 /** The split's people and items as they will be after each change, for checking the next one */
 interface Model {
-  people: Map<string, { name: string }>;
-  items: Map<string, { payerId: string; participantIds: string[] }>;
+  people: Map<string, { name: string; memberEmail: string | null }>;
+  items: Map<string, { payerId: string; participantIds: string[]; splitMode: SplitMode }>;
+  members: Set<string>;
   nextPersonPosition: number;
   nextItemPosition: number;
 }
 
 async function loadModel(db: D1Database, splitId: string): Promise<Model> {
-  const [people, items, participants, positions] = await db.batch<Record<string, unknown>>([
-    db.prepare('SELECT id, name FROM people WHERE split_id = ?').bind(splitId),
-    db.prepare('SELECT id, payer_id AS payerId FROM items WHERE split_id = ?').bind(splitId),
-    db
-      .prepare(
-        `SELECT ip.item_id AS itemId, ip.person_id AS personId FROM item_participants ip
+  const [people, items, participants, positions, members] = await db.batch<Record<string, unknown>>(
+    [
+      db
+        .prepare('SELECT id, name, member_email AS memberEmail FROM people WHERE split_id = ?')
+        .bind(splitId),
+      db
+        .prepare(
+          'SELECT id, payer_id AS payerId, split_mode AS splitMode FROM items WHERE split_id = ?',
+        )
+        .bind(splitId),
+      db
+        .prepare(
+          `SELECT ip.item_id AS itemId, ip.person_id AS personId FROM item_participants ip
          JOIN items i ON i.id = ip.item_id WHERE i.split_id = ?`,
-      )
-      .bind(splitId),
-    db
-      .prepare(
-        `SELECT (SELECT coalesce(max(position), -1) + 1 FROM people WHERE split_id = ?1) AS person,
+        )
+        .bind(splitId),
+      db
+        .prepare(
+          `SELECT (SELECT coalesce(max(position), -1) + 1 FROM people WHERE split_id = ?1) AS person,
                 (SELECT coalesce(max(position), -1) + 1 FROM items WHERE split_id = ?1) AS item`,
-      )
-      .bind(splitId),
-  ]);
+        )
+        .bind(splitId),
+      db.prepare('SELECT email FROM split_members WHERE split_id = ?').bind(splitId),
+    ],
+  );
 
   const model: Model = {
     people: new Map(
-      (people.results as { id: string; name: string }[]).map((p) => [p.id, { name: p.name }]),
-    ),
-    items: new Map(
-      (items.results as { id: string; payerId: string }[]).map((i) => [
-        i.id,
-        { payerId: i.payerId, participantIds: [] as string[] },
+      (people.results as { id: string; name: string; memberEmail: string | null }[]).map((p) => [
+        p.id,
+        { name: p.name, memberEmail: p.memberEmail },
       ]),
     ),
+    items: new Map(
+      (items.results as { id: string; payerId: string; splitMode: SplitMode }[]).map((i) => [
+        i.id,
+        { payerId: i.payerId, participantIds: [] as string[], splitMode: i.splitMode },
+      ]),
+    ),
+    members: new Set((members.results as { email: string }[]).map((m) => m.email)),
     nextPersonPosition: (positions.results[0] as { person: number }).person,
     nextItemPosition: (positions.results[0] as { item: number }).item,
   };
@@ -144,8 +205,19 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
   return model;
 }
 
-const nameTaken = (model: Model, name: string) =>
-  [...model.people.values()].some((p) => p.name === name);
+const nameTaken = (model: Model, name: string, exceptId?: string) =>
+  [...model.people].some(([id, p]) => p.name === name && id !== exceptId);
+
+/** A member email a person may be linked to, or null; refuses non-members and double links */
+function readMemberEmail(model: Model, value: unknown, personId: string): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string') throw new Refused('Invalid account');
+  const email = value.toLowerCase();
+  if (!model.members.has(email)) throw new Refused('That account is not in this split');
+  const other = [...model.people].find(([id, p]) => p.memberEmail === email && id !== personId);
+  if (other) throw new Refused(`That account is already ${other[1].name}`);
+  return email;
+}
 
 function readItem(model: Model, raw: unknown) {
   const item = (raw ?? {}) as Record<string, unknown>;
@@ -157,33 +229,76 @@ function readItem(model: Model, raw: unknown) {
   if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0 || cost > MAX_COST) {
     throw new Refused('Cost must be a number of 0 or more');
   }
+  const costCents = toCents(cost);
 
   const payerId = item.payerId;
-  const participantIds = item.participantIds;
   if (typeof payerId !== 'string' || !model.people.has(payerId)) {
     throw new Refused('Who paid must be someone in this split');
   }
-  if (!Array.isArray(participantIds) || participantIds.length === 0) {
+  const raws = item.participantIds;
+  if (!Array.isArray(raws) || raws.length === 0) {
     throw new Refused('Choose at least one person to split with');
   }
-  if (participantIds.some((p) => typeof p !== 'string' || !model.people.has(p))) {
+  if (raws.some((p) => typeof p !== 'string' || !model.people.has(p))) {
     throw new Refused('Everyone splitting an item must be someone in this split');
   }
+  const participantIds = [...new Set(raws as string[])];
 
-  return {
-    id: item.id,
-    name,
-    costCents: Math.round(cost * 100),
-    payerId,
-    participantIds: [...new Set(participantIds as string[])],
-  };
+  const splitMode = (item.splitMode ?? 'equal') as SplitMode;
+  if (!['equal', 'shares', 'exact'].includes(splitMode)) throw new Refused('Invalid split');
+
+  const participants = participantIds.map((personId) => ({
+    personId,
+    shares: 1,
+    exactCents: null as number | null,
+  }));
+  if (splitMode === 'shares') {
+    const shares = (item.shares ?? {}) as Record<string, unknown>;
+    for (const p of participants) {
+      const n = shares[p.personId];
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_SHARES) {
+        throw new Refused(`Shares must be whole numbers from 1 to ${MAX_SHARES}`);
+      }
+      p.shares = n;
+    }
+  }
+  if (splitMode === 'exact') {
+    const exact = (item.exact ?? {}) as Record<string, unknown>;
+    for (const p of participants) {
+      const amount = exact[p.personId];
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
+        throw new Refused('Exact amounts must be numbers of 0 or more');
+      }
+      p.exactCents = toCents(amount);
+    }
+    const assigned = participants.reduce((a, p) => a + (p.exactCents ?? 0), 0);
+    if (assigned !== costCents) {
+      throw new Refused('The exact amounts must add up to the cost');
+    }
+  }
+
+  let category: string | null = null;
+  if (item.category != null && item.category !== '') {
+    if (typeof item.category !== 'string' || item.category.trim().length > MAX_CATEGORY_LENGTH) {
+      throw new Refused('Invalid category');
+    }
+    category = item.category.trim();
+  }
+
+  return { id: item.id, name, costCents, payerId, splitMode, participants, category };
 }
 
-const insertParticipants = (db: D1Database, itemId: string, personIds: string[]) =>
-  personIds.map((personId) =>
+const insertParticipants = (
+  db: D1Database,
+  itemId: string,
+  participants: { personId: string; shares: number; exactCents: number | null }[],
+) =>
+  participants.map((p) =>
     db
-      .prepare('INSERT INTO item_participants (item_id, person_id) VALUES (?, ?)')
-      .bind(itemId, personId),
+      .prepare(
+        'INSERT INTO item_participants (item_id, person_id, shares, exact_cents) VALUES (?, ?, ?, ?)',
+      )
+      .bind(itemId, p.personId, p.shares, p.exactCents),
   );
 
 /** Checks one change against the model, updates the model, and returns its statements */
@@ -205,11 +320,8 @@ function plan(
       const name = readName(change.name);
       if (name == null) throw new Refused(`Name must be 1-${MAX_NAME_LENGTH} characters`);
       if (nameTaken(model, name)) throw new Refused(`${name} is already in this split`);
-      const memberEmail =
-        typeof change.memberEmail === 'string' && change.memberEmail !== ''
-          ? change.memberEmail.toLowerCase()
-          : null;
-      model.people.set(change.id, { name });
+      const memberEmail = readMemberEmail(model, change.memberEmail, change.id);
+      model.people.set(change.id, { name, memberEmail });
       return [
         db
           .prepare(
@@ -219,19 +331,66 @@ function plan(
       ];
     }
 
+    case 'renamePerson': {
+      const person = model.people.get(change.id);
+      if (person == null) throw new Refused('That person was removed by someone else');
+      const name = readName(change.name);
+      if (name == null) throw new Refused(`Name must be 1-${MAX_NAME_LENGTH} characters`);
+      if (nameTaken(model, name, change.id)) throw new Refused(`${name} is already in this split`);
+      person.name = name;
+      return [db.prepare('UPDATE people SET name = ? WHERE id = ?').bind(name, change.id)];
+    }
+
+    case 'linkPerson': {
+      const person = model.people.get(change.id);
+      if (person == null) throw new Refused('That person was removed by someone else');
+      const memberEmail = readMemberEmail(model, change.memberEmail, change.id);
+      // Someone else's link has to be removed first, so no one takes over another person
+      if (memberEmail != null && person.memberEmail != null && person.memberEmail !== memberEmail) {
+        throw new Refused(`${person.name} is already linked to another account`);
+      }
+      person.memberEmail = memberEmail;
+      return [
+        db.prepare('UPDATE people SET member_email = ? WHERE id = ?').bind(memberEmail, change.id),
+      ];
+    }
+
     case 'removePerson': {
       const person = model.people.get(change.id);
       // Already removed (by someone else) is fine: the result is the same
       if (person == null) return [];
-      const uses = [...model.items.values()].filter(
-        (i) => i.payerId === change.id || i.participantIds.includes(change.id),
-      ).length;
-      if (uses > 0) {
-        const items = uses === 1 ? '1 item' : `${uses} items`;
+      const paid = [...model.items.values()].filter((i) => i.payerId === change.id).length;
+      const shared = [...model.items].filter(
+        ([, i]) => i.payerId !== change.id && i.participantIds.includes(change.id),
+      );
+      if (paid > 0) {
+        const items = paid === 1 ? '1 item' : `${paid} items`;
+        throw new Refused(`${person.name} paid for ${items}. Edit or remove those items first.`);
+      }
+      if (shared.length > 0 && !change.fromItems) {
+        const items = shared.length === 1 ? '1 item' : `${shared.length} items`;
         throw new Refused(`${person.name} is on ${items}. Edit or remove those items first.`);
       }
+      const emptied = shared.filter(([, i]) => i.participantIds.length === 1);
+      if (emptied.length > 0) {
+        throw new Refused(
+          `${person.name} is the only person on ${emptied.length === 1 ? 'an item' : 'some items'}. Edit or remove ${emptied.length === 1 ? 'it' : 'them'} first.`,
+        );
+      }
+      // Exact amounts would no longer add up to the cost without them
+      if (shared.some(([, i]) => i.splitMode === 'exact')) {
+        throw new Refused(
+          `${person.name} is on an item split by exact amounts. Edit that item first.`,
+        );
+      }
+      for (const [, i] of shared) {
+        i.participantIds = i.participantIds.filter((p) => p !== change.id);
+      }
       model.people.delete(change.id);
-      return [db.prepare('DELETE FROM people WHERE id = ?').bind(change.id)];
+      return [
+        db.prepare('DELETE FROM item_participants WHERE person_id = ?').bind(change.id),
+        db.prepare('DELETE FROM people WHERE id = ?').bind(change.id),
+      ];
     }
 
     case 'clearPeople':
@@ -242,12 +401,17 @@ function plan(
     case 'addItem': {
       const item = readItem(model, change.item);
       if (model.items.has(item.id)) throw new Refused('Invalid item');
-      model.items.set(item.id, { payerId: item.payerId, participantIds: item.participantIds });
+      model.items.set(item.id, {
+        payerId: item.payerId,
+        participantIds: item.participants.map((p) => p.personId),
+        splitMode: item.splitMode,
+      });
       return [
         db
           .prepare(
-            `INSERT INTO items (id, split_id, name, cost_cents, payer_id, position)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO items
+               (id, split_id, name, cost_cents, payer_id, position, split_mode, category, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             item.id,
@@ -256,21 +420,31 @@ function plan(
             item.costCents,
             item.payerId,
             model.nextItemPosition++,
+            item.splitMode,
+            item.category,
+            Date.now(),
           ),
-        ...insertParticipants(db, item.id, item.participantIds),
+        ...insertParticipants(db, item.id, item.participants),
       ];
     }
 
     case 'updateItem': {
       const item = readItem(model, change.item);
       if (!model.items.has(item.id)) throw new Refused('This item was removed by someone else');
-      model.items.set(item.id, { payerId: item.payerId, participantIds: item.participantIds });
+      model.items.set(item.id, {
+        payerId: item.payerId,
+        participantIds: item.participants.map((p) => p.personId),
+        splitMode: item.splitMode,
+      });
       return [
         db
-          .prepare('UPDATE items SET name = ?, cost_cents = ?, payer_id = ? WHERE id = ?')
-          .bind(item.name, item.costCents, item.payerId, item.id),
+          .prepare(
+            `UPDATE items SET name = ?, cost_cents = ?, payer_id = ?, split_mode = ?, category = ?
+             WHERE id = ?`,
+          )
+          .bind(item.name, item.costCents, item.payerId, item.splitMode, item.category, item.id),
         db.prepare('DELETE FROM item_participants WHERE item_id = ?').bind(item.id),
-        ...insertParticipants(db, item.id, item.participantIds),
+        ...insertParticipants(db, item.id, item.participants),
       ];
     }
 
@@ -278,6 +452,12 @@ function plan(
       // Already removed (by someone else) is fine: the result is the same
       if (!model.items.delete(change.id)) return [];
       return [
+        db
+          .prepare(
+            'DELETE FROM attachment_data WHERE id IN (SELECT id FROM attachments WHERE item_id = ?)',
+          )
+          .bind(change.id),
+        db.prepare('DELETE FROM attachments WHERE item_id = ?').bind(change.id),
         db.prepare('DELETE FROM item_participants WHERE item_id = ?').bind(change.id),
         db.prepare('DELETE FROM items WHERE id = ?').bind(change.id),
       ];
@@ -285,6 +465,17 @@ function plan(
     case 'clearItems':
       model.items.clear();
       return [
+        db
+          .prepare(
+            `DELETE FROM attachment_data WHERE id IN
+               (SELECT id FROM attachments WHERE item_id IN (SELECT id FROM items WHERE split_id = ?))`,
+          )
+          .bind(splitId),
+        db
+          .prepare(
+            'DELETE FROM attachments WHERE item_id IN (SELECT id FROM items WHERE split_id = ?)',
+          )
+          .bind(splitId),
         db
           .prepare(
             'DELETE FROM item_participants WHERE item_id IN (SELECT id FROM items WHERE split_id = ?)',
