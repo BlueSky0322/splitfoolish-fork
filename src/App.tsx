@@ -2,13 +2,14 @@ import { Loader } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import './App.css';
 import { api } from './api';
+import { clearCache, setCacheUser } from './split-cache';
 import JoinSplit from './components/JoinSplit';
 import SplitView from './components/SplitView';
 import SplitsHome from './components/SplitsHome';
 import { useRoute } from './hooks/useRoute';
 
 // Signing in happens in front of the app (Cloudflare Access), so by the time this
-// runs the user is known; /api/me just tells us who.
+// runs the user is known; /api/me just tells us who. Pages load alongside it.
 function App() {
   const route = useRoute();
   const [email, setEmail] = useState<string | null>(null);
@@ -17,7 +18,10 @@ function App() {
   useEffect(() => {
     api
       .me()
-      .then(({ email }) => setEmail(email))
+      .then(async ({ email }) => {
+        await setCacheUser(email);
+        setEmail(email);
+      })
       .catch(() => setSignedOut(true));
   }, []);
 
@@ -28,12 +32,7 @@ function App() {
           You're signed out. <a href={window.location.href}>Reload</a> to sign in again.
         </div>
       )}
-      {!signedOut && email == null && (
-        <div className="p-8 flex justify-center">
-          <Loader size="sm" />
-        </div>
-      )}
-      {email != null && (
+      {!signedOut && (
         <>
           {route.view === 'home' && <SplitsHome tab={route.tab} />}
           {route.view === 'join' && <JoinSplit token={route.token} />}
@@ -44,15 +43,26 @@ function App() {
               myEmail={email}
             />
           )}
-          <div className="text-xs text-center text-gray-500 py-4">
-            Signed in as {email} ·{' '}
-            <a
-              className="underline"
-              href="/cdn-cgi/access/logout"
-            >
-              Sign out
-            </a>
-          </div>
+          {email == null ? (
+            <div className="py-4 flex justify-center">
+              <Loader size="xs" />
+            </div>
+          ) : (
+            <div className="text-xs text-center text-gray-500 py-4">
+              Signed in as {email} ·{' '}
+              <a
+                className="underline"
+                href="/cdn-cgi/access/logout"
+                onClick={async (e) => {
+                  e.preventDefault();
+                  await clearCache();
+                  window.location.href = '/cdn-cgi/access/logout';
+                }}
+              >
+                Sign out
+              </a>
+            </div>
+          )}
         </>
       )}
     </div>

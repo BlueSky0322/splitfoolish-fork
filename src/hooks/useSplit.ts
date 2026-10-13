@@ -1,9 +1,20 @@
 import { notifications } from '@mantine/notifications';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ApiError, ItemInput, SplitDetail, api } from '../api';
 import { AppContext } from '../context/AppContext/AppContext';
+import { toApiItem } from '../context/AppContext/app-reducer';
+import { readCache, removeCache, writeCache } from '../split-cache';
 
-export type SyncStatus = 'loading' | 'saving' | 'saved' | 'error' | 'notfound';
+/** 'refreshing' means a cached copy is showing while the latest loads */
+export type SyncStatus = 'loading' | 'refreshing' | 'saving' | 'saved' | 'error' | 'notfound';
 
 export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
 
@@ -24,34 +35,76 @@ export const useSplitActions = () => useContext(SplitActionsContext);
 
 // Loads a split and sends each change to the server, applying it locally once accepted
 export function useSplit(splitId: string) {
-  const { dispatch } = useContext(AppContext);
+  const { state, dispatch } = useContext(AppContext);
   const [status, setStatus] = useState<SyncStatus>('loading');
   const [meta, setMeta] = useState<SplitMeta | null>(null);
 
+  const cacheKey = `split:${splitId}`;
+  // Counts changes sent, so a load that raced with an edit can tell its data is stale
+  const changesSent = useRef(0);
+
+  const show = useCallback(
+    ({ people, items, ...rest }: SplitDetail) => {
+      setMeta(rest);
+      dispatch({ type: 'LOAD_STATE', payload: { people, items } });
+    },
+    [dispatch],
+  );
+
   const load = useCallback(async () => {
-    const { people, items, ...rest } = await api.getSplit(splitId);
-    setMeta(rest);
-    dispatch({ type: 'LOAD_STATE', payload: { people, items } });
-  }, [splitId, dispatch]);
+    for (;;) {
+      const seen = changesSent.current;
+      const detail = await api.getSplit(splitId);
+      if (seen !== changesSent.current) continue;
+      show(detail);
+      return;
+    }
+  }, [splitId, show]);
 
   useEffect(() => {
     let cancelled = false;
+    // Set once the server has answered, even with an error, so the cache can't override it
+    let answered = false;
     setStatus('loading');
     setMeta(null);
     dispatch({ type: 'LOAD_STATE', payload: { people: [], items: [] } });
 
+    // Show the last-seen copy straight away, unless the server has already answered
+    readCache<SplitDetail>(cacheKey).then((cached) => {
+      if (cached == null || cancelled || answered) return;
+      show(cached);
+      setStatus('refreshing');
+    });
+
     load()
-      .then(() => !cancelled && setStatus('saved'))
+      .then(() => {
+        answered = true;
+        if (!cancelled) setStatus('saved');
+      })
       .catch((err) => {
+        answered = true;
+        const gone = err instanceof ApiError && err.status === 404;
+        // Deleted, or no longer shared with this person: drop the local copy too
+        if (gone) removeCache(cacheKey);
         if (cancelled) return;
         console.error(err);
-        setStatus(err instanceof ApiError && err.status === 404 ? 'notfound' : 'error');
+        setStatus(gone ? 'notfound' : 'error');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [load, dispatch]);
+  }, [load, show, cacheKey, dispatch]);
+
+  // Keep the cached copy in step with what's on screen once it's confirmed by the server
+  useEffect(() => {
+    if (status !== 'saved' || meta == null) return;
+    writeCache<SplitDetail>(cacheKey, {
+      ...meta,
+      people: state.people,
+      items: state.items.map(toApiItem),
+    });
+  }, [status, meta, state.people, state.items, cacheKey]);
 
   // Refresh members and invites after sharing changes, without touching people/items
   const refreshMeta = useCallback(async () => {
@@ -66,6 +119,7 @@ export function useSplit(splitId: string) {
   const run = useCallback(
     async <T>(request: () => Promise<T>, apply: (result: T) => void): Promise<boolean> => {
       setStatus('saving');
+      changesSent.current += 1;
       try {
         apply(await request());
         setStatus('saved');

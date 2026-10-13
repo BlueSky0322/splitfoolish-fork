@@ -35,31 +35,34 @@ const readName = (value: unknown) => {
   return name.length > 0 && name.length <= MAX_NAME_LENGTH ? name : null;
 };
 
-export async function loadContent(db: D1Database, splitId: string) {
-  const [people, items, participants] = await db.batch<Record<string, unknown>>([
-    db
-      .prepare(
-        `SELECT id, name, member_email AS memberEmail FROM people
-         WHERE split_id = ? ORDER BY position, rowid`,
-      )
-      .bind(splitId),
-    db
-      .prepare(
-        `SELECT id, name, cost_cents AS costCents, payer_id AS payerId FROM items
-         WHERE split_id = ? ORDER BY position, rowid`,
-      )
-      .bind(splitId),
-    db
-      .prepare(
-        `SELECT ip.item_id AS itemId, ip.person_id AS personId
-         FROM item_participants ip
-         JOIN items i ON i.id = ip.item_id
-         JOIN people p ON p.id = ip.person_id
-         WHERE i.split_id = ? ORDER BY p.position, p.rowid`,
-      )
-      .bind(splitId),
-  ]);
+/** Reads a split's people and items; run as part of a larger batch, then pass to assembleContent */
+export const contentStatements = (db: D1Database, splitId: string) => [
+  db
+    .prepare(
+      `SELECT id, name, member_email AS memberEmail FROM people
+       WHERE split_id = ? ORDER BY position, rowid`,
+    )
+    .bind(splitId),
+  db
+    .prepare(
+      `SELECT id, name, cost_cents AS costCents, payer_id AS payerId FROM items
+       WHERE split_id = ? ORDER BY position, rowid`,
+    )
+    .bind(splitId),
+  db
+    .prepare(
+      `SELECT ip.item_id AS itemId, ip.person_id AS personId
+       FROM item_participants ip
+       JOIN items i ON i.id = ip.item_id
+       JOIN people p ON p.id = ip.person_id
+       WHERE i.split_id = ? ORDER BY p.position, p.rowid`,
+    )
+    .bind(splitId),
+];
 
+export function assembleContent([people, items, participants]: D1Result<
+  Record<string, unknown>
+>[]) {
   const participantIds = new Map<string, string[]>();
   for (const row of participants.results as { itemId: string; personId: string }[]) {
     participantIds.set(row.itemId, [...(participantIds.get(row.itemId) ?? []), row.personId]);

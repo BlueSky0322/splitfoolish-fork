@@ -1,11 +1,11 @@
 import { ActionIcon, Button, MultiSelect, Select, TextInput, Title, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import IconTrashX from '~icons/tabler/trash-x';
-import { evaluate } from 'mathjs';
 import { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { useSplitActions } from '../hooks/useSplit';
 import ItemTable from './ItemTable';
+import { loadMath } from '../utils/math';
 import { itemFormValidate, itemInputFromForm } from './item-form-validate';
 
 const ItemList = () => {
@@ -22,6 +22,11 @@ const ItemList = () => {
     validate: itemFormValidate,
   });
 
+  // Start fetching mathjs now so it's ready by the time an item is added
+  useEffect(() => {
+    loadMath();
+  }, []);
+
   useEffect(() => {
     itemForm.setValues({
       participants: state.people.map((p) => p.name),
@@ -31,6 +36,7 @@ const ItemList = () => {
   const handleItemSubmit = async (values: Record<string, any>) => {
     let input;
     try {
+      const { evaluate } = await loadMath();
       input = itemInputFromForm(values, state.people, evaluate);
     } catch (error) {
       alert(error);

@@ -1,8 +1,14 @@
 import { Badge, Button, Loader, Tabs, TextInput, Title } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MyInvite, SplitSummary, api } from '../api';
 import { navigate } from '../hooks/useRoute';
+import { readCache, writeCache } from '../split-cache';
+
+interface HomeData {
+  splits: SplitSummary[];
+  invites: MyInvite[];
+}
 
 const TABS = ['all', 'mine', 'shared', 'invites'] as const;
 type Tab = (typeof TABS)[number];
@@ -25,17 +31,27 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
     validate: { name: (value) => (value.trim() ? null : 'Give the split a name') },
   });
 
+  const freshLoaded = useRef(false);
+
   const load = useCallback(async () => {
     try {
       const [{ splits }, { invites }] = await Promise.all([api.listSplits(), api.myInvites()]);
+      freshLoaded.current = true;
       setSplits(splits);
       setInvites(invites);
+      writeCache<HomeData>('home', { splits, invites });
     } catch {
       setError('Could not load your splits.');
     }
   }, []);
 
   useEffect(() => {
+    // Show the last-seen list straight away, unless the fresh one already arrived
+    readCache<HomeData>('home').then((cached) => {
+      if (cached == null || freshLoaded.current) return;
+      setSplits(cached.splits);
+      setInvites(cached.invites);
+    });
     load();
   }, [load]);
 

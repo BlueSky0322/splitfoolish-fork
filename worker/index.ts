@@ -5,7 +5,8 @@ import {
   clearItems,
   clearPeople,
   deleteContentStatements,
-  loadContent,
+  assembleContent,
+  contentStatements,
   removeItem,
   removePerson,
   updateItem,
@@ -144,46 +145,47 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
 
   if ((match = pathname.match(SPLIT_PATH))) {
     const id = match[1];
-    // Non-members get the same 404 as a missing split, so ids can't be probed
-    const role = await getRole(db, id, email);
-    if (role == null) return notFound();
 
     if (req.method === 'GET') {
-      const split = await db
-        .prepare('SELECT name, invite_token AS inviteToken FROM splits WHERE id = ?')
-        .bind(id)
-        .first<{ name: string; inviteToken: string }>();
-      if (split == null) return notFound();
-      const { results: members } = await db
-        .prepare(
-          'SELECT email, role FROM split_members WHERE split_id = ? ORDER BY joined_at, email',
-        )
-        .bind(id)
-        .all<{ email: string; role: Role }>();
-
-      const invites =
-        role === 'owner'
-          ? (
-              await db
-                .prepare(
-                  `SELECT id, email, created_at AS createdAt, expires_at AS expiresAt
-                   FROM split_invites WHERE split_id = ? AND expires_at > ? ORDER BY created_at`,
-                )
-                .bind(id, Date.now())
-                .all()
-            ).results
-          : undefined;
+      // One round trip: the database can be far from the user, so every query costs
+      const [roleRows, splitRows, memberRows, inviteRows, ...content] = await db.batch<
+        Record<string, unknown>
+      >([
+        db
+          .prepare('SELECT role FROM split_members WHERE split_id = ? AND email = ?')
+          .bind(id, email),
+        db.prepare('SELECT name, invite_token AS inviteToken FROM splits WHERE id = ?').bind(id),
+        db
+          .prepare(
+            'SELECT email, role FROM split_members WHERE split_id = ? ORDER BY joined_at, email',
+          )
+          .bind(id),
+        db
+          .prepare(
+            `SELECT id, email, created_at AS createdAt, expires_at AS expiresAt
+             FROM split_invites WHERE split_id = ? AND expires_at > ? ORDER BY created_at`,
+          )
+          .bind(id, Date.now()),
+        ...contentStatements(db, id),
+      ]);
+      const role = (roleRows.results[0] as { role: Role } | undefined)?.role;
+      const split = splitRows.results[0] as { name: string; inviteToken: string } | undefined;
+      // Non-members get the same 404 as a missing split, so ids can't be probed
+      if (role == null || split == null) return notFound();
 
       return json({
         id,
         name: split.name,
         role,
-        members,
-        invites,
+        members: memberRows.results,
+        invites: role === 'owner' ? inviteRows.results : undefined,
         inviteToken: role === 'owner' ? split.inviteToken : undefined,
-        ...(await loadContent(db, id)),
+        ...assembleContent(content),
       });
     }
+
+    const role = await getRole(db, id, email);
+    if (role == null) return notFound();
 
     if (req.method === 'DELETE') {
       if (role !== 'owner') return json({ error: 'Only the owner can delete this split' }, 403);
