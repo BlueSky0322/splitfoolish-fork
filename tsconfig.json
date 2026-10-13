@@ -22,6 +22,6 @@
 
     "types": ["unplugin-icons/types/react"]
   },
-  "include": ["src"],
+  "include": ["src", "shared"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
