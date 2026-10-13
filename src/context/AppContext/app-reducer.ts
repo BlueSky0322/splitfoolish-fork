@@ -29,6 +29,14 @@ export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
   };
 };
 
+export const toApiItem = (item: IItem): ApiItem => ({
+  id: item.id,
+  name: item.name,
+  cost: item.cost,
+  payerId: item.payer.id,
+  participantIds: item.participants.map((p) => p.id),
+});
+
 // Every action applies a change the server has already accepted
 export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draft, action) => {
   switch (action.type) {

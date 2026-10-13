@@ -15,7 +15,7 @@ import SplitPage from './SplitPage';
 
 interface SplitViewProps {
   splitId: string;
-  myEmail: string;
+  myEmail: string | null;
 }
 
 const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
@@ -42,7 +42,7 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
       children: (
         <SplitMembers
           splitId={splitId}
-          myEmail={myEmail}
+          myEmail={myEmail!}
           onChange={refreshMeta}
         />
       ),
@@ -63,7 +63,7 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
         <Button
           size="compact-sm"
           variant="light"
-          disabled={meta == null}
+          disabled={meta == null || myEmail == null}
           onClick={openSharing}
         >
           Share{meta ? ` (${meta.members.length})` : ''}
@@ -127,6 +127,7 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
       </Tabs>
       <div className="text-xs text-center text-gray-500 py-1">
         {status === 'loading' && 'Loading…'}
+        {status === 'refreshing' && 'Updating…'}
         {status === 'saving' && 'Saving…'}
         {status === 'saved' && 'Saved'}
         {status === 'error' && 'Sync failed, changes not saved'}

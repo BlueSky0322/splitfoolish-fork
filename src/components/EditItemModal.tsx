@@ -3,9 +3,9 @@ import { useForm } from '@mantine/form';
 import { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IItem } from '../interfaces/app-reducer';
-import { evaluate } from 'mathjs';
 import { modals } from '@mantine/modals';
 import { SplitActions } from '../hooks/useSplit';
+import { loadMath } from '../utils/math';
 import { itemFormValidate, itemInputFromForm } from './item-form-validate';
 
 interface EditItemModalProps {
@@ -30,6 +30,7 @@ const EditItemModal = ({ item, actions }: EditItemModalProps) => {
   const handleItemSubmit = async (values: Record<string, any>) => {
     let input;
     try {
+      const { evaluate } = await loadMath();
       input = itemInputFromForm(values, state.people, evaluate);
     } catch (error) {
       alert(error);

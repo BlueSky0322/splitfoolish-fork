@@ -1,5 +1,4 @@
 import { Title } from '@mantine/core';
-import html2canvas from 'html2canvas';
 import { useEffect, useRef } from 'react';
 import { IOwing } from '../interfaces/app-reducer';
 import ItemTable from './ItemTable';
@@ -15,31 +14,34 @@ const ShareModal = ({ owings }: ShareModalProps) => {
   useEffect(() => {
     if (owings == null || shareRef.current == null) return;
 
-    html2canvas(shareRef.current).then((canvas) => {
-      canvas.toBlob(async (blob) => {
-        if (navigator.share && blob !== null) {
-          try {
-            const data = {
-              files: [
-                new File([blob], `splitfoolish-${Date.now()}.png`, {
-                  type: 'image/png',
-                }),
-              ],
-            };
+    const target = shareRef.current;
+    import('html2canvas')
+      .then(({ default: html2canvas }) => html2canvas(target))
+      .then((canvas) => {
+        canvas.toBlob(async (blob) => {
+          if (navigator.share && blob !== null) {
+            try {
+              const data = {
+                files: [
+                  new File([blob], `splitfoolish-${Date.now()}.png`, {
+                    type: 'image/png',
+                  }),
+                ],
+              };
 
-            if (navigator.canShare(data)) {
-              await navigator.share(data);
-            } else {
-              console.error('Unable to share settlements.');
+              if (navigator.canShare(data)) {
+                await navigator.share(data);
+              } else {
+                console.error('Unable to share settlements.');
+              }
+            } catch (err) {
+              console.error(`Error sharing the div: ${err}`);
             }
-          } catch (err) {
-            console.error(`Error sharing the div: ${err}`);
+          } else {
+            alert('Sharing is not supported in this browser');
           }
-        } else {
-          alert('Sharing is not supported in this browser');
-        }
-      }, 'image/png');
-    });
+        }, 'image/png');
+      });
   }, []);
 
   return (
