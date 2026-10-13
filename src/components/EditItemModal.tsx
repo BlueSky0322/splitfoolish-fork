@@ -1,18 +1,21 @@
 import { TextInput, Select, MultiSelect, Button } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IItem } from '../interfaces/app-reducer';
 import { evaluate } from 'mathjs';
 import { modals } from '@mantine/modals';
-import { itemFormValidate } from './item-form-validate';
+import { SplitActions } from '../hooks/useSplit';
+import { itemFormValidate, itemInputFromForm } from './item-form-validate';
 
 interface EditItemModalProps {
   item: IItem;
-  itemIndex: number;
+  // Passed in because modals render outside the split page's context
+  actions: SplitActions;
 }
-const EditItemModal = ({ item, itemIndex }: EditItemModalProps) => {
-  const { state, dispatch } = useContext(AppContext);
+const EditItemModal = ({ item, actions }: EditItemModalProps) => {
+  const { state } = useContext(AppContext);
+  const [saving, setSaving] = useState(false);
   const itemForm = useForm({
     mode: 'uncontrolled',
     initialValues: {
@@ -24,31 +27,18 @@ const EditItemModal = ({ item, itemIndex }: EditItemModalProps) => {
     validate: itemFormValidate,
   });
 
-  const handleItemSubmit = (
-    values: Record<string, any>,
-    _e: React.FormEvent<HTMLFormElement> | undefined
-  ) => {
-    const participants = state.people.filter((p) => values['participants'].includes(p.name));
-    const payer = state.people.find((p) => p.name === values['payer']);
-
+  const handleItemSubmit = async (values: Record<string, any>) => {
+    let input;
     try {
-      dispatch({
-        type: 'UPDATE_ITEM',
-        payload: {
-          oldItemIndex: itemIndex,
-          newItem: {
-            cost: evaluate(values['cost']),
-            name: values['name'],
-            participants,
-            payer,
-            strategy: values['strategy'],
-          } as IItem,
-        },
-      });
-      modals.closeAll();
+      input = itemInputFromForm(values, state.people, evaluate);
     } catch (error) {
       alert(error);
+      return;
     }
+
+    setSaving(true);
+    if (await actions.updateItem(item.id, input)) modals.closeAll();
+    setSaving(false);
   };
 
   return (
@@ -85,6 +75,7 @@ const EditItemModal = ({ item, itemIndex }: EditItemModalProps) => {
       <Button
         className="mt-2 col-span-full"
         type="submit"
+        disabled={saving}
       >
         Save Item
       </Button>

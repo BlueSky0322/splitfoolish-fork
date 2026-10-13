@@ -5,6 +5,7 @@ import IconMinus from '~icons/tabler/minus';
 import { useContext } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { cn } from '../utils/cn';
+import { useSplitActions } from '../hooks/useSplit';
 import EditItemModal from './EditItemModal';
 import Big from 'big.js';
 
@@ -14,11 +15,9 @@ interface ItemTableProps {
 }
 const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemTableProps) => {
   const maxShownParticipants = alwaysShowParticipants ? 9999 : 3;
-  const { state, dispatch } = useContext(AppContext);
-
-  const handleItemRemove = (ix: number) => {
-    dispatch({ type: 'REMOVE_ITEM', payload: ix });
-  };
+  const { state } = useContext(AppContext);
+  // Null when the table is shown read-only outside the split page (e.g. the share image)
+  const actions = useSplitActions();
 
   return (
     <Table>
@@ -49,8 +48,8 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
             </Table.Td>
           </Table.Tr>
         ) : null}
-        {state.items.map((i, ix) => (
-          <Table.Tr key={ix}>
+        {state.items.map((i) => (
+          <Table.Tr key={i.id}>
             <Table.Td className="whitespace-nowrap">{i.name}</Table.Td>
             <Table.Td
               align="right"
@@ -93,7 +92,7 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
                       children: (
                         <EditItemModal
                           item={i}
-                          itemIndex={ix}
+                          actions={actions!}
                         />
                       ),
                     });
@@ -102,7 +101,7 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
                   <IconEdit />
                 </ActionIcon>
                 <ActionIcon
-                  onClick={() => handleItemRemove(ix)}
+                  onClick={() => actions?.removeItem(i.id)}
                   color="red"
                 >
                   <IconMinus />

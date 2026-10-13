@@ -4,9 +4,8 @@ import IconArrowsSplit from '~icons/tabler/arrows-split';
 import IconListDetails from '~icons/tabler/list-details';
 import IconUser from '~icons/tabler/user';
 import IconChevronLeft from '~icons/tabler/chevron-left';
-import { useContext, useState } from 'react';
-import { AppContext } from '../context/AppContext/AppContext';
-import { useRemoteSync } from '../hooks/useRemoteSync';
+import { useState } from 'react';
+import { SplitActionsContext, useSplit } from '../hooks/useSplit';
 import { navigate } from '../hooks/useRoute';
 import ErrorBoundary from './ErrorBoundary';
 import ItemList from './ItemList';
@@ -20,9 +19,8 @@ interface SplitViewProps {
 }
 
 const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
-  const { dispatch } = useContext(AppContext);
   const [activeTab, setActiveTab] = useState<string | null>('0');
-  const { status, meta, refreshMeta } = useRemoteSync(splitId);
+  const { status, meta, refreshMeta, actions } = useSplit(splitId);
 
   if (status === 'notfound') {
     return (
@@ -51,7 +49,7 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
     });
 
   return (
-    <>
+    <SplitActionsContext.Provider value={actions}>
       <div className="flex items-center justify-between gap-2 px-2 py-2 border-b">
         <Button
           variant="subtle"
@@ -141,13 +139,13 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
           radius="xs"
           variant="transparent"
           onClick={() => {
-            dispatch({ type: 'LOAD_TEST_DATA', payload: null });
+            actions.loadTestData();
           }}
         >
           Load test data.
         </Button>
       </div>
-    </>
+    </SplitActionsContext.Provider>
   );
 };
 

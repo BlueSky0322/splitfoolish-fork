@@ -4,7 +4,7 @@ import IconMinus from '~icons/tabler/minus';
 import { useCallback, useEffect, useState } from 'react';
 import { SplitInvite, api, invitesPageUrl, inviteUrl } from '../api';
 import { navigate } from '../hooks/useRoute';
-import { SplitMeta } from '../hooks/useRemoteSync';
+import { SplitMeta } from '../hooks/useSplit';
 
 interface SplitMembersProps {
   splitId: string;
