@@ -10,7 +10,8 @@ interface PhotoStripProps {
   photos: Attachment[];
   /** Picked but not uploaded yet (a new item's receipts wait until it's added) */
   pending?: File[];
-  uploading?: number;
+  /** On their way up: shown from this device with a spinner */
+  uploading?: File[];
   canRemove: (photo: Attachment) => boolean;
   onAdd: (files: File[]) => void;
   onRemove: (photo: Attachment) => void;
@@ -20,7 +21,15 @@ interface PhotoStripProps {
   layout?: 'strip' | 'gallery';
 }
 
-function PendingThumb({ file, onRemove }: { file: File; onRemove?: () => void }) {
+function PendingThumb({
+  file,
+  onRemove,
+  busy,
+}: {
+  file: File;
+  onRemove?: () => void;
+  busy?: boolean;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     const u = URL.createObjectURL(file);
@@ -34,6 +43,14 @@ function PendingThumb({ file, onRemove }: { file: File; onRemove?: () => void })
           src={url}
           alt={file.name}
         />
+      )}
+      {busy && (
+        <div className={classes.busy}>
+          <Loader
+            size="xs"
+            color="white"
+          />
+        </div>
       )}
       {onRemove && (
         <ActionIcon
@@ -56,7 +73,7 @@ const PhotoStrip = ({
   splitId,
   photos,
   pending = [],
-  uploading = 0,
+  uploading = [],
   canRemove,
   onAdd,
   onRemove,
@@ -106,13 +123,12 @@ const PhotoStrip = ({
           onRemove={onRemovePending ? () => onRemovePending(file) : undefined}
         />
       ))}
-      {Array.from({ length: uploading }, (_, ix) => (
-        <div
-          key={`uploading-${ix}`}
-          className={`${classes.thumb} ${classes.placeholder}`}
-        >
-          <Loader size="xs" />
-        </div>
+      {uploading.map((file, ix) => (
+        <PendingThumb
+          key={`uploading-${file.name}-${ix}`}
+          file={file}
+          busy
+        />
       ))}
       <UnstyledButton
         className={`${classes.thumb} ${classes.add}`}

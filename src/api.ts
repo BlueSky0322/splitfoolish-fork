@@ -44,6 +44,8 @@ export interface Profile {
   paymentMethods: PaymentMethod[];
   preferredPaymentMethodId: string | null;
   settings: Settings;
+  /** On this device only: a new picture still uploading, shown in the meantime */
+  avatarPreview?: string | null;
 }
 
 export interface ProfilePatch {
@@ -160,8 +162,9 @@ export const api = {
     }),
   removeAvatar: () => request<{ ok: true }>('DELETE', '/api/me/avatar'),
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
-  createSplit: (name: string, currency: string) =>
-    request<{ id: string }>('POST', '/api/splits', { name, currency }),
+  /** id is made by the app, so the new split can open before this finishes */
+  createSplit: (id: string, name: string, currency: string) =>
+    request<{ id: string }>('POST', '/api/splits', { id, name, currency }),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
   /** Sends queued changes; keepalive lets a save finish while the page is closing */
   applyChanges: (id: string, changes: Change[]) =>
