@@ -29,7 +29,8 @@ export interface SplitActions {
   /** fromItems also takes them off items they share; see removeBlocker for what's allowed */
   removePerson: (personId: string, fromItems?: boolean) => boolean;
   clearPeople: () => boolean;
-  addItem: (item: ItemInput) => boolean;
+  /** id lets the caller refer to the new item straight away, say to attach photos */
+  addItem: (item: ItemInput, id?: string) => boolean;
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
   /** Puts back an item that was just removed (Undo) */
@@ -46,7 +47,7 @@ export const useSplitActions = () => useContext(SplitActionsContext);
 const SAVE_DELAY_MS = 500;
 const RETRY_DELAY_MS = 3000;
 
-const newId = () =>
+export const newId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) =>
     b.toString(16).padStart(2, '0'),
   ).join('');
@@ -296,9 +297,9 @@ export function useSplit(splitId: string) {
         dispatch({ type: 'CLEAR_PEOPLE', payload: null });
         return queue({ op: 'clearPeople' });
       },
-      addItem: (input) => {
+      addItem: (input, id = newId()) => {
         // The server stamps its own time; this one orders it until the next load
-        const item = { id: newId(), createdAt: Date.now(), ...input };
+        const item = { id, createdAt: Date.now(), ...input };
         dispatch({ type: 'ADD_ITEM', payload: item });
         return queue({ op: 'addItem', item });
       },
@@ -330,5 +331,15 @@ export function useSplit(splitId: string) {
     save();
   }, [save]);
 
-  return { status, meta, setMeta, refreshMeta, actions, retry };
+  /** Saves anything queued now, resolving once the server has it (photos need their item saved) */
+  const whenSaved = useCallback(async () => {
+    const deadline = Date.now() + 20_000;
+    save();
+    while (pending.current.length > 0 || inFlight.current) {
+      if (Date.now() > deadline) throw new Error('Still saving. Try again in a moment.');
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }, [save]);
+
+  return { status, meta, setMeta, refreshMeta, actions, retry, whenSaved };
 }

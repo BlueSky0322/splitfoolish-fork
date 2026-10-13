@@ -1,5 +1,5 @@
 import { ActionIcon, UnstyledButton } from '@mantine/core';
-import { ArrowDown, ArrowUp, PencilSimple, Trash } from '@phosphor-icons/react';
+import { ArrowDown, ArrowUp, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
 import { categoryIcon } from '../../split/categories';
@@ -19,6 +19,21 @@ interface ItemViewProps {
   mobile: boolean;
   onEdit: (item: IItem) => void;
   onDelete: (item: IItem) => void;
+  /** Receipt photos per item id */
+  photoCounts: Map<string, number>;
+}
+
+function PhotoBadge({ count }: { count?: number }) {
+  if (!count) return null;
+  return (
+    <span
+      className={classes.photoBadge}
+      title={`${count} ${count === 1 ? 'photo' : 'photos'}`}
+    >
+      <Paperclip size={12} />
+      {count > 1 && count}
+    </span>
+  );
 }
 
 const MODE_LABELS = { equal: 'Equal', shares: 'Shares', exact: 'Exact' } as const;
@@ -70,6 +85,7 @@ function RowActions({
 }
 
 export function ItemCards({
+  photoCounts,
   groups,
   grouped,
   summary,
@@ -114,7 +130,10 @@ export function ItemCards({
                     className={`${classes.itemText} ${classes.stretched}`}
                     onClick={() => onEdit(item)}
                   >
-                    <div className={classes.itemName}>{item.name}</div>
+                    <div className={classes.itemName}>
+                      {item.name}
+                      <PhotoBadge count={photoCounts.get(item.id)} />
+                    </div>
                     <div className={classes.itemMeta}>
                       {mobile
                         ? `${item.payer.name} paid${share != null ? ` · yours ${formatMoney(share, currency)}` : ''}`
@@ -191,6 +210,7 @@ function SortHeader({
 }
 
 export function ItemTable({
+  photoCounts,
   groups,
   grouped,
   summary,
@@ -301,7 +321,10 @@ export function ItemTable({
                 role="row"
                 onDoubleClick={() => onEdit(item)}
               >
-                <span className={classes.cellEllipsis}>{item.name}</span>
+                <span className={classes.cellEllipsis}>
+                  {item.name}
+                  <PhotoBadge count={photoCounts.get(item.id)} />
+                </span>
                 <span className={classes.payerCell}>
                   <UserAvatar
                     name={item.payer.name}
