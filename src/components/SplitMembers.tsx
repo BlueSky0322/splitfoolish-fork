@@ -15,6 +15,8 @@ interface SplitMembersProps {
   myEmail: string;
   /** Reloads members and invites after a change */
   onChange: () => Promise<void>;
+  /** Shows a change straight away, before the server confirms it */
+  setMeta: (update: (meta: SplitMeta | null) => SplitMeta | null) => void;
 }
 
 // Owners send this themselves until the app can email invites
@@ -32,7 +34,7 @@ const showError = (err: unknown) =>
 
 // Sharing and members (F8): invite by email, the share link, who has access, and
 // deleting or leaving the split
-const SplitMembers = ({ meta, myEmail, onChange }: SplitMembersProps) => {
+const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) => {
   const [busy, setBusy] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -52,6 +54,15 @@ const SplitMembers = ({ meta, myEmail, onChange }: SplitMembersProps) => {
     }
   };
 
+  // Shown straight away; reloaded from the server if it says no
+  const optimistic = (show: (m: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => {
+    setMeta((m) => (m ? show(m) : m));
+    request().catch((err) => {
+      showError(err);
+      onChange();
+    });
+  };
+
   // Leaving or deleting ends access, so go home instead of reloading
   const exit = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -67,17 +78,32 @@ const SplitMembers = ({ meta, myEmail, onChange }: SplitMembersProps) => {
 
   const sendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
+    const email = inviteEmail.trim().toLowerCase();
     setInviteError(null);
-    setBusy(true);
+    // Listed straight away with a stand-in id; swapped for the real one when it arrives
+    const now = Date.now();
+    const pending: SplitInvite = {
+      id: `pending-${now}`,
+      email,
+      createdAt: now,
+      expiresAt: now + 14 * 24 * 60 * 60 * 1000,
+    };
+    setInviteEmail('');
+    setJustInvited(pending);
+    setMeta((m) =>
+      m ? { ...m, invites: [...(m.invites ?? []).filter((i) => i.email !== email), pending] } : m,
+    );
     try {
-      const invite = await api.inviteByEmail(meta.id, inviteEmail.trim());
+      const invite = await api.inviteByEmail(meta.id, email);
       setJustInvited(invite);
-      setInviteEmail('');
-      await onChange();
+      setMeta((m) =>
+        m ? { ...m, invites: m.invites?.map((i) => (i.id === pending.id ? invite : i)) } : m,
+      );
     } catch (err) {
+      setJustInvited(null);
+      setInviteEmail(email);
       setInviteError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
+      setMeta((m) => (m ? { ...m, invites: m.invites?.filter((i) => i.id !== pending.id) } : m));
     }
   };
 
@@ -188,7 +214,12 @@ const SplitMembers = ({ meta, myEmail, onChange }: SplitMembersProps) => {
                   className={classes.textAction}
                   disabled={busy}
                   aria-label={`Remove ${m.email}`}
-                  onClick={() => run(() => api.removeMember(meta.id, m.email))}
+                  onClick={() =>
+                    optimistic(
+                      (x) => ({ ...x, members: x.members.filter((y) => y.email !== m.email) }),
+                      () => api.removeMember(meta.id, m.email),
+                    )
+                  }
                 >
                   Remove
                 </UnstyledButton>
@@ -210,9 +241,14 @@ const SplitMembers = ({ meta, myEmail, onChange }: SplitMembersProps) => {
               </div>
               <UnstyledButton
                 className={classes.textAction}
-                disabled={busy}
+                disabled={busy || i.id.startsWith('pending-')}
                 aria-label={`Revoke invite for ${i.email}`}
-                onClick={() => run(() => api.revokeInvite(meta.id, i.id))}
+                onClick={() =>
+                  optimistic(
+                    (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== i.id) }),
+                    () => api.revokeInvite(meta.id, i.id),
+                  )
+                }
               >
                 Revoke
               </UnstyledButton>

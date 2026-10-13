@@ -4,7 +4,7 @@ import { Check, Plus, X } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { MyInvite, SplitSummary, api } from '../api';
 import { useIsDesktop } from '../hooks/useBreakpoints';
-import { reloadHomeData, useHomeData } from '../hooks/useHomeData';
+import { reloadHomeData, updateHomeData, useHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
 import { nameFor, useProfile } from '../profile/ProfileContext';
 import { formatMoney } from '../utils/money';
@@ -63,23 +63,27 @@ const splitMeta = (split: SplitSummary) =>
 function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
   const [busy, setBusy] = useState<string | null>(null);
 
+  // The invite leaves the list straight away; the server catches up in the background
   const respond = async (invite: MyInvite, accept: boolean) => {
-    setBusy(invite.id);
+    updateHomeData((data) => ({
+      invites: (data.invites ?? []).filter((i) => i.id !== invite.id),
+    }));
     try {
       if (accept) {
+        setBusy(invite.id);
+        // Joining has to finish before the split can be opened
         const { id } = await api.acceptInvite(invite.id);
         reloadHomeData();
         navigate(`?s=${id}`);
         return;
       }
       await api.declineInvite(invite.id);
-      await reloadHomeData();
     } catch (err) {
       notifications.show({
         color: 'red',
         message: err instanceof Error ? err.message : 'Could not answer the invite',
       });
-      await reloadHomeData();
+      reloadHomeData();
     } finally {
       setBusy(null);
     }
@@ -220,6 +224,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
               name={profile ? nameFor(profile.email, profile.displayName) : ''}
               email={profile?.email}
               avatarVersion={profile?.avatarVersion}
+              previewSrc={profile?.avatarPreview}
               size={32}
             />
           </UnstyledButton>

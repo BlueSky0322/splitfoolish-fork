@@ -65,6 +65,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
         name={name}
         email={profile?.email}
         avatarVersion={profile?.avatarVersion}
+        previewSrc={profile?.avatarPreview}
       />
       {open && (
         <>

@@ -13,6 +13,7 @@ import { AppContext } from '../context/AppContext/AppContext';
 import { ApiItem, toApiItem } from '../context/AppContext/app-reducer';
 import { AppReducerState } from '../interfaces/app-reducer';
 import { readCache, removeCache, writeCache } from '../split-cache';
+import { whenCreated } from '../pending-creates';
 import { reloadHomeData } from './useHomeData';
 
 /** 'refreshing' means a cached copy is showing while the latest loads */
@@ -118,6 +119,8 @@ export function useSplit(splitId: string) {
   );
 
   const load = useCallback(async () => {
+    // A split made a moment ago may still be on its way to the server
+    await whenCreated(splitId);
     for (;;) {
       const seen = batchesSent.current;
       const detail = await api.getSplit(splitId);
@@ -143,6 +146,7 @@ export function useSplit(splitId: string) {
     setStatus('saving');
 
     try {
+      await whenCreated(splitId);
       await api.applyChanges(splitId, batch);
       inFlight.current = false;
       if (pending.current.length > 0) return save();

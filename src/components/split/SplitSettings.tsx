@@ -1,5 +1,6 @@
 import { Button, Select, TextInput } from '@mantine/core';
 import { useMemo, useState } from 'react';
+import { notifications } from '@mantine/notifications';
 import { api } from '../../api';
 import { reloadHomeData } from '../../hooks/useHomeData';
 import { listCurrencies } from '../../utils/money';
@@ -25,28 +26,30 @@ const SplitSettings = ({
 }: SplitSettingsProps) => {
   const [draftName, setDraftName] = useState(name);
   const [draftCurrency, setDraftCurrency] = useState(currency);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const currencies = useMemo(listCurrencies, []);
 
-  const save = async (e: React.FormEvent) => {
+  // Shown straight away; put back if the server refuses it
+  const save = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = draftName.trim();
     if (!trimmed) {
       setError('Give the split a name');
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      await api.updateSplit(splitId, { name: trimmed, currency: draftCurrency });
-      onSaved({ name: trimmed, currency: draftCurrency });
-      reloadHomeData();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the settings');
-      setBusy(false);
-    }
+    const before = { name, currency };
+    onSaved({ name: trimmed, currency: draftCurrency });
+    onClose();
+    api
+      .updateSplit(splitId, { name: trimmed, currency: draftCurrency })
+      .then(() => reloadHomeData())
+      .catch((err) => {
+        onSaved(before);
+        notifications.show({
+          color: 'red',
+          message: err instanceof Error ? err.message : 'Could not save the split settings',
+        });
+      });
   };
 
   return (
@@ -84,14 +87,7 @@ const SplitSettings = ({
         >
           {canEdit ? 'Cancel' : 'Close'}
         </Button>
-        {canEdit && (
-          <Button
-            type="submit"
-            loading={busy}
-          >
-            Save
-          </Button>
-        )}
+        {canEdit && <Button type="submit">Save</Button>}
       </div>
     </form>
   );
