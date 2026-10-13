@@ -40,6 +40,19 @@ export type ProfilePatch = Partial<Pick<Profile, 'displayName' | 'theme' | 'acce
 export interface SplitMember {
   email: string;
   role: Role;
+  displayName: string | null;
+  avatarVersion: number | null;
+  /** Preferred first */
+  paymentMethods: PaymentMethod[];
+}
+
+export interface Attachment {
+  id: string;
+  /** Null for a photo of the whole split */
+  itemId: string | null;
+  size: number;
+  uploadedBy: string;
+  createdAt: number;
 }
 
 export interface SplitInvite {
@@ -61,21 +74,25 @@ export interface MyInvite {
 export interface SplitDetail {
   id: string;
   name: string;
+  currency: string;
   role: Role;
   members: SplitMember[];
   /** Pending email invites; only sent to the owner */
   invites?: SplitInvite[];
   inviteToken?: string;
+  attachments: Attachment[];
   people: IPerson[];
   items: ApiItem[];
 }
 
-export type ItemInput = Omit<ApiItem, 'id'>;
+export type ItemInput = Omit<ApiItem, 'id' | 'createdAt'>;
 
 /** One change to a split's people or items; ids are made by the client */
 export type Change =
   | { op: 'addPerson'; id: string; name: string; memberEmail?: string | null }
-  | { op: 'removePerson'; id: string }
+  | { op: 'renamePerson'; id: string; name: string }
+  | { op: 'linkPerson'; id: string; memberEmail: string | null }
+  | { op: 'removePerson'; id: string; fromItems?: boolean }
   | { op: 'clearPeople' }
   | { op: 'addItem'; item: ApiItem }
   | { op: 'updateItem'; item: ApiItem }
@@ -120,6 +137,8 @@ export const api = {
   /** Sends queued changes; keepalive lets a save finish while the page is closing */
   applyChanges: (id: string, changes: Change[]) =>
     request<{ ok: true }>('POST', `${splitPath(id)}/changes`, { changes }, { keepalive: true }),
+  updateSplit: (id: string, patch: { name?: string; currency?: string }) =>
+    request<{ ok: true }>('PATCH', splitPath(id), patch),
   deleteSplit: (id: string) => request<{ ok: true }>('DELETE', splitPath(id)),
   resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>

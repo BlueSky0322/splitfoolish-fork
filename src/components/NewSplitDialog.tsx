@@ -63,7 +63,8 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
         data={currencies}
         description="Defaults to your last-used currency. You can change it later in split settings."
         inputWrapperOrder={['label', 'input', 'description', 'error']}
-        comboboxProps={{ withinPortal: true }}
+        // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
+        comboboxProps={{ withinPortal: false }}
         {...form.getInputProps('currency')}
       />
       {error && <div className="sf-negative text-sm">{error}</div>}

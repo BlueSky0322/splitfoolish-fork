@@ -8,7 +8,7 @@ interface AppContextValue {
 }
 
 export const AppContext = createContext<AppContextValue>({
-  state: { items: [], people: [], owings: [] } as AppReducerState,
+  state: { items: [], people: [] } as AppReducerState,
   dispatch: () => {},
 });
 

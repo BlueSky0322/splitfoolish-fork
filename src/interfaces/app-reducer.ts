@@ -1,13 +1,9 @@
-export interface IOwing {
-  payer: IPerson;
-  payee: IPerson;
-  amount: number;
-}
+import { SplitMode } from '../../shared/settle';
 
 export interface IPerson {
   id: string;
   name: string;
-  /** Set when the person was added from the split's members or invitees */
+  /** The account this person is, when linked ("This is me") */
   memberEmail?: string | null;
 }
 
@@ -15,15 +11,22 @@ export interface IPerson {
 export interface IItem {
   id: string;
   name: string;
+  /** In currency units */
   cost: number;
   payer: IPerson;
   participants: IPerson[];
+  splitMode: SplitMode;
+  /** Shares per person id, when split by shares */
+  shares?: Record<string, number>;
+  /** Amount per person id in currency units, when split by exact amounts */
+  exact?: Record<string, number>;
+  category: string | null;
+  createdAt: number;
 }
 
 export interface AppReducerState {
   people: IPerson[];
   items: IItem[];
-  owings: IOwing[];
 }
 
 export interface AppReducerAction {
