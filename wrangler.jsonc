@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "splitfoolish-db",
-      "database_id": "REPLACE_WITH_ID_FROM_wrangler_d1_create",
+      "database_id": "318166d8-116e-4922-877f-9e98dd357dd1",
       "migrations_dir": "migrations"
     }
   ]
