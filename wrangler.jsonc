@@ -7,7 +7,7 @@
   // until both are set. Locally, .dev.vars blanks them and sets DEV_USER_EMAIL.
   "vars": {
     "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    "ACCESS_AUD": "0b9d523eaa0a5d680e662443a9922d5be39edf752659882fef24b4f1dda5438b"
   },
   "assets": {
     "directory": "./dist",
