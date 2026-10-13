@@ -6,10 +6,36 @@ export type Role = 'owner' | 'editor';
 export interface SplitSummary {
   id: string;
   name: string;
+  currency: string;
   role: Role;
   memberCount: number;
+  peopleCount: number;
+  totalCents: number;
+  /** Null when no one in the split is linked to this account */
+  myBalanceCents: number | null;
   updatedAt: number;
 }
+
+export type ThemeSetting = 'dark' | 'light' | 'auto';
+
+export interface PaymentMethod {
+  id: string;
+  type: string;
+  detail: string;
+}
+
+export interface Profile {
+  email: string;
+  displayName: string | null;
+  theme: ThemeSetting;
+  accent: string;
+  lastCurrency: string | null;
+  avatarVersion: number | null;
+  paymentMethods: PaymentMethod[];
+  preferredPaymentMethodId: string | null;
+}
+
+export type ProfilePatch = Partial<Pick<Profile, 'displayName' | 'theme' | 'accent'>>;
 
 export interface SplitMember {
   email: string;
@@ -85,9 +111,11 @@ async function request<T>(
 const splitPath = (id: string) => `/api/splits/${encodeURIComponent(id)}`;
 
 export const api = {
-  me: () => request<{ email: string }>('GET', '/api/me'),
+  me: () => request<Profile>('GET', '/api/me'),
+  updateMe: (patch: ProfilePatch) => request<Profile>('PATCH', '/api/me', patch),
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
-  createSplit: (name: string) => request<{ id: string }>('POST', '/api/splits', { name }),
+  createSplit: (name: string, currency: string) =>
+    request<{ id: string }>('POST', '/api/splits', { name, currency }),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
   /** Sends queued changes; keepalive lets a save finish while the page is closing */
   applyChanges: (id: string, changes: Change[]) =>
@@ -108,6 +136,9 @@ export const api = {
   joinSplit: (token: string) =>
     request<{ id: string }>('POST', `/api/join/${encodeURIComponent(token)}`),
 };
+
+export const avatarUrl = (email: string, version: number) =>
+  `/api/avatars/${encodeURIComponent(email)}?v=${version}`;
 
 export const inviteUrl = (token: string) =>
   `${window.location.origin}/?join=${encodeURIComponent(token)}`;

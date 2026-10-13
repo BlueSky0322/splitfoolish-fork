@@ -1,0 +1,60 @@
+import { useEffect, useSyncExternalStore } from 'react';
+import { MyInvite, SplitSummary, api } from '../api';
+import { readCache, writeCache } from '../split-cache';
+
+// My splits and pending invites, shared by the sidebar, My splits and Invites pages so
+// they load once and always agree. The last-seen copy shows while a fresh one loads.
+
+interface HomeData {
+  splits: SplitSummary[] | null;
+  invites: MyInvite[] | null;
+  error: string | null;
+}
+
+let state: HomeData = { splits: null, invites: null, error: null };
+const listeners = new Set<() => void>();
+let freshLoaded = false;
+let cacheRead = false;
+let inFlight: Promise<void> | null = null;
+
+function setState(next: Partial<HomeData>) {
+  state = { ...state, ...next };
+  listeners.forEach((l) => l());
+}
+
+/** Fetches the latest splits and invites; concurrent calls share one request */
+export function reloadHomeData(): Promise<void> {
+  inFlight ??= Promise.all([api.listSplits(), api.myInvites()])
+    .then(([{ splits }, { invites }]) => {
+      freshLoaded = true;
+      setState({ splits, invites, error: null });
+      writeCache('home-v2', { splits, invites });
+    })
+    .catch(() => setState({ error: 'Could not load your splits.' }))
+    .finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function useHomeData() {
+  const data = useSyncExternalStore(subscribe, () => state);
+
+  useEffect(() => {
+    if (!cacheRead) {
+      cacheRead = true;
+      readCache<{ splits: SplitSummary[]; invites: MyInvite[] }>('home-v2').then((cached) => {
+        if (cached == null || freshLoaded) return;
+        setState({ splits: cached.splits, invites: cached.invites });
+      });
+    }
+    reloadHomeData();
+  }, []);
+
+  return data;
+}
