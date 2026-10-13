@@ -1,0 +1,139 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-sm);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 14px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--sf-divider);
+}
+
+.row:hover {
+  background: var(--sf-hover);
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.balance {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* One person's page */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.back:hover {
+  color: var(--sf-text);
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.heroName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.heroSub {
+  font-size: 13px;
+  color: var(--sf-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--sf-tint);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+}
+
+.statValue {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.actionList {
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-sm);
+  overflow: hidden;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.action + .action {
+  border-top: 1px solid var(--sf-divider);
+}
+
+.action:hover {
+  background: var(--sf-hover);
+}
+
+.danger {
+  color: var(--sf-negative);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--sf-tint);
+}

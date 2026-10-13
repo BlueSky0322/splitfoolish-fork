@@ -1,7 +1,7 @@
 import { ArrowRight } from '@phosphor-icons/react';
 import { IPerson } from '../../interfaces/app-reducer';
 import { formatMoney } from '../../utils/money';
-import UserAvatar from '../ui/UserAvatar';
+import PersonAvatar from './PersonAvatar';
 import classes from './Split.module.css';
 
 interface TransferRowProps {
@@ -21,16 +21,16 @@ const TransferRow = ({ from, to, amountCents, currency, size = 'md' }: TransferR
       className={classes.transfer}
       data-size={size}
     >
-      <UserAvatar
-        name={from.name}
+      <PersonAvatar
+        person={from}
         size={avatar}
       />
       <ArrowRight
         size={size === 'xl' ? 28 : 14}
         className={classes.transferArrow}
       />
-      <UserAvatar
-        name={to.name}
+      <PersonAvatar
+        person={to}
         size={avatar}
       />
       <span className={classes.transferText}>
