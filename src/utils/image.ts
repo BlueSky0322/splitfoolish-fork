@@ -2,6 +2,8 @@
 // receipt is perfectly readable at 1600px. The server stores up to 1.5 MB per photo.
 
 const MAX_BYTES = 1_400_000;
+/** Profile pictures are small and square-ish; the server takes up to 256 KB */
+export const AVATAR = { maxSide: 512, maxBytes: 240_000 };
 
 async function decode(file: Blob): Promise<ImageBitmap | HTMLImageElement> {
   if ('createImageBitmap' in window) {
@@ -27,7 +29,7 @@ const toBlob = (canvas: HTMLCanvasElement, type: string, quality: number) =>
   new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
 
 /** A JPEG no larger than maxSide pixels on its longest side, and under the upload limit */
-export async function shrinkImage(file: Blob, maxSide = 1600): Promise<Blob> {
+export async function shrinkImage(file: Blob, maxSide = 1600, maxBytes = MAX_BYTES): Promise<Blob> {
   const image = await decode(file);
   let scale = Math.min(1, maxSide / Math.max(image.width, image.height));
 
@@ -43,7 +45,7 @@ export async function shrinkImage(file: Blob, maxSide = 1600): Promise<Blob> {
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob = await toBlob(canvas, 'image/jpeg', 0.82);
     if (blob == null) throw new Error('Could not read that photo');
-    if (blob.size <= MAX_BYTES) return blob;
+    if (blob.size <= maxBytes) return blob;
     scale *= 0.75;
   }
   throw new Error('That photo is too large');

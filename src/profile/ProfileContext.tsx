@@ -1,7 +1,7 @@
 import { useMantineColorScheme } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Profile, ProfilePatch, ThemeSetting, api } from '../api';
+import { Profile, ProfilePatch, Settings, ThemeSetting, api } from '../api';
 import { setCacheUser } from '../split-cache';
 import { Accent, isAccent } from '../theme/accents';
 
@@ -37,8 +37,10 @@ function saveAppearance(appearance: Appearance) {
 interface ProfileContextValue {
   profile: Profile | null;
   signedOut: boolean;
-  /** Saves profile fields, showing the change straight away */
+  /** Saves profile fields or settings, showing the change straight away */
   update: (patch: ProfilePatch) => Promise<void>;
+  /** Saves some settings, showing the change straight away */
+  updateSettings: (settings: Partial<Settings>) => Promise<void>;
   /** Replaces the profile with one the server returned */
   replace: (profile: Profile) => void;
 }
@@ -68,10 +70,11 @@ export function ProfileProvider({
 
   const apply = useCallback(
     (next: Profile) => {
-      const accent = isAccent(next.accent) ? next.accent : 'blurple';
-      setColorScheme(next.theme);
+      const { theme } = next.settings;
+      const accent = isAccent(next.settings.accent) ? next.settings.accent : 'blurple';
+      setColorScheme(theme);
       onAccentChange(accent);
-      saveAppearance({ theme: next.theme, accent });
+      saveAppearance({ theme, accent });
     },
     [setColorScheme, onAccentChange],
   );
@@ -98,7 +101,11 @@ export function ProfileProvider({
     async (patch: ProfilePatch) => {
       if (profile == null) return;
       const before = profile;
-      replace({ ...profile, ...patch });
+      replace({
+        ...profile,
+        ...('displayName' in patch ? { displayName: patch.displayName ?? null } : {}),
+        settings: { ...profile.settings, ...patch.settings },
+      });
       try {
         replace(await api.updateMe(patch));
       } catch (err) {
@@ -112,8 +119,13 @@ export function ProfileProvider({
     [profile, replace],
   );
 
+  const updateSettings = useCallback(
+    (settings: Partial<Settings>) => update({ settings }),
+    [update],
+  );
+
   return (
-    <ProfileContext.Provider value={{ profile, signedOut, update, replace }}>
+    <ProfileContext.Provider value={{ profile, signedOut, update, updateSettings, replace }}>
       {children}
     </ProfileContext.Provider>
   );

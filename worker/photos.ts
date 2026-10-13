@@ -8,6 +8,8 @@ const MAX_PHOTO_BYTES = 1_500_000;
 const MAX_AVATAR_BYTES = 256_000;
 const MAX_PHOTOS_PER_SPLIT = 300;
 
+import { ensureProfile } from './profiles';
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -161,27 +163,21 @@ export async function putAvatar(req: Request, db: D1Database, email: string) {
   const image = await readImage(req, MAX_AVATAR_BYTES);
   if (image instanceof Response) return image;
 
-  const now = Date.now();
-  await db
-    .prepare(
-      `INSERT INTO profiles (email, avatar_version, avatar_type, avatar, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?2)
-       ON CONFLICT (email) DO UPDATE SET
-         avatar_version = ?2, avatar_type = ?3, avatar = ?4, updated_at = ?2`,
-    )
-    .bind(email, now, image.contentType, image.bytes)
-    .run();
-  return json({ avatarVersion: now });
+  const version = Date.now();
+  await db.batch([
+    ensureProfile(db, email),
+    db
+      .prepare(
+        `INSERT INTO avatars (email, content_type, version, data) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (email) DO UPDATE SET content_type = ?2, version = ?3, data = ?4`,
+      )
+      .bind(email, image.contentType, version, image.bytes),
+  ]);
+  return json({ avatarVersion: version });
 }
 
 export async function deleteAvatar(db: D1Database, email: string) {
-  await db
-    .prepare(
-      `UPDATE profiles SET avatar_version = NULL, avatar_type = NULL, avatar = NULL, updated_at = ?
-       WHERE email = ?`,
-    )
-    .bind(Date.now(), email)
-    .run();
+  await db.prepare('DELETE FROM avatars WHERE email = ?').bind(email).run();
   return json({ ok: true });
 }
 
@@ -198,9 +194,9 @@ export async function getAvatar(db: D1Database, viewer: string, email: string) {
     if (shared == null) return json({ error: 'Not found' }, 404);
   }
   const row = await db
-    .prepare('SELECT avatar_type AS contentType, avatar FROM profiles WHERE email = ?')
+    .prepare('SELECT content_type AS contentType, data FROM avatars WHERE email = ?')
     .bind(email)
-    .first<{ contentType: string | null; avatar: ArrayBuffer | number[] | null }>();
-  if (row?.avatar == null || row.contentType == null) return json({ error: 'Not found' }, 404);
-  return imageResponse(row.avatar, row.contentType);
+    .first<{ contentType: string; data: ArrayBuffer | number[] }>();
+  if (row == null) return json({ error: 'Not found' }, 404);
+  return imageResponse(row.data, row.contentType);
 }

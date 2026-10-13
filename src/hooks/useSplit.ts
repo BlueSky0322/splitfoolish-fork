@@ -33,6 +33,8 @@ export interface SplitActions {
   addItem: (item: ItemInput, id?: string) => boolean;
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
+  /** Who everyone settles up through, or null for the fewest transfers */
+  setDistributor: (personId: string | null) => boolean;
   /** Puts back an item that was just removed (Undo) */
   restoreItem: (item: ApiItem) => boolean;
   clearItems: () => boolean;
@@ -312,6 +314,10 @@ export function useSplit(splitId: string) {
       removeItem: (itemId) => {
         dispatch({ type: 'REMOVE_ITEM', payload: itemId });
         return queue({ op: 'removeItem', id: itemId });
+      },
+      setDistributor: (personId) => {
+        setMeta((m) => (m ? { ...m, distributorId: personId } : m));
+        return queue({ op: 'setDistributor', personId });
       },
       restoreItem: (item) => {
         if (current.current.items.some((i) => i.id === item.id)) return false;

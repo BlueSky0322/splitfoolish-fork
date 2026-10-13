@@ -135,6 +135,8 @@ export type Change =
   /** fromItems: also take them off items they share (never items they paid for) */
   | { op: 'removePerson'; id: string; fromItems?: boolean }
   | { op: 'clearPeople' }
+  /** Settle up through this person ("route payments through"), or null for fewest transfers */
+  | { op: 'setDistributor'; personId: string | null }
   | { op: 'addItem'; item: Item }
   | { op: 'updateItem'; item: Item }
   | { op: 'removeItem'; id: string }
@@ -390,6 +392,19 @@ function plan(
       return [
         db.prepare('DELETE FROM item_participants WHERE person_id = ?').bind(change.id),
         db.prepare('DELETE FROM people WHERE id = ?').bind(change.id),
+      ];
+    }
+
+    case 'setDistributor': {
+      const personId = change.personId ?? null;
+      if (personId != null && !model.people.has(personId)) {
+        throw new Refused('That person was removed by someone else');
+      }
+      // Removing the person clears this too (ON DELETE SET NULL)
+      return [
+        db
+          .prepare('UPDATE splits SET distributor_person_id = ? WHERE id = ?')
+          .bind(personId, splitId),
       ];
     }
 

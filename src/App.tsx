@@ -3,7 +3,7 @@ import { SignIn } from '@phosphor-icons/react';
 import JoinSplit from './components/JoinSplit';
 import StateCard from './components/ui/StateCard';
 import { NewSplitProvider } from './components/NewSplitDialog';
-import SettingsPage from './components/SettingsPage';
+import SettingsPage from './components/settings/SettingsPage';
 import SplitScreen from './components/split/SplitScreen';
 import SplitsHome from './components/SplitsHome';
 import AppLayout from './components/shell/AppLayout';

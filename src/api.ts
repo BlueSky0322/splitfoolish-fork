@@ -24,18 +24,32 @@ export interface PaymentMethod {
   detail: string;
 }
 
+export interface Settings {
+  theme: ThemeSetting;
+  accent: string;
+  /** The default currency for new splits */
+  lastCurrency: string | null;
+  sidebarOpen: boolean;
+  itemsView: 'card' | 'table';
+  itemsGroupBy: 'none' | 'day' | 'payer' | 'category';
+  itemsSortKey: 'date' | 'name' | 'payer' | 'amount';
+  itemsSortDir: 'asc' | 'desc';
+}
+
+/** The signed-in account: what others see of it, and its private settings */
 export interface Profile {
   email: string;
   displayName: string | null;
-  theme: ThemeSetting;
-  accent: string;
-  lastCurrency: string | null;
   avatarVersion: number | null;
   paymentMethods: PaymentMethod[];
   preferredPaymentMethodId: string | null;
+  settings: Settings;
 }
 
-export type ProfilePatch = Partial<Pick<Profile, 'displayName' | 'theme' | 'accent'>>;
+export interface ProfilePatch {
+  displayName?: string | null;
+  settings?: Partial<Settings>;
+}
 
 export interface SplitMember {
   email: string;
@@ -75,6 +89,8 @@ export interface SplitDetail {
   id: string;
   name: string;
   currency: string;
+  /** Everyone settles up through this person; null for the fewest transfers */
+  distributorId: string | null;
   role: Role;
   members: SplitMember[];
   /** Pending email invites; only sent to the owner */
@@ -94,6 +110,7 @@ export type Change =
   | { op: 'linkPerson'; id: string; memberEmail: string | null }
   | { op: 'removePerson'; id: string; fromItems?: boolean }
   | { op: 'clearPeople' }
+  | { op: 'setDistributor'; personId: string | null }
   | { op: 'addItem'; item: ApiItem }
   | { op: 'updateItem'; item: ApiItem }
   | { op: 'removeItem'; id: string }
@@ -131,6 +148,15 @@ const splitPath = (id: string) => `/api/splits/${encodeURIComponent(id)}`;
 export const api = {
   me: () => request<Profile>('GET', '/api/me'),
   updateMe: (patch: ProfilePatch) => request<Profile>('PATCH', '/api/me', patch),
+  /** Replaces all payment methods and which one is preferred */
+  setPaymentMethods: (methods: PaymentMethod[], preferredId: string | null) =>
+    request<Profile>('PUT', '/api/me/payment-methods', { methods, preferredId }),
+  setAvatar: (photo: Blob) =>
+    request<{ avatarVersion: number }>('PUT', '/api/me/avatar', undefined, {
+      body: photo,
+      headers: { 'Content-Type': photo.type || 'image/jpeg' },
+    }),
+  removeAvatar: () => request<{ ok: true }>('DELETE', '/api/me/avatar'),
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
   createSplit: (name: string, currency: string) =>
     request<{ id: string }>('POST', '/api/splits', { name, currency }),
