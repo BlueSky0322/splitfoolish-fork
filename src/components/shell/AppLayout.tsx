@@ -5,6 +5,7 @@ import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { Route } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import Sidebar from './Sidebar';
+import classes from './AppLayout.module.css';
 
 // Desktop gets a sidebar (collapsible to a rail with the button or "["); phones and
 // tablets get the page alone, each with its own top bar
@@ -23,14 +24,17 @@ const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) =
       navbar={{ width: open ? 248 : 64, breakpoint: 0 }}
       padding={0}
     >
-      <AppShell.Navbar withBorder={false}>
+      <AppShell.Navbar
+        withBorder={false}
+        className={classes.navbar}
+      >
         <Sidebar
           route={route}
           open={open}
           onToggle={toggle}
         />
       </AppShell.Navbar>
-      <AppShell.Main className="h-dvh overflow-auto">{children}</AppShell.Main>
+      <AppShell.Main className={`h-dvh overflow-auto ${classes.main}`}>{children}</AppShell.Main>
     </AppShell>
   );
 };

@@ -1,6 +1,14 @@
 import { useMantineColorScheme } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { ReactNode, createContext, useCallback, useContext, useEffect, useState } from 'react';
+import {
+  ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Profile, ProfilePatch, Settings, ThemeSetting, api } from '../api';
 import { setCacheUser } from '../split-cache';
 import { Accent, isAccent } from '../theme/accents';
@@ -68,19 +76,26 @@ export function ProfileProvider({
   const [signedOut, setSignedOut] = useState(false);
   const { setColorScheme } = useMantineColorScheme();
 
+  // Only touch the colour scheme and accent when they change: re-applying them on every
+  // settings change (say, collapsing the sidebar) restyles the whole page
+  const applied = useRef<{ theme: ThemeSetting; accent: Accent } | null>(null);
   const apply = useCallback(
     (next: Profile) => {
       const { theme } = next.settings;
       const accent = isAccent(next.settings.accent) ? next.settings.accent : 'blurple';
-      setColorScheme(theme);
-      onAccentChange(accent);
+      if (applied.current?.theme === theme && applied.current?.accent === accent) return;
+      if (applied.current?.theme !== theme) setColorScheme(theme);
+      if (applied.current?.accent !== accent) onAccentChange(accent);
+      applied.current = { theme, accent };
       saveAppearance({ theme, accent });
     },
     [setColorScheme, onAccentChange],
   );
 
+  const profileRef = useRef(profile);
   const replace = useCallback(
     (next: Profile) => {
+      profileRef.current = next;
       setProfile(next);
       apply(next);
     },
@@ -97,26 +112,31 @@ export function ProfileProvider({
       .catch(() => setSignedOut(true));
   }, [replace]);
 
+  // Each change shows straight away. The server's reply only replaces what's on screen
+  // if no newer change has been made since, so quick changes never jump back.
+  const latest = useRef(0);
   const update = useCallback(
     async (patch: ProfilePatch) => {
-      if (profile == null) return;
-      const before = profile;
+      const current = profileRef.current;
+      if (current == null) return;
+      const id = ++latest.current;
       replace({
-        ...profile,
+        ...current,
         ...('displayName' in patch ? { displayName: patch.displayName ?? null } : {}),
-        settings: { ...profile.settings, ...patch.settings },
+        settings: { ...current.settings, ...patch.settings },
       });
       try {
-        replace(await api.updateMe(patch));
+        const saved = await api.updateMe(patch);
+        if (id === latest.current) replace(saved);
       } catch (err) {
-        replace(before);
+        if (id === latest.current) replace(current);
         notifications.show({
           color: 'red',
           message: err instanceof Error ? err.message : 'Could not save your settings',
         });
       }
     },
-    [profile, replace],
+    [replace],
   );
 
   const updateSettings = useCallback(

@@ -1,5 +1,5 @@
-import { ActionIcon, Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
-import { PencilSimple, Plus, Trash } from '@phosphor-icons/react';
+import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
+import { PencilSimple, Plus } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { PaymentMethod } from '../../api';
 import { newId } from '../../hooks/useSplit';
@@ -12,15 +12,19 @@ interface PaymentMethodsProps {
   methods: PaymentMethod[];
   preferredId: string | null;
   onChange: (methods: PaymentMethod[], preferredId: string | null) => Promise<boolean>;
+  /** On phones the list is one grouped card */
+  grouped: boolean;
 }
 
 function MethodForm({
   initial,
   onSave,
+  onRemove,
   onCancel,
 }: {
   initial?: PaymentMethod;
   onSave: (method: { type: string; detail: string }) => void;
+  onRemove?: () => void;
   onCancel: () => void;
 }) {
   const [type, setType] = useState(initial?.type ?? '');
@@ -51,10 +55,21 @@ function MethodForm({
         onChange={(e) => setDetail(e.target.value)}
         maxLength={120}
       />
-      <div className="flex justify-end gap-2">
+      <div className="flex gap-2">
+        {onRemove && (
+          <Button
+            variant="subtle"
+            color="red"
+            onClick={onRemove}
+            className="mr-auto"
+          >
+            Remove
+          </Button>
+        )}
         <Button
           variant="default"
           onClick={onCancel}
+          className={onRemove ? undefined : 'ml-auto'}
         >
           Cancel
         </Button>
@@ -71,7 +86,7 @@ function MethodForm({
 
 // The ways someone can pay you, one marked preferred. People who owe you see them
 // next to their transfer in Settle up.
-const PaymentMethods = ({ methods, preferredId, onChange }: PaymentMethodsProps) => {
+const PaymentMethods = ({ methods, preferredId, onChange, grouped }: PaymentMethodsProps) => {
   const [editing, setEditing] = useState<string | 'new' | null>(null);
 
   const save = async ({ type, detail }: { type: string; detail: string }) => {
@@ -84,15 +99,35 @@ const PaymentMethods = ({ methods, preferredId, onChange }: PaymentMethodsProps)
     if (await onChange(next, preferred)) setEditing(null);
   };
 
-  const remove = (id: string) => {
+  const remove = async (id: string) => {
     const next = methods.filter((m) => m.id !== id);
-    onChange(next, preferredId === id ? next[0]?.id ?? null : preferredId);
+    if (await onChange(next, preferredId === id ? next[0]?.id ?? null : preferredId)) {
+      setEditing(null);
+    }
   };
 
+  const addButton =
+    editing === 'new' ? (
+      <MethodForm
+        onSave={save}
+        onCancel={() => setEditing(null)}
+      />
+    ) : (
+      methods.length < MAX_METHODS && (
+        <UnstyledButton
+          className={grouped ? classes.addRow : classes.addLink}
+          onClick={() => setEditing('new')}
+        >
+          <Plus size={16} />
+          Add method
+        </UnstyledButton>
+      )
+    );
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className={grouped ? classes.methodGroup : 'flex flex-col gap-2'}>
       <div
-        className="flex flex-col gap-2"
+        className={grouped ? 'contents' : 'flex flex-col gap-2'}
         role="radiogroup"
         aria-label="Preferred payment method"
       >
@@ -102,12 +137,13 @@ const PaymentMethods = ({ methods, preferredId, onChange }: PaymentMethodsProps)
               key={m.id}
               initial={m}
               onSave={save}
+              onRemove={() => remove(m.id)}
               onCancel={() => setEditing(null)}
             />
           ) : (
             <div
               key={m.id}
-              className={classes.method}
+              className={grouped ? classes.methodRow : classes.method}
               data-selected={m.id === preferredId || undefined}
             >
               <UnstyledButton
@@ -121,50 +157,23 @@ const PaymentMethods = ({ methods, preferredId, onChange }: PaymentMethodsProps)
                   aria-hidden
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={classes.methodType}>
-                    {m.type}
-                    {m.id === preferredId && <span className={classes.preferred}>Preferred</span>}
-                  </span>
+                  <span className={classes.methodType}>{m.type}</span>
                   <span className={classes.methodDetail}>{m.detail}</span>
                 </span>
+                {m.id === preferredId && <span className={classes.preferred}>Preferred</span>}
               </UnstyledButton>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
+              <UnstyledButton
+                className={classes.edit}
                 aria-label={`Edit ${m.type}`}
                 onClick={() => setEditing(m.id)}
               >
                 <PencilSimple size={16} />
-              </ActionIcon>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                aria-label={`Remove ${m.type}`}
-                onClick={() => remove(m.id)}
-              >
-                <Trash size={16} />
-              </ActionIcon>
+              </UnstyledButton>
             </div>
           ),
         )}
       </div>
-      {editing === 'new' ? (
-        <MethodForm
-          onSave={save}
-          onCancel={() => setEditing(null)}
-        />
-      ) : (
-        methods.length < MAX_METHODS && (
-          <Button
-            variant="subtle"
-            className="self-start"
-            leftSection={<Plus size={16} />}
-            onClick={() => setEditing('new')}
-          >
-            Add method
-          </Button>
-        )
-      )}
+      {addButton}
     </div>
   );
 };

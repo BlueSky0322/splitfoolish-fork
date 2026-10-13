@@ -217,6 +217,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
                   <BalanceTag
                     cents={s.myBalanceCents}
                     currency={s.currency}
+                    hasItems={s.totalCents > 0}
                   />
                 </UnstyledButton>
               ))}
