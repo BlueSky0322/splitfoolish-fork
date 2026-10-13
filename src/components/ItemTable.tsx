@@ -58,7 +58,7 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
             >
               RM {i.cost.toFixed(2)}
             </Table.Td>
-            <Table.Td className="whitespace-nowrap">{i.payer.name}</Table.Td>
+            <Table.Td className="whitespace-nowrap">{i.payer?.name ?? '—'}</Table.Td>
             <Table.Td
               className={cn({
                 'hidden md:table-cell': !alwaysShowParticipants,

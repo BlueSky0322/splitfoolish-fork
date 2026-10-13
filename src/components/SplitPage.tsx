@@ -191,6 +191,8 @@ const SplitPage = () => {
         {(() => {
           const totalSpent = state.items.reduce(
             (acc, i) => {
+              if (i.payer == null) return acc;
+
               if (acc[i.payer.name] == null) {
                 acc[i.payer.name] = 0;
               }
