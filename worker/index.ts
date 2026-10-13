@@ -151,23 +151,34 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
         return json({ error: 'Invalid currency' }, 400);
       }
 
-      const id = newId();
+      // The app may pick the id, so it can open the new split before this finishes
+      const id = typeof body.id === 'string' && /^[0-9a-f]{16}$/.test(body.id) ? body.id : newId();
       const now = Date.now();
-      await db.batch([
-        db
-          .prepare(
-            `INSERT INTO splits (id, name, currency, invite_token, created_at, updated_at)
+      const created = await db
+        .batch([
+          db
+            .prepare(
+              `INSERT INTO splits (id, name, currency, invite_token, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
-          )
-          .bind(id, name, currency, newInviteToken(), now),
-        // New splits default to the currency used last
-        ...settingsStatements(db, email, { lastCurrency: currency }),
-        db
-          .prepare(
-            `INSERT INTO split_members (split_id, email, role, joined_at) VALUES (?, ?, 'owner', ?)`,
-          )
-          .bind(id, email, now),
-      ]);
+            )
+            .bind(id, name, currency, newInviteToken(), now),
+          // New splits default to the currency used last
+          ...settingsStatements(db, email, { lastCurrency: currency }),
+          db
+            .prepare(
+              `INSERT INTO split_members (split_id, email, role, joined_at) VALUES (?, ?, 'owner', ?)`,
+            )
+            .bind(id, email, now),
+        ])
+        .then(
+          () => true,
+          (err) => {
+            // That id is already taken
+            if (String(err).includes('CONSTRAINT')) return false;
+            throw err;
+          },
+        );
+      if (!created) return json({ error: 'That split already exists' }, 409);
       return json({ id }, 201);
     }
 

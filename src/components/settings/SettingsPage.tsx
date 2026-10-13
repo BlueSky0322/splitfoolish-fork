@@ -74,7 +74,7 @@ function useSaveIndicator() {
 
 // Settings (2a). Everything saves as it changes.
 const SettingsPage = () => {
-  const { profile, update, updateSettings, replace } = useProfile();
+  const { profile, update, updateSettings, patch } = useProfile();
   const isDesktop = useIsDesktop();
   const isMobile = useIsMobile();
   const [name, setName] = useState(profile?.displayName ?? '');
@@ -96,40 +96,54 @@ const SettingsPage = () => {
     track(update({ displayName: trimmed || null }));
   };
 
+  // Shown straight away; put back if the server refuses it
   const savePayments = async (methods: PaymentMethod[], preferredId: string | null) => {
-    try {
-      replace(await track(api.setPaymentMethods(methods, preferredId)));
-      return true;
-    } catch (err) {
+    const before = {
+      paymentMethods: profile.paymentMethods,
+      preferredPaymentMethodId: profile.preferredPaymentMethodId,
+    };
+    patch((p) => ({ ...p, paymentMethods: methods, preferredPaymentMethodId: preferredId }));
+    track(api.setPaymentMethods(methods, preferredId)).catch((err) => {
+      patch((p) => ({ ...p, ...before }));
       fail(err, 'Could not save your payment methods');
-      return false;
-    }
+    });
+    return true;
   };
 
+  // The new picture shows from this device while it uploads
   const changeAvatar = async (file: File | null) => {
     if (file == null) return;
     setAvatarBusy(true);
+    let preview: string | null = null;
     try {
       const photo = await shrinkImage(file, AVATAR.maxSide, AVATAR.maxBytes);
+      preview = URL.createObjectURL(photo);
+      const shown = preview;
+      patch((p) => ({ ...p, avatarPreview: shown }));
       const { avatarVersion } = await track(api.setAvatar(photo));
-      replace({ ...profile, avatarVersion });
+      patch((p) => ({ ...p, avatarVersion }));
     } catch (err) {
       fail(err, 'Could not change your picture');
     } finally {
+      // Keep showing the local copy until the uploaded one has loaded
+      const shown = preview;
+      if (shown) {
+        setTimeout(() => {
+          patch((p) => (p.avatarPreview === shown ? { ...p, avatarPreview: null } : p));
+          URL.revokeObjectURL(shown);
+        }, 3000);
+      }
       setAvatarBusy(false);
     }
   };
 
-  const removeAvatar = async () => {
-    setAvatarBusy(true);
-    try {
-      await track(api.removeAvatar());
-      replace({ ...profile, avatarVersion: null });
-    } catch (err) {
+  const removeAvatar = () => {
+    const before = profile.avatarVersion;
+    patch((p) => ({ ...p, avatarVersion: null, avatarPreview: null }));
+    track(api.removeAvatar()).catch((err) => {
+      patch((p) => ({ ...p, avatarVersion: before }));
       fail(err, 'Could not remove your picture');
-    } finally {
-      setAvatarBusy(false);
-    }
+    });
   };
 
   const pictureButtons = (
@@ -148,7 +162,7 @@ const SettingsPage = () => {
           </UnstyledButton>
         )}
       </FileButton>
-      {profile.avatarVersion && (
+      {(profile.avatarVersion || profile.avatarPreview) && (
         <UnstyledButton
           className={`${classes.textAction} ${classes.quiet}`}
           disabled={avatarBusy}
@@ -250,6 +264,7 @@ const SettingsPage = () => {
               name={myName}
               email={profile.email}
               avatarVersion={profile.avatarVersion}
+              previewSrc={profile.avatarPreview}
               size={60}
             />
           </div>
@@ -295,6 +310,7 @@ const SettingsPage = () => {
                 name={myName}
                 email={profile.email}
                 avatarVersion={profile.avatarVersion}
+                previewSrc={profile.avatarPreview}
                 size={44}
               />
               {pictureButtons}
@@ -344,6 +360,7 @@ const SettingsPage = () => {
                     name={myName}
                     email={profile.email}
                     avatarVersion={profile.avatarVersion}
+                    previewSrc={profile.avatarPreview}
                     size={24}
                   />
                   {myName} <span className="sf-muted">(you)</span>

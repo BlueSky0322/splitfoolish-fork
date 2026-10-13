@@ -1,8 +1,12 @@
 import { Button, Select, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { api } from '../api';
-import { reloadHomeData } from '../hooks/useHomeData';
+import { SplitDetail, SplitSummary, api } from '../api';
+import { notifications } from '@mantine/notifications';
+import { newId } from '../hooks/useSplit';
+import { reloadHomeData, updateHomeData } from '../hooks/useHomeData';
+import { trackCreate } from '../pending-creates';
+import { removeCache, writeCache } from '../split-cache';
 import { navigate } from '../hooks/useRoute';
 import { useProfile } from '../profile/ProfileContext';
 import { listCurrencies } from '../utils/money';
@@ -18,8 +22,6 @@ const DEFAULT_CURRENCY = 'MYR';
 
 function NewSplitForm({ onDone }: { onDone: () => void }) {
   const { profile, replace } = useProfile();
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const currencies = useMemo(listCurrencies, []);
   const form = useForm({
     initialValues: { name: '', currency: profile?.settings.lastCurrency ?? DEFAULT_CURRENCY },
@@ -29,21 +31,62 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
     },
   });
 
-  const submit = form.onSubmit(async ({ name, currency }) => {
-    setError(null);
-    setBusy(true);
-    try {
-      const { id } = await api.createSplit(name.trim(), currency);
-      if (profile != null) {
-        replace({ ...profile, settings: { ...profile.settings, lastCurrency: currency } });
-      }
-      reloadHomeData();
+  // The split opens straight away; it's created on the server in the background
+  const submit = form.onSubmit(({ name, currency }) => {
+    if (profile == null) return;
+    const id = newId();
+    const trimmed = name.trim();
+    const now = Date.now();
+    const detail: SplitDetail = {
+      id,
+      name: trimmed,
+      currency,
+      distributorId: null,
+      role: 'owner',
+      members: [
+        {
+          email: profile.email,
+          role: 'owner',
+          displayName: profile.displayName,
+          avatarVersion: profile.avatarVersion,
+          paymentMethods: profile.paymentMethods,
+        },
+      ],
+      invites: [],
+      attachments: [],
+      people: [],
+      items: [],
+    };
+    const summary: SplitSummary = {
+      id,
+      name: trimmed,
+      currency,
+      role: 'owner',
+      memberCount: 1,
+      peopleCount: 0,
+      totalCents: 0,
+      myBalanceCents: null,
+      updatedAt: now,
+    };
+
+    replace({ ...profile, settings: { ...profile.settings, lastCurrency: currency } });
+    updateHomeData((data) => ({ splits: [summary, ...(data.splits ?? [])] }));
+    trackCreate(id, api.createSplit(id, trimmed, currency))
+      .then(() => reloadHomeData())
+      .catch((err) => {
+        notifications.show({
+          color: 'red',
+          message: err instanceof Error ? err.message : 'Could not create the split',
+        });
+        updateHomeData((data) => ({ splits: (data.splits ?? []).filter((x) => x.id !== id) }));
+        removeCache(`split:${id}`);
+        if (new URLSearchParams(window.location.search).get('s') === id) navigate('');
+      });
+    // Shown from this copy until the server answers
+    writeCache(`split:${id}`, detail).finally(() => {
       onDone();
       navigate(`?s=${id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the split.');
-      setBusy(false);
-    }
+    });
   });
 
   return (
@@ -69,7 +112,6 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
         comboboxProps={{ withinPortal: false }}
         {...form.getInputProps('currency')}
       />
-      {error && <div className="sf-negative text-sm">{error}</div>}
       <div className="flex justify-end gap-2">
         <Button
           variant="default"
@@ -77,12 +119,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
         >
           Cancel
         </Button>
-        <Button
-          type="submit"
-          loading={busy}
-        >
-          Create split
-        </Button>
+        <Button type="submit">Create split</Button>
       </div>
     </form>
   );

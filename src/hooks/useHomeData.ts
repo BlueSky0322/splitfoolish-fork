@@ -22,6 +22,11 @@ function setState(next: Partial<HomeData>) {
   listeners.forEach((l) => l());
 }
 
+/** Changes what's shown straight away, before the server has confirmed it */
+export function updateHomeData(change: (data: HomeData) => Partial<HomeData>) {
+  setState(change(state));
+}
+
 /** Fetches the latest splits and invites; concurrent calls share one request */
 export function reloadHomeData(): Promise<void> {
   inFlight ??= Promise.all([api.listSplits(), api.myInvites()])

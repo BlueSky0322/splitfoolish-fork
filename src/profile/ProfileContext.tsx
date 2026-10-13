@@ -51,6 +51,8 @@ interface ProfileContextValue {
   updateSettings: (settings: Partial<Settings>) => Promise<void>;
   /** Replaces the profile with one the server returned */
   replace: (profile: Profile) => void;
+  /** Changes the profile on screen from its latest value */
+  patch: (change: (profile: Profile) => Profile) => void;
 }
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
@@ -102,15 +104,20 @@ export function ProfileProvider({
     [apply],
   );
 
+  // Load once. (Depending on replace would refetch on every change, because the colour
+  // scheme setter it uses is a new function each render, and the stale reply would
+  // undo the change that was just made.)
+  const replaceRef = useRef(replace);
+  replaceRef.current = replace;
   useEffect(() => {
     api
       .me()
       .then(async (me) => {
         await setCacheUser(me.email);
-        replace(me);
+        replaceRef.current(me);
       })
       .catch(() => setSignedOut(true));
-  }, [replace]);
+  }, []);
 
   // Each change shows straight away. The server's reply only replaces what's on screen
   // if no newer change has been made since, so quick changes never jump back.
@@ -139,13 +146,20 @@ export function ProfileProvider({
     [replace],
   );
 
+  const patch = useCallback(
+    (change: (profile: Profile) => Profile) => {
+      if (profileRef.current != null) replace(change(profileRef.current));
+    },
+    [replace],
+  );
+
   const updateSettings = useCallback(
     (settings: Partial<Settings>) => update({ settings }),
     [update],
   );
 
   return (
-    <ProfileContext.Provider value={{ profile, signedOut, update, updateSettings, replace }}>
+    <ProfileContext.Provider value={{ profile, signedOut, update, updateSettings, replace, patch }}>
       {children}
     </ProfileContext.Provider>
   );

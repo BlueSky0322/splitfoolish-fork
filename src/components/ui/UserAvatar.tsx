@@ -13,6 +13,8 @@ interface UserAvatarProps {
   active?: boolean;
   /** Clicking a profile picture shows it full size */
   preview?: boolean;
+  /** A picture to show instead, such as one still uploading */
+  previewSrc?: string | null;
 }
 
 // A round avatar: the profile picture when there is one, else the first letter
@@ -23,9 +25,10 @@ const UserAvatar = ({
   size = 26,
   active,
   preview,
+  previewSrc,
 }: UserAvatarProps) => {
   const [open, setOpen] = useState(false);
-  const src = email && avatarVersion ? avatarUrl(email, avatarVersion) : null;
+  const src = previewSrc ?? (email && avatarVersion ? avatarUrl(email, avatarVersion) : null);
 
   const avatar = (
     <Avatar

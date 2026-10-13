@@ -34,7 +34,7 @@ interface ItemFormProps {
   onCancel: () => void;
   /** The item's receipt photos (editing only) */
   photos: Attachment[];
-  uploading: number;
+  uploading: File[];
   canRemovePhoto: (photo: Attachment) => boolean;
   onAddPhotos: (files: File[]) => void;
   onRemovePhoto: (photo: Attachment) => void;

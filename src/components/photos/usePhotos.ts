@@ -18,20 +18,22 @@ const fail = (err: unknown, fallback: string) =>
 // Receipt photos on items and photos of the whole split: shrinking, uploading and
 // removing them, keeping the split's list of photos in step
 export function usePhotos({ splitId, meta, setMeta, whenSaved }: UsePhotosOptions) {
-  // How many photos are uploading, per item id ('' for the split itself)
-  const [uploading, setUploading] = useState<Record<string, number>>({});
+  // Photos on their way up, per item id ('' for the split itself), shown meanwhile
+  const [uploading, setUploading] = useState<Record<string, File[]>>({});
 
-  const bump = (key: string, by: number) =>
-    setUploading((u) => ({ ...u, [key]: Math.max(0, (u[key] ?? 0) + by) }));
+  const adding = (key: string, files: File[]) =>
+    setUploading((u) => ({ ...u, [key]: [...(u[key] ?? []), ...files] }));
+  const done = (key: string, file: File) =>
+    setUploading((u) => ({ ...u, [key]: (u[key] ?? []).filter((f) => f !== file) }));
 
   const upload = useCallback(
     async (files: File[], itemId: string | null) => {
       const key = itemId ?? '';
-      bump(key, files.length);
+      adding(key, files);
       try {
         await whenSaved();
       } catch (err) {
-        bump(key, -files.length);
+        files.forEach((f) => done(key, f));
         fail(err, 'Could not save the item first');
         return;
       }
@@ -44,7 +46,7 @@ export function usePhotos({ splitId, meta, setMeta, whenSaved }: UsePhotosOption
           } catch (err) {
             fail(err, 'Could not add that photo');
           } finally {
-            bump(key, -1);
+            done(key, file);
           }
         }),
       );

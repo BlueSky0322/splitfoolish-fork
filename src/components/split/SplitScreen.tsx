@@ -26,7 +26,7 @@ import { Attachment, ItemInput } from '../../api';
 import { AppContext } from '../../context/AppContext/AppContext';
 import { toApiItem } from '../../context/AppContext/app-reducer';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { reloadHomeData } from '../../hooks/useHomeData';
+import { updateHomeData } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../hooks/useSplit';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
@@ -501,7 +501,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             splitId={splitId}
             onSave={saveItem}
             photos={dialog.kind === 'edit' ? photos.photosOf(dialog.item.id) : []}
-            uploading={dialog.kind === 'edit' ? photos.uploading[dialog.item.id] ?? 0 : 0}
+            uploading={dialog.kind === 'edit' ? photos.uploading[dialog.item.id] ?? [] : []}
             canRemovePhoto={canRemovePhoto}
             onAddPhotos={(files) => dialog.kind === 'edit' && photos.upload(files, dialog.item.id)}
             onRemovePhoto={photos.remove}
@@ -588,6 +588,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             meta={meta}
             myEmail={myEmail}
             onChange={refreshMeta}
+            setMeta={setMeta}
           />
         )}
       </ResponsiveDialog>
@@ -606,7 +607,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             <PhotoStrip
               splitId={splitId}
               photos={photos.photosOf(null)}
-              uploading={photos.uploading[''] ?? 0}
+              uploading={photos.uploading[''] ?? []}
               canRemove={canRemovePhoto}
               onAdd={(files) => photos.upload(files, null)}
               onRemove={photos.remove}
@@ -627,8 +628,10 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             currency={meta.currency}
             canEdit={meta.role === 'owner'}
             onSaved={(changes) => {
-              setMeta({ ...meta, ...changes });
-              reloadHomeData();
+              setMeta((m) => (m ? { ...m, ...changes } : m));
+              updateHomeData((data) => ({
+                splits: data.splits?.map((x) => (x.id === splitId ? { ...x, ...changes } : x)),
+              }));
             }}
             onClose={close}
           />
