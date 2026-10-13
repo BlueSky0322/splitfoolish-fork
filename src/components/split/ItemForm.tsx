@@ -11,24 +11,33 @@ import {
 import { Check, Minus, Plus } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
 import { SplitMode, itemShares } from '../../../shared/settle';
-import { ItemInput } from '../../api';
+import { Attachment, ItemInput } from '../../api';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { CATEGORIES } from '../../split/categories';
 import { currencySymbol, formatMoney } from '../../utils/money';
 import { loadMath } from '../../utils/math';
+import PhotoStrip from '../photos/PhotoStrip';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './ItemForm.module.css';
 
 interface ItemFormProps {
+  splitId: string;
   people: IPerson[];
   currency: string;
   /** Editing this item; adding a new one when absent */
   item?: IItem;
   /** Who paid by default for a new item */
   defaultPayerId?: string | null;
-  onSave: (input: ItemInput) => boolean;
+  /** Photos picked for a new item are uploaded once it's added */
+  onSave: (input: ItemInput, newPhotos: File[]) => boolean;
   onDelete?: () => void;
   onCancel: () => void;
+  /** The item's receipt photos (editing only) */
+  photos: Attachment[];
+  uploading: number;
+  canRemovePhoto: (photo: Attachment) => boolean;
+  onAddPhotos: (files: File[]) => void;
+  onRemovePhoto: (photo: Attachment) => void;
 }
 
 const MODES: { value: SplitMode; label: string }[] = [
@@ -73,6 +82,7 @@ function useEvaluated(expression: string) {
 
 // Add item (F5) and Edit item (F6): amount first, who paid, then how it's split
 const ItemForm = ({
+  splitId,
   people,
   currency,
   item,
@@ -80,7 +90,14 @@ const ItemForm = ({
   onSave,
   onDelete,
   onCancel,
+  photos,
+  uploading,
+  canRemovePhoto,
+  onAddPhotos,
+  onRemovePhoto,
 }: ItemFormProps) => {
+  const [newPhotos, setNewPhotos] = useState<File[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [expression, setExpression] = useState(item ? String(item.cost) : '');
   const [name, setName] = useState(item?.name ?? '');
   const [payerId, setPayerId] = useState<string | null>(
@@ -150,19 +167,23 @@ const ItemForm = ({
     setTried(true);
     if (!valid || cost == null || payerId == null) return;
     const ids = chosen.map((p) => p.id);
-    onSave({
-      name: name.trim(),
-      cost: toCents(cost) / 100,
-      payerId,
-      participantIds: ids,
-      splitMode: mode,
-      shares: mode === 'shares' ? Object.fromEntries(ids.map((id) => [id, shares[id]])) : undefined,
-      exact:
-        mode === 'exact'
-          ? Object.fromEntries(ids.map((id) => [id, exact[id] === '' ? 0 : Number(exact[id])]))
-          : undefined,
-      category,
-    });
+    onSave(
+      {
+        name: name.trim(),
+        cost: toCents(cost) / 100,
+        payerId,
+        participantIds: ids,
+        splitMode: mode,
+        shares:
+          mode === 'shares' ? Object.fromEntries(ids.map((id) => [id, shares[id]])) : undefined,
+        exact:
+          mode === 'exact'
+            ? Object.fromEntries(ids.map((id) => [id, exact[id] === '' ? 0 : Number(exact[id])]))
+            : undefined,
+        category,
+      },
+      newPhotos,
+    );
   };
 
   return (
@@ -331,15 +352,34 @@ const ItemForm = ({
         )}
       </div>
 
+      <div className={classes.field}>
+        <div className={classes.label}>Receipts</div>
+        <PhotoStrip
+          splitId={splitId}
+          photos={photos}
+          pending={newPhotos}
+          uploading={uploading}
+          canRemove={canRemovePhoto}
+          onAdd={(files) => (item ? onAddPhotos(files) : setNewPhotos((p) => [...p, ...files]))}
+          onRemove={onRemovePhoto}
+          onRemovePending={(file) => setNewPhotos((p) => p.filter((f) => f !== file))}
+        />
+      </div>
+
       <div className={classes.actions}>
         {onDelete && (
           <Button
             variant="subtle"
             color="red"
-            onClick={onDelete}
+            // Photos can't come back with Undo, so ask first when there are some
+            onClick={() =>
+              photos.length > 0 && !confirmDelete ? setConfirmDelete(true) : onDelete()
+            }
             className="mr-auto"
           >
-            Delete item
+            {confirmDelete
+              ? `Delete with ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}?`
+              : 'Delete item'}
           </Button>
         )}
         <Button

@@ -1,5 +1,6 @@
 import { ActionIcon, Button, Menu, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
 import { useLocalStorage } from '@mantine/hooks';
+import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
   CaretDown,
@@ -9,6 +10,7 @@ import {
   CloudSlash,
   DotsThreeOutline,
   GearSix,
+  Images,
   LockSimple,
   Plus,
   Rows,
@@ -21,13 +23,13 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { ReactNode, useContext, useMemo, useState } from 'react';
-import { ItemInput } from '../../api';
+import { Attachment, ItemInput } from '../../api';
 import { AppContext } from '../../context/AppContext/AppContext';
 import { toApiItem } from '../../context/AppContext/app-reducer';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { reloadHomeData } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
-import { SplitActionsContext, SyncStatus, useSplit } from '../../hooks/useSplit';
+import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../hooks/useSplit';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { findMe, summarise } from '../../split/derive';
 import {
@@ -40,6 +42,8 @@ import {
 } from '../../split/grouping';
 import { currencySymbol } from '../../utils/money';
 import ErrorBoundary from '../ErrorBoundary';
+import PhotoStrip from '../photos/PhotoStrip';
+import { usePhotos } from '../photos/usePhotos';
 import SplitMembers from '../SplitMembers';
 import Fab from '../ui/Fab';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
@@ -77,7 +81,8 @@ type Dialog =
   | { kind: 'settle' }
   | { kind: 'share' }
   | { kind: 'members' }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  | { kind: 'photos' };
 
 const MAX_AVATARS = 4;
 
@@ -157,7 +162,11 @@ function oweLine(people: IPerson[], summary: ReturnType<typeof summarise>, me: I
 }
 
 const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | null }) => {
-  const { status, meta, setMeta, refreshMeta, actions, retry } = useSplit(splitId);
+  const { status, meta, setMeta, refreshMeta, actions, retry, whenSaved } = useSplit(splitId);
+  const photos = usePhotos({ splitId, meta, setMeta, whenSaved });
+  // People can remove photos they added; the owner can remove any
+  const canRemovePhoto = (photo: Attachment) =>
+    photo.uploadedBy === myEmail || meta?.role === 'owner';
   const { state } = useContext(AppContext);
   const isDesktop = useIsDesktop();
   const [prefs, setPrefs] = useLocalStorage<ViewPrefs>({
@@ -171,6 +180,11 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const close = () => setDialog(null);
+  const photoCounts = new Map<string, number>();
+  for (const a of meta?.attachments ?? []) {
+    if (a.itemId) photoCounts.set(a.itemId, (photoCounts.get(a.itemId) ?? 0) + 1);
+  }
+  const splitPhotoCount = meta?.attachments.filter((a) => a.itemId == null).length ?? 0;
 
   const currency = meta?.currency ?? 'MYR';
   const distributorId = state.people.some((p) => p.id === distributor) ? distributor : null;
@@ -220,7 +234,33 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       groupBy: GROUP_ORDER[(GROUP_ORDER.indexOf(prefs.groupBy) + 1) % GROUP_ORDER.length],
     });
 
-  const deleteItem = (item: IItem) => {
+  const deleteItem = (item: IItem, confirmed = false) => {
+    const count = photos.photosOf(item.id).length;
+    if (count > 0) {
+      // Photos are deleted with the item and can't be undone, so ask first
+      const remove = () => {
+        if (!actions.removeItem(item.id)) return;
+        photos.forgetItem(item.id);
+        notifications.show({ message: `Deleted ${item.name} and its photos` });
+      };
+      if (confirmed) {
+        remove();
+        return;
+      }
+      modals.openConfirmModal({
+        title: `Delete ${item.name}?`,
+        children: (
+          <p className="text-sm">
+            Its {count === 1 ? 'photo' : `${count} photos`} will be deleted too. This can't be
+            undone.
+          </p>
+        ),
+        labels: { confirm: 'Delete', cancel: 'Cancel' },
+        confirmProps: { color: 'red' },
+        onConfirm: remove,
+      });
+      return;
+    }
     const saved = toApiItem(item);
     if (!actions.removeItem(item.id)) return;
     const id = notifications.show({
@@ -243,10 +283,18 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     });
   };
 
-  const saveItem = (input: ItemInput) => {
-    const ok =
-      dialog?.kind === 'edit' ? actions.updateItem(dialog.item.id, input) : actions.addItem(input);
-    if (ok) close();
+  const saveItem = (input: ItemInput, newPhotos: File[]) => {
+    if (dialog?.kind === 'edit') {
+      const ok = actions.updateItem(dialog.item.id, input);
+      if (ok) close();
+      return ok;
+    }
+    const id = newId();
+    const ok = actions.addItem(input, id);
+    if (ok) {
+      close();
+      if (newPhotos.length > 0) photos.upload(newPhotos, id);
+    }
     return ok;
   };
 
@@ -307,6 +355,13 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
           onClick={() => setDialog({ kind: 'members' })}
         >
           Sharing and members
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<Images size={16} />}
+          onClick={() => setDialog({ kind: 'photos' })}
+        >
+          Photos
+          {splitPhotoCount > 0 && <span className="sf-muted"> ({splitPhotoCount})</span>}
         </Menu.Item>
         <Menu.Item
           leftSection={<GearSix size={16} />}
@@ -378,6 +433,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       mobile={!isDesktop}
       onEdit={(item) => setDialog({ kind: 'edit', item })}
       onDelete={deleteItem}
+      photoCounts={photoCounts}
       sortKey={prefs.sortKey}
       sortDir={prefs.sortDir}
       onSort={sortBy}
@@ -394,6 +450,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       mobile={!isDesktop}
       onEdit={(item) => setDialog({ kind: 'edit', item })}
       onDelete={deleteItem}
+      photoCounts={photoCounts}
     />
   );
 
@@ -426,12 +483,18 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             currency={currency}
             item={dialog.kind === 'edit' ? dialog.item : undefined}
             defaultPayerId={me?.id}
+            splitId={splitId}
             onSave={saveItem}
+            photos={dialog.kind === 'edit' ? photos.photosOf(dialog.item.id) : []}
+            uploading={dialog.kind === 'edit' ? photos.uploading[dialog.item.id] ?? 0 : 0}
+            canRemovePhoto={canRemovePhoto}
+            onAddPhotos={(files) => dialog.kind === 'edit' && photos.upload(files, dialog.item.id)}
+            onRemovePhoto={photos.remove}
             onDelete={
               dialog.kind === 'edit'
                 ? () => {
                     close();
-                    deleteItem(dialog.item);
+                    deleteItem(dialog.item, true);
                   }
                 : undefined
             }
@@ -509,6 +572,30 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             myEmail={myEmail}
             onChange={refreshMeta}
           />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'photos'}
+        onClose={close}
+        title="Photos"
+        width={560}
+      >
+        {dialog?.kind === 'photos' && (
+          <div className="flex flex-col gap-3">
+            <p className="sf-muted text-sm">
+              Photos of the trip or anything else for everyone in the split. Receipts for an item
+              are added on the item.
+            </p>
+            <PhotoStrip
+              splitId={splitId}
+              photos={photos.photosOf(null)}
+              uploading={photos.uploading[''] ?? 0}
+              canRemove={canRemovePhoto}
+              onAdd={(files) => photos.upload(files, null)}
+              onRemove={photos.remove}
+              layout="gallery"
+            />
+          </div>
         )}
       </ResponsiveDialog>
       <ResponsiveDialog

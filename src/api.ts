@@ -115,10 +115,11 @@ async function request<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const res = await fetch(path, {
-    ...init,
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
+    // Lets a call send something other than JSON, such as a photo
+    ...init,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, data.error ?? `${method} ${path} failed`);
@@ -139,6 +140,19 @@ export const api = {
     request<{ ok: true }>('POST', `${splitPath(id)}/changes`, { changes }, { keepalive: true }),
   updateSplit: (id: string, patch: { name?: string; currency?: string }) =>
     request<{ ok: true }>('PATCH', splitPath(id), patch),
+  /** Uploads a photo of an item's receipt, or of the whole split when itemId is null */
+  uploadPhoto: (id: string, photo: Blob, itemId: string | null) =>
+    request<Attachment>(
+      'POST',
+      `${splitPath(id)}/attachments${itemId ? `?itemId=${encodeURIComponent(itemId)}` : ''}`,
+      undefined,
+      { body: photo, headers: { 'Content-Type': photo.type || 'image/jpeg' } },
+    ),
+  deletePhoto: (id: string, attachmentId: string) =>
+    request<{ ok: true }>(
+      'DELETE',
+      `${splitPath(id)}/attachments/${encodeURIComponent(attachmentId)}`,
+    ),
   deleteSplit: (id: string) => request<{ ok: true }>('DELETE', splitPath(id)),
   resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
@@ -155,6 +169,9 @@ export const api = {
   joinSplit: (token: string) =>
     request<{ id: string }>('POST', `/api/join/${encodeURIComponent(token)}`),
 };
+
+export const photoUrl = (splitId: string, attachmentId: string) =>
+  `${splitPath(splitId)}/attachments/${encodeURIComponent(attachmentId)}`;
 
 export const avatarUrl = (email: string, version: number) =>
   `/api/avatars/${encodeURIComponent(email)}?v=${version}`;

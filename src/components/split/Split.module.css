@@ -791,3 +791,13 @@
   color: var(--sf-text-muted);
   max-width: 320px;
 }
+
+.photoBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--sf-text-muted);
+  vertical-align: middle;
+}
