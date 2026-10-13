@@ -8,11 +8,6 @@ import {
 } from '../../interfaces/app-reducer.ts';
 import Big from 'big.js';
 
-const saveToLocalStorage = (draft: WritableDraft<AppReducerState>) => {
-  localStorage.setItem('people', JSON.stringify(draft.people));
-  localStorage.setItem('items', JSON.stringify(draft.items));
-};
-
 const loadFromLocalStorage = (draft: WritableDraft<AppReducerState>) => {
   const people = localStorage.getItem('people');
   if (people != null) {
@@ -29,7 +24,6 @@ export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draf
   switch (action.type) {
     case 'ADD_PERSON':
       draft.people.push({ name: action.payload, owings: [] } as IPerson);
-      saveToLocalStorage(draft);
       break;
     case 'REMOVE_PERSON':
       const indexToRemove = draft.people.findIndex((p) => p.name === action.payload);
@@ -37,42 +31,42 @@ export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draf
       if (indexToRemove === -1) return;
 
       draft.people.splice(indexToRemove, 1);
-      saveToLocalStorage(draft);
       break;
 
     case 'CLEAR_PEOPLE':
       draft.people.splice(0, draft.people.length);
 
       draft.owings = calculateOwings(draft);
-      saveToLocalStorage(draft);
       break;
 
     case 'ADD_ITEM':
       draft.items.push(action.payload);
 
       draft.owings = calculateOwings(draft);
-      saveToLocalStorage(draft);
       break;
     case 'UPDATE_ITEM':
       draft.items.splice(action.payload.oldItemIndex, 1, action.payload.newItem);
 
       draft.owings = calculateOwings(draft);
-      saveToLocalStorage(draft);
       break;
     case 'REMOVE_ITEM':
       draft.items.splice(action.payload, 1);
 
       draft.owings = calculateOwings(draft);
-      saveToLocalStorage(draft);
       break;
 
     case 'CLEAR_ITEMS':
       draft.items.splice(0, draft.items.length);
       draft.owings = calculateOwings(draft);
-      saveToLocalStorage(draft);
       break;
 
     case 'SETTLE':
+      draft.owings = calculateOwings(draft);
+      break;
+
+    case 'LOAD_STATE':
+      draft.people = action.payload.people ?? [];
+      draft.items = action.payload.items ?? [];
       draft.owings = calculateOwings(draft);
       break;
 
