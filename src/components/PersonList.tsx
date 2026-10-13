@@ -1,7 +1,5 @@
+import { Minus, Plus, Trash } from '@phosphor-icons/react';
 import { ActionIcon, Autocomplete, TextInput, Title, Tooltip } from '@mantine/core';
-import IconMinus from '~icons/tabler/minus';
-import IconPlus from '~icons/tabler/plus';
-import IconTrashX from '~icons/tabler/trash-x';
 import React, { useContext, useRef, useState } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { useSplitActions } from '../hooks/useSplit';
@@ -46,7 +44,7 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
       <div className="flex justify-between items-baseline">
         <Title
           order={2}
-          className="mb-4 text-gray-800"
+          className="mb-4"
         >
           Add People
         </Title>
@@ -55,7 +53,7 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
             color="red"
             onClick={() => actions.clearPeople()}
           >
-            <IconTrashX />
+            <Trash size={18} />
           </ActionIcon>
         </Tooltip>
       </div>
@@ -71,7 +69,7 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
                 onClick={() => actions.removePerson(p.id)}
                 color="red"
               >
-                <IconMinus />
+                <Minus size={18} />
               </ActionIcon>
             }
           ></TextInput>
@@ -101,7 +99,7 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
                 <div>
                   <div>{option.value}</div>
                   {s && (
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs sf-muted">
                       {s.email} · {s.status === 'member' ? 'has access' : 'invited'}
                     </div>
                   )}
@@ -113,7 +111,7 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
                 type="submit"
                 aria-label="Add person"
               >
-                <IconPlus />
+                <Plus size={18} />
               </ActionIcon>
             }
           />

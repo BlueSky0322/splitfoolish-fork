@@ -1,3 +1,4 @@
+import { ShareNetwork } from '@phosphor-icons/react';
 import { ActionIcon, Button, List, Select, Title, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
@@ -6,7 +7,6 @@ import { produce } from 'immer';
 import _ from 'lodash';
 import { FormEvent, useContext, useEffect } from 'react';
 import { useImmer } from 'use-immer';
-import IconShare from '~icons/tabler/share';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IOwing } from '../interfaces/app-reducer';
 import ShareModal from './ShareModal';
@@ -153,7 +153,7 @@ const SplitPage = () => {
             });
           }}
         >
-          <IconShare fontSize={16} />
+          <ShareNetwork size={16} />
         </ActionIcon>
       </Tooltip>
       <Title order={3}>Summary</Title>

@@ -1,0 +1,36 @@
+.sheet {
+  height: auto;
+  max-height: calc(100dvh - 40px);
+  border-radius: 22px 22px 0 0;
+  padding-bottom: var(--sf-safe-bottom);
+}
+
+/* The grab handle */
+.sheet::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 8px auto 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sf-text) 25%, transparent);
+}
+
+.sheetHeader {
+  padding: 12px 20px 4px;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.sheetBody {
+  padding: 8px 20px 20px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.modalBody {
+  padding: 4px 24px 24px;
+}

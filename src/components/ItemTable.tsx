@@ -1,7 +1,6 @@
+import { Minus, PencilSimple } from '@phosphor-icons/react';
 import { ActionIcon, Table, Tooltip } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import IconEdit from '~icons/tabler/edit';
-import IconMinus from '~icons/tabler/minus';
 import { useContext } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { cn } from '../utils/cn';
@@ -41,7 +40,7 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
         {state.items.length === 0 ? (
           <Table.Tr>
             <Table.Td
-              className="text-center text-gray-400"
+              className="text-center sf-muted"
               colSpan={5}
             >
               There are no items to show.
@@ -98,20 +97,20 @@ const ItemTable = ({ showActions = true, alwaysShowParticipants = false }: ItemT
                     });
                   }}
                 >
-                  <IconEdit />
+                  <PencilSimple size={18} />
                 </ActionIcon>
                 <ActionIcon
                   onClick={() => actions?.removeItem(i.id)}
                   color="red"
                 >
-                  <IconMinus />
+                  <Minus size={18} />
                 </ActionIcon>
               </div>
             </Table.Td>
           </Table.Tr>
         ))}
       </Table.Tbody>
-      <Table.Tfoot className="border-double border-t-4">
+      <Table.Tfoot className="border-double border-t-4 border-[var(--sf-divider)]">
         <Table.Tr>
           <Table.Td></Table.Td>
           <Table.Td

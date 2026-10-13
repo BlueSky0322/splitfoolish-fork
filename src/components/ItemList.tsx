@@ -1,6 +1,6 @@
+import { Trash } from '@phosphor-icons/react';
 import { ActionIcon, Button, MultiSelect, Select, TextInput, Title, Tooltip } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import IconTrashX from '~icons/tabler/trash-x';
 import { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { useSplitActions } from '../hooks/useSplit';
@@ -50,7 +50,7 @@ const ItemList = () => {
     <>
       <Title
         order={2}
-        className="mb-4 text-gray-800"
+        className="mb-4"
       >
         Add Items
       </Title>
@@ -96,7 +96,7 @@ const ItemList = () => {
       <div className="mb-4 flex justify-between items-baseline">
         <Title
           order={2}
-          className="mb-4 text-gray-800 mt-6"
+          className="mb-4 mt-6"
         >
           Item List
         </Title>
@@ -105,7 +105,7 @@ const ItemList = () => {
             color="red"
             onClick={() => actions.clearItems()}
           >
-            <IconTrashX />
+            <Trash size={18} />
           </ActionIcon>
         </Tooltip>
       </div>

@@ -1,82 +1,44 @@
-import { Badge, Button, Loader, Tabs, TextInput, Title } from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { MyInvite, SplitSummary, api } from '../api';
+import { Button, Loader, Tabs, Title } from '@mantine/core';
+import { Plus } from '@phosphor-icons/react';
+import { useState } from 'react';
+import { MyInvite, api } from '../api';
+import { useIsDesktop } from '../hooks/useBreakpoints';
+import { reloadHomeData, useHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
-import { readCache, writeCache } from '../split-cache';
-
-interface HomeData {
-  splits: SplitSummary[];
-  invites: MyInvite[];
-}
+import { formatMoney } from '../utils/money';
+import { useOpenNewSplit } from './NewSplitDialog';
+import Fab from './ui/Fab';
 
 const TABS = ['all', 'mine', 'shared', 'invites'] as const;
 type Tab = (typeof TABS)[number];
 
 const EMPTY_MESSAGES: Record<Exclude<Tab, 'invites'>, string> = {
-  all: 'No splits yet. Create one above.',
+  all: 'No splits yet. Start one with New split.',
   mine: "You haven't created any splits yet.",
   shared: 'Nobody has shared a split with you yet.',
 };
 
 const SplitsHome = ({ tab }: { tab: string | null }) => {
-  const [splits, setSplits] = useState<SplitSummary[] | null>(null);
-  const [invites, setInvites] = useState<MyInvite[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { splits, invites, error } = useHomeData();
   const [busyInvite, setBusyInvite] = useState<string | null>(null);
   const activeTab: Tab = TABS.includes(tab as Tab) ? (tab as Tab) : 'all';
-  const newSplitForm = useForm({
-    mode: 'uncontrolled',
-    initialValues: { name: '' },
-    validate: { name: (value) => (value.trim() ? null : 'Give the split a name') },
-  });
-
-  const freshLoaded = useRef(false);
-
-  const load = useCallback(async () => {
-    try {
-      const [{ splits }, { invites }] = await Promise.all([api.listSplits(), api.myInvites()]);
-      freshLoaded.current = true;
-      setSplits(splits);
-      setInvites(invites);
-      writeCache<HomeData>('home', { splits, invites });
-    } catch {
-      setError('Could not load your splits.');
-    }
-  }, []);
-
-  useEffect(() => {
-    // Show the last-seen list straight away, unless the fresh one already arrived
-    readCache<HomeData>('home').then((cached) => {
-      if (cached == null || freshLoaded.current) return;
-      setSplits(cached.splits);
-      setInvites(cached.invites);
-    });
-    load();
-  }, [load]);
-
-  const handleCreate = async ({ name }: { name: string }) => {
-    try {
-      const { id } = await api.createSplit(name.trim());
-      navigate(`?s=${id}`);
-    } catch {
-      setError('Could not create the split.');
-    }
-  };
+  const openNewSplit = useOpenNewSplit();
+  const isDesktop = useIsDesktop();
 
   const respond = async (invite: MyInvite, accept: boolean) => {
     setBusyInvite(invite.id);
     try {
       if (accept) {
         const { id } = await api.acceptInvite(invite.id);
+        reloadHomeData();
         navigate(`?s=${id}`);
         return;
       }
       await api.declineInvite(invite.id);
-      await load();
+      await reloadHomeData();
     } catch (err) {
       alert(err instanceof Error ? err.message : err);
-      await load();
+      await reloadHomeData();
     } finally {
       setBusyInvite(null);
     }
@@ -91,34 +53,24 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
     ) ?? null;
 
   return (
-    <div className="p-4">
-      <Title
-        order={2}
-        className="mb-4 text-gray-800"
-      >
-        My Splits
-      </Title>
+    <div className="p-4 lg:px-10 lg:py-8 max-w-[980px] flex flex-col gap-4 pb-[110px]">
+      <div className="flex items-center justify-between gap-2">
+        <Title order={2}>My splits</Title>
+        {isDesktop && (
+          <Button
+            leftSection={<Plus size={16} />}
+            onClick={openNewSplit}
+          >
+            New split
+          </Button>
+        )}
+      </div>
 
-      <form
-        onSubmit={newSplitForm.onSubmit(handleCreate)}
-        className="flex gap-2 items-start mb-4"
-      >
-        <TextInput
-          className="flex-1"
-          key={newSplitForm.key('name')}
-          {...newSplitForm.getInputProps('name')}
-          placeholder="Friday dinner"
-          aria-label="New split name"
-        />
-        <Button type="submit">New Split</Button>
-      </form>
-
-      {error && <div className="text-red-600 mb-4">{error}</div>}
+      {error && <div className="sf-negative">{error}</div>}
 
       <Tabs
         value={activeTab}
         onChange={(t) => navigate(t === 'all' ? '' : `?tab=${t}`, { replace: true })}
-        className="mb-4"
       >
         <Tabs.List>
           <Tabs.Tab value="all">All</Tabs.Tab>
@@ -127,14 +79,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
           <Tabs.Tab
             value="invites"
             rightSection={
-              invites?.length ? (
-                <Badge
-                  size="sm"
-                  circle
-                >
-                  {invites.length}
-                </Badge>
-              ) : null
+              invites?.length ? <span className="sf-count-badge">{invites.length}</span> : null
             }
           >
             Invites
@@ -146,29 +91,20 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
 
       {activeTab === 'invites' ? (
         <>
-          {invites?.length === 0 && (
-            <div className="text-gray-400 text-center">No pending invites.</div>
-          )}
+          {invites?.length === 0 && <div className="sf-muted text-center">No pending invites.</div>}
           <ul className="flex flex-col gap-2">
             {invites?.map((i) => (
               <li
                 key={i.id}
-                className="border rounded p-3 flex flex-wrap gap-2 justify-between items-center"
+                className="sf-card p-4 flex flex-wrap gap-2 justify-between items-center"
               >
                 <div>
-                  <div className="font-semibold">{i.splitName}</div>
-                  <div className="text-xs text-gray-500">
+                  <div className="font-medium">{i.splitName}</div>
+                  <div className="text-xs sf-muted">
                     From {i.invitedBy} · expires {new Date(i.expiresAt).toLocaleDateString()}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    size="compact-sm"
-                    disabled={busyInvite != null}
-                    onClick={() => respond(i, true)}
-                  >
-                    Accept
-                  </Button>
                   <Button
                     size="compact-sm"
                     variant="default"
@@ -176,6 +112,13 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
                     onClick={() => respond(i, false)}
                   >
                     Decline
+                  </Button>
+                  <Button
+                    size="compact-sm"
+                    disabled={busyInvite != null}
+                    onClick={() => respond(i, true)}
+                  >
+                    Accept
                   </Button>
                 </div>
               </li>
@@ -185,26 +128,35 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
       ) : (
         <>
           {shown?.length === 0 && (
-            <div className="text-gray-400 text-center">{EMPTY_MESSAGES[activeTab]}</div>
+            <div className="sf-muted text-center">{EMPTY_MESSAGES[activeTab]}</div>
           )}
-          <ul className="flex flex-col gap-2">
+          <ul className="grid gap-3 lg:grid-cols-2">
             {shown?.map((s) => (
               <li key={s.id}>
                 <button
-                  className="w-full text-left border rounded p-3 hover:bg-gray-50"
+                  className="sf-card w-full text-left p-4 hover:shadow-[var(--sf-shadow-md)]"
                   onClick={() => navigate(`?s=${s.id}`)}
                 >
-                  <div className="font-semibold">{s.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {s.role === 'owner' ? 'Owner' : 'Shared with you'} · {s.memberCount}{' '}
-                    {s.memberCount === 1 ? 'person' : 'people'} · updated{' '}
-                    {new Date(s.updatedAt).toLocaleDateString()}
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate">{s.name}</span>
+                    <span className="sf-tag">{s.role === 'owner' ? 'Owner' : 'Shared'}</span>
+                  </div>
+                  <div className="text-xs sf-muted sf-tabular">
+                    {s.peopleCount} {s.peopleCount === 1 ? 'person' : 'people'} ·{' '}
+                    {formatMoney(s.totalCents, s.currency)}
                   </div>
                 </button>
               </li>
             ))}
           </ul>
         </>
+      )}
+
+      {!isDesktop && (
+        <Fab
+          label="New split"
+          onClick={openNewSplit}
+        />
       )}
     </div>
   );

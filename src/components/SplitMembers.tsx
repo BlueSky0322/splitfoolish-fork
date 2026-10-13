@@ -1,6 +1,6 @@
+import { Minus } from '@phosphor-icons/react';
 import { ActionIcon, Button, CopyButton, Loader, TextInput, Title, Tooltip } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import IconMinus from '~icons/tabler/minus';
 import { useCallback, useEffect, useState } from 'react';
 import { SplitInvite, api, invitesPageUrl, inviteUrl } from '../api';
 import { navigate } from '../hooks/useRoute';
@@ -94,7 +94,7 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
           onSubmit={sendInvite}
         >
           <Title order={5}>Invite by email</Title>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs sf-muted">
             They'll see the invite after signing in with that email, and can accept or decline.
           </div>
           <div className="flex gap-2 items-start">
@@ -115,7 +115,7 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
             </Button>
           </div>
           {justInvited && (
-            <div className="text-xs bg-gray-50 rounded p-2 flex flex-wrap gap-2 items-center justify-between">
+            <div className="text-xs bg-[var(--sf-tint)] rounded p-2 flex flex-wrap gap-2 items-center justify-between">
               <span>Invited {justInvited.email}. We don't send emails yet, so let them know:</span>
               <CopyButton value={inviteMessage(meta.name)}>
                 {({ copied, copy }) => (
@@ -139,7 +139,7 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
                 >
                   <span>
                     {i.email}
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs sf-muted">
                       {' '}
                       · invited, expires {new Date(i.expiresAt).toLocaleDateString()}
                     </span>
@@ -164,7 +164,7 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
       {isOwner && meta.inviteToken && (
         <div className="flex flex-col gap-2">
           <Title order={5}>Or share a link</Title>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs sf-muted">
             Anyone who opens this link and signs in can view and edit this split.
           </div>
           <div className="flex gap-2">
@@ -208,7 +208,7 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
               <span>
                 {m.email}
                 {m.email === myEmail && ' (you)'}
-                <span className="text-xs text-gray-500"> · {m.role}</span>
+                <span className="text-xs sf-muted"> · {m.role}</span>
               </span>
               {isOwner && m.role !== 'owner' && (
                 <Tooltip label="Remove access">
@@ -218,7 +218,7 @@ const SplitMembers = ({ splitId, myEmail, onChange }: SplitMembersProps) => {
                     aria-label={`Remove ${m.email}`}
                     onClick={() => run(() => api.removeMember(meta.id, m.email))}
                   >
-                    <IconMinus />
+                    <Minus size={18} />
                   </ActionIcon>
                 </Tooltip>
               )}

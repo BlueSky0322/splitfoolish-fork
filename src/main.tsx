@@ -3,46 +3,59 @@ import '@mantine/core/styles.css';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import '@mantine/notifications/styles.css';
-import React from 'react';
+import { IconContext } from '@phosphor-icons/react';
+import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
 import { AppContextProvider } from './context/AppContext/AppContext.tsx';
 import { appReducer } from './context/AppContext/app-reducer.ts';
 import './index.css';
+import { ProfileProvider, readAppearance } from './profile/ProfileContext.tsx';
+import { Accent } from './theme/accents.ts';
+import { buildTheme, cssVariablesResolver } from './theme/theme.ts';
+import './theme/tokens.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary fallback={<p>Something went wrong</p>}>
-      {/* <IDBContextProvider
-        dbName="splitfoolish"
-        schema={{
-          people: { keyPath: 'id', autoIncrement: true },
-          items: {
-            keyPath: 'id',
-            autoIncrement: true,
-          },
-        }}
-        indexes={{
-          people: [{ keyPath: 'name', name: 'name', options: { unique: false } }],
-          items: [
-            { keyPath: 'name', name: 'name', options: { unique: false } },
-            { keyPath: 'cost', name: 'cost', options: { unique: false } },
-          ],
-        }}
-      > */}
-      <AppContextProvider
-        reducer={appReducer}
-        initialState={{ items: [], people: [], owings: [] }}
-      >
-        <MantineProvider>
+const initialAppearance = readAppearance();
+
+function Root() {
+  const [accent, setAccent] = useState<Accent>(initialAppearance.accent);
+  const theme = useMemo(() => buildTheme(accent), [accent]);
+
+  return (
+    <MantineProvider
+      theme={theme}
+      defaultColorScheme={initialAppearance.theme}
+      cssVariablesResolver={cssVariablesResolver}
+    >
+      <IconContext.Provider value={{ size: 20, weight: 'regular' }}>
+        <ProfileProvider onAccentChange={setAccent}>
           <Notifications />
           <ModalsProvider>
             <App />
           </ModalsProvider>
-        </MantineProvider>
+        </ProfileProvider>
+      </IconContext.Provider>
+    </MantineProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ErrorBoundary fallback={<p>Something went wrong</p>}>
+      <AppContextProvider
+        reducer={appReducer}
+        initialState={{ items: [], people: [], owings: [] }}
+      >
+        <Root />
       </AppContextProvider>
-      {/* </IDBContextProvider> */}
     </ErrorBoundary>
   </React.StrictMode>,
 );
+
+// Installable app: the service worker only keeps the built files for offline starts
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}

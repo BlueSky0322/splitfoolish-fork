@@ -1,9 +1,6 @@
+import { ArrowsSplit, CaretLeft, ListBullets, User } from '@phosphor-icons/react';
 import { Button, Tabs } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import IconArrowsSplit from '~icons/tabler/arrows-split';
-import IconListDetails from '~icons/tabler/list-details';
-import IconUser from '~icons/tabler/user';
-import IconChevronLeft from '~icons/tabler/chevron-left';
 import { useState } from 'react';
 import { SplitActionsContext, useSplit } from '../hooks/useSplit';
 import { navigate } from '../hooks/useRoute';
@@ -50,11 +47,11 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
 
   return (
     <SplitActionsContext.Provider value={actions}>
-      <div className="flex items-center justify-between gap-2 px-2 py-2 border-b">
+      <div className="flex items-center justify-between gap-2 px-2 py-2 border-b border-[var(--sf-divider)]">
         <Button
           variant="subtle"
           size="compact-sm"
-          leftSection={<IconChevronLeft />}
+          leftSection={<CaretLeft size={18} />}
           onClick={() => navigate('')}
         >
           My Splits
@@ -76,19 +73,19 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
         <Tabs.List>
           <Tabs.Tab
             value="0"
-            leftSection={<IconUser fontSize={20} />}
+            leftSection={<User size={20} />}
           >
             People
           </Tabs.Tab>
           <Tabs.Tab
             value="1"
-            leftSection={<IconListDetails fontSize={20} />}
+            leftSection={<ListBullets size={20} />}
           >
             Items
           </Tabs.Tab>
           <Tabs.Tab
             value="2"
-            leftSection={<IconArrowsSplit fontSize={20} />}
+            leftSection={<ArrowsSplit size={20} />}
           >
             Settlements
           </Tabs.Tab>
@@ -125,7 +122,7 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
           </ErrorBoundary>
         </Tabs.Panel>
       </Tabs>
-      <div className="text-xs text-center text-gray-500 py-1">
+      <div className="text-xs text-center sf-muted py-1">
         {status === 'loading' && 'Loading…'}
         {status === 'refreshing' && 'Updating…'}
         {status === 'saving' && 'Saving…'}
