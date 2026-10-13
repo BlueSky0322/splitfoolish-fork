@@ -4,6 +4,7 @@ import IconPlus from '~icons/tabler/plus';
 import IconTrashX from '~icons/tabler/trash-x';
 import React, { useContext, useRef, useState } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
+import { useSplitActions } from '../hooks/useSplit';
 
 export interface PersonSuggestion {
   email: string;
@@ -19,21 +20,17 @@ interface PersonListProps {
 }
 
 const PersonList = ({ suggestions = [] }: PersonListProps) => {
-  const { state, dispatch } = useContext(AppContext);
+  const { state } = useContext(AppContext);
+  const actions = useSplitActions()!;
   const [name, setName] = useState('');
   // Autocomplete writes the picked option into the box right after onOptionSubmit
   const justPicked = useRef(false);
 
-  const addPerson = (value: string) => {
-    const trimmed = value.trim();
-    if (trimmed === '') return;
-    dispatch({ type: 'ADD_PERSON', payload: trimmed });
-    setName('');
-  };
-
-  const handlePersonSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handlePersonSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    addPerson(name);
+    const trimmed = name.trim();
+    if (trimmed === '') return;
+    if (await actions.addPerson(trimmed)) setName('');
   };
 
   // Offer members and invitees who aren't in the split yet, keyed by the name they'd get
@@ -43,10 +40,6 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
     const n = nameFromEmail(s.email);
     if (!existing.has(n.toLowerCase()) && !offered.has(n)) offered.set(n, s);
   }
-
-  const handlePersonRemove = (name: string) => {
-    dispatch({ type: 'REMOVE_PERSON', payload: name });
-  };
 
   return (
     <>
@@ -60,7 +53,7 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
         <Tooltip label="Clear List">
           <ActionIcon
             color="red"
-            onClick={() => dispatch({ type: 'CLEAR_PEOPLE', payload: null })}
+            onClick={() => actions.clearPeople()}
           >
             <IconTrashX />
           </ActionIcon>
@@ -69,13 +62,13 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
       <div className="flex flex-col gap-2">
         {state.people.map((p) => (
           <TextInput
-            key={p.name}
+            key={p.id}
             className="w-full"
             readOnly
             value={p.name}
             rightSection={
               <ActionIcon
-                onClick={() => handlePersonRemove(p.name)}
+                onClick={() => actions.removePerson(p.id)}
                 color="red"
               >
                 <IconMinus />
@@ -99,7 +92,7 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
             }}
             onOptionSubmit={(value) => {
               justPicked.current = true;
-              addPerson(value);
+              actions.addPerson(value, offered.get(value)?.email);
             }}
             data={[...offered.keys()]}
             renderOption={({ option }) => {

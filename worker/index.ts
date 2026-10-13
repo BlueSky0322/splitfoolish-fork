@@ -1,4 +1,15 @@
 import { AuthEnv, getUserEmail } from './auth';
+import {
+  addItem,
+  addPerson,
+  clearItems,
+  clearPeople,
+  deleteContentStatements,
+  loadContent,
+  removeItem,
+  removePerson,
+  updateItem,
+} from './split-content';
 
 interface Env extends AuthEnv {
   DB: D1Database;
@@ -16,6 +27,10 @@ const SPLIT_INVITE_PATH = new RegExp(`^/api/splits/${ID}/invites/${ID}$`);
 const MY_INVITES_PATH = /^\/api\/invites$/;
 const MY_INVITE_ACTION_PATH = new RegExp(`^/api/invites/${ID}/(accept|decline)$`);
 const MEMBER_PATH = new RegExp(`^/api/splits/${ID}/members/([^/]+)$`);
+const PEOPLE_PATH = new RegExp(`^/api/splits/${ID}/people$`);
+const PERSON_PATH = new RegExp(`^/api/splits/${ID}/people/${ID}$`);
+const ITEMS_PATH = new RegExp(`^/api/splits/${ID}/items$`);
+const ITEM_PATH = new RegExp(`^/api/splits/${ID}/items/${ID}$`);
 const JOIN_PATH = new RegExp(`^/api/join/${ID}$`);
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -111,10 +126,10 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
       await db.batch([
         db
           .prepare(
-            `INSERT INTO splits (id, name, data, invite_token, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
+            `INSERT INTO splits (id, name, invite_token, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?4)`,
           )
-          .bind(id, name, JSON.stringify({ people: [], items: [] }), newInviteToken(), now),
+          .bind(id, name, newInviteToken(), now),
         db
           .prepare(
             `INSERT INTO split_members (split_id, email, role, joined_at) VALUES (?, ?, 'owner', ?)`,
@@ -135,9 +150,9 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
 
     if (req.method === 'GET') {
       const split = await db
-        .prepare('SELECT name, data, invite_token AS inviteToken FROM splits WHERE id = ?')
+        .prepare('SELECT name, invite_token AS inviteToken FROM splits WHERE id = ?')
         .bind(id)
-        .first<{ name: string; data: string; inviteToken: string }>();
+        .first<{ name: string; inviteToken: string }>();
       if (split == null) return notFound();
       const { results: members } = await db
         .prepare(
@@ -166,27 +181,14 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
         members,
         invites,
         inviteToken: role === 'owner' ? split.inviteToken : undefined,
-        ...JSON.parse(split.data),
+        ...(await loadContent(db, id)),
       });
-    }
-
-    if (req.method === 'PUT') {
-      const data = await readJson(req);
-      if (data instanceof Response) return data;
-      if (!Array.isArray(data.people) || !Array.isArray(data.items)) {
-        return json({ error: 'Expected { people: [], items: [] }' }, 400);
-      }
-
-      await db
-        .prepare('UPDATE splits SET data = ?, updated_at = ? WHERE id = ?')
-        .bind(JSON.stringify({ people: data.people, items: data.items }), Date.now(), id)
-        .run();
-      return json({ ok: true });
     }
 
     if (req.method === 'DELETE') {
       if (role !== 'owner') return json({ error: 'Only the owner can delete this split' }, 403);
       await db.batch([
+        ...deleteContentStatements(db, id),
         db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
         db.prepare('DELETE FROM split_members WHERE split_id = ?').bind(id),
         db.prepare('DELETE FROM splits WHERE id = ?').bind(id),
@@ -194,6 +196,34 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
       return json({ ok: true });
     }
 
+    return json({ error: 'Method not allowed' }, 405);
+  }
+
+  // The bill (people and items) can be changed by any member
+  const contentMatch =
+    pathname.match(PEOPLE_PATH) ??
+    pathname.match(PERSON_PATH) ??
+    pathname.match(ITEMS_PATH) ??
+    pathname.match(ITEM_PATH);
+  if (contentMatch) {
+    const [, id, childId] = contentMatch;
+    if ((await getRole(db, id, email)) == null) return notFound();
+    const isPeople = pathname.includes('/people');
+    const body = ['POST', 'PUT'].includes(req.method) ? await readJson(req) : {};
+    if (body instanceof Response) return body;
+
+    if (isPeople && childId == null) {
+      if (req.method === 'POST') return addPerson(db, id, body);
+      if (req.method === 'DELETE') return clearPeople(db, id);
+    } else if (isPeople) {
+      if (req.method === 'DELETE') return removePerson(db, id, childId);
+    } else if (childId == null) {
+      if (req.method === 'POST') return addItem(db, id, body);
+      if (req.method === 'DELETE') return clearItems(db, id);
+    } else {
+      if (req.method === 'PUT') return updateItem(db, id, childId, body);
+      if (req.method === 'DELETE') return removeItem(db, id, childId);
+    }
     return json({ error: 'Method not allowed' }, 405);
   }
 

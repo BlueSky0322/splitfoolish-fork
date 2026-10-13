@@ -2,14 +2,15 @@ import { ActionIcon, Button, MultiSelect, Select, TextInput, Title, Tooltip } fr
 import { useForm } from '@mantine/form';
 import IconTrashX from '~icons/tabler/trash-x';
 import { evaluate } from 'mathjs';
-import React, { useContext, useEffect } from 'react';
+import { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
-import { IItem } from '../interfaces/app-reducer';
+import { useSplitActions } from '../hooks/useSplit';
 import ItemTable from './ItemTable';
-import { itemFormValidate } from './item-form-validate';
+import { itemFormValidate, itemInputFromForm } from './item-form-validate';
 
 const ItemList = () => {
-  const { state, dispatch } = useContext(AppContext);
+  const { state } = useContext(AppContext);
+  const actions = useSplitActions()!;
   const itemForm = useForm({
     mode: 'uncontrolled',
     initialValues: {
@@ -27,28 +28,16 @@ const ItemList = () => {
     });
   }, [state]);
 
-  const handleItemSubmit = (
-    values: Record<string, any>,
-    _e: React.FormEvent<HTMLFormElement> | undefined,
-  ) => {
-    const participants = state.people.filter((p) => values['participants'].includes(p.name));
-    const payer = state.people.find((p) => p.name === values['payer']);
-
+  const handleItemSubmit = async (values: Record<string, any>) => {
+    let input;
     try {
-      dispatch({
-        type: 'ADD_ITEM',
-        payload: {
-          cost: evaluate(values['cost']),
-          name: values['name'],
-          participants,
-          payer,
-          strategy: values['strategy'],
-        } as IItem,
-      });
-      itemForm.reset();
+      input = itemInputFromForm(values, state.people, evaluate);
     } catch (error) {
       alert(error);
+      return;
     }
+
+    if (await actions.addItem(input)) itemForm.reset();
   };
 
   return (
@@ -108,7 +97,7 @@ const ItemList = () => {
         <Tooltip label="Clear List">
           <ActionIcon
             color="red"
-            onClick={() => dispatch({ type: 'CLEAR_ITEMS', payload: null })}
+            onClick={() => actions.clearItems()}
           >
             <IconTrashX />
           </ActionIcon>
