@@ -1,6 +1,7 @@
 import { Button } from '@mantine/core';
 import { SignIn } from '@phosphor-icons/react';
 import JoinSplit from './components/JoinSplit';
+import StateCard from './components/ui/StateCard';
 import { NewSplitProvider } from './components/NewSplitDialog';
 import SettingsPage from './components/SettingsPage';
 import SplitView from './components/SplitView';
@@ -17,14 +18,12 @@ function App() {
 
   if (signedOut) {
     return (
-      <div className="min-h-dvh flex flex-col items-center justify-center gap-3 p-8 text-center">
-        <SignIn
-          size={36}
-          className="sf-muted"
-        />
-        <div className="text-lg font-medium">You're signed out</div>
-        <Button onClick={() => window.location.reload()}>Sign in</Button>
-      </div>
+      <StateCard
+        icon={<SignIn size={36} />}
+        title="You're signed out"
+        body="Sign in again to see your splits."
+        action={<Button onClick={() => window.location.reload()}>Sign in</Button>}
+      />
     );
   }
 

@@ -1,10 +1,11 @@
-import { ArrowsSplit, CaretLeft, ListBullets, User } from '@phosphor-icons/react';
+import { ArrowsSplit, CaretLeft, ListBullets, LockSimple, User } from '@phosphor-icons/react';
 import { Button, Tabs } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { useState } from 'react';
 import { SplitActionsContext, useSplit } from '../hooks/useSplit';
 import { navigate } from '../hooks/useRoute';
 import ErrorBoundary from './ErrorBoundary';
+import StateCard from './ui/StateCard';
 import ItemList from './ItemList';
 import PersonList from './PersonList';
 import SplitMembers from './SplitMembers';
@@ -21,15 +22,12 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
 
   if (status === 'notfound') {
     return (
-      <div className="p-8 text-center flex flex-col gap-4 items-center">
-        <div>This split doesn't exist, or you don't have access to it.</div>
-        <Button
-          variant="light"
-          onClick={() => navigate('')}
-        >
-          Go to My Splits
-        </Button>
-      </div>
+      <StateCard
+        icon={<LockSimple size={36} />}
+        title="This split doesn't exist, or you don't have access"
+        body="If someone shared it with you, they may have removed you."
+        action={<Button onClick={() => navigate('')}>Go to My splits</Button>}
+      />
     );
   }
 
