@@ -26,11 +26,11 @@ const PersonList = ({ suggestions = [] }: PersonListProps) => {
   // Autocomplete writes the picked option into the box right after onOptionSubmit
   const justPicked = useRef(false);
 
-  const handlePersonSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handlePersonSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (trimmed === '') return;
-    if (await actions.addPerson(trimmed)) setName('');
+    if (actions.addPerson(trimmed)) setName('');
   };
 
   // Offer members and invitees who aren't in the split yet, keyed by the name they'd get

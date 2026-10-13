@@ -1,6 +1,6 @@
 import { TextInput, Select, MultiSelect, Button } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { useContext, useState } from 'react';
+import { useContext } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IItem } from '../interfaces/app-reducer';
 import { modals } from '@mantine/modals';
@@ -15,7 +15,6 @@ interface EditItemModalProps {
 }
 const EditItemModal = ({ item, actions }: EditItemModalProps) => {
   const { state } = useContext(AppContext);
-  const [saving, setSaving] = useState(false);
   const itemForm = useForm({
     mode: 'uncontrolled',
     initialValues: {
@@ -37,9 +36,7 @@ const EditItemModal = ({ item, actions }: EditItemModalProps) => {
       return;
     }
 
-    setSaving(true);
-    if (await actions.updateItem(item.id, input)) modals.closeAll();
-    setSaving(false);
+    if (actions.updateItem(item.id, input)) modals.closeAll();
   };
 
   return (
@@ -76,7 +73,6 @@ const EditItemModal = ({ item, actions }: EditItemModalProps) => {
       <Button
         className="mt-2 col-span-full"
         type="submit"
-        disabled={saving}
       >
         Save Item
       </Button>

@@ -1,15 +1,9 @@
 import { AuthEnv, getUserEmail } from './auth';
 import {
-  addItem,
-  addPerson,
-  clearItems,
-  clearPeople,
-  deleteContentStatements,
+  applyChanges,
   assembleContent,
   contentStatements,
-  removeItem,
-  removePerson,
-  updateItem,
+  deleteContentStatements,
 } from './split-content';
 
 interface Env extends AuthEnv {
@@ -28,10 +22,7 @@ const SPLIT_INVITE_PATH = new RegExp(`^/api/splits/${ID}/invites/${ID}$`);
 const MY_INVITES_PATH = /^\/api\/invites$/;
 const MY_INVITE_ACTION_PATH = new RegExp(`^/api/invites/${ID}/(accept|decline)$`);
 const MEMBER_PATH = new RegExp(`^/api/splits/${ID}/members/([^/]+)$`);
-const PEOPLE_PATH = new RegExp(`^/api/splits/${ID}/people$`);
-const PERSON_PATH = new RegExp(`^/api/splits/${ID}/people/${ID}$`);
-const ITEMS_PATH = new RegExp(`^/api/splits/${ID}/items$`);
-const ITEM_PATH = new RegExp(`^/api/splits/${ID}/items/${ID}$`);
+const CHANGES_PATH = new RegExp(`^/api/splits/${ID}/changes$`);
 const JOIN_PATH = new RegExp(`^/api/join/${ID}$`);
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -202,31 +193,13 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
   }
 
   // The bill (people and items) can be changed by any member
-  const contentMatch =
-    pathname.match(PEOPLE_PATH) ??
-    pathname.match(PERSON_PATH) ??
-    pathname.match(ITEMS_PATH) ??
-    pathname.match(ITEM_PATH);
-  if (contentMatch) {
-    const [, id, childId] = contentMatch;
+  if ((match = pathname.match(CHANGES_PATH))) {
+    if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    const id = match[1];
     if ((await getRole(db, id, email)) == null) return notFound();
-    const isPeople = pathname.includes('/people');
-    const body = ['POST', 'PUT'].includes(req.method) ? await readJson(req) : {};
+    const body = await readJson(req);
     if (body instanceof Response) return body;
-
-    if (isPeople && childId == null) {
-      if (req.method === 'POST') return addPerson(db, id, body);
-      if (req.method === 'DELETE') return clearPeople(db, id);
-    } else if (isPeople) {
-      if (req.method === 'DELETE') return removePerson(db, id, childId);
-    } else if (childId == null) {
-      if (req.method === 'POST') return addItem(db, id, body);
-      if (req.method === 'DELETE') return clearItems(db, id);
-    } else {
-      if (req.method === 'PUT') return updateItem(db, id, childId, body);
-      if (req.method === 'DELETE') return removeItem(db, id, childId);
-    }
-    return json({ error: 'Method not allowed' }, 405);
+    return applyChanges(db, id, body);
   }
 
   if ((match = pathname.match(INVITE_LINK_PATH))) {
