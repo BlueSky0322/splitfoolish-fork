@@ -197,8 +197,6 @@ export const api = {
   resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
     request<{ ok: true }>('DELETE', `${splitPath(id)}/members/${encodeURIComponent(email)}`),
-  inviteByEmail: (id: string, email: string) =>
-    request<SplitInvite>('POST', `${splitPath(id)}/invites`, { email }),
   revokeInvite: (id: string, inviteId: string) =>
     request<{ ok: true }>('DELETE', `${splitPath(id)}/invites/${encodeURIComponent(inviteId)}`),
   myInvites: () => request<{ invites: MyInvite[] }>('GET', '/api/invites'),
@@ -221,6 +219,3 @@ export const avatarUrl = (email: string, version: number) =>
 
 export const inviteUrl = (token: string) =>
   `${window.location.origin}/?join=${encodeURIComponent(token)}`;
-
-/** Where an emailed-in invitee goes to find their pending invites */
-export const invitesPageUrl = () => `${window.location.origin}/?tab=invites`;

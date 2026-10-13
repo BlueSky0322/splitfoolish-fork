@@ -61,7 +61,7 @@ function MethodForm({
             variant="subtle"
             color="red"
             onClick={onRemove}
-            className="mr-auto"
+            className="sf-danger mr-auto"
           >
             Remove
           </Button>
