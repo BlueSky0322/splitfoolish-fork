@@ -10,12 +10,18 @@ type Role = 'owner' | 'editor';
 const ID = '([A-Za-z0-9_-]{8,64})';
 const SPLITS_PATH = /^\/api\/splits$/;
 const SPLIT_PATH = new RegExp(`^/api/splits/${ID}$`);
-const INVITE_PATH = new RegExp(`^/api/splits/${ID}/invite$`);
+const INVITE_LINK_PATH = new RegExp(`^/api/splits/${ID}/invite$`);
+const SPLIT_INVITES_PATH = new RegExp(`^/api/splits/${ID}/invites$`);
+const SPLIT_INVITE_PATH = new RegExp(`^/api/splits/${ID}/invites/${ID}$`);
+const MY_INVITES_PATH = /^\/api\/invites$/;
+const MY_INVITE_ACTION_PATH = new RegExp(`^/api/invites/${ID}/(accept|decline)$`);
 const MEMBER_PATH = new RegExp(`^/api/splits/${ID}/members/([^/]+)$`);
 const JOIN_PATH = new RegExp(`^/api/join/${ID}$`);
 
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_NAME_LENGTH = 80;
+const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -49,6 +55,18 @@ const readName = (body: Record<string, unknown>) => {
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   return name.length > 0 && name.length <= MAX_NAME_LENGTH ? name : null;
 };
+
+// Adds an editor (no-op if already a member) and clears any pending invite for them
+const addEditor = (db: D1Database, splitId: string, email: string) =>
+  db.batch([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO split_members (split_id, email, role, joined_at)
+         VALUES (?, ?, 'editor', ?)`,
+      )
+      .bind(splitId, email, Date.now()),
+    db.prepare('DELETE FROM split_invites WHERE split_id = ? AND email = ?').bind(splitId, email),
+  ]);
 
 async function getRole(db: D1Database, splitId: string, email: string): Promise<Role | null> {
   const row = await db
@@ -128,11 +146,25 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
         .bind(id)
         .all<{ email: string; role: Role }>();
 
+      const invites =
+        role === 'owner'
+          ? (
+              await db
+                .prepare(
+                  `SELECT id, email, created_at AS createdAt, expires_at AS expiresAt
+                   FROM split_invites WHERE split_id = ? AND expires_at > ? ORDER BY created_at`,
+                )
+                .bind(id, Date.now())
+                .all()
+            ).results
+          : undefined;
+
       return json({
         id,
         name: split.name,
         role,
         members,
+        invites,
         inviteToken: role === 'owner' ? split.inviteToken : undefined,
         ...JSON.parse(split.data),
       });
@@ -155,6 +187,7 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     if (req.method === 'DELETE') {
       if (role !== 'owner') return json({ error: 'Only the owner can delete this split' }, 403);
       await db.batch([
+        db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
         db.prepare('DELETE FROM split_members WHERE split_id = ?').bind(id),
         db.prepare('DELETE FROM splits WHERE id = ?').bind(id),
       ]);
@@ -164,7 +197,7 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     return json({ error: 'Method not allowed' }, 405);
   }
 
-  if ((match = pathname.match(INVITE_PATH))) {
+  if ((match = pathname.match(INVITE_LINK_PATH))) {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const id = match[1];
     const role = await getRole(db, id, email);
@@ -174,6 +207,86 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     const inviteToken = newInviteToken();
     await db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(inviteToken, id).run();
     return json({ inviteToken });
+  }
+
+  if ((match = pathname.match(SPLIT_INVITES_PATH))) {
+    if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    const id = match[1];
+    const role = await getRole(db, id, email);
+    if (role == null) return notFound();
+    if (role !== 'owner') return json({ error: 'Only the owner can invite people' }, 403);
+
+    const body = await readJson(req);
+    if (body instanceof Response) return body;
+    const invitee = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!EMAIL_PATTERN.test(invitee)) return json({ error: 'Enter a valid email address' }, 400);
+    if ((await getRole(db, id, invitee)) != null) {
+      return json({ error: `${invitee} already has access` }, 409);
+    }
+
+    // Inviting the same email again replaces the old invite and restarts its expiry
+    const now = Date.now();
+    const invite = { id: newId(), email: invitee, createdAt: now, expiresAt: now + INVITE_TTL_MS };
+    await db
+      .prepare(
+        `INSERT INTO split_invites (id, split_id, email, invited_by, created_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT (split_id, email) DO UPDATE SET
+           id = excluded.id, invited_by = excluded.invited_by,
+           created_at = excluded.created_at, expires_at = excluded.expires_at`,
+      )
+      .bind(invite.id, id, invitee, email, invite.createdAt, invite.expiresAt)
+      .run();
+    return json(invite, 201);
+  }
+
+  if ((match = pathname.match(SPLIT_INVITE_PATH))) {
+    if (req.method !== 'DELETE') return json({ error: 'Method not allowed' }, 405);
+    const [, id, inviteId] = match;
+    const role = await getRole(db, id, email);
+    if (role == null) return notFound();
+    if (role !== 'owner') return json({ error: 'Only the owner can revoke invites' }, 403);
+
+    const { meta } = await db
+      .prepare('DELETE FROM split_invites WHERE id = ? AND split_id = ?')
+      .bind(inviteId, id)
+      .run();
+    return meta.changes > 0 ? json({ ok: true }) : notFound();
+  }
+
+  if (MY_INVITES_PATH.test(pathname)) {
+    if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+    const { results } = await db
+      .prepare(
+        `SELECT i.id, i.split_id AS splitId, s.name AS splitName, i.invited_by AS invitedBy,
+           i.created_at AS createdAt, i.expires_at AS expiresAt
+         FROM split_invites i JOIN splits s ON s.id = i.split_id
+         WHERE i.email = ? AND i.expires_at > ?
+         ORDER BY i.created_at DESC`,
+      )
+      .bind(email, Date.now())
+      .all();
+    return json({ invites: results });
+  }
+
+  if ((match = pathname.match(MY_INVITE_ACTION_PATH))) {
+    if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    const [, inviteId, action] = match;
+    // Only the invited email can act on an invite; to anyone else it doesn't exist
+    const invite = await db
+      .prepare(
+        'SELECT split_id AS splitId FROM split_invites WHERE id = ? AND email = ? AND expires_at > ?',
+      )
+      .bind(inviteId, email, Date.now())
+      .first<{ splitId: string }>();
+    if (invite == null) return json({ error: 'This invite has expired or was withdrawn' }, 404);
+
+    if (action === 'accept') {
+      await addEditor(db, invite.splitId, email);
+      return json({ id: invite.splitId });
+    }
+    await db.prepare('DELETE FROM split_invites WHERE id = ?').bind(inviteId).run();
+    return json({ ok: true });
   }
 
   if ((match = pathname.match(MEMBER_PATH))) {
@@ -206,13 +319,7 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
       .first<{ id: string }>();
     if (split == null) return json({ error: 'This invite link is no longer valid' }, 404);
 
-    await db
-      .prepare(
-        `INSERT OR IGNORE INTO split_members (split_id, email, role, joined_at)
-         VALUES (?, ?, 'editor', ?)`,
-      )
-      .bind(split.id, email, Date.now())
-      .run();
+    await addEditor(db, split.id, email);
     return json({ id: split.id });
   }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 export type Route =
-  | { view: 'home' }
+  | { view: 'home'; tab: string | null }
   | { view: 'split'; id: string }
   | { view: 'join'; token: string };
 
@@ -11,7 +11,7 @@ function readRoute(): Route {
   const token = params.get('join');
   if (token) return { view: 'join', token };
   if (id) return { view: 'split', id };
-  return { view: 'home' };
+  return { view: 'home', tab: params.get('tab') };
 }
 
 const ROUTE_CHANGE = 'routechange';
@@ -23,7 +23,8 @@ export function navigate(search: string, { replace = false } = {}) {
   window.dispatchEvent(new Event(ROUTE_CHANGE));
 }
 
-// Pages are picked from the query string: ?s=<id> is a split, ?join=<token> joins one
+// Pages are picked from the query string: ?s=<id> is a split, ?join=<token> joins one,
+// and ?tab=<name> picks a My Splits tab
 export function useRoute(): Route {
   const [route, setRoute] = useState(readRoute);
 
