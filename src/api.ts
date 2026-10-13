@@ -46,6 +46,16 @@ export interface SplitDetail {
 
 export type ItemInput = Omit<ApiItem, 'id'>;
 
+/** One change to a split's people or items; ids are made by the client */
+export type Change =
+  | { op: 'addPerson'; id: string; name: string; memberEmail?: string | null }
+  | { op: 'removePerson'; id: string }
+  | { op: 'clearPeople' }
+  | { op: 'addItem'; item: ApiItem }
+  | { op: 'updateItem'; item: ApiItem }
+  | { op: 'removeItem'; id: string }
+  | { op: 'clearItems' };
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -55,8 +65,14 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  init: RequestInit = {},
+): Promise<T> {
   const res = await fetch(path, {
+    ...init,
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -73,18 +89,9 @@ export const api = {
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
   createSplit: (name: string) => request<{ id: string }>('POST', '/api/splits', { name }),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
-  addPerson: (id: string, name: string, memberEmail?: string) =>
-    request<IPerson>('POST', `${splitPath(id)}/people`, { name, memberEmail }),
-  removePerson: (id: string, personId: string) =>
-    request<{ ok: true }>('DELETE', `${splitPath(id)}/people/${encodeURIComponent(personId)}`),
-  clearPeople: (id: string) => request<{ ok: true }>('DELETE', `${splitPath(id)}/people`),
-  addItem: (id: string, item: ItemInput) =>
-    request<ApiItem>('POST', `${splitPath(id)}/items`, item),
-  updateItem: (id: string, itemId: string, item: ItemInput) =>
-    request<ApiItem>('PUT', `${splitPath(id)}/items/${encodeURIComponent(itemId)}`, item),
-  removeItem: (id: string, itemId: string) =>
-    request<{ ok: true }>('DELETE', `${splitPath(id)}/items/${encodeURIComponent(itemId)}`),
-  clearItems: (id: string) => request<{ ok: true }>('DELETE', `${splitPath(id)}/items`),
+  /** Sends queued changes; keepalive lets a save finish while the page is closing */
+  applyChanges: (id: string, changes: Change[]) =>
+    request<{ ok: true }>('POST', `${splitPath(id)}/changes`, { changes }, { keepalive: true }),
   deleteSplit: (id: string) => request<{ ok: true }>('DELETE', splitPath(id)),
   resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
