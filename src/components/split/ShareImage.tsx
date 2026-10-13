@@ -1,8 +1,10 @@
-import { Button, Loader } from '@mantine/core';
+import { Button, Loader, useComputedColorScheme } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
+import { useProfile } from '../../profile/ProfileContext';
+import { ACCENTS, Accent, isAccent } from '../../theme/accents';
 import { formatMoney } from '../../utils/money';
 import TransferRow from './TransferRow';
 import classes from './ShareImage.module.css';
@@ -13,6 +15,36 @@ interface ShareImageProps {
   people: IPerson[];
   items: IItem[];
   summary: SplitSummary;
+}
+
+/** a mixed into b by amount (0-1), as plain hex */
+function mix(a: string, b: string, amount: number) {
+  const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const [ca, cb] = [channels(a), channels(b)];
+  return `#${ca
+    .map((v, i) => Math.round(v * amount + cb[i] * (1 - amount)))
+    .map((v) => v.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+/** The theme's colours in plain hex, so the picture matches what's on screen */
+export function shareImagePalette(scheme: 'dark' | 'light', accent: Accent) {
+  const dark = scheme === 'dark';
+  const bg = dark ? '#161826' : '#eceef6';
+  const surface = dark ? '#232532' : '#f8f9fd';
+  const text = dark ? '#e9e9ed' : '#1e202b';
+  const accentColour = ACCENTS[accent].ramp[dark ? 4 : 6];
+  return {
+    '--sf-bg': bg,
+    '--sf-surface': surface,
+    '--sf-text': text,
+    '--sf-accent': accentColour,
+    '--sf-tint': mix(text, bg, 0.05),
+    '--sf-avatar': mix(accentColour, surface, 0.24),
+    '--sf-text-muted': mix(text, bg, 0.58),
+    '--sf-text-label': mix(text, bg, 0.5),
+    '--sf-rule': mix(text, bg, 0.16),
+  } as React.CSSProperties;
 }
 
 const WIDTH = 1080;
@@ -29,8 +61,12 @@ function dateRange(items: IItem[]) {
 }
 
 // The settle-up summary as a 1080x1350 picture to post in a group chat. Drawn from a
-// hidden copy of the card, always in the dark theme so it looks the same for everyone.
+// hidden copy of the card, in the theme and accent on screen.
 const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps) => {
+  const scheme = useComputedColorScheme('dark');
+  const { profile } = useProfile();
+  const accent = isAccent(profile?.settings.accent) ? profile.settings.accent : 'blurple';
+  const palette = shareImagePalette(scheme, accent);
   const cardRef = useRef<HTMLDivElement>(null);
   const [showItems, setShowItems] = useState(true);
   const [image, setImage] = useState<{ url: string; blob: Blob } | null>(null);
@@ -51,7 +87,12 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
     if (card == null) return;
     import('html2canvas')
       .then(({ default: html2canvas }) =>
-        html2canvas(card, { width: WIDTH, height: HEIGHT, scale: 1, backgroundColor: '#161826' }),
+        html2canvas(card, {
+          width: WIDTH,
+          height: HEIGHT,
+          scale: 1,
+          backgroundColor: (palette as Record<string, string>)['--sf-bg'],
+        }),
       )
       .then(
         (canvas) =>
@@ -135,8 +176,7 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
         <div
           ref={cardRef}
           className={classes.card}
-          style={{ width: WIDTH, height: HEIGHT }}
-          data-mantine-color-scheme="dark"
+          style={{ width: WIDTH, height: HEIGHT, ...palette }}
         >
           <div className={classes.brand}>
             <ArrowsSplit size={28} />
@@ -156,7 +196,9 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
           <div className={classes.heading}>Who pays who</div>
           <div className={classes.transfers}>
             {summary.transfers.length === 0 && (
-              <div className={classes.meta}>Everyone is settled up.</div>
+              <div className={classes.meta}>
+                {items.length > 0 ? 'Everyone is settled up.' : 'No items yet.'}
+              </div>
             )}
             {summary.transfers.map((t) => (
               <TransferRow

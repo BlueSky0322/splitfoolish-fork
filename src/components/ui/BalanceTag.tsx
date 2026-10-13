@@ -4,8 +4,17 @@ import classes from './BalanceTag.module.css';
 
 // A split's balance in the sidebar: amount then an arrow, green when you're owed and
 // red when you owe. No sign: the colour and arrow carry the direction.
-const BalanceTag = ({ cents, currency }: { cents: number | null; currency: string }) => {
-  if (cents == null) return null;
+const BalanceTag = ({
+  cents,
+  currency,
+  hasItems = true,
+}: {
+  cents: number | null;
+  currency: string;
+  /** Nothing to show for a split with nothing in it yet */
+  hasItems?: boolean;
+}) => {
+  if (cents == null || !hasItems) return null;
   if (cents === 0) {
     return (
       <span className={`${classes.tag} ${classes.settled}`}>

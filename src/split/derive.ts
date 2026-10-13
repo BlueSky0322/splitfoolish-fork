@@ -28,6 +28,8 @@ export function toSettleItem(item: IItem): SettleItem {
 
 export interface SplitSummary {
   totalCents: number;
+  /** False until something has been added; nothing is "settled" before then */
+  hasItems: boolean;
   balances: Map<string, Balance>;
   transfers: Transfer[];
   /** What each item costs each person, by item id then person id */
@@ -48,6 +50,7 @@ export function summarise(
   );
   return {
     totalCents: settleItems.reduce((sum, i) => sum + i.costCents, 0),
+    hasItems: settleItems.length > 0,
     balances: all,
     transfers: transfers(all, distributorId),
     sharesByItem: new Map(valid.map((item, ix) => [item.id, itemShares(settleItems[ix])])),

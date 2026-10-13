@@ -1,0 +1,18 @@
+/* The sidebar slides between its full width and the rail; the page follows it */
+.navbar {
+  overflow: hidden;
+  /* Same as the sidebar, so the edge doesn't flash while it slides */
+  background: color-mix(in srgb, var(--sf-bg) 70%, var(--sf-surface));
+  transition: width 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.main {
+  transition: padding-inline-start 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar,
+  .main {
+    transition: none;
+  }
+}

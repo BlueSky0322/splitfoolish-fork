@@ -612,7 +612,7 @@
 }
 
 .transfer[data-size='xl'] .transferArrow {
-  color: #8c8e9d;
+  color: var(--sf-text-label);
 }
 
 .transferText {

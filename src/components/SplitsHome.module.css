@@ -24,6 +24,10 @@
   align-self: flex-start;
 }
 
+.filter :global(.mantine-SegmentedControl-label) {
+  white-space: nowrap;
+}
+
 @media (max-width: 63.99em) {
   .filter {
     align-self: stretch;
@@ -55,10 +59,32 @@
 
 .splitCard {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 108px;
   padding: 16px;
   border-radius: 8px;
+}
+
+.cardTop,
+.cardBottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cardTop {
+  align-items: flex-start;
+}
+
+.cardBottom {
+  align-items: flex-end;
+}
+
+.cardTitle {
+  font-size: 17px;
 }
 
 .splitCard:hover {

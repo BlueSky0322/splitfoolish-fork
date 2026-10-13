@@ -60,7 +60,13 @@ export function BalanceHero({
     );
   }
   const cents = summary.balances.get(me.id)?.balanceCents ?? 0;
-  const label = cents > 0 ? "you're owed" : cents < 0 ? 'you owe' : "you're settled";
+  const label = !summary.hasItems
+    ? 'nothing spent yet'
+    : cents > 0
+      ? "you're owed"
+      : cents < 0
+        ? 'you owe'
+        : "you're settled";
   return (
     <div className="flex flex-col gap-1">
       <div className="sf-muted text-[13px]">
@@ -106,7 +112,7 @@ const BalancePanel = ({
             onLinkMe={onLinkMe}
             size={42}
           />
-          {mine && (
+          {mine && summary.hasItems && (
             <div className={classes.stats}>
               <div>
                 <div className={classes.statLabel}>You paid</div>
@@ -125,7 +131,11 @@ const BalancePanel = ({
       <section className={classes.panelSection}>
         <h6 className="sf-label">Who pays who</h6>
         {count === 0 ? (
-          <div className="sf-muted text-sm">Everyone is settled up.</div>
+          <div className="sf-muted text-sm">
+            {summary.hasItems
+              ? 'Everyone is settled up.'
+              : 'No items yet. Add what was bought and who paid, and who pays who appears here.'}
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             {summary.transfers.map((t) => {
@@ -158,7 +168,7 @@ const BalancePanel = ({
         )}
       </section>
 
-      {people.length > 0 && (
+      {people.length > 0 && summary.hasItems && (
         <section className={classes.panelSection}>
           <h6 className="sf-label">Balances</h6>
           <BalanceBars
@@ -184,7 +194,7 @@ const BalancePanel = ({
         variant="default"
         leftSection={<ShareNetwork size={16} />}
         onClick={onShareImage}
-        disabled={people.length === 0}
+        disabled={!summary.hasItems}
       >
         Share as image
       </Button>
