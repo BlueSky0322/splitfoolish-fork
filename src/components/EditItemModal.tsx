@@ -5,6 +5,7 @@ import { AppContext } from '../context/AppContext/AppContext';
 import { IItem } from '../interfaces/app-reducer';
 import { evaluate } from 'mathjs';
 import { modals } from '@mantine/modals';
+import { itemFormValidate } from './item-form-validate';
 
 interface EditItemModalProps {
   item: IItem;
@@ -17,9 +18,10 @@ const EditItemModal = ({ item, itemIndex }: EditItemModalProps) => {
     initialValues: {
       name: item.name,
       cost: item.cost.toString(),
-      payer: item.payer.name,
+      payer: item.payer?.name ?? null,
       participants: item.participants.map((p) => p.name),
     },
+    validate: itemFormValidate,
   });
 
   const handleItemSubmit = (

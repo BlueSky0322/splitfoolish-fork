@@ -6,14 +6,19 @@ import React, { useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext/AppContext';
 import { IItem } from '../interfaces/app-reducer';
 import ItemTable from './ItemTable';
+import { itemFormValidate } from './item-form-validate';
 
 const ItemList = () => {
   const { state, dispatch } = useContext(AppContext);
   const itemForm = useForm({
     mode: 'uncontrolled',
     initialValues: {
+      name: '',
+      cost: '',
+      payer: null as string | null,
       participants: state.people.map((p) => p.name),
     },
+    validate: itemFormValidate,
   });
 
   useEffect(() => {
