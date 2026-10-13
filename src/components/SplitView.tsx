@@ -100,7 +100,14 @@ const SplitView = ({ splitId, myEmail }: SplitViewProps) => {
           className="p-4"
         >
           <ErrorBoundary fallback={<div>An error occured.</div>}>
-            <PersonList />
+            <PersonList
+              suggestions={[
+                ...(meta?.members.map((m) => ({ email: m.email, status: 'member' as const })) ??
+                  []),
+                ...(meta?.invites?.map((i) => ({ email: i.email, status: 'invited' as const })) ??
+                  []),
+              ]}
+            />
           </ErrorBoundary>
         </Tabs.Panel>
         <Tabs.Panel
