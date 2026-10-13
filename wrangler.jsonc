@@ -3,6 +3,8 @@
   "name": "splitfoolish",
   "main": "worker/index.ts",
   "compatibility_date": "2025-09-01",
+  // Runs the Worker near the D1 database when that is faster than near the visitor
+  "placement": { "mode": "smart" },
   // Cloudflare Access app protecting this Worker. The API refuses every request
   // until both are set. Locally, .dev.vars blanks them and sets DEV_USER_EMAIL.
   "vars": {
