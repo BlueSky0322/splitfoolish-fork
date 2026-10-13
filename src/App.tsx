@@ -1,92 +1,60 @@
-import { Button, Tabs } from '@mantine/core';
-import IconArrowsSplit from '~icons/tabler/arrows-split';
-import IconListDetails from '~icons/tabler/list-details';
-import IconUser from '~icons/tabler/user';
-import { useContext, useState } from 'react';
+import { Loader } from '@mantine/core';
+import { useEffect, useState } from 'react';
 import './App.css';
-import ErrorBoundary from './components/ErrorBoundary';
-import ItemList from './components/ItemList';
-import PersonList from './components/PersonList';
-import SplitPage from './components/SplitPage';
-import { AppContext } from './context/AppContext/AppContext';
-import { useRemoteSync } from './hooks/useRemoteSync';
+import { api } from './api';
+import JoinSplit from './components/JoinSplit';
+import SplitView from './components/SplitView';
+import SplitsHome from './components/SplitsHome';
+import { useRoute } from './hooks/useRoute';
 
+// Signing in happens in front of the app (Cloudflare Access), so by the time this
+// runs the user is known; /api/me just tells us who.
 function App() {
-  const { dispatch } = useContext(AppContext);
-  const [activeTab, setActiveTab] = useState<string | null>('0');
-  const { status } = useRemoteSync();
+  const route = useRoute();
+  const [email, setEmail] = useState<string | null>(null);
+  const [signedOut, setSignedOut] = useState(false);
+
+  useEffect(() => {
+    api
+      .me()
+      .then(({ email }) => setEmail(email))
+      .catch(() => setSignedOut(true));
+  }, []);
 
   return (
     <div className="max-w-screen-md m-auto bg-white min-h-screen">
-      <Tabs
-        value={activeTab}
-        onChange={setActiveTab}
-      >
-        <Tabs.List>
-          <Tabs.Tab
-            value="0"
-            leftSection={<IconUser fontSize={20} />}
-          >
-            People
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="1"
-            leftSection={<IconListDetails fontSize={20} />}
-          >
-            Items
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="2"
-            leftSection={<IconArrowsSplit fontSize={20} />}
-          >
-            Settlements
-          </Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel
-          value="0"
-          className="p-4"
-        >
-          <ErrorBoundary fallback={<div>An error occured.</div>}>
-            <PersonList />
-          </ErrorBoundary>
-        </Tabs.Panel>
-        <Tabs.Panel
-          value="1"
-          className="p-4"
-        >
-          <ErrorBoundary fallback={<div>An error occured.</div>}>
-            <ItemList />
-          </ErrorBoundary>
-        </Tabs.Panel>
-        <Tabs.Panel
-          value="2"
-          className="p-4"
-        >
-          <ErrorBoundary fallback={<div>An error occured.</div>}>
-            <SplitPage />
-          </ErrorBoundary>
-        </Tabs.Panel>
-      </Tabs>
-      <div className="text-xs text-center text-gray-500 py-1">
-        {status === 'loading' && 'Loading…'}
-        {status === 'saving' && 'Saving…'}
-        {status === 'saved' && 'Saved'}
-        {status === 'error' && 'Sync failed, changes not saved'}
-      </div>
-      <div className="flex gap-2 items-center justify-center">
-        <div className="text-xs">Are you testing?</div>
-        <Button
-          className="p-0"
-          size="compact-xs"
-          radius="xs"
-          variant="transparent"
-          onClick={() => {
-            dispatch({ type: 'LOAD_TEST_DATA', payload: null });
-          }}
-        >
-          Load test data.
-        </Button>
-      </div>
+      {signedOut && (
+        <div className="p-8 text-center">
+          You're signed out. <a href={window.location.href}>Reload</a> to sign in again.
+        </div>
+      )}
+      {!signedOut && email == null && (
+        <div className="p-8 flex justify-center">
+          <Loader size="sm" />
+        </div>
+      )}
+      {email != null && (
+        <>
+          {route.view === 'home' && <SplitsHome />}
+          {route.view === 'join' && <JoinSplit token={route.token} />}
+          {route.view === 'split' && (
+            <SplitView
+              key={route.id}
+              splitId={route.id}
+              myEmail={email}
+            />
+          )}
+          <div className="text-xs text-center text-gray-500 py-4">
+            Signed in as {email} ·{' '}
+            <a
+              className="underline"
+              href="/cdn-cgi/access/logout"
+            >
+              Sign out
+            </a>
+          </div>
+        </>
+      )}
     </div>
   );
 }
