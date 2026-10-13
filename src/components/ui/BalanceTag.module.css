@@ -1,0 +1,17 @@
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount {
+  min-width: 56px;
+  text-align: right;
+}
+
+.settled {
+  color: color-mix(in srgb, var(--sf-text) 50%, transparent);
+}

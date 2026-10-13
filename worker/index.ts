@@ -5,6 +5,25 @@ import {
   contentStatements,
   deleteContentStatements,
 } from './split-content';
+import {
+  CURRENCY,
+  assembleMembers,
+  getProfile,
+  memberProfileStatements,
+  patchProfile,
+  putPaymentMethods,
+  settingsStatements,
+} from './profiles';
+import { listSplitSummaries } from './summaries';
+import {
+  deleteAttachment,
+  deleteAvatar,
+  getAttachment,
+  getAvatar,
+  listAttachmentsStatement,
+  putAvatar,
+  uploadAttachment,
+} from './photos';
 
 interface Env extends AuthEnv {
   DB: D1Database;
@@ -23,6 +42,9 @@ const MY_INVITES_PATH = /^\/api\/invites$/;
 const MY_INVITE_ACTION_PATH = new RegExp(`^/api/invites/${ID}/(accept|decline)$`);
 const MEMBER_PATH = new RegExp(`^/api/splits/${ID}/members/([^/]+)$`);
 const CHANGES_PATH = new RegExp(`^/api/splits/${ID}/changes$`);
+const ATTACHMENTS_PATH = new RegExp(`^/api/splits/${ID}/attachments$`);
+const ATTACHMENT_PATH = new RegExp(`^/api/splits/${ID}/attachments/${ID}$`);
+const AVATAR_PATH = /^\/api\/avatars\/([^/]+)$/;
 const JOIN_PATH = new RegExp(`^/api/join/${ID}$`);
 
 const MAX_BODY_BYTES = 256 * 1024;
@@ -89,39 +111,57 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
   let match: RegExpMatchArray | null;
 
   if (pathname === '/api/me') {
-    return req.method === 'GET' ? json({ email }) : json({ error: 'Method not allowed' }, 405);
+    if (req.method === 'GET') return json(await getProfile(db, email));
+    if (req.method === 'PATCH') {
+      const body = await readJson(req);
+      if (body instanceof Response) return body;
+      return patchProfile(db, email, body);
+    }
+    return json({ error: 'Method not allowed' }, 405);
+  }
+
+  if (pathname === '/api/me/payment-methods') {
+    if (req.method !== 'PUT') return json({ error: 'Method not allowed' }, 405);
+    const body = await readJson(req);
+    if (body instanceof Response) return body;
+    return putPaymentMethods(db, email, body);
+  }
+
+  if (pathname === '/api/me/avatar') {
+    if (req.method === 'PUT') return putAvatar(req, db, email);
+    if (req.method === 'DELETE') return deleteAvatar(db, email);
+    return json({ error: 'Method not allowed' }, 405);
+  }
+
+  if ((match = pathname.match(AVATAR_PATH))) {
+    if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+    return getAvatar(db, email, decodeURIComponent(match[1]).toLowerCase());
   }
 
   if (SPLITS_PATH.test(pathname)) {
-    if (req.method === 'GET') {
-      const { results } = await db
-        .prepare(
-          `SELECT s.id, s.name, s.updated_at AS updatedAt, m.role,
-             (SELECT count(*) FROM split_members WHERE split_id = s.id) AS memberCount
-           FROM splits s JOIN split_members m ON m.split_id = s.id
-           WHERE m.email = ?
-           ORDER BY s.updated_at DESC`,
-        )
-        .bind(email)
-        .all();
-      return json({ splits: results });
-    }
+    if (req.method === 'GET') return json({ splits: await listSplitSummaries(db, email) });
 
     if (req.method === 'POST') {
       const body = await readJson(req);
       if (body instanceof Response) return body;
       const name = readName(body);
       if (name == null) return json({ error: `Name must be 1-${MAX_NAME_LENGTH} characters` }, 400);
+      const currency = body.currency ?? 'MYR';
+      if (typeof currency !== 'string' || !CURRENCY.test(currency)) {
+        return json({ error: 'Invalid currency' }, 400);
+      }
 
       const id = newId();
       const now = Date.now();
       await db.batch([
         db
           .prepare(
-            `INSERT INTO splits (id, name, invite_token, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?4)`,
+            `INSERT INTO splits (id, name, currency, invite_token, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
           )
-          .bind(id, name, newInviteToken(), now),
+          .bind(id, name, currency, newInviteToken(), now),
+        // New splits default to the currency used last
+        ...settingsStatements(db, email, { lastCurrency: currency }),
         db
           .prepare(
             `INSERT INTO split_members (split_id, email, role, joined_at) VALUES (?, ?, 'owner', ?)`,
@@ -139,38 +179,45 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
 
     if (req.method === 'GET') {
       // One round trip: the database can be far from the user, so every query costs
-      const [roleRows, splitRows, memberRows, inviteRows, ...content] = await db.batch<
-        Record<string, unknown>
-      >([
-        db
-          .prepare('SELECT role FROM split_members WHERE split_id = ? AND email = ?')
-          .bind(id, email),
-        db.prepare('SELECT name, invite_token AS inviteToken FROM splits WHERE id = ?').bind(id),
-        db
-          .prepare(
-            'SELECT email, role FROM split_members WHERE split_id = ? ORDER BY joined_at, email',
-          )
-          .bind(id),
-        db
-          .prepare(
-            `SELECT id, email, created_at AS createdAt, expires_at AS expiresAt
+      const [roleRows, splitRows, memberRows, methodRows, inviteRows, attachmentRows, ...content] =
+        await db.batch<Record<string, unknown>>([
+          db
+            .prepare('SELECT role FROM split_members WHERE split_id = ? AND email = ?')
+            .bind(id, email),
+          db
+            .prepare(
+              `SELECT name, currency, invite_token AS inviteToken,
+                 distributor_person_id AS distributorId
+               FROM splits WHERE id = ?`,
+            )
+            .bind(id),
+          ...memberProfileStatements(db, id),
+          db
+            .prepare(
+              `SELECT id, email, created_at AS createdAt, expires_at AS expiresAt
              FROM split_invites WHERE split_id = ? AND expires_at > ? ORDER BY created_at`,
-          )
-          .bind(id, Date.now()),
-        ...contentStatements(db, id),
-      ]);
+            )
+            .bind(id, Date.now()),
+          listAttachmentsStatement(db, id),
+          ...contentStatements(db, id),
+        ]);
       const role = (roleRows.results[0] as { role: Role } | undefined)?.role;
-      const split = splitRows.results[0] as { name: string; inviteToken: string } | undefined;
+      const split = splitRows.results[0] as
+        | { name: string; currency: string; inviteToken: string; distributorId: string | null }
+        | undefined;
       // Non-members get the same 404 as a missing split, so ids can't be probed
       if (role == null || split == null) return notFound();
 
       return json({
         id,
         name: split.name,
+        currency: split.currency,
+        distributorId: split.distributorId,
         role,
-        members: memberRows.results,
+        members: assembleMembers([memberRows, methodRows]),
         invites: role === 'owner' ? inviteRows.results : undefined,
         inviteToken: role === 'owner' ? split.inviteToken : undefined,
+        attachments: attachmentRows.results,
         ...assembleContent(content),
       });
     }
@@ -178,9 +225,45 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     const role = await getRole(db, id, email);
     if (role == null) return notFound();
 
+    // Split settings: rename, change currency
+    if (req.method === 'PATCH') {
+      if (role !== 'owner') return json({ error: 'Only the owner can change split settings' }, 403);
+      const body = await readJson(req);
+      if (body instanceof Response) return body;
+      const statements: D1PreparedStatement[] = [];
+      if ('name' in body) {
+        const name = readName(body);
+        if (name == null) {
+          return json({ error: `Name must be 1-${MAX_NAME_LENGTH} characters` }, 400);
+        }
+        statements.push(db.prepare('UPDATE splits SET name = ? WHERE id = ?').bind(name, id));
+      }
+      if ('currency' in body) {
+        if (typeof body.currency !== 'string' || !CURRENCY.test(body.currency)) {
+          return json({ error: 'Invalid currency' }, 400);
+        }
+        statements.push(
+          db.prepare('UPDATE splits SET currency = ? WHERE id = ?').bind(body.currency, id),
+        );
+      }
+      if (statements.length > 0) {
+        await db.batch([
+          ...statements,
+          db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), id),
+        ]);
+      }
+      return json({ ok: true });
+    }
+
     if (req.method === 'DELETE') {
       if (role !== 'owner') return json({ error: 'Only the owner can delete this split' }, 403);
       await db.batch([
+        db
+          .prepare(
+            'DELETE FROM attachment_data WHERE id IN (SELECT id FROM attachments WHERE split_id = ?)',
+          )
+          .bind(id),
+        db.prepare('DELETE FROM attachments WHERE split_id = ?').bind(id),
         ...deleteContentStatements(db, id),
         db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
         db.prepare('DELETE FROM split_members WHERE split_id = ?').bind(id),
@@ -200,6 +283,23 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     const body = await readJson(req);
     if (body instanceof Response) return body;
     return applyChanges(db, id, body);
+  }
+
+  // Photos can be added by any member, and removed by whoever added them or the owner
+  if ((match = pathname.match(ATTACHMENTS_PATH) ?? pathname.match(ATTACHMENT_PATH))) {
+    const [, id, attachmentId] = match;
+    const role = await getRole(db, id, email);
+    if (role == null) return notFound();
+    if (attachmentId == null) {
+      return req.method === 'POST'
+        ? uploadAttachment(req, db, id, email)
+        : json({ error: 'Method not allowed' }, 405);
+    }
+    if (req.method === 'GET') return getAttachment(db, id, attachmentId);
+    if (req.method === 'DELETE') {
+      return deleteAttachment(db, id, attachmentId, email, role === 'owner');
+    }
+    return json({ error: 'Method not allowed' }, 405);
   }
 
   if ((match = pathname.match(INVITE_LINK_PATH))) {

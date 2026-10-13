@@ -1,0 +1,149 @@
+.page {
+  max-width: 980px;
+  padding: 32px 40px 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+@media (max-width: 63.99em) {
+  .page {
+    padding: 16px 22px 110px;
+    gap: 16px;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filter {
+  align-self: flex-start;
+}
+
+@media (max-width: 63.99em) {
+  .filter {
+    align-self: stretch;
+  }
+  .filter :global(.mantine-SegmentedControl-control) {
+    flex: 1 1 0;
+  }
+  .filter :global(.mantine-SegmentedControl-label) {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+}
+
+.invitesTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.splitCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.splitCard:hover {
+  box-shadow: var(--sf-shadow-md);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.splitRow,
+.inviteRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.splitRow {
+  min-height: 64px;
+  padding: 8px 14px;
+}
+
+.splitRow:hover {
+  background: var(--sf-hover);
+}
+
+.inviteRow {
+  padding: 14px 16px;
+}
+
+.splitRow + .splitRow,
+.inviteRow + .inviteRow {
+  border-top: 1px solid var(--sf-divider);
+}
+
+.rowTitle {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.balance {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.balanceLabel {
+  font-size: 11px;
+  color: var(--sf-text-muted);
+}
+
+.balanceAmount {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 63.99em) {
+  .balanceAmount {
+    font-size: 15px;
+  }
+}
+
+.empty {
+  padding: 32px 0;
+  text-align: center;
+}
+
+.footnote {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  text-align: center;
+}
+
+.inviteRow .rowMeta {
+  white-space: normal;
+}

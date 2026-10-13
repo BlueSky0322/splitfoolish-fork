@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 export type Route =
   | { view: 'home'; tab: string | null }
   | { view: 'split'; id: string }
-  | { view: 'join'; token: string };
+  | { view: 'join'; token: string }
+  | { view: 'settings' };
 
 function readRoute(): Route {
   const params = new URLSearchParams(window.location.search);
@@ -11,6 +12,7 @@ function readRoute(): Route {
   const token = params.get('join');
   if (token) return { view: 'join', token };
   if (id) return { view: 'split', id };
+  if (params.has('settings')) return { view: 'settings' };
   return { view: 'home', tab: params.get('tab') };
 }
 
@@ -24,7 +26,7 @@ export function navigate(search: string, { replace = false } = {}) {
 }
 
 // Pages are picked from the query string: ?s=<id> is a split, ?join=<token> joins one,
-// and ?tab=<name> picks a My Splits tab
+// ?settings is Settings, and ?tab=<name> picks a My Splits tab
 export function useRoute(): Route {
   const [route, setRoute] = useState(readRoute);
 

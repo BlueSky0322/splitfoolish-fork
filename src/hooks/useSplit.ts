@@ -10,9 +10,10 @@ import {
 } from 'react';
 import { ApiError, Change, ItemInput, SplitDetail, api } from '../api';
 import { AppContext } from '../context/AppContext/AppContext';
-import { toApiItem } from '../context/AppContext/app-reducer';
+import { ApiItem, toApiItem } from '../context/AppContext/app-reducer';
 import { AppReducerState } from '../interfaces/app-reducer';
 import { readCache, removeCache, writeCache } from '../split-cache';
+import { reloadHomeData } from './useHomeData';
 
 /** 'refreshing' means a cached copy is showing while the latest loads */
 export type SyncStatus = 'loading' | 'refreshing' | 'saving' | 'saved' | 'error' | 'notfound';
@@ -22,11 +23,20 @@ export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
 /** Each returns false (after explaining why) when the change isn't allowed */
 export interface SplitActions {
   addPerson: (name: string, memberEmail?: string) => boolean;
-  removePerson: (personId: string) => boolean;
+  renamePerson: (personId: string, name: string) => boolean;
+  /** "This is me": links a person to an account, or unlinks with null */
+  linkPerson: (personId: string, memberEmail: string | null) => boolean;
+  /** fromItems also takes them off items they share; see removeBlocker for what's allowed */
+  removePerson: (personId: string, fromItems?: boolean) => boolean;
   clearPeople: () => boolean;
-  addItem: (item: ItemInput) => boolean;
+  /** id lets the caller refer to the new item straight away, say to attach photos */
+  addItem: (item: ItemInput, id?: string) => boolean;
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
+  /** Who everyone settles up through, or null for the fewest transfers */
+  setDistributor: (personId: string | null) => boolean;
+  /** Puts back an item that was just removed (Undo) */
+  restoreItem: (item: ApiItem) => boolean;
   clearItems: () => boolean;
 }
 
@@ -39,7 +49,7 @@ export const useSplitActions = () => useContext(SplitActionsContext);
 const SAVE_DELAY_MS = 500;
 const RETRY_DELAY_MS = 3000;
 
-const newId = () =>
+export const newId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) =>
     b.toString(16).padStart(2, '0'),
   ).join('');
@@ -48,6 +58,33 @@ const refuse = (message: string) => {
   notifications.show({ color: 'red', message });
   return false;
 };
+
+/**
+ * Why a person can't be removed, or null if they can. Mirrors the server: someone who
+ * paid for anything stays; with fromItems they come off items they share, unless that
+ * would leave an item with nobody or break an exact split.
+ */
+export function removeBlocker(
+  state: AppReducerState,
+  personId: string,
+  fromItems: boolean,
+): string | null {
+  const person = state.people.find((p) => p.id === personId);
+  if (person == null) return null;
+  const count = (n: number) => (n === 1 ? '1 item' : `${n} items`);
+  const paid = state.items.filter((i) => i.payer.id === personId).length;
+  if (paid > 0) return `${person.name} paid for ${count(paid)}. Edit or remove those items first.`;
+  const shared = state.items.filter((i) => i.participants.some((p) => p.id === personId));
+  if (shared.length === 0) return null;
+  if (!fromItems) return `${person.name} is on ${count(shared.length)}.`;
+  if (shared.some((i) => i.participants.length === 1)) {
+    return `${person.name} is the only person on an item. Edit or remove it first.`;
+  }
+  if (shared.some((i) => i.splitMode === 'exact')) {
+    return `${person.name} is on an item split by exact amounts. Edit that item first.`;
+  }
+  return null;
+}
 
 // Loads a split, applies changes on screen straight away, and saves them in batches.
 // The server checks each batch against the split's current contents; if it refuses
@@ -108,6 +145,8 @@ export function useSplit(splitId: string) {
       inFlight.current = false;
       if (pending.current.length > 0) return save();
       setStatus('saved');
+      // Totals and balances in the sidebar and My splits follow the change
+      reloadHomeData();
       if (reloadAfterSave.current) {
         reloadAfterSave.current = false;
         await load();
@@ -221,18 +260,37 @@ export function useSplit(splitId: string) {
         dispatch({ type: 'ADD_PERSON', payload: person });
         return queue({ op: 'addPerson', ...person });
       },
-      removePerson: (personId) => {
+      renamePerson: (personId, name) => {
+        const trimmed = name.trim();
+        const person = current.current.people.find((p) => p.id === personId);
+        if (person == null || trimmed === '' || trimmed === person.name) return false;
+        if (current.current.people.some((p) => p.name === trimmed && p.id !== personId)) {
+          return refuse(`${trimmed} is already in this split`);
+        }
+        dispatch({ type: 'UPDATE_PERSON', payload: { id: personId, name: trimmed } });
+        return queue({ op: 'renamePerson', id: personId, name: trimmed });
+      },
+      linkPerson: (personId, memberEmail) => {
+        const people = current.current.people;
+        const person = people.find((p) => p.id === personId);
+        if (person == null) return false;
+        if (memberEmail != null) {
+          const other = people.find((p) => p.memberEmail === memberEmail && p.id !== personId);
+          if (other) return refuse(`That account is already ${other.name}`);
+          if (person.memberEmail != null && person.memberEmail !== memberEmail) {
+            return refuse(`${person.name} is already linked to another account`);
+          }
+        }
+        dispatch({ type: 'UPDATE_PERSON', payload: { id: personId, memberEmail } });
+        return queue({ op: 'linkPerson', id: personId, memberEmail });
+      },
+      removePerson: (personId, fromItems = false) => {
         const person = current.current.people.find((p) => p.id === personId);
         if (person == null) return false;
-        const uses = current.current.items.filter(
-          (i) => i.payer.id === personId || i.participants.some((p) => p.id === personId),
-        ).length;
-        if (uses > 0) {
-          const items = uses === 1 ? '1 item' : `${uses} items`;
-          return refuse(`${person.name} is on ${items}. Edit or remove those items first.`);
-        }
+        const blocker = removeBlocker(current.current, personId, fromItems);
+        if (blocker) return refuse(blocker);
         dispatch({ type: 'REMOVE_PERSON', payload: personId });
-        return queue({ op: 'removePerson', id: personId });
+        return queue({ op: 'removePerson', id: personId, fromItems });
       },
       clearPeople: () => {
         if (current.current.items.length > 0) {
@@ -241,19 +299,30 @@ export function useSplit(splitId: string) {
         dispatch({ type: 'CLEAR_PEOPLE', payload: null });
         return queue({ op: 'clearPeople' });
       },
-      addItem: (input) => {
-        const item = { id: newId(), ...input };
+      addItem: (input, id = newId()) => {
+        // The server stamps its own time; this one orders it until the next load
+        const item = { id, createdAt: Date.now(), ...input };
         dispatch({ type: 'ADD_ITEM', payload: item });
         return queue({ op: 'addItem', item });
       },
       updateItem: (itemId, input) => {
-        const item = { id: itemId, ...input };
+        const existing = current.current.items.find((i) => i.id === itemId);
+        const item = { id: itemId, createdAt: existing?.createdAt ?? Date.now(), ...input };
         dispatch({ type: 'UPDATE_ITEM', payload: item });
         return queue({ op: 'updateItem', item });
       },
       removeItem: (itemId) => {
         dispatch({ type: 'REMOVE_ITEM', payload: itemId });
         return queue({ op: 'removeItem', id: itemId });
+      },
+      setDistributor: (personId) => {
+        setMeta((m) => (m ? { ...m, distributorId: personId } : m));
+        return queue({ op: 'setDistributor', personId });
+      },
+      restoreItem: (item) => {
+        if (current.current.items.some((i) => i.id === item.id)) return false;
+        dispatch({ type: 'ADD_ITEM', payload: item });
+        return queue({ op: 'addItem', item });
       },
       clearItems: () => {
         dispatch({ type: 'CLEAR_ITEMS', payload: null });
@@ -263,5 +332,20 @@ export function useSplit(splitId: string) {
     [dispatch, queue],
   );
 
-  return { status, meta, refreshMeta, actions };
+  /** Tries a failed save again now, rather than waiting for the automatic retry */
+  const retry = useCallback(() => {
+    save();
+  }, [save]);
+
+  /** Saves anything queued now, resolving once the server has it (photos need their item saved) */
+  const whenSaved = useCallback(async () => {
+    const deadline = Date.now() + 20_000;
+    save();
+    while (pending.current.length > 0 || inFlight.current) {
+      if (Date.now() > deadline) throw new Error('Still saving. Try again in a moment.');
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }, [save]);
+
+  return { status, meta, setMeta, refreshMeta, actions, retry, whenSaved };
 }
