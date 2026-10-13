@@ -48,7 +48,7 @@ import SplitMembers from '../SplitMembers';
 import Fab from '../ui/Fab';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import StateCard from '../ui/StateCard';
-import UserAvatar from '../ui/UserAvatar';
+import PersonAvatar, { AvatarVersionsContext } from './PersonAvatar';
 import BalancePanel, { BalanceHero } from './BalancePanel';
 import ItemForm from './ItemForm';
 import { ItemCards, ItemTable } from './ItemViews';
@@ -94,9 +94,9 @@ function AvatarStack({ people, size, max }: { people: IPerson[]; size: number; m
       data-size={size >= 30 ? 'lg' : undefined}
     >
       {shown.map((p) => (
-        <UserAvatar
+        <PersonAvatar
           key={p.id}
-          name={p.name}
+          person={p}
           size={size}
         />
       ))}
@@ -197,6 +197,10 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     [state.people, state.items, distributorId],
   );
   const me = findMe(state.people, myEmail);
+  const avatarVersions = useMemo(
+    () => new Map((meta?.members ?? []).map((m) => [m.email, m.avatarVersion])),
+    [meta?.members],
+  );
   const filterPerson = state.people.find((p) => p.id === personFilter) ?? null;
   const shownItems = filterPerson
     ? state.items.filter(
@@ -633,113 +637,115 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   if (isDesktop) {
     return (
       <SplitActionsContext.Provider value={actions}>
-        <div className={classes.desktop}>
-          <div className={classes.main}>
-            <div className={classes.titleRow}>
-              <div className={classes.titleBlock}>
-                <div className={classes.title}>
-                  <Title order={2}>{meta?.name ?? ' '}</Title>
-                  {meta && (
-                    <span className="sf-tag">
-                      {currency} · {currencySymbol(currency)}
-                    </span>
-                  )}
+        <AvatarVersionsContext.Provider value={avatarVersions}>
+          <div className={classes.desktop}>
+            <div className={classes.main}>
+              <div className={classes.titleRow}>
+                <div className={classes.titleBlock}>
+                  <div className={classes.title}>
+                    <Title order={2}>{meta?.name ?? ' '}</Title>
+                    {meta && (
+                      <span className="sf-tag">
+                        {currency} · {currencySymbol(currency)}
+                      </span>
+                    )}
+                  </div>
+                  <SaveStatus
+                    status={status}
+                    count={state.items.length}
+                    onRetry={retry}
+                  />
                 </div>
-                <SaveStatus
-                  status={status}
-                  count={state.items.length}
-                  onRetry={retry}
-                />
-              </div>
-              <div className={classes.actions}>
-                <Button
-                  variant="default"
-                  leftSection={<ShareNetwork size={16} />}
-                  onClick={() => setDialog({ kind: 'members' })}
-                  disabled={!loaded || myEmail == null}
-                >
-                  Share
-                </Button>
-                {moreMenu(
-                  <ActionIcon
+                <div className={classes.actions}>
+                  <Button
                     variant="default"
-                    size={36}
-                    aria-label="More"
+                    leftSection={<ShareNetwork size={16} />}
+                    onClick={() => setDialog({ kind: 'members' })}
+                    disabled={!loaded || myEmail == null}
                   >
-                    <DotsThreeOutline size={16} />
-                  </ActionIcon>,
-                )}
-                <Button
-                  leftSection={<Plus size={16} />}
-                  onClick={() => setDialog({ kind: 'add' })}
-                  disabled={!loaded || state.people.length === 0}
-                >
-                  Add item
-                </Button>
-              </div>
-            </div>
-
-            {state.people.length > 0 && (
-              <div className={classes.peopleLine}>
-                <AvatarStack
-                  people={state.people}
-                  size={26}
-                  max={6}
-                />
-                <span className={classes.peopleNames}>{peopleNames}</span>
-                <button
-                  type="button"
-                  className={classes.linkButton}
-                  onClick={() => openPeople()}
-                >
-                  Edit people
-                </button>
-              </div>
-            )}
-
-            {banner}
-
-            {!noPeople && state.items.length > 0 && (
-              <div className={classes.toolbar}>
-                <Menu
-                  position="bottom-start"
-                  withinPortal
-                >
-                  <Menu.Target>
-                    <Button
-                      variant="subtle"
-                      color="gray"
-                      leftSection={<StackSimple size={16} />}
-                      rightSection={<CaretDown size={12} />}
+                    Share
+                  </Button>
+                  {moreMenu(
+                    <ActionIcon
+                      variant="default"
+                      size={36}
+                      aria-label="More"
                     >
-                      {GROUP_LABELS[prefs.groupBy]}
-                    </Button>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    {GROUP_ORDER.map((g) => (
-                      <Menu.Item
-                        key={g}
-                        onClick={() => setPref({ groupBy: g })}
-                        color={g === prefs.groupBy ? 'accent' : undefined}
-                      >
-                        {GROUP_LABELS[g]}
-                      </Menu.Item>
-                    ))}
-                  </Menu.Dropdown>
-                </Menu>
-                {filterChip}
-                <span className={classes.toolbarSpacer} />
-                {viewToggle}
+                      <DotsThreeOutline size={16} />
+                    </ActionIcon>,
+                  )}
+                  <Button
+                    leftSection={<Plus size={16} />}
+                    onClick={() => setDialog({ kind: 'add' })}
+                    disabled={!loaded || state.people.length === 0}
+                  >
+                    Add item
+                  </Button>
+                </div>
               </div>
-            )}
 
-            <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
-              {list}
-            </ErrorBoundary>
+              {state.people.length > 0 && (
+                <div className={classes.peopleLine}>
+                  <AvatarStack
+                    people={state.people}
+                    size={26}
+                    max={6}
+                  />
+                  <span className={classes.peopleNames}>{peopleNames}</span>
+                  <button
+                    type="button"
+                    className={classes.linkButton}
+                    onClick={() => openPeople()}
+                  >
+                    Edit people
+                  </button>
+                </div>
+              )}
+
+              {banner}
+
+              {!noPeople && state.items.length > 0 && (
+                <div className={classes.toolbar}>
+                  <Menu
+                    position="bottom-start"
+                    withinPortal
+                  >
+                    <Menu.Target>
+                      <Button
+                        variant="subtle"
+                        color="gray"
+                        leftSection={<StackSimple size={16} />}
+                        rightSection={<CaretDown size={12} />}
+                      >
+                        {GROUP_LABELS[prefs.groupBy]}
+                      </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      {GROUP_ORDER.map((g) => (
+                        <Menu.Item
+                          key={g}
+                          onClick={() => setPref({ groupBy: g })}
+                          color={g === prefs.groupBy ? 'accent' : undefined}
+                        >
+                          {GROUP_LABELS[g]}
+                        </Menu.Item>
+                      ))}
+                    </Menu.Dropdown>
+                  </Menu>
+                  {filterChip}
+                  <span className={classes.toolbarSpacer} />
+                  {viewToggle}
+                </div>
+              )}
+
+              <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
+                {list}
+              </ErrorBoundary>
+            </div>
+            <aside className={classes.aside}>{panel}</aside>
           </div>
-          <aside className={classes.aside}>{panel}</aside>
-        </div>
-        {dialogs}
+          {dialogs}
+        </AvatarVersionsContext.Provider>
       </SplitActionsContext.Provider>
     );
   }
@@ -748,126 +754,128 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
 
   return (
     <SplitActionsContext.Provider value={actions}>
-      <div className={classes.mobile}>
-        <div className={classes.topBar}>
-          <Button
-            variant="subtle"
-            color="gray"
-            leftSection={<CaretLeft size={16} />}
-            onClick={() => navigate('')}
-          >
-            Splits
-          </Button>
-          <div className="flex gap-1">
-            <ActionIcon
+      <AvatarVersionsContext.Provider value={avatarVersions}>
+        <div className={classes.mobile}>
+          <div className={classes.topBar}>
+            <Button
               variant="subtle"
               color="gray"
-              size={44}
-              aria-label="Share split"
-              onClick={() => setDialog({ kind: 'members' })}
-              disabled={!loaded || myEmail == null}
+              leftSection={<CaretLeft size={16} />}
+              onClick={() => navigate('')}
             >
-              <ShareNetwork size={20} />
-            </ActionIcon>
-            {moreMenu(
+              Splits
+            </Button>
+            <div className="flex gap-1">
               <ActionIcon
                 variant="subtle"
                 color="gray"
                 size={44}
-                aria-label="More"
+                aria-label="Share split"
+                onClick={() => setDialog({ kind: 'members' })}
+                disabled={!loaded || myEmail == null}
               >
-                <DotsThreeOutline size={20} />
-              </ActionIcon>,
-            )}
-          </div>
-        </div>
-
-        <div className={classes.mobileHero}>
-          <BalanceHero
-            summary={summary}
-            currency={currency}
-            me={me}
-            onLinkMe={linkMe}
-            size={40}
-            prefix={meta?.name}
-          />
-          <div className={classes.heroButtons}>
-            <Button
-              onClick={() => setDialog({ kind: 'settle' })}
-              disabled={noPeople || !loaded}
-            >
-              Settle up
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => setDialog({ kind: 'share' })}
-              disabled={noPeople || !loaded}
-            >
-              Share image
-            </Button>
-          </div>
-          <SaveStatus
-            status={status}
-            count={state.items.length}
-            onRetry={retry}
-          />
-        </div>
-
-        {state.people.length > 0 && (
-          <UnstyledButton
-            className={classes.peopleSummary}
-            onClick={() => openPeople()}
-          >
-            <AvatarStack
-              people={state.people}
-              size={30}
-              max={MAX_AVATARS}
-            />
-            <div className={classes.peopleSummaryText}>
-              <div className={classes.peopleSummaryTitle}>
-                {state.people.length} {state.people.length === 1 ? 'person' : 'people'}
-              </div>
-              <div className={classes.peopleSummarySub}>{oweLine(state.people, summary, me)}</div>
+                <ShareNetwork size={20} />
+              </ActionIcon>
+              {moreMenu(
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size={44}
+                  aria-label="More"
+                >
+                  <DotsThreeOutline size={20} />
+                </ActionIcon>,
+              )}
             </div>
-            <CaretRight size={16} />
-          </UnstyledButton>
-        )}
-
-        {banner}
-
-        {!noPeople && state.items.length > 0 && (
-          <div className={classes.toolbar}>
-            <UnstyledButton
-              className={classes.pill}
-              onClick={cycleGroup}
-            >
-              <StackSimple size={14} />
-              {GROUP_LABELS[prefs.groupBy]}
-            </UnstyledButton>
-            <UnstyledButton
-              className={classes.pill}
-              onClick={cycleMobileSort}
-            >
-              <SortDescending size={14} />
-              {shownSort.label}
-            </UnstyledButton>
-            <span className={classes.toolbarSpacer} />
-            {viewToggle}
           </div>
-        )}
-        {filterChip}
 
-        <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
-          {list}
-        </ErrorBoundary>
-      </div>
-      {!noPeople && loaded && (
-        <Fab
-          label="Add item"
-          onClick={() => setDialog({ kind: 'add' })}
-        />
-      )}
-      {dialogs}
+          <div className={classes.mobileHero}>
+            <BalanceHero
+              summary={summary}
+              currency={currency}
+              me={me}
+              onLinkMe={linkMe}
+              size={40}
+              prefix={meta?.name}
+            />
+            <div className={classes.heroButtons}>
+              <Button
+                onClick={() => setDialog({ kind: 'settle' })}
+                disabled={noPeople || !loaded}
+              >
+                Settle up
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => setDialog({ kind: 'share' })}
+                disabled={noPeople || !loaded}
+              >
+                Share image
+              </Button>
+            </div>
+            <SaveStatus
+              status={status}
+              count={state.items.length}
+              onRetry={retry}
+            />
+          </div>
+
+          {state.people.length > 0 && (
+            <UnstyledButton
+              className={classes.peopleSummary}
+              onClick={() => openPeople()}
+            >
+              <AvatarStack
+                people={state.people}
+                size={30}
+                max={MAX_AVATARS}
+              />
+              <div className={classes.peopleSummaryText}>
+                <div className={classes.peopleSummaryTitle}>
+                  {state.people.length} {state.people.length === 1 ? 'person' : 'people'}
+                </div>
+                <div className={classes.peopleSummarySub}>{oweLine(state.people, summary, me)}</div>
+              </div>
+              <CaretRight size={16} />
+            </UnstyledButton>
+          )}
+
+          {banner}
+
+          {!noPeople && state.items.length > 0 && (
+            <div className={classes.toolbar}>
+              <UnstyledButton
+                className={classes.pill}
+                onClick={cycleGroup}
+              >
+                <StackSimple size={14} />
+                {GROUP_LABELS[prefs.groupBy]}
+              </UnstyledButton>
+              <UnstyledButton
+                className={classes.pill}
+                onClick={cycleMobileSort}
+              >
+                <SortDescending size={14} />
+                {shownSort.label}
+              </UnstyledButton>
+              <span className={classes.toolbarSpacer} />
+              {viewToggle}
+            </div>
+          )}
+          {filterChip}
+
+          <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
+            {list}
+          </ErrorBoundary>
+        </div>
+        {!noPeople && loaded && (
+          <Fab
+            label="Add item"
+            onClick={() => setDialog({ kind: 'add' })}
+          />
+        )}
+        {dialogs}
+      </AvatarVersionsContext.Provider>
     </SplitActionsContext.Provider>
   );
 };

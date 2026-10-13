@@ -93,6 +93,8 @@ export function useSplit(splitId: string) {
   const { state, dispatch } = useContext(AppContext);
   const [status, setStatus] = useState<SyncStatus>('loading');
   const [meta, setMeta] = useState<SplitMeta | null>(null);
+  const metaRef = useRef(meta);
+  metaRef.current = meta;
 
   const cacheKey = `split:${splitId}`;
   // What's on screen, for checking changes before they're queued
@@ -264,6 +266,9 @@ export function useSplit(splitId: string) {
         const trimmed = name.trim();
         const person = current.current.people.find((p) => p.id === personId);
         if (person == null || trimmed === '' || trimmed === person.name) return false;
+        if (person.memberEmail != null) {
+          return refuse(`${person.name}'s name comes from their account`);
+        }
         if (current.current.people.some((p) => p.name === trimmed && p.id !== personId)) {
           return refuse(`${trimmed} is already in this split`);
         }
@@ -281,7 +286,14 @@ export function useSplit(splitId: string) {
             return refuse(`${person.name} is already linked to another account`);
           }
         }
-        dispatch({ type: 'UPDATE_PERSON', payload: { id: personId, memberEmail } });
+        // Linked people go by their account's display name, as the server shows them
+        const displayName = metaRef.current?.members.find(
+          (m) => m.email === memberEmail,
+        )?.displayName;
+        dispatch({
+          type: 'UPDATE_PERSON',
+          payload: { id: personId, memberEmail, ...(displayName ? { name: displayName } : {}) },
+        });
         return queue({ op: 'linkPerson', id: personId, memberEmail });
       },
       removePerson: (personId, fromItems = false) => {

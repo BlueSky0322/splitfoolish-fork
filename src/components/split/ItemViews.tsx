@@ -5,7 +5,7 @@ import { SplitSummary } from '../../split/derive';
 import { categoryIcon } from '../../split/categories';
 import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
 import { currencySymbol, formatMoney } from '../../utils/money';
-import UserAvatar from '../ui/UserAvatar';
+import PersonAvatar from './PersonAvatar';
 import classes from './Split.module.css';
 
 interface ItemViewProps {
@@ -294,8 +294,8 @@ export function ItemTable({
                   onClick={() => onEdit(item)}
                 >
                   <span className={classes.payerCell}>
-                    <UserAvatar
-                      name={item.payer.name}
+                    <PersonAvatar
+                      person={item.payer}
                       size={26}
                     />
                     <span className="min-w-0">
@@ -326,8 +326,8 @@ export function ItemTable({
                   <PhotoBadge count={photoCounts.get(item.id)} />
                 </span>
                 <span className={classes.payerCell}>
-                  <UserAvatar
-                    name={item.payer.name}
+                  <PersonAvatar
+                    person={item.payer}
                     size={22}
                   />
                   <span className={classes.cellEllipsis}>{item.payer.name}</span>

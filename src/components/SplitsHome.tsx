@@ -88,7 +88,8 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
           <div className="min-w-0 flex-1">
             <div className={classes.rowTitle}>{invite.splitName}</div>
             <div className={classes.rowMeta}>
-              From {invite.invitedBy} · expires {new Date(invite.expiresAt).toLocaleDateString()}
+              From {invite.invitedByName ?? invite.invitedBy} · expires{' '}
+              {new Date(invite.expiresAt).toLocaleDateString()}
             </div>
           </div>
           <ActionIcon
