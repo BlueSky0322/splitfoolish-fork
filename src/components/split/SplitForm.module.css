@@ -1,0 +1,18 @@
+.pictureRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.textAction {
+  font-size: 13px;
+  color: var(--sf-accent);
+}
+
+.textAction:hover {
+  text-decoration: underline;
+}
+
+.quiet {
+  color: var(--sf-text-muted);
+}

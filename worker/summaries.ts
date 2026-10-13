@@ -8,7 +8,8 @@ export async function listSplitSummaries(db: D1Database, email: string) {
     db
       .prepare(
         `SELECT s.id, s.name, s.currency, s.updated_at AS updatedAt, m.role,
-           (SELECT count(*) FROM split_members WHERE split_id = s.id) AS memberCount
+           (SELECT count(*) FROM split_members WHERE split_id = s.id) AS memberCount,
+           (SELECT version FROM split_pictures WHERE split_id = s.id) AS pictureVersion
          FROM splits s JOIN split_members m ON m.split_id = s.id
          WHERE m.email = ? ORDER BY s.updated_at DESC`,
       )
@@ -84,6 +85,7 @@ export async function listSplitSummaries(db: D1Database, email: string) {
       updatedAt: number;
       role: string;
       memberCount: number;
+      pictureVersion: number | null;
     }[]
   ).map((s) => {
     const splitItems = bySplit.get(s.id) ?? [];

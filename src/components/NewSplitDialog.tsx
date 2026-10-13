@@ -1,6 +1,4 @@
-import { Button, Select, TextInput } from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { ReactNode, createContext, useCallback, useContext, useState } from 'react';
 import { SplitDetail, SplitSummary, api } from '../api';
 import { notifications } from '@mantine/notifications';
 import { newId } from '../hooks/useSplit';
@@ -9,7 +7,8 @@ import { trackCreate } from '../pending-creates';
 import { removeCache, writeCache } from '../split-cache';
 import { navigate } from '../hooks/useRoute';
 import { useProfile } from '../profile/ProfileContext';
-import { listCurrencies } from '../utils/money';
+import { uploadSplitPicture } from '../split-pictures';
+import SplitForm, { SplitFormValues } from './split/SplitForm';
 import ResponsiveDialog from './ui/ResponsiveDialog';
 
 // The one "New split" form, opened from the sidebar, My splits and the phone's FAB
@@ -22,26 +21,19 @@ const DEFAULT_CURRENCY = 'MYR';
 
 function NewSplitForm({ onDone }: { onDone: () => void }) {
   const { profile, replace } = useProfile();
-  const currencies = useMemo(listCurrencies, []);
-  const form = useForm({
-    initialValues: { name: '', currency: profile?.settings.lastCurrency ?? DEFAULT_CURRENCY },
-    validate: {
-      name: (value) => (value.trim() ? null : 'Give the split a name'),
-      currency: (value) => (value ? null : 'Pick a currency'),
-    },
-  });
 
   // The split opens straight away; it's created on the server in the background
-  const submit = form.onSubmit(({ name, currency }) => {
+  const submit = ({ name, currency, picture }: SplitFormValues) => {
     if (profile == null) return;
     const id = newId();
-    const trimmed = name.trim();
+    const trimmed = name;
     const now = Date.now();
     const detail: SplitDetail = {
       id,
       name: trimmed,
       currency,
       distributorId: null,
+      pictureVersion: null,
       role: 'owner',
       members: [
         {
@@ -66,6 +58,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
       peopleCount: 0,
       totalCents: 0,
       myBalanceCents: null,
+      pictureVersion: null,
       updatedAt: now,
     };
 
@@ -82,46 +75,30 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
         removeCache(`split:${id}`);
         if (new URLSearchParams(window.location.search).get('s') === id) navigate('');
       });
+    // The picture shows from this device while it uploads after the split is created
+    if (picture instanceof File) {
+      uploadSplitPicture(id, picture).catch((err) =>
+        notifications.show({
+          color: 'red',
+          message: err instanceof Error ? err.message : 'Could not add the picture',
+        }),
+      );
+    }
     // Shown from this copy until the server answers
     writeCache(`split:${id}`, detail).finally(() => {
       onDone();
       navigate(`?s=${id}`);
     });
-  });
+  };
 
   return (
-    <form
+    <SplitForm
+      initial={{ name: '', currency: profile?.settings.lastCurrency ?? DEFAULT_CURRENCY }}
+      submitLabel="Create split"
+      currencyHelp="Defaults to your last-used currency. You can change it later in split settings."
       onSubmit={submit}
-      className="flex flex-col gap-[18px]"
-    >
-      <TextInput
-        label="Name"
-        placeholder="Langkawi trip"
-        data-autofocus
-        maxLength={80}
-        {...form.getInputProps('name')}
-      />
-      <Select
-        label="Currency"
-        searchable
-        allowDeselect={false}
-        data={currencies}
-        description="Defaults to your last-used currency. You can change it later in split settings."
-        inputWrapperOrder={['label', 'input', 'description', 'error']}
-        // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
-        comboboxProps={{ withinPortal: false }}
-        {...form.getInputProps('currency')}
-      />
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="default"
-          onClick={onDone}
-        >
-          Cancel
-        </Button>
-        <Button type="submit">Create split</Button>
-      </div>
-    </form>
+      onCancel={onDone}
+    />
   );
 }
 

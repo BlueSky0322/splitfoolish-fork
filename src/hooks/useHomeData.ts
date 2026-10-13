@@ -47,6 +47,9 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
+/** The same data without asking for a fresh copy, for screens that only read it */
+export const useHomeDataSnapshot = () => useSyncExternalStore(subscribe, () => state);
+
 export function useHomeData() {
   const data = useSyncExternalStore(subscribe, () => state);
 

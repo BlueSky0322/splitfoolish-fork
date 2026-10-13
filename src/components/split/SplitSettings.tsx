@@ -1,95 +1,69 @@
-import { Button, Select, TextInput } from '@mantine/core';
-import { useMemo, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { api } from '../../api';
 import { reloadHomeData } from '../../hooks/useHomeData';
-import { listCurrencies } from '../../utils/money';
+import { removeSplitPicture, uploadSplitPicture } from '../../split-pictures';
+import SplitForm, { SplitFormValues } from './SplitForm';
 
 interface SplitSettingsProps {
   splitId: string;
   name: string;
   currency: string;
+  pictureVersion: number | null;
   canEdit: boolean;
-  onSaved: (changes: { name: string; currency: string }) => void;
+  onSaved: (changes: { name?: string; currency?: string; pictureVersion?: number | null }) => void;
   onClose: () => void;
 }
 
-// Rename a split or change its currency. Amounts stay as they are: changing the
-// currency relabels them, it doesn't convert them.
+const fail = (err: unknown, fallback: string) =>
+  notifications.show({ color: 'red', message: err instanceof Error ? err.message : fallback });
+
+// Rename a split, change its currency or picture. Amounts stay as they are: changing
+// the currency relabels them, it doesn't convert them.
 const SplitSettings = ({
   splitId,
   name,
   currency,
+  pictureVersion,
   canEdit,
   onSaved,
   onClose,
 }: SplitSettingsProps) => {
-  const [draftName, setDraftName] = useState(name);
-  const [draftCurrency, setDraftCurrency] = useState(currency);
-  const [error, setError] = useState<string | null>(null);
-  const currencies = useMemo(listCurrencies, []);
-
-  // Shown straight away; put back if the server refuses it
-  const save = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = draftName.trim();
-    if (!trimmed) {
-      setError('Give the split a name');
-      return;
-    }
-    const before = { name, currency };
-    onSaved({ name: trimmed, currency: draftCurrency });
+  // Everything shows straight away; changes are put back if the server refuses them
+  const save = (values: SplitFormValues) => {
     onClose();
-    api
-      .updateSplit(splitId, { name: trimmed, currency: draftCurrency })
-      .then(() => reloadHomeData())
-      .catch((err) => {
-        onSaved(before);
-        notifications.show({
-          color: 'red',
-          message: err instanceof Error ? err.message : 'Could not save the split settings',
+    if (values.name !== name || values.currency !== currency) {
+      onSaved({ name: values.name, currency: values.currency });
+      api
+        .updateSplit(splitId, { name: values.name, currency: values.currency })
+        .then(() => reloadHomeData())
+        .catch((err) => {
+          onSaved({ name, currency });
+          fail(err, 'Could not save the split settings');
         });
+    }
+    if (values.picture instanceof File) {
+      uploadSplitPicture(splitId, values.picture, (v) => onSaved({ pictureVersion: v })).catch(
+        (err) => fail(err, 'Could not change the picture'),
+      );
+    } else if (values.picture === 'remove') {
+      onSaved({ pictureVersion: null });
+      removeSplitPicture(splitId).catch((err) => {
+        onSaved({ pictureVersion });
+        fail(err, 'Could not remove the picture');
       });
+    }
   };
 
   return (
-    <form
+    <SplitForm
+      splitId={splitId}
+      initial={{ name, currency, pictureVersion }}
+      canEdit={canEdit}
+      submitLabel="Save"
+      currencyHelp="Changing it relabels the amounts; it doesn't convert them."
       onSubmit={save}
-      className="flex flex-col gap-[18px]"
-    >
-      <TextInput
-        label="Name"
-        value={draftName}
-        onChange={(e) => setDraftName(e.target.value)}
-        maxLength={80}
-        disabled={!canEdit}
-        data-autofocus
-      />
-      <Select
-        label="Currency"
-        searchable
-        allowDeselect={false}
-        data={currencies}
-        value={draftCurrency}
-        onChange={(v) => v && setDraftCurrency(v)}
-        disabled={!canEdit}
-        description="Changing it relabels the amounts; it doesn't convert them."
-        inputWrapperOrder={['label', 'input', 'description', 'error']}
-        // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
-        comboboxProps={{ withinPortal: false }}
-      />
-      {!canEdit && <div className="sf-muted text-sm">Only the owner can change these.</div>}
-      {error && <div className="sf-negative text-sm">{error}</div>}
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="default"
-          onClick={onClose}
-        >
-          {canEdit ? 'Cancel' : 'Close'}
-        </Button>
-        {canEdit && <Button type="submit">Save</Button>}
-      </div>
-    </form>
+      onCancel={onClose}
+    />
   );
 };
 
