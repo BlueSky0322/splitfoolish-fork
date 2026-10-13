@@ -135,6 +135,9 @@ function calculateOwings(draft: WritableDraft<AppReducerState>): WritableDraft<I
   for (let i = 0; i < draft.items.length; i++) {
     const item = draft.items[i];
 
+    // Items saved before the form required these can't be split yet
+    if (item.payer == null || item.participants.length === 0) continue;
+
     const pricePerPerson = Big(item.cost).div(item.participants.length).toNumber();
 
     item.participants.forEach((p) => {
