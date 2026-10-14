@@ -9,9 +9,11 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Check, Minus, Plus } from '@phosphor-icons/react';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { COMMON_CURRENCIES, convertCents, convertParts, isValidRate } from '../../../shared/rates';
 import { SplitMode, itemShares } from '../../../shared/settle';
-import { Attachment, ItemInput } from '../../api';
+import { Attachment, ItemInput, api } from '../../api';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { CATEGORIES } from '../../split/categories';
 import { currencySymbol, formatMoney } from '../../utils/money';
@@ -48,6 +50,18 @@ const MODES: { value: SplitMode; label: string }[] = [
 
 const MAX_SHARES = 999;
 const toCents = (amount: number) => Math.round(amount * 100);
+const RATE_FRESH_MS = 5 * 60 * 1000;
+
+const SOURCE_LABELS = { wise: 'Wise', frankfurter: 'ECB', manual: 'your rate' } as const;
+
+/** How a rate reads: "1 JPY = 0.0297 MYR", with as many digits as small rates need */
+const describeRate = (rate: number, from: string, to: string) =>
+  `1 ${from} = ${rate.toLocaleString(undefined, { maximumSignificantDigits: 4 })} ${to}`;
+
+/** The split's currency first, then the common ones (and the item's, if it's another) */
+const currencyOptions = (splitCurrency: string, current: string) => [
+  ...new Set([splitCurrency, current, ...COMMON_CURRENCIES]),
+];
 
 /** The cost as typed: a number or a sum like "30*3"; null while it doesn't work out */
 function useEvaluated(expression: string) {
@@ -100,7 +114,17 @@ const ItemForm = ({
 }: ItemFormProps) => {
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [expression, setExpression] = useState(item ? String(item.cost) : '');
+  // Items in another currency are edited as they were typed, in that currency
+  const original = item?.original ?? null;
+  const [expression, setExpression] = useState(
+    original ? String(original.amount) : item ? String(item.cost) : '',
+  );
+  const [entryCurrency, setEntryCurrency] = useState(original?.currency ?? currency);
+  const foreign = entryCurrency !== currency;
+  const [useOwnRate, setUseOwnRate] = useState(original?.rateSource === 'manual');
+  const [ownRate, setOwnRate] = useState<number | ''>(
+    original?.rateSource === 'manual' ? original.rate ?? '' : '',
+  );
   const [name, setName] = useState(item?.name ?? '');
   const [payerId, setPayerId] = useState<string | null>(
     item?.payer.id ?? defaultPayerId ?? people[0]?.id ?? null,
@@ -113,7 +137,9 @@ const ItemForm = ({
     Object.fromEntries(people.map((p) => [p.id, item?.shares?.[p.id] ?? 1])),
   );
   const [exact, setExact] = useState<Record<string, number | ''>>(() =>
-    Object.fromEntries(people.map((p) => [p.id, item?.exact?.[p.id] ?? ''])),
+    Object.fromEntries(
+      people.map((p) => [p.id, original?.exact?.[p.id] ?? item?.exact?.[p.id] ?? '']),
+    ),
   );
   const [category, setCategory] = useState<string | null>(item?.category ?? null);
   const [tried, setTried] = useState(false);
@@ -123,8 +149,44 @@ const ItemForm = ({
   }, []);
 
   const cost = useEvaluated(expression);
-  const costCents = cost == null || cost < 0 ? null : toCents(cost);
+  /** The amount as typed, in the currency it was paid in */
+  const enteredCents = cost == null || cost < 0 ? null : toCents(cost);
   const chosen = people.filter((p) => included.has(p.id));
+
+  // The rate for the preview. The server converts again when saving, except that an
+  // edit leaving the amount alone keeps the rate the item was saved with.
+  const fetchedRate = useQuery({
+    queryKey: ['rate', entryCurrency, currency],
+    queryFn: () => api.getRate(entryCurrency, currency),
+    enabled: foreign && !useOwnRate,
+    staleTime: RATE_FRESH_MS,
+    retry: 1,
+  });
+  const keepsSavedRate =
+    original != null &&
+    original.currency === entryCurrency &&
+    enteredCents === toCents(original.amount) &&
+    original.rate != null &&
+    (useOwnRate
+      ? original.rateSource === 'manual' && ownRate === original.rate
+      : original.rateSource !== 'manual');
+  const rate = !foreign
+    ? 1
+    : useOwnRate
+      ? isValidRate(ownRate)
+        ? ownRate
+        : null
+      : keepsSavedRate
+        ? original.rate!
+        : fetchedRate.data?.rate ?? null;
+  const rateSource = useOwnRate
+    ? 'manual'
+    : keepsSavedRate
+      ? original.rateSource ?? 'wise'
+      : fetchedRate.data?.source ?? null;
+  /** The amount in the split's currency; unknown in another currency until there's a rate */
+  const costCents =
+    enteredCents == null ? null : rate == null ? null : convertCents(enteredCents, rate);
 
   // What each person's part comes to, shown next to them
   const preview = useMemo(() => {
@@ -145,10 +207,12 @@ const ItemForm = ({
     (sum, p) => sum + (exact[p.id] === '' ? 0 : toCents(Number(exact[p.id]))),
     0,
   );
-  const leftCents = (costCents ?? 0) - assignedCents;
+  // Exact amounts are typed in the currency it was paid in
+  const leftCents = (enteredCents ?? 0) - assignedCents;
 
   const problems = {
-    cost: costCents == null ? 'Enter an amount, like 90 or 30*3' : null,
+    cost: enteredCents == null ? 'Enter an amount, like 90 or 30*3' : null,
+    rate: foreign && useOwnRate && !isValidRate(ownRate) ? 'Enter the rate, like 0.03' : null,
     name: name.trim() ? null : 'Enter what it was for',
     payer: payerId ? null : 'Choose who paid',
     people: chosen.length > 0 ? null : 'Choose at least one person to split with',
@@ -167,12 +231,28 @@ const ItemForm = ({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setTried(true);
-    if (!valid || cost == null || payerId == null) return;
+    if (!valid || enteredCents == null || payerId == null) return;
     const ids = chosen.map((p) => p.id);
+    const typedExact = Object.fromEntries(
+      ids.map((id) => [id, exact[id] === '' ? 0 : Number(exact[id])]),
+    );
+    // Shown until the server's converted numbers arrive; without a rate yet (offline),
+    // the amounts as typed stand in
+    const shownCents = costCents ?? enteredCents;
+    const shownExact =
+      foreign && rate != null
+        ? Object.fromEntries(
+            convertParts(
+              ids.map((id) => [id, toCents(typedExact[id])]),
+              rate,
+              shownCents,
+            ),
+          )
+        : null;
     onSave(
       {
         name: name.trim(),
-        cost: toCents(cost) / 100,
+        cost: shownCents / 100,
         payerId,
         participantIds: ids,
         splitMode: mode,
@@ -180,9 +260,21 @@ const ItemForm = ({
           mode === 'shares' ? Object.fromEntries(ids.map((id) => [id, shares[id]])) : undefined,
         exact:
           mode === 'exact'
-            ? Object.fromEntries(ids.map((id) => [id, exact[id] === '' ? 0 : Number(exact[id])]))
+            ? shownExact
+              ? Object.fromEntries(ids.map((id) => [id, (shownExact[id] ?? 0) / 100]))
+              : typedExact
             : undefined,
         category,
+        original: foreign
+          ? {
+              currency: entryCurrency,
+              amount: enteredCents / 100,
+              exact: mode === 'exact' ? typedExact : undefined,
+              ...(useOwnRate && isValidRate(ownRate)
+                ? { rate: ownRate, rateSource: 'manual' as const }
+                : {}),
+            }
+          : null,
       },
       newPhotos,
     );
@@ -194,7 +286,17 @@ const ItemForm = ({
       className={classes.form}
     >
       <div className={classes.amount}>
-        <span className={classes.symbol}>{currencySymbol(currency)}</span>
+        <Select
+          aria-label="Currency"
+          className={classes.currency}
+          data={currencyOptions(currency, entryCurrency)}
+          value={entryCurrency}
+          onChange={(v) => v && setEntryCurrency(v)}
+          allowDeselect={false}
+          searchable
+          variant="unstyled"
+          comboboxProps={{ withinPortal: false, width: 120 }}
+        />
         <input
           className={classes.amountInput}
           value={expression}
@@ -210,6 +312,63 @@ const ItemForm = ({
         )}
       </div>
       {tried && problems.cost && <div className={classes.error}>{problems.cost}</div>}
+      {foreign && (
+        <div className={classes.conversion}>
+          {useOwnRate ? (
+            <>
+              <span>1 {entryCurrency} =</span>
+              <NumberInput
+                aria-label={`How much 1 ${entryCurrency} is in ${currency}`}
+                className={classes.rateInput}
+                value={ownRate}
+                onChange={(v) => setOwnRate(v === '' ? '' : Number(v))}
+                min={0}
+                decimalScale={6}
+                hideControls
+                size="xs"
+                placeholder="0.00"
+                error={tried && problems.rate}
+              />
+              <span>{currency}</span>
+              {costCents != null && (
+                <span className={classes.converted}>≈ {formatMoney(costCents, currency)}</span>
+              )}
+              <UnstyledButton
+                className={classes.rateToggle}
+                onClick={() => setUseOwnRate(false)}
+              >
+                Use the live rate
+              </UnstyledButton>
+            </>
+          ) : (
+            <>
+              <span className={classes.converted}>
+                {costCents != null
+                  ? `≈ ${formatMoney(costCents, currency)}`
+                  : fetchedRate.isError
+                    ? 'Converted when saved'
+                    : enteredCents == null
+                      ? ''
+                      : 'Getting the rate…'}
+              </span>
+              {rate != null && rateSource != null && (
+                <span>
+                  {describeRate(rate, entryCurrency, currency)} · {SOURCE_LABELS[rateSource]}
+                </span>
+              )}
+              <UnstyledButton
+                className={classes.rateToggle}
+                onClick={() => {
+                  setUseOwnRate(true);
+                  if (ownRate === '' && rate != null) setOwnRate(rate);
+                }}
+              >
+                Use my own rate
+              </UnstyledButton>
+            </>
+          )}
+        </div>
+      )}
 
       <TextInput
         aria-label="What it was for"
@@ -320,7 +479,7 @@ const ItemForm = ({
                     hideControls
                     placeholder="0.00"
                     leftSection={
-                      <span className="sf-muted text-xs">{currencySymbol(currency)}</span>
+                      <span className="sf-muted text-xs">{currencySymbol(entryCurrency)}</span>
                     }
                   />
                 ) : (
@@ -339,7 +498,7 @@ const ItemForm = ({
               className={leftCents === 0 ? classes.leftDone : leftCents < 0 ? 'sf-negative' : ''}
             >
               {leftCents < 0 ? '−' : ''}
-              {formatMoney(leftCents, currency)}
+              {formatMoney(leftCents, entryCurrency)}
               {leftCents === 0 && (
                 <Check
                   size={14}

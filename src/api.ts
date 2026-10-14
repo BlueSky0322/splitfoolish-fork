@@ -195,6 +195,12 @@ export const api = {
     request<{ id: string }>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
   declineInvite: (inviteId: string) =>
     request<{ ok: true }>('POST', `/api/invites/${encodeURIComponent(inviteId)}/decline`),
+  /** The rate to convert `from` into `to`, for previews; the server converts again on save */
+  getRate: (from: string, to: string) =>
+    request<{ rate: number; source: 'wise' | 'frankfurter'; fetchedAt: number }>(
+      'GET',
+      `/api/rates?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    ),
   /** Opening a share link: you're either in the split already, or now have an invite */
   joinSplit: (token: string) =>
     request<{ status: 'member'; id: string } | { status: 'invited'; id: string; inviteId: string }>(
