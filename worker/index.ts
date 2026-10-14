@@ -59,7 +59,7 @@ const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' },
   });
 
 const notFound = () => json({ error: 'Not found' }, 404);
@@ -67,6 +67,11 @@ const notFound = () => json({ error: 'Not found' }, 404);
 const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 
 async function readJson(req: Request): Promise<Record<string, unknown> | Response> {
+  // Turned away before reading when it says it's too big; checked again after, as the
+  // header can be missing or wrong
+  if (Number(req.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) {
+    return json({ error: 'Too large' }, 413);
+  }
   const text = await req.text();
   if (text.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
   try {
@@ -516,6 +521,20 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
   return notFound();
 }
 
+/**
+ * True for a change (not a read) started by another site. The sign-in cookie rides
+ * along with such requests, so without this a page elsewhere could, say, open a share
+ * link or post changes on someone's behalf. Browsers say where a request came from in
+ * Sec-Fetch-Site; older ones only in Origin.
+ */
+export function isCrossSiteWrite(req: Request, url: URL): boolean {
+  if (req.method === 'GET' || req.method === 'HEAD') return false;
+  const site = req.headers.get('Sec-Fetch-Site');
+  if (site != null) return site !== 'same-origin' && site !== 'none';
+  const origin = req.headers.get('Origin');
+  return origin != null && origin !== url.origin;
+}
+
 export default {
   async fetch(req, env): Promise<Response> {
     const url = new URL(req.url);
@@ -524,9 +543,18 @@ export default {
       return env.ASSETS.fetch(req);
     }
 
+    if (isCrossSiteWrite(req, url)) return json({ error: 'Not allowed from another site' }, 403);
+
     const email = await getUserEmail(req, env);
     if (email == null) return json({ error: 'Not signed in' }, 401);
 
-    return handleApi(req, env, url, email);
+    try {
+      return await handleApi(req, env, url, email);
+    } catch (err) {
+      // Answer in JSON like every other error, so the app can show it, rather than
+      // Cloudflare's error page
+      console.error(err);
+      return json({ error: 'Something went wrong. Try again in a moment.' }, 500);
+    }
   },
 } satisfies ExportedHandler<Env>;
