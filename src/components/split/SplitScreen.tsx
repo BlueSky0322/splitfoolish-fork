@@ -364,6 +364,17 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const loaded = meta != null;
   const noPeople = loaded && state.people.length === 0;
 
+  // A copy of a saved item (not edits still in the form), as of its date or today.
+  // Receipts stay with the original.
+  const duplicateItem = (item: IItem, keepDate: boolean) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, createdAt, ...input } = toApiItem(item);
+    close();
+    if (actions.addItem(input, newId(), keepDate ? createdAt : undefined)) {
+      notifications.show({ message: `Duplicated ${item.name}` });
+    }
+  };
+
   const peopleNames = state.people.map((p) => p.name).join(', ');
 
   const viewToggle = (
@@ -580,6 +591,11 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                     close();
                     deleteItem(dialog.item, true);
                   }
+                : undefined
+            }
+            onDuplicate={
+              dialog.kind === 'edit'
+                ? (keepDate) => duplicateItem(dialog.item, keepDate)
                 : undefined
             }
             onCancel={close}
