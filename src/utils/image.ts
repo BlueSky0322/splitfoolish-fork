@@ -123,3 +123,66 @@ export async function shrinkAvatar(file: Blob): Promise<Blob> {
   }
   throw new Error('That picture is too large');
 }
+
+interface DetectedCode {
+  boundingBox: DOMRectReadOnly;
+}
+type CodeDetector = { detect: (image: ImageBitmapSource) => Promise<DetectedCode[]> };
+type CodeDetectorClass = new (options: { formats: string[] }) => CodeDetector;
+
+/**
+ * Where the QR code is in a picture (a screenshot from a banking app, say), with the
+ * blank margin a scanner needs around it, or null when the browser can't look for
+ * codes (only some can) or finds none
+ */
+async function findQrCode(image: ImageBitmap | HTMLImageElement) {
+  const Detector = (window as unknown as { BarcodeDetector?: CodeDetectorClass }).BarcodeDetector;
+  if (Detector == null) return null;
+  try {
+    const [code] = await new Detector({ formats: ['qr_code'] }).detect(image);
+    if (code == null) return null;
+    const box = code.boundingBox;
+    const margin = Math.max(box.width, box.height) * 0.12;
+    const x = Math.max(0, box.x - margin);
+    const y = Math.max(0, box.y - margin);
+    return {
+      x,
+      y,
+      width: Math.min(image.width, box.x + box.width + margin) - x,
+      height: Math.min(image.height, box.y + box.height + margin) - y,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The longest side a QR code is kept at: sharp to scan, small to send */
+const QR_MAX_SIDE = 1000;
+const QR_MAX_BYTES = 480_000;
+
+/**
+ * A QR code ready to upload: cropped to the code when the browser can find it, shrunk,
+ * and saved as PNG (crisp edges) unless that's too large, then as a sharp JPEG.
+ * Also says whether it was cropped.
+ */
+export async function prepareQrCode(file: Blob): Promise<{ blob: Blob; cropped: boolean }> {
+  const image = await decode(file);
+  const found = await findQrCode(image);
+  const area = found ?? { x: 0, y: 0, width: image.width, height: image.height };
+  const scale = Math.min(1, QR_MAX_SIDE / Math.max(area.width, area.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(area.width * scale));
+  canvas.height = Math.max(1, Math.round(area.height * scale));
+  const ctx = canvas.getContext('2d');
+  if (ctx == null) throw new Error('Could not read that picture');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, area.x, area.y, area.width, area.height, 0, 0, canvas.width, canvas.height);
+  const png = await toBlob(canvas, 'image/png', 1);
+  if (png != null && png.size <= QR_MAX_BYTES) return { blob: png, cropped: found != null };
+  for (const quality of [0.92, 0.85, 0.75]) {
+    const jpeg = await toBlob(canvas, 'image/jpeg', quality);
+    if (jpeg != null && jpeg.size <= QR_MAX_BYTES) return { blob: jpeg, cropped: found != null };
+  }
+  throw new Error('That picture is too large');
+}

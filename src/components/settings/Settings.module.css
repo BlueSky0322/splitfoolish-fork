@@ -394,3 +394,77 @@
 .currencySelect {
   max-width: 360px;
 }
+
+/* A QR code method's picture (7a, 7b) */
+.qrEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 180px;
+  padding: 18px 14px;
+  border: 1px dashed var(--sf-border);
+  border-radius: 14px;
+  text-align: center;
+  justify-content: center;
+}
+
+.qrIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sf-accent) 16%, transparent);
+  color: var(--sf-accent);
+}
+
+.qrTitle {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.qrPicked {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+/* Light in both themes, as the code is shown to people paying */
+.qrTile {
+  position: relative;
+  flex-shrink: 0;
+  width: 132px;
+  height: 132px;
+  padding: 8px;
+  border-radius: 12px;
+  background: #f3f4f8;
+}
+
+.qrTile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.qrBusy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.6);
+}
+
+/* In the list, in place of a type icon (7c) */
+.qrThumb {
+  width: 36px;
+  height: 36px;
+  padding: 3px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #f3f4f8;
+  object-fit: contain;
+}

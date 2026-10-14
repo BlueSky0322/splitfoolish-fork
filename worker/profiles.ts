@@ -9,6 +9,7 @@ import {
   MAX_METHOD_DETAIL,
   MAX_METHOD_TYPE,
   type PaymentMethod,
+  QR_CODE,
   needsDetail,
 } from '../shared/payments';
 
@@ -79,9 +80,10 @@ export async function getProfile(db: D1Database, email: string) {
     db.prepare('SELECT version FROM avatars WHERE email = ?').bind(email),
     db
       .prepare(
-        `SELECT id, type, detail, bank, account_name AS accountName,
-           is_preferred AS isPreferred FROM payment_methods
-         WHERE email = ? ORDER BY position`,
+        `SELECT pm.id, pm.type, pm.detail, pm.bank, pm.account_name AS accountName,
+           q.version AS qrVersion, pm.is_preferred AS isPreferred
+         FROM payment_methods pm LEFT JOIN payment_qr_codes q ON q.method_id = pm.id
+         WHERE pm.email = ? ORDER BY pm.position`,
       )
       .bind(email),
   ]);
@@ -91,12 +93,13 @@ export async function getProfile(db: D1Database, email: string) {
     email,
     displayName: (profile.results[0]?.displayName as string | null | undefined) ?? null,
     avatarVersion: (avatar.results[0]?.version as number | undefined) ?? null,
-    paymentMethods: all.map(({ id, type, detail, bank, accountName }) => ({
+    paymentMethods: all.map(({ id, type, detail, bank, accountName, qrVersion }) => ({
       id,
       type,
       detail,
       bank,
       accountName,
+      qrVersion,
     })),
     preferredPaymentMethodId: all.find((m) => m.isPreferred)?.id ?? null,
     settings: saved
@@ -214,6 +217,21 @@ export async function putPaymentMethods(
     clean.push({ id, type, detail, bank: bank || null, accountName: accountName || null });
   }
 
+  // A QR code method needs its image, uploaded first
+  const qrIds = clean.filter((m) => m.type === QR_CODE).map((m) => m.id);
+  if (qrIds.length > 0) {
+    const found = await db
+      .prepare(
+        `SELECT count(*) AS n FROM payment_qr_codes
+         WHERE email = ? AND method_id IN (${qrIds.map(() => '?').join(', ')})`,
+      )
+      .bind(email, ...qrIds)
+      .first<{ n: number }>();
+    if ((found?.n ?? 0) !== qrIds.length) {
+      return json({ error: 'Add the QR code image first' }, 400);
+    }
+  }
+
   const preferred =
     typeof body.preferredId === 'string' && clean.some((m) => m.id === body.preferredId)
       ? body.preferredId
@@ -241,6 +259,13 @@ export async function putPaymentMethods(
             m.id === preferred ? 1 : 0,
           ),
       ),
+      // Codes whose method was removed, or uploaded and never saved
+      db
+        .prepare(
+          `DELETE FROM payment_qr_codes WHERE email = ?1
+           AND method_id NOT IN (SELECT id FROM payment_methods WHERE email = ?1 AND type = ?2)`,
+        )
+        .bind(email, QR_CODE),
     ]);
   } catch (err) {
     // An id already used by someone else's method
@@ -266,9 +291,11 @@ export const memberProfileStatements = (db: D1Database, splitId: string) => [
     .bind(splitId),
   db
     .prepare(
-      `SELECT pm.email, pm.id, pm.type, pm.detail, pm.bank, pm.account_name AS accountName
+      `SELECT pm.email, pm.id, pm.type, pm.detail, pm.bank, pm.account_name AS accountName,
+         q.version AS qrVersion
        FROM payment_methods pm
        JOIN split_members m ON m.email = pm.email AND m.split_id = ?
+       LEFT JOIN payment_qr_codes q ON q.method_id = pm.id
        ORDER BY pm.is_preferred DESC, pm.position`,
     )
     .bind(splitId),
@@ -279,7 +306,14 @@ export function assembleMembers([members, methods]: D1Result<Record<string, unkn
   for (const m of methods.results as unknown as (PaymentMethod & { email: string })[]) {
     byEmail.set(m.email, [
       ...(byEmail.get(m.email) ?? []),
-      { id: m.id, type: m.type, detail: m.detail, bank: m.bank, accountName: m.accountName },
+      {
+        id: m.id,
+        type: m.type,
+        detail: m.detail,
+        bank: m.bank,
+        accountName: m.accountName,
+        qrVersion: m.qrVersion,
+      },
     ]);
   }
   return (

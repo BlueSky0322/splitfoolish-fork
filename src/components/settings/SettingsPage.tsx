@@ -392,6 +392,8 @@ const SettingsPage = () => {
                   amountCents={10250}
                   currency={profile.settings.lastCurrency ?? 'MYR'}
                   methods={orderedMethods}
+                  email={profile.email}
+                  avatarVersion={profile.avatarVersion}
                 />
               </div>
             )}

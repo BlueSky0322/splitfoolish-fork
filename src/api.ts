@@ -182,6 +182,12 @@ export const api = {
   /** Replaces all payment methods and which one is preferred */
   setPaymentMethods: (methods: PaymentMethod[], preferredId: string | null) =>
     request<Profile>('PUT', '/api/me/payment-methods', { methods, preferredId }),
+  /** Uploads a QR code method's image; done before saving the method itself */
+  setPaymentQr: (methodId: string, image: Blob) =>
+    request<{ qrVersion: number }>('PUT', `/api/me/payment-qr/${methodId}`, undefined, {
+      body: image,
+      headers: { 'Content-Type': image.type || 'image/jpeg' },
+    }),
   setAvatar: (photo: Blob) =>
     request<{ avatarVersion: number }>('PUT', '/api/me/avatar', undefined, {
       body: photo,
@@ -257,6 +263,9 @@ export const photoUrl = (splitId: string, attachmentId: string) =>
 
 export const splitPictureUrl = (splitId: string, version: number) =>
   `${splitPath(splitId)}/picture?v=${version}`;
+
+export const paymentQrUrl = (methodId: string, version: number) =>
+  `/api/payment-qr/${methodId}?v=${version}`;
 
 export const avatarUrl = (email: string, version: number) =>
   `/api/avatars/${encodeURIComponent(email)}?v=${version}`;
