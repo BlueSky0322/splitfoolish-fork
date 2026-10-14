@@ -113,7 +113,9 @@ splits.get(SPLIT, async (c) => {
   const [roleRows, splitRows, memberRows, methodRows, inviteRows, attachmentRows, ...content] =
     await db.batch<Record<string, unknown>>([
       db
-        .prepare('SELECT role FROM split_members WHERE split_id = ? AND email = ?')
+        .prepare(
+          'SELECT role, share_token AS shareToken FROM split_members WHERE split_id = ? AND email = ?',
+        )
         .bind(id, c.var.email),
       db
         .prepare(
@@ -126,14 +128,18 @@ splits.get(SPLIT, async (c) => {
       ...memberProfileStatements(db, id),
       db
         .prepare(
-          `SELECT id, email, created_at AS createdAt, expires_at AS expiresAt
-           FROM split_invites WHERE split_id = ? AND expires_at > ? ORDER BY created_at`,
+          `SELECT i.id, i.email, i.invited_by AS invitedBy, p.display_name AS invitedByName,
+             i.needs_approval = 1 AS needsApproval, i.created_at AS createdAt,
+             i.expires_at AS expiresAt
+           FROM split_invites i LEFT JOIN profiles p ON p.email = i.invited_by
+           WHERE i.split_id = ? AND i.expires_at > ? ORDER BY i.created_at`,
         )
         .bind(id, Date.now()),
       listAttachmentsStatement(db, id),
       ...contentStatements(db, id),
     ]);
-  const role = (roleRows.results[0] as { role: Role } | undefined)?.role;
+  const { role, shareToken } =
+    (roleRows.results[0] as { role: Role; shareToken: string | null } | undefined) ?? {};
   const split = splitRows.results[0] as
     | {
         name: string;
@@ -163,8 +169,12 @@ splits.get(SPLIT, async (c) => {
     converting,
     role,
     members: assembleMembers([memberRows, methodRows]),
-    invites: role === 'owner' ? inviteRows.results : undefined,
-    inviteToken: role === 'owner' ? split.inviteToken : undefined,
+    invites:
+      role === 'owner'
+        ? inviteRows.results.map((i) => ({ ...i, needsApproval: Boolean(i.needsApproval) }))
+        : undefined,
+    // Everyone shares with their own link; a member's asks the owner to approve
+    inviteToken: role === 'owner' ? split.inviteToken : shareToken ?? undefined,
     attachments: attachmentRows.results,
     ...assembleContent(content),
   });
@@ -272,7 +282,7 @@ splits.delete(`${SPLIT}/attachments/:attachmentId${ID}`, member, (c) =>
   ),
 );
 
-// A new share link; invites picked up from the old one go with it
+// New share links, the owner's and every member's; invites picked up from the old ones go
 splits.post(
   `${SPLIT}/invite`,
   member,
@@ -283,6 +293,12 @@ splits.post(
     const inviteToken = newInviteToken();
     await db.batch([
       db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(inviteToken, id),
+      db
+        .prepare(
+          `UPDATE split_members SET share_token = lower(hex(randomblob(18)))
+           WHERE split_id = ? AND role = 'editor'`,
+        )
+        .bind(id),
       db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
     ]);
     return json({ inviteToken });
