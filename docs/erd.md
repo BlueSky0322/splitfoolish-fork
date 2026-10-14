@@ -37,13 +37,15 @@ erDiagram
         text split_id PK, FK
         text email PK "the account"
         text role "owner or editor"
+        text share_token UK "a member's own share link"
         int joined_at
     }
     split_invites {
         text id PK
         text split_id FK
         text email
-        text invited_by
+        text invited_by "whose link it came from"
+        int needs_approval "1: asked through a member's link"
         int created_at
         int expires_at
     }
@@ -164,6 +166,12 @@ erDiagram
   their old entry), otherwise a new `people` row is added. Declining or the owner
   withdrawing it deletes it; an expired one is ignored and replaced if you open the
   link again.
+- **Sharing as a member.** Members have their own link (`split_members.share_token`).
+  Opening it makes the same `split_invites` row with `needs_approval` set: it waits in
+  the owner's Invites, who approves (adding you as if you'd accepted) or declines.
+  You see it as waiting and can withdraw it. Opening the owner's link as well turns
+  it into a plain invite; a plain one never becomes a request again. Resetting the
+  link changes every member's link too.
 - **Removing someone.** When the owner takes an account out of a split, its
   `split_members` row goes, the person it was in the bill stays as a guest
   (`people.member_email` cleared), and `splits.invite_token` changes so the old link

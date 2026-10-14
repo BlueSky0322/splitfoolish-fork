@@ -9,6 +9,7 @@ import {
   Stack,
 } from '@phosphor-icons/react';
 import { ReactNode } from 'react';
+import { actionableInvites } from '../../api';
 import { useHomeData } from '../../hooks/useHomeData';
 import { Route, navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
@@ -188,7 +189,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
             label="Invites"
             active={route.view === 'home' && route.tab === 'invites'}
             onClick={() => navigate('?tab=invites')}
-            badge={invites?.length}
+            badge={actionableInvites(invites)}
           />
           <NavItem
             icon={<GearSix size={18} />}
