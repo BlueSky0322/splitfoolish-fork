@@ -362,6 +362,7 @@ const PeopleSheet = ({
                 onClick={() => setOpenId(p.id)}
               >
                 <PersonAvatar
+                  preview={false}
                   person={p}
                   size={34}
                   active={p.id === meId}

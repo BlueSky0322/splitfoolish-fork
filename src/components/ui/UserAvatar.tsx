@@ -1,6 +1,7 @@
-import { Avatar, Modal, UnstyledButton } from '@mantine/core';
+import { Avatar, UnstyledButton } from '@mantine/core';
 import { useState } from 'react';
 import { avatarUrl } from '../../api';
+import PhotoViewer from '../photos/PhotoViewer';
 import classes from './UserAvatar.module.css';
 
 interface UserAvatarProps {
@@ -11,7 +12,10 @@ interface UserAvatarProps {
   avatarVersion?: number | null;
   size?: number;
   active?: boolean;
-  /** Clicking a profile picture shows it full size */
+  /**
+   * Tapping a profile picture shows it full size. Off where the avatar sits inside
+   * something that already does something when tapped, such as a row or a chip.
+   */
   preview?: boolean;
   /** A picture to show instead, such as one still uploading */
   previewSrc?: string | null;
@@ -24,7 +28,7 @@ const UserAvatar = ({
   avatarVersion,
   size = 26,
   active,
-  preview,
+  preview = true,
   previewSrc,
 }: UserAvatarProps) => {
   const [open, setOpen] = useState(false);
@@ -63,20 +67,11 @@ const UserAvatar = ({
       >
         {avatar}
       </UnstyledButton>
-      <Modal
-        opened={open}
-        onClose={() => setOpen(false)}
-        title={name}
-        centered
-        size="auto"
-        classNames={{ body: classes.previewBody }}
-      >
-        <img
-          src={src}
-          alt={`${name}'s profile picture`}
-          className={classes.previewImage}
-        />
-      </Modal>
+      <PhotoViewer
+        photos={[{ key: src, src }]}
+        index={open ? 0 : null}
+        onIndexChange={(ix) => setOpen(ix != null)}
+      />
     </>
   );
 };

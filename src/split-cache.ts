@@ -1,4 +1,5 @@
 import { clear, del, get, set } from 'idb-keyval';
+import { LAST_PAGE_KEY } from './hooks/useRoute';
 
 // Last-seen copies of API responses, kept in IndexedDB so pages show instantly on
 // reload while fresh data loads. Entries are tagged with the signed-in email, and
@@ -55,7 +56,19 @@ export async function removeCache(key: string): Promise<void> {
 /** Call once the signed-in email is known; someone else's cache is dropped. */
 export async function setCacheUser(email: string): Promise<void> {
   if (lastEmail() !== email) {
+    // The page open now is this person's own: keep it when nobody was signed in before
+    let page: string | null = null;
+    try {
+      page = lastEmail() == null ? localStorage.getItem(LAST_PAGE_KEY) : null;
+    } catch {
+      // ignore
+    }
     await clearCache();
+    try {
+      if (page != null) localStorage.setItem(LAST_PAGE_KEY, page);
+    } catch {
+      // ignore
+    }
     try {
       localStorage.setItem(LAST_EMAIL_KEY, email);
     } catch {
@@ -84,6 +97,8 @@ export function assumeLastUser(): string | null {
 export async function clearCache(): Promise<void> {
   try {
     localStorage.removeItem(LAST_EMAIL_KEY);
+    // The page they had open is theirs too
+    localStorage.removeItem(LAST_PAGE_KEY);
     await clear();
     // Pictures and photos the service worker kept, so the next person can't see them
     if ('caches' in window) await caches.delete('splitfoolish-images-v1');

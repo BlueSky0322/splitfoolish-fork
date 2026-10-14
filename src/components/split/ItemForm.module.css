@@ -210,4 +210,11 @@
   margin: 0 -4px -4px;
   padding: 12px 4px 4px;
   background: var(--sf-surface);
+  align-items: center;
+}
+
+.confirm {
+  flex: 1;
+  font-size: 14px;
+  color: var(--sf-negative);
 }

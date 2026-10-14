@@ -114,6 +114,7 @@ function AvatarStack({ people, size, max }: { people: IPerson[]; size: number; m
     >
       {shown.map((p) => (
         <PersonAvatar
+          preview={false}
           key={p.id}
           person={p}
           size={size}
