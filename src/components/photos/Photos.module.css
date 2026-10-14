@@ -1,7 +1,17 @@
 .strip {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  /* Room for the shadows, which overflow would otherwise clip */
+  margin: -4px;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+
+.strip > * {
+  scroll-snap-align: start;
 }
 
 .thumb {
