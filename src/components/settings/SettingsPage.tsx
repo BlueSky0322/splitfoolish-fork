@@ -22,6 +22,7 @@ import UserAvatar from '../ui/UserAvatar';
 import PayHint from './PayHint';
 import PaymentMethods from './PaymentMethods';
 import classes from './Settings.module.css';
+import { InstallField } from '../ui/InstallApp';
 
 const MAX_DISPLAY_NAME = 32;
 const SAVED_FOR_MS = 2000;
@@ -331,6 +332,10 @@ const SettingsPage = () => {
           <div className={classes.fieldLabel}>Getting paid</div>
           {payments}
         </div>
+        <div className={classes.field}>
+          <div className={classes.fieldLabel}>App</div>
+          <InstallField />
+        </div>
 
         <Button
           variant="default"
@@ -446,6 +451,11 @@ const SettingsPage = () => {
                 <span className="sf-positive sf-tabular">+140.10</span>
               </div>
             </div>
+          </section>
+
+          <section className={classes.section}>
+            <h2 className="sf-label">App</h2>
+            <InstallField />
           </section>
 
           <section className={classes.section}>
