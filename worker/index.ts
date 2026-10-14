@@ -35,6 +35,14 @@ api.use('*', async (c, next) => {
   await next();
 });
 
+// Each account gets a limited number of changes a minute; reading is never limited
+api.use('*', async (c, next) => {
+  if (c.req.method === 'GET' || c.req.method === 'HEAD') return next();
+  const { success } = await c.env.API_LIMITER.limit({ key: c.var.email });
+  if (!success) return json({ error: 'Too many changes, slow down a moment.' }, 429);
+  await next();
+});
+
 api.route('/', me);
 api.route('/', splits);
 api.route('/', invites);
