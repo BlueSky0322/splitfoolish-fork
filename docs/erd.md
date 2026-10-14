@@ -139,13 +139,18 @@ erDiagram
 - **Deleting cleans up.** Deleting a split removes its members, invites, people, items,
   picture, photos and photo bytes. Deleting an item removes its receipts. Removing a person who
   was the settle-up route sets the route back to none.
-- **Joining.** Joining with the share link or an invite also puts the person in the
-  bill: a guest with their name is linked to their account (so someone who was removed
-  and comes back gets their old entry), otherwise a new `people` row is added.
+- **Joining.** Opening the share link doesn't join you: it gives you a `split_invites`
+  row (one per person per split, so opening it again changes nothing) that waits in
+  Invites. Accepting deletes it, adds you to `split_members` and puts you in the bill: a
+  guest with your name becomes you (so someone who was removed and comes back gets
+  their old entry), otherwise a new `people` row is added. Declining or the owner
+  withdrawing it deletes it; an expired one is ignored and replaced if you open the
+  link again.
 - **Removing someone.** When the owner takes an account out of a split, its
-  `split_members` row and any invite go, the person it was in the bill stays as a guest
+  `split_members` row goes, the person it was in the bill stays as a guest
   (`people.member_email` cleared), and `splits.invite_token` changes so the old link
-  can't bring them back. Only the owner changes `people`; anyone in the split can
+  can't bring them back. Changing the link, by reset or removal, also withdraws the
+  invites picked up from it. Only the owner changes `people`; anyone in the split can
   change `items`.
 - **Lazy profiles.** A profile row is made the first time someone saves a setting,
   name, picture or payment method; until then the defaults apply. Emails in

@@ -41,7 +41,6 @@ const ID = '([A-Za-z0-9_-]{8,64})';
 const SPLITS_PATH = /^\/api\/splits$/;
 const SPLIT_PATH = new RegExp(`^/api/splits/${ID}$`);
 const INVITE_LINK_PATH = new RegExp(`^/api/splits/${ID}/invite$`);
-const SPLIT_INVITES_PATH = new RegExp(`^/api/splits/${ID}/invites$`);
 const SPLIT_INVITE_PATH = new RegExp(`^/api/splits/${ID}/invites/${ID}$`);
 const MY_INVITES_PATH = /^\/api\/invites$/;
 const MY_INVITE_ACTION_PATH = new RegExp(`^/api/invites/${ID}/(accept|decline)$`);
@@ -56,7 +55,6 @@ const JOIN_PATH = new RegExp(`^/api/join/${ID}$`);
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_NAME_LENGTH = 80;
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -382,40 +380,13 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     if (role == null) return notFound();
     if (role !== 'owner') return json({ error: 'Only the owner can reset the invite link' }, 403);
 
+    // Invites picked up from the old link go with it
     const inviteToken = newInviteToken();
-    await db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(inviteToken, id).run();
+    await db.batch([
+      db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(inviteToken, id),
+      db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
+    ]);
     return json({ inviteToken });
-  }
-
-  if ((match = pathname.match(SPLIT_INVITES_PATH))) {
-    if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-    const id = match[1];
-    const role = await getRole(db, id, email);
-    if (role == null) return notFound();
-    if (role !== 'owner') return json({ error: 'Only the owner can invite people' }, 403);
-
-    const body = await readJson(req);
-    if (body instanceof Response) return body;
-    const invitee = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-    if (!EMAIL_PATTERN.test(invitee)) return json({ error: 'Enter a valid email address' }, 400);
-    if ((await getRole(db, id, invitee)) != null) {
-      return json({ error: `${invitee} already has access` }, 409);
-    }
-
-    // Inviting the same email again replaces the old invite and restarts its expiry
-    const now = Date.now();
-    const invite = { id: newId(), email: invitee, createdAt: now, expiresAt: now + INVITE_TTL_MS };
-    await db
-      .prepare(
-        `INSERT INTO split_invites (id, split_id, email, invited_by, created_at, expires_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT (split_id, email) DO UPDATE SET
-           id = excluded.id, invited_by = excluded.invited_by,
-           created_at = excluded.created_at, expires_at = excluded.expires_at`,
-      )
-      .bind(invite.id, id, invitee, email, invite.createdAt, invite.expiresAt)
-      .run();
-    return json(invite, 201);
   }
 
   if ((match = pathname.match(SPLIT_INVITE_PATH))) {
@@ -440,7 +411,9 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
            p.display_name AS invitedByName, i.created_at AS createdAt, i.expires_at AS expiresAt
          FROM split_invites i JOIN splits s ON s.id = i.split_id
          LEFT JOIN profiles p ON p.email = i.invited_by
-         WHERE i.email = ? AND i.expires_at > ?
+         WHERE i.email = ?1 AND i.expires_at > ?2
+           AND NOT EXISTS (SELECT 1 FROM split_members m
+                           WHERE m.split_id = i.split_id AND m.email = ?1)
          ORDER BY i.created_at DESC`,
       )
       .bind(email, Date.now())
@@ -458,9 +431,15 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
       )
       .bind(inviteId, email, Date.now())
       .first<{ splitId: string }>();
-    if (invite == null) return json({ error: 'This invite has expired or was withdrawn' }, 404);
+    if (invite == null) {
+      return json(
+        { error: 'This invite has expired or was withdrawn. Ask for the link again.' },
+        404,
+      );
+    }
 
     if (action === 'accept') {
+      // Joining also clears the invite, so accepting twice lands in the split either way
       await addEditor(db, invite.splitId, email);
       return json({ id: invite.splitId });
     }
@@ -495,16 +474,43 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
     return json({ ok: true });
   }
 
+  // Opening the share link gives you an invite to accept or decline; it doesn't join you
   if ((match = pathname.match(JOIN_PATH))) {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const split = await db
-      .prepare('SELECT id FROM splits WHERE invite_token = ?')
+      .prepare(
+        `SELECT s.id, m.email AS owner FROM splits s
+         JOIN split_members m ON m.split_id = s.id AND m.role = 'owner'
+         WHERE s.invite_token = ?`,
+      )
       .bind(match[1])
-      .first<{ id: string }>();
+      .first<{ id: string; owner: string }>();
     if (split == null) return json({ error: 'This invite link is no longer valid' }, 404);
 
-    await addEditor(db, split.id, email);
-    return json({ id: split.id });
+    // Already in it (the owner included): nothing to accept
+    if ((await getRole(db, split.id, email)) != null) {
+      return json({ status: 'member', id: split.id });
+    }
+
+    // Opening the link again keeps the same invite; an expired one starts over
+    const now = Date.now();
+    await db
+      .prepare(
+        `INSERT INTO split_invites (id, split_id, email, invited_by, created_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT (split_id, email) DO UPDATE SET
+           id = CASE WHEN expires_at > ?5 THEN id ELSE excluded.id END,
+           invited_by = excluded.invited_by,
+           created_at = CASE WHEN expires_at > ?5 THEN created_at ELSE excluded.created_at END,
+           expires_at = CASE WHEN expires_at > ?5 THEN expires_at ELSE excluded.expires_at END`,
+      )
+      .bind(newId(), split.id, email, split.owner, now, now + INVITE_TTL_MS)
+      .run();
+    const invite = await db
+      .prepare('SELECT id FROM split_invites WHERE split_id = ? AND email = ?')
+      .bind(split.id, email)
+      .first<{ id: string }>();
+    return json({ status: 'invited', id: split.id, inviteId: invite!.id });
   }
 
   return notFound();

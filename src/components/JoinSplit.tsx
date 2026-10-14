@@ -13,10 +13,16 @@ const JoinSplit = ({ token }: { token: string }) => {
     let cancelled = false;
     api
       .joinSplit(token)
-      .then(({ id }) => {
+      .then((result) => {
         if (cancelled) return;
         reloadHomeData();
-        navigate(`?s=${id}`, { replace: true });
+        // Already in it: straight in. Otherwise the invite waits in Invites to be accepted
+        navigate(
+          result.status === 'member'
+            ? `?s=${result.id}`
+            : `?tab=invites&invite=${encodeURIComponent(result.inviteId)}`,
+          { replace: true },
+        );
       })
       .catch(() => !cancelled && setFailed(true));
     return () => {
@@ -45,7 +51,7 @@ const JoinSplit = ({ token }: { token: string }) => {
           className="animate-spin"
         />
       }
-      title="Joining the split…"
+      title="Opening the invite…"
       action={
         <Button
           variant="default"

@@ -164,13 +164,14 @@ export const newInviteToken = () =>
     .replace(/=+$/, '');
 
 /**
- * Takes an account out of a split: their membership and any invite go, the person they
- * were in the bill stays as a guest, and the share link changes so the old one can't
- * bring them back
+ * Takes an account out of a split: their membership goes, the person they were in the
+ * bill stays as a guest, and the share link changes (withdrawing invites picked up from
+ * it) so the old one can't bring them back
  */
 export const removeAccessStatements = (db: D1Database, splitId: string, email: string) => [
   db.prepare('DELETE FROM split_members WHERE split_id = ? AND email = ?').bind(splitId, email),
-  db.prepare('DELETE FROM split_invites WHERE split_id = ? AND email = ?').bind(splitId, email),
+  // The link changes below, so invites picked up from the old one go too
+  db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(splitId),
   db
     .prepare('UPDATE people SET member_email = NULL WHERE split_id = ? AND member_email = ?')
     .bind(splitId, email),

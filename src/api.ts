@@ -204,8 +204,12 @@ export const api = {
     request<{ id: string }>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
   declineInvite: (inviteId: string) =>
     request<{ ok: true }>('POST', `/api/invites/${encodeURIComponent(inviteId)}/decline`),
+  /** Opening a share link: you're either in the split already, or now have an invite */
   joinSplit: (token: string) =>
-    request<{ id: string }>('POST', `/api/join/${encodeURIComponent(token)}`),
+    request<{ status: 'member'; id: string } | { status: 'invited'; id: string; inviteId: string }>(
+      'POST',
+      `/api/join/${encodeURIComponent(token)}`,
+    ),
 };
 
 export const photoUrl = (splitId: string, attachmentId: string) =>

@@ -175,3 +175,9 @@
 .inviteRow .rowMeta {
   white-space: normal;
 }
+
+/* The invite from the share link you just opened */
+.inviteRow[data-highlight] {
+  background: color-mix(in srgb, var(--sf-accent) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--sf-accent);
+}
