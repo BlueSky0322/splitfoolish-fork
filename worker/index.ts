@@ -85,9 +85,22 @@ const readName = (body: Record<string, unknown>) => {
   return name.length > 0 && name.length <= MAX_NAME_LENGTH ? name : null;
 };
 
-// Adds an editor (no-op if already a member) and clears any pending invite for them
-const addEditor = (db: D1Database, splitId: string, email: string) =>
-  db.batch([
+/**
+ * Adds an editor (no-op if already a member), clears any pending invite for them, and
+ * puts them in the bill: a guest with their name becomes them, otherwise they're added
+ */
+async function addEditor(db: D1Database, splitId: string, email: string) {
+  const [profileRows, peopleRows] = await db.batch<Record<string, unknown>>([
+    db.prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?').bind(email),
+    db
+      .prepare('SELECT id, name, member_email AS memberEmail FROM people WHERE split_id = ?')
+      .bind(splitId),
+  ]);
+  const people = peopleRows.results as { id: string; name: string; memberEmail: string | null }[];
+  const displayName = (profileRows.results[0] as { displayName: string | null } | undefined)
+    ?.displayName;
+
+  const statements = [
     db
       .prepare(
         `INSERT OR IGNORE INTO split_members (split_id, email, role, joined_at)
@@ -95,7 +108,37 @@ const addEditor = (db: D1Database, splitId: string, email: string) =>
       )
       .bind(splitId, email, Date.now()),
     db.prepare('DELETE FROM split_invites WHERE split_id = ? AND email = ?').bind(splitId, email),
-  ]);
+  ];
+
+  if (!people.some((p) => p.memberEmail === email)) {
+    const name = displayName?.trim() || email.split('@')[0];
+    const guest = people.find(
+      (p) => p.memberEmail == null && p.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (guest) {
+      statements.push(
+        db.prepare('UPDATE people SET member_email = ? WHERE id = ?').bind(email, guest.id),
+      );
+    } else {
+      // Names are unique in a split; their account name is shown either way
+      const taken = new Set(people.map((p) => p.name));
+      const unique = [name, email].find((n) => !taken.has(n)) ?? `${email} ${newId()}`;
+      statements.push(
+        db
+          .prepare(
+            `INSERT OR IGNORE INTO people (id, split_id, name, member_email, position)
+             VALUES (?1, ?2, ?3, ?4,
+               (SELECT coalesce(max(position), -1) + 1 FROM people WHERE split_id = ?2))`,
+          )
+          .bind(newId(), splitId, unique, email),
+      );
+    }
+    statements.push(
+      db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), splitId),
+    );
+  }
+  await db.batch(statements);
+}
 
 async function getRole(db: D1Database, splitId: string, email: string): Promise<Role | null> {
   const row = await db

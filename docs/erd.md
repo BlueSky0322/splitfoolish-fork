@@ -139,6 +139,9 @@ erDiagram
 - **Deleting cleans up.** Deleting a split removes its members, invites, people, items,
   picture, photos and photo bytes. Deleting an item removes its receipts. Removing a person who
   was the settle-up route sets the route back to none.
+- **Joining.** Joining with the share link or an invite also puts the person in the
+  bill: a guest with their name is linked to their account (so someone who was removed
+  and comes back gets their old entry), otherwise a new `people` row is added.
 - **Removing someone.** When the owner takes an account out of a split, its
   `split_members` row and any invite go, the person it was in the bill stays as a guest
   (`people.member_email` cleared), and `splits.invite_token` changes so the old link
