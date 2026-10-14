@@ -1,7 +1,8 @@
 import { ActionIcon, Button, CopyButton, Tooltip, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ArrowClockwise, Check, Copy, LinkSimple, ShareNetwork } from '@phosphor-icons/react';
-import { api, inviteUrl } from '../api';
+import { SplitInvite, api, inviteUrl } from '../api';
+import { reloadHomeData } from '../hooks/useHomeData';
 import { useIsMobile } from '../hooks/useBreakpoints';
 import { SplitMeta } from '../hooks/useSplit';
 import { nameFor } from '../profile/ProfileContext';
@@ -47,7 +48,10 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
   const isMobile = useIsMobile();
   const isOwner = meta.role === 'owner';
   const link = meta.inviteToken ? inviteUrl(meta.inviteToken) : null;
-  const invites = meta.invites ?? [];
+  const invites = (meta.invites ?? []).filter((i) => !i.needsApproval);
+  const requests = (meta.invites ?? []).filter((i) => i.needsApproval);
+  const owner = meta.members.find((m) => m.role === 'owner');
+  const ownerName = owner ? nameFor(owner.email, owner.displayName) : 'the owner';
 
   // Shown straight away; reloaded from the server if it says no
   const optimistic = (show: (m: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => {
@@ -72,11 +76,28 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
     notifications.show({ message: 'Link copied' });
   };
 
-  const helper = <p className={classes.help}>Anyone with the link can ask to join and edit.</p>;
+  const helper = (
+    <p className={classes.help}>
+      {isOwner
+        ? 'Anyone with the link can ask to join and edit.'
+        : `Your own link. People who open it ask ${ownerName} to let them in.`}
+    </p>
+  );
+
+  const answerRequest = (invite: SplitInvite, approve: boolean) =>
+    optimistic(
+      (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== invite.id) }),
+      async () => {
+        await (approve ? api.acceptInvite(invite.id) : api.declineInvite(invite.id));
+        void reloadHomeData();
+        // Approving adds them to the members list
+        if (approve) await onChange();
+      },
+    );
 
   return (
     <div className={classes.panel}>
-      {isOwner && link && !isMobile && (
+      {link && !isMobile && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <div className={classes.linkBox}>
@@ -106,23 +127,25 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
                 )}
               </CopyButton>
             </div>
-            <Tooltip label="Reset link">
-              <ActionIcon
-                variant="subtle"
-                size={36}
-                className={classes.reset}
-                aria-label="Reset link"
-                onClick={onReset}
-              >
-                <ArrowClockwise size={18} />
-              </ActionIcon>
-            </Tooltip>
+            {isOwner && (
+              <Tooltip label="Reset link">
+                <ActionIcon
+                  variant="subtle"
+                  size={36}
+                  className={classes.reset}
+                  aria-label="Reset link"
+                  onClick={onReset}
+                >
+                  <ArrowClockwise size={18} />
+                </ActionIcon>
+              </Tooltip>
+            )}
           </div>
           {helper}
         </div>
       )}
 
-      {isOwner && link && isMobile && (
+      {link && isMobile && (
         <div className="flex flex-col gap-2">
           <Button
             className={classes.tall}
@@ -147,14 +170,16 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
                 </Button>
               )}
             </CopyButton>
-            <Button
-              variant="default"
-              className={`${classes.half} flex-1`}
-              leftSection={<ArrowClockwise size={16} />}
-              onClick={onReset}
-            >
-              Reset
-            </Button>
+            {isOwner && (
+              <Button
+                variant="default"
+                className={`${classes.half} flex-1`}
+                leftSection={<ArrowClockwise size={16} />}
+                onClick={onReset}
+              >
+                Reset
+              </Button>
+            )}
           </div>
           {helper}
         </div>
@@ -202,6 +227,45 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
           ))}
         </div>
       </div>
+
+      {isOwner && requests.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <h6 className="sf-label">Asking to join · {requests.length}</h6>
+          <div className={classes.rows}>
+            {requests.map((i) => (
+              <div
+                key={i.id}
+                className={classes.row}
+              >
+                <UserAvatar
+                  name={nameFor(i.email)}
+                  size={isMobile ? 36 : 32}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className={classes.name}>{i.email}</div>
+                  <div className={classes.email}>
+                    Shared by {i.invitedByName ?? i.invitedBy} · expires {shortDate(i.expiresAt)}
+                  </div>
+                </div>
+                <UnstyledButton
+                  className={classes.textAction}
+                  aria-label={`Decline ${i.email}`}
+                  onClick={() => answerRequest(i, false)}
+                >
+                  Decline
+                </UnstyledButton>
+                <Button
+                  size="compact-sm"
+                  aria-label={`Approve ${i.email}`}
+                  onClick={() => answerRequest(i, true)}
+                >
+                  Approve
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isOwner && invites.length > 0 && (
         <div className="flex flex-col gap-1">

@@ -57,7 +57,11 @@ describe('who can see a split', () => {
     expect(
       (await api.call(editor, 'DELETE', `/api/splits/${id}/members/${owner}`)).status,
     ).not.toBe(200);
-    expect((await api.call(editor, 'GET', `/api/splits/${id}`)).data.inviteToken).toBeUndefined();
+    // Members share with a link of their own, never the owner's
+    const ownToken = (await api.call(editor, 'GET', `/api/splits/${id}`)).data.inviteToken;
+    const ownerToken = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.inviteToken;
+    expect(ownToken).toBeTruthy();
+    expect(ownToken).not.toBe(ownerToken);
   });
 });
 
@@ -196,6 +200,92 @@ describe('share link invites', () => {
       false,
     );
     expect(split.people).toHaveLength(1);
+  });
+});
+
+describe("sharing through a member's link", () => {
+  /** A split with a member, and the link that member shares */
+  async function shared() {
+    const owner = person('owner');
+    const member = person('member');
+    const { id, token } = await splitWith(owner, member);
+    const memberToken: string = (await api.call(member, 'GET', `/api/splits/${id}`)).data
+      .inviteToken;
+    return { owner, member, id, token, memberToken };
+  }
+  const invitesOf = async (who: string) =>
+    (await api.call(who, 'GET', '/api/invites')).data.invites as {
+      id: string;
+      kind: string;
+      email?: string;
+      invitedBy: string;
+    }[];
+
+  it("asks the owner, once however often it's opened, and can't be accepted by the asker", async () => {
+    const { owner, member, id, memberToken } = await shared();
+    const cat = person('cat');
+    const first = await api.call(cat, 'POST', `/api/join/${memberToken}`);
+    expect(first.data).toMatchObject({ status: 'requested', id });
+    const again = await api.call(cat, 'POST', `/api/join/${memberToken}`);
+    expect(again.data.inviteId).toBe(first.data.inviteId);
+
+    expect(await invitesOf(cat)).toMatchObject([{ kind: 'sent', owner }]);
+    expect(await invitesOf(owner)).toMatchObject([
+      { kind: 'request', email: cat, invitedBy: member },
+    ]);
+    // Only the owner sees it; the member who shared doesn't decide
+    expect(await invitesOf(member)).toEqual([]);
+    expect(
+      (await api.call(member, 'POST', `/api/invites/${first.data.inviteId}/accept`)).status,
+    ).toBe(404);
+    expect((await api.call(cat, 'POST', `/api/invites/${first.data.inviteId}/accept`)).status).toBe(
+      403,
+    );
+    expect((await api.call(cat, 'GET', `/api/splits/${id}`)).status).toBe(404);
+  });
+
+  it('approving lets them in and puts them in the bill; declining or withdrawing drops it', async () => {
+    const { owner, id, memberToken } = await shared();
+    const [cat, dan, eve] = [person('cat'), person('dan'), person('eve')];
+    const catAsk = (await api.call(cat, 'POST', `/api/join/${memberToken}`)).data.inviteId;
+    const danAsk = (await api.call(dan, 'POST', `/api/join/${memberToken}`)).data.inviteId;
+    const eveAsk = (await api.call(eve, 'POST', `/api/join/${memberToken}`)).data.inviteId;
+
+    expect((await api.call(owner, 'POST', `/api/invites/${catAsk}/accept`)).status).toBe(200);
+    const split = (await api.call(cat, 'GET', `/api/splits/${id}`)).data;
+    expect(split.role).toBe('editor');
+    expect(split.people.some((p: { memberEmail: string }) => p.memberEmail === cat)).toBe(true);
+    // Approving twice finds nothing to approve
+    expect((await api.call(owner, 'POST', `/api/invites/${catAsk}/accept`)).status).toBe(404);
+
+    expect((await api.call(owner, 'POST', `/api/invites/${danAsk}/decline`)).status).toBe(200);
+    expect(await invitesOf(dan)).toEqual([]);
+    expect((await api.call(eve, 'POST', `/api/invites/${eveAsk}/decline`)).status).toBe(200);
+    expect(await invitesOf(owner)).toEqual([]);
+  });
+
+  it("turns into a plain invite when the owner's link is opened, and never back", async () => {
+    const { owner, token, memberToken } = await shared();
+    const cat = person('cat');
+    const asked = (await api.call(cat, 'POST', `/api/join/${memberToken}`)).data;
+    const invited = (await api.call(cat, 'POST', `/api/join/${token}`)).data;
+    expect(invited).toMatchObject({ status: 'invited', inviteId: asked.inviteId });
+    expect((await api.call(cat, 'POST', `/api/join/${memberToken}`)).data.status).toBe('invited');
+    expect(await invitesOf(cat)).toMatchObject([{ kind: 'invite', invitedBy: owner }]);
+    expect(await invitesOf(owner)).toEqual([]);
+  });
+
+  it("stops working when the member leaves, and resetting changes every member's link", async () => {
+    const { owner, member, id, memberToken } = await shared();
+    const other = person('other');
+    const reset = await api.call(owner, 'POST', `/api/splits/${id}/invite`);
+    expect(reset.status).toBe(200);
+    expect((await api.call(other, 'POST', `/api/join/${memberToken}`)).status).toBe(404);
+    const newToken = (await api.call(member, 'GET', `/api/splits/${id}`)).data.inviteToken;
+    expect(newToken).not.toBe(memberToken);
+
+    await api.call(member, 'DELETE', `/api/splits/${id}/members/${member}`);
+    expect((await api.call(other, 'POST', `/api/join/${newToken}`)).status).toBe(404);
   });
 });
 

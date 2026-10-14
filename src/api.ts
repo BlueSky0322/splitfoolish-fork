@@ -76,20 +76,39 @@ export interface Attachment {
 export interface SplitInvite {
   id: string;
   email: string;
+  /** Whose link they opened */
+  invitedBy?: string;
+  invitedByName?: string | null;
+  /** Opened a member's link: waiting for the owner to approve */
+  needsApproval?: boolean;
   createdAt: number;
   expiresAt: number;
 }
 
-export interface MyInvite {
+interface InviteBase {
   id: string;
   splitId: string;
   splitName: string;
+  /** Whose link it came from */
   invitedBy: string;
-  /** The inviter's display name, if they set one */
+  /** Their display name, if they set one */
   invitedByName: string | null;
   createdAt: number;
   expiresAt: number;
 }
+
+/**
+ * invite: to you, to accept or decline. sent: you asked to join through a member's
+ * link, waiting for the owner. request: someone asked to join your split.
+ */
+export type MyInvite =
+  | (InviteBase & { kind: 'invite' })
+  | (InviteBase & { kind: 'sent'; owner: string; ownerName: string | null })
+  | (InviteBase & { kind: 'request'; email: string; name: string | null });
+
+/** Invites that need you to do something, for the count badges */
+export const actionableInvites = (invites: MyInvite[] | null) =>
+  (invites ?? []).filter((i) => i.kind !== 'sent').length;
 
 export interface SplitDetail {
   id: string;
@@ -102,8 +121,9 @@ export interface SplitDetail {
   converting?: boolean;
   role: Role;
   members: SplitMember[];
-  /** Pending email invites; only sent to the owner */
+  /** Invites and requests to join not yet answered; only sent to the owner */
   invites?: SplitInvite[];
+  /** Your share link: the owner's lets people in, a member's asks the owner first */
   inviteToken?: string;
   attachments: Attachment[];
   // Copies cached on this device may predate memberEmail, so it's optional here
@@ -203,12 +223,12 @@ export const api = {
       'GET',
       `/api/rates?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     ),
-  /** Opening a share link: you're either in the split already, or now have an invite */
+  /** Opening a share link: you're in the split already, have an invite, or asked to join */
   joinSplit: (token: string) =>
-    request<{ status: 'member'; id: string } | { status: 'invited'; id: string; inviteId: string }>(
-      'POST',
-      `/api/join/${encodeURIComponent(token)}`,
-    ),
+    request<
+      | { status: 'member'; id: string }
+      | { status: 'invited' | 'requested'; id: string; inviteId: string }
+    >('POST', `/api/join/${encodeURIComponent(token)}`),
 };
 
 export const photoUrl = (splitId: string, attachmentId: string) =>
