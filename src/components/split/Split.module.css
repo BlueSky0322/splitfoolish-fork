@@ -641,6 +641,67 @@
   font-size: 30px;
 }
 
+/* A transfer you make, with how to pay under it in the same box */
+.transferGroup {
+  border-radius: 8px;
+  background: var(--sf-tint);
+}
+
+.transferGroup > .transfer {
+  background: none;
+}
+
+.payLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px 12px;
+}
+
+.payMethod {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sf-accent);
+  background: color-mix(in srgb, var(--sf-accent) 12%, transparent);
+  white-space: nowrap;
+}
+
+.transferGroup[data-size='lg'] .payChip {
+  height: 36px;
+}
+
+/* Settle up sheet: the row to balances and routing, and back */
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px;
+  border-top: 1px solid var(--sf-divider);
+}
+
+.sheetBack {
+  align-self: flex-start;
+  height: 44px;
+  margin-left: -12px;
+}
+
 /* ---------- Balance bars ---------- */
 
 .bars {
