@@ -91,6 +91,41 @@ export function BalanceHero({
   );
 }
 
+/** Where you stand in one line, for the phone's bar once the big figure scrolls away */
+export function BalanceLine({
+  summary,
+  currency,
+  me,
+}: {
+  summary: SplitSummary;
+  currency: string;
+  me: IPerson | null;
+}) {
+  if (me == null) {
+    return (
+      <span className={classes.balanceLine}>
+        <span className="sf-muted">Total</span> {formatMoney(summary.totalCents, currency)}
+      </span>
+    );
+  }
+  const cents = summary.balances.get(me.id)?.balanceCents ?? 0;
+  const label = !summary.hasItems
+    ? 'Nothing spent yet'
+    : cents > 0
+      ? "You're owed"
+      : cents < 0
+        ? 'You owe'
+        : 'Settled';
+  return (
+    <span className={classes.balanceLine}>
+      <span className="sf-muted">{label}</span>{' '}
+      <span className={cents > 0 ? 'sf-positive' : cents < 0 ? 'sf-negative' : ''}>
+        {formatMoney(cents, currency)}
+      </span>
+    </span>
+  );
+}
+
 const COPIED_MS = 1500;
 
 /** Under a transfer you make: how they like to be paid, and their number to copy */

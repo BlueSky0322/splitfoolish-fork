@@ -19,6 +19,7 @@ import {
   ArrowsLeftRight,
   CloudSlash,
   DotsThreeOutline,
+  ImageSquare,
   GearSix,
   Images,
   LockSimple,
@@ -64,7 +65,7 @@ import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from '../ui/SplitAvatar';
 import StateCard from '../ui/StateCard';
 import PersonAvatar, { AvatarVersionsContext } from './PersonAvatar';
-import BalancePanel, { BalanceHero } from './BalancePanel';
+import BalancePanel, { BalanceHero, BalanceLine } from './BalancePanel';
 import ItemForm from './ItemForm';
 import { ItemCards, ItemTable } from './ItemViews';
 import { DesktopSelectionBar, MobileSelectionBar, MoveDateDialog } from './ItemSelection';
@@ -309,6 +310,22 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [isDesktop, selecting]);
+
+  // Phones: whether the balance and its buttons have scrolled out of sight
+  const heroRef = useRef<HTMLDivElement>(null);
+  const [heroHidden, setHeroHidden] = useState(false);
+  const hasMeta = meta != null;
+  useEffect(() => {
+    const el = heroRef.current;
+    if (isDesktop || el == null) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setHeroHidden(!entry.isIntersecting && entry.boundingClientRect.top < 0),
+      // Collapses as the buttons pass under the bar, not after they're long gone
+      { rootMargin: '-56px 0px 0px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isDesktop, hasMeta]);
 
   if (status === 'notfound') {
     return (
@@ -1082,47 +1099,99 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
         <div className={classes.mobile}>
           {selecting && <MobileSelectionBar {...selectionProps} />}
           {moveDialog}
-          <div className={classes.topBar}>
-            <Button
-              variant="subtle"
-              color="gray"
-              leftSection={<CaretLeft size={16} />}
-              onClick={() => navigate('')}
-            >
-              Splits
-            </Button>
-            <div className="flex gap-1">
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size={44}
-                aria-label="Share split"
-                onClick={() => setDialog({ kind: 'members' })}
-                disabled={!loaded || myEmail == null}
-              >
-                <ShareNetwork size={20} />
-              </ActionIcon>
-              {moreMenu(
+          {/* Once the balance and its buttons scroll away, the bar keeps them in reach */}
+          <div
+            className={classes.topBar}
+            data-collapsed={heroHidden || undefined}
+          >
+            {heroHidden ? (
+              <>
                 <ActionIcon
                   variant="subtle"
                   color="gray"
-                  size={44}
-                  aria-label="More"
+                  size={40}
+                  aria-label="Back to splits"
+                  onClick={() => navigate('')}
                 >
-                  <DotsThreeOutline size={20} />
-                </ActionIcon>,
-              )}
-            </div>
+                  <CaretLeft size={18} />
+                </ActionIcon>
+                <UnstyledButton
+                  className={classes.compactTitle}
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  aria-label="Back to the top"
+                >
+                  <span className={classes.compactName}>{meta?.name}</span>
+                  <BalanceLine
+                    summary={summary}
+                    currency={currency}
+                    me={me}
+                  />
+                </UnstyledButton>
+                <Button
+                  size="compact-sm"
+                  onClick={() => setDialog({ kind: 'settle' })}
+                  disabled={noPeople || !loaded}
+                >
+                  Settle up
+                </Button>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size={40}
+                  aria-label="Share image"
+                  onClick={() => setDialog({ kind: 'share' })}
+                  disabled={!summary.hasItems}
+                >
+                  <ImageSquare size={20} />
+                </ActionIcon>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  leftSection={<CaretLeft size={16} />}
+                  onClick={() => navigate('')}
+                >
+                  Splits
+                </Button>
+                <div className="flex gap-1">
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size={44}
+                    aria-label="Share split"
+                    onClick={() => setDialog({ kind: 'members' })}
+                    disabled={!loaded || myEmail == null}
+                  >
+                    <ShareNetwork size={20} />
+                  </ActionIcon>
+                  {moreMenu(
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size={44}
+                      aria-label="More"
+                    >
+                      <DotsThreeOutline size={20} />
+                    </ActionIcon>,
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className={classes.mobileHero}>
             {meta && (
-              <SplitAvatar
-                splitId={splitId}
-                name={meta.name}
-                pictureVersion={pictureVersion}
-                size={40}
-              />
+              <div className={classes.mobileTitle}>
+                <SplitAvatar
+                  splitId={splitId}
+                  name={meta.name}
+                  pictureVersion={pictureVersion}
+                  size={40}
+                />
+                <h1 className={classes.mobileName}>{meta.name}</h1>
+              </div>
             )}
             <BalanceHero
               summary={summary}
@@ -1130,9 +1199,11 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               me={me}
               onLinkMe={linkMe}
               size={40}
-              prefix={meta?.name}
             />
-            <div className={classes.heroButtons}>
+            <div
+              className={classes.heroButtons}
+              ref={heroRef}
+            >
               <Button
                 onClick={() => setDialog({ kind: 'settle' })}
                 disabled={noPeople || !loaded}
