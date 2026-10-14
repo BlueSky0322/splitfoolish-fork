@@ -27,8 +27,15 @@
 }
 
 .title {
+  flex: 1;
+  min-width: 0;
   font-size: 18px;
   font-weight: 500;
+}
+
+.sheetTitle {
+  flex: 1;
+  min-width: 0;
 }
 
 .modalBody {

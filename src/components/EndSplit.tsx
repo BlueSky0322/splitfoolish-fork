@@ -1,5 +1,6 @@
 import { Button } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../api';
 import { reloadHomeData, updateHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
@@ -12,6 +13,14 @@ interface EndSplitProps {
   myEmail: string;
   onCancel: () => void;
 }
+
+/** 3d's title: a red-tinted icon beside "Delete this split?" (or "Leave this split?") */
+export const EndSplitTitle = ({ isOwner }: { isOwner: boolean }) => (
+  <span className={classes.endTitle}>
+    <span className={classes.endIcon}>{isOwner ? <Trash size={18} /> : <SignOut size={18} />}</span>
+    {isOwner ? 'Delete this split?' : 'Leave this split?'}
+  </span>
+);
 
 // Asks before the owner deletes a split, or someone else leaves it. Either way the
 // split goes from their list straight away and the server catches up.
@@ -34,16 +43,15 @@ const EndSplit = ({ splitId, name, isOwner, myEmail, onCancel }: EndSplitProps) 
   };
 
   return (
-    <div
-      className={classes.confirm}
-      role="alertdialog"
-      aria-label={isOwner ? 'Delete split?' : 'Leave split?'}
-    >
-      <p className="text-sm">
-        {isOwner
-          ? `Delete "${name}" for everyone? Its items and photos go too. This can't be undone.`
-          : `Leave "${name}"? You'll need the share link to get back in.`}
-      </p>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <div className={classes.endName}>{name}</div>
+        <p className="sf-muted text-sm">
+          {isOwner
+            ? "Removes it for everyone, with all items and photos. This can't be undone."
+            : "You'll lose access. To come back, open the share link again."}
+        </p>
+      </div>
       <div className="flex gap-2 justify-end">
         <Button
           variant="default"
@@ -52,7 +60,8 @@ const EndSplit = ({ splitId, name, isOwner, myEmail, onCancel }: EndSplitProps) 
           Cancel
         </Button>
         <Button
-          color="red"
+          variant="default"
+          className="sf-danger-outline"
           onClick={end}
         >
           {isOwner ? 'Delete for everyone' : 'Leave split'}
