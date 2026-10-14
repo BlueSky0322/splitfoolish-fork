@@ -18,6 +18,7 @@
 }
 
 .amountInput {
+  font-family: var(--sf-font-num);
   flex: 1;
   min-width: 0;
   background: transparent;
@@ -57,6 +58,7 @@
 }
 
 .converted {
+  font-family: var(--sf-font-num);
   color: var(--sf-text);
   font-variant-numeric: tabular-nums;
 }
@@ -75,6 +77,7 @@
 }
 
 .evaluated {
+  font-family: var(--sf-font-num);
   font-size: 15px;
   color: var(--sf-text-muted);
   font-variant-numeric: tabular-nums;
@@ -177,6 +180,7 @@
 }
 
 .left {
+  font-family: var(--sf-font-num);
   display: flex;
   justify-content: space-between;
   font-size: 14px;

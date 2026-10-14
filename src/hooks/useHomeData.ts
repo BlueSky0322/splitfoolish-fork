@@ -1,3 +1,4 @@
+import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { MyInvite, SplitSummary, api } from '../api';
@@ -51,6 +52,28 @@ export function updateHomeData(change: (data: HomeData) => Partial<HomeData>) {
       splits: next.splits ?? old?.splits ?? [],
       invites: next.invites ?? old?.invites ?? [],
     };
+  });
+}
+
+/** Moves a split to where another one is, in your own order, and saves the new order */
+export function moveSplit(id: string, toId: string) {
+  let ids: string[] | null = null;
+  updateHomeData(({ splits }) => {
+    const list = [...(splits ?? [])];
+    const from = list.findIndex((s) => s.id === id);
+    const to = list.findIndex((s) => s.id === toId);
+    if (from < 0 || to < 0) return {};
+    list.splice(to, 0, ...list.splice(from, 1));
+    ids = list.map((s) => s.id);
+    return { splits: list };
+  });
+  if (ids == null) return;
+  api.reorderSplits(ids).catch((err: unknown) => {
+    notifications.show({
+      color: 'red',
+      message: err instanceof Error ? err.message : 'Could not save the new order',
+    });
+    void reloadHomeData();
   });
 }
 

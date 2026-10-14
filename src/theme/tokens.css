@@ -41,13 +41,33 @@
   --sf-accent-tint: color-mix(in srgb, var(--sf-accent) 14%, transparent);
   --sf-avatar: color-mix(in srgb, var(--sf-accent) 24%, var(--sf-surface));
   --sf-safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* Amounts: Geist's even, tabular digits */
+  --sf-font-num: Geist, Inter, system-ui, sans-serif;
 }
 
 body {
   background: var(--sf-bg);
   color: var(--sf-text);
   font-family: Inter, system-ui, sans-serif;
+  /* Inter's display cut at large sizes, its text cut at small ones */
+  font-optical-sizing: auto;
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Larger text sits tighter */
+h1,
+h2,
+h3,
+.mantine-Title-root {
+  letter-spacing: -0.02em;
+}
+
+/* A split being dragged into a new place */
+[data-dragging] {
+  cursor: grabbing;
+  background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-lg);
 }
 
 :focus-visible {
@@ -113,6 +133,7 @@ body {
 
 /* Text helpers */
 .sf-tabular {
+  font-family: var(--sf-font-num);
   font-variant-numeric: tabular-nums;
 }
 .sf-muted {
