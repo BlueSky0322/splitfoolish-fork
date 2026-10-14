@@ -87,7 +87,8 @@ function MethodForm({
 // The ways someone can pay you, one marked preferred. People who owe you see them
 // next to their transfer in Settle up.
 const PaymentMethods = ({ methods, preferredId, onChange, grouped }: PaymentMethodsProps) => {
-  const [editing, setEditing] = useState<string | 'new' | null>(null);
+  // A method's id, or 'new' while adding one
+  const [editing, setEditing] = useState<string | null>(null);
 
   const save = async ({ type, detail }: { type: string; detail: string }) => {
     const next =

@@ -15,7 +15,7 @@ const JoinSplit = ({ token }: { token: string }) => {
       .joinSplit(token)
       .then((result) => {
         if (cancelled) return;
-        reloadHomeData();
+        void reloadHomeData();
         // Already in it: straight in. Otherwise the invite waits in Invites to be accepted
         navigate(
           result.status === 'member'

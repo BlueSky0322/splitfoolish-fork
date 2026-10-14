@@ -19,7 +19,19 @@ let keyCache: { url: string; keys: Map<string, CryptoKey>; fetchedAt: number } |
 const decodeBase64Url = (s: string) =>
   Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 
-const decodeJson = (s: string) => JSON.parse(new TextDecoder().decode(decodeBase64Url(s)));
+// Token fields as read from the wire; each one is checked before it's trusted
+interface JwtHeader {
+  kid?: unknown;
+}
+interface JwtPayload {
+  aud?: unknown;
+  iss?: unknown;
+  exp?: unknown;
+  nbf?: unknown;
+  email?: unknown;
+}
+
+const decodeJson = <T>(s: string) => JSON.parse(new TextDecoder().decode(decodeBase64Url(s))) as T;
 
 async function getSigningKey(certsUrl: string, kid: string): Promise<CryptoKey | undefined> {
   const fresh =
@@ -29,7 +41,7 @@ async function getSigningKey(certsUrl: string, kid: string): Promise<CryptoKey |
 
   const res = await fetch(certsUrl);
   if (!res.ok) throw new Error(`Access certs fetch failed: ${res.status}`);
-  const { keys } = (await res.json()) as { keys: AccessJwk[] };
+  const { keys } = await res.json<{ keys: AccessJwk[] }>();
 
   const imported = new Map<string, CryptoKey>();
   for (const jwk of keys) {
@@ -60,7 +72,7 @@ async function verifyAccessJwt(
   const [rawHeader, rawPayload, rawSignature] = parts;
 
   try {
-    const header = decodeJson(rawHeader);
+    const header = decodeJson<JwtHeader>(rawHeader);
     // Always verified as RS256 with the team's key, whatever alg the token claims
     if (typeof header.kid !== 'string') return null;
 
@@ -76,8 +88,8 @@ async function verifyAccessJwt(
     );
     if (!valid) return null;
 
-    const payload = decodeJson(rawPayload);
-    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    const payload = decodeJson<JwtPayload>(rawPayload);
+    const audiences: unknown[] = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     const nowSeconds = Date.now() / 1000;
     if (payload.iss !== `https://${team}`) return null;
     if (!audiences.includes(aud)) return null;

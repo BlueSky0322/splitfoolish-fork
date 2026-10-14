@@ -47,6 +47,18 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    // These export hooks or helpers next to their component by design (and main.tsx is
+    // the entry point); fast refresh just reloads the page for them
+    files: [
+      'src/components/NewSplitDialog.tsx',
+      'src/components/settings/SettingsPage.tsx',
+      'src/components/split/ShareImage.tsx',
+      'src/profile/ProfileContext.tsx',
+      'src/main.tsx',
+    ],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 
   {
     rules: {

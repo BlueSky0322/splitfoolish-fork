@@ -152,7 +152,7 @@ export function useSplit(splitId: string) {
       if (pending.current.length > 0) return save();
       setStatus('saved');
       // Totals and balances in the sidebar and My splits follow the change
-      reloadHomeData();
+      void reloadHomeData();
       if (reloadAfterSave.current) {
         reloadAfterSave.current = false;
         await load();
@@ -162,8 +162,8 @@ export function useSplit(splitId: string) {
       // Removed from the split (or it was deleted) while it was open
       if (err instanceof ApiError && err.status === 404) {
         pending.current = [];
-        removeCache(cacheKey);
-        reloadHomeData();
+        void removeCache(cacheKey);
+        void reloadHomeData();
         setStatus('notfound');
         return;
       }
@@ -180,7 +180,7 @@ export function useSplit(splitId: string) {
       console.error(err);
       pending.current = [...batch, ...pending.current];
       setStatus('error');
-      timer.current = setTimeout(save, RETRY_DELAY_MS);
+      timer.current = setTimeout(() => void save(), RETRY_DELAY_MS);
     }
   }, [splitId, load, cacheKey]);
 
@@ -189,7 +189,7 @@ export function useSplit(splitId: string) {
       pending.current.push(change);
       setStatus('saving');
       clearTimeout(timer.current);
-      timer.current = setTimeout(save, SAVE_DELAY_MS);
+      timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
       return true;
     },
     [save],
@@ -204,7 +204,7 @@ export function useSplit(splitId: string) {
     dispatch({ type: 'LOAD_STATE', payload: { people: [], items: [] } });
 
     // Show the last-seen copy straight away, unless the server has already answered
-    readCache<SplitDetail>(cacheKey).then((cached) => {
+    void readCache<SplitDetail>(cacheKey).then((cached) => {
       if (cached == null || cancelled || answered) return;
       show(cached);
       setStatus('refreshing');
@@ -219,7 +219,7 @@ export function useSplit(splitId: string) {
         answered = true;
         const gone = err instanceof ApiError && err.status === 404;
         // Deleted, or no longer shared with this person: drop the local copy too
-        if (gone) removeCache(cacheKey);
+        if (gone) void removeCache(cacheKey);
         if (cancelled) return;
         console.error(err);
         setStatus(gone ? 'notfound' : 'error');
@@ -233,21 +233,22 @@ export function useSplit(splitId: string) {
   // Save right away when leaving the split or hiding the page, rather than waiting
   useEffect(() => {
     const saveNow = () => {
-      if (document.visibilityState === 'hidden') save();
+      if (document.visibilityState === 'hidden') void save();
     };
+    const saveOnHide = () => void save();
     document.addEventListener('visibilitychange', saveNow);
-    window.addEventListener('pagehide', save);
+    window.addEventListener('pagehide', saveOnHide);
     return () => {
       document.removeEventListener('visibilitychange', saveNow);
-      window.removeEventListener('pagehide', save);
-      save();
+      window.removeEventListener('pagehide', saveOnHide);
+      void save();
     };
   }, [save]);
 
   // Keep the cached copy in step with what's on screen once it's confirmed by the server
   useEffect(() => {
     if (status !== 'saved' || meta == null) return;
-    writeCache<SplitDetail>(cacheKey, {
+    void writeCache<SplitDetail>(cacheKey, {
       ...meta,
       people: state.people,
       items: state.items.map(toApiItem),
@@ -367,13 +368,13 @@ export function useSplit(splitId: string) {
 
   /** Tries a failed save again now, rather than waiting for the automatic retry */
   const retry = useCallback(() => {
-    save();
+    void save();
   }, [save]);
 
   /** Saves anything queued now, resolving once the server has it (photos need their item saved) */
   const whenSaved = useCallback(async () => {
     const deadline = Date.now() + 20_000;
-    save();
+    void save();
     while (pending.current.length > 0 || inFlight.current) {
       if (Date.now() > deadline) throw new Error('Still saving. Try again in a moment.');
       await new Promise((r) => setTimeout(r, 100));

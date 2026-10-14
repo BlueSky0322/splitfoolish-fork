@@ -1,4 +1,5 @@
 import { SplitMode } from '../../shared/settle';
+import type { Item } from '../../shared/types';
 
 export interface IPerson {
   id: string;
@@ -29,7 +30,14 @@ export interface AppReducerState {
   items: IItem[];
 }
 
-export interface AppReducerAction {
-  type: string;
-  payload: any;
-}
+// Items arrive as the API shapes them, referring to people by id
+export type AppReducerAction =
+  | { type: 'ADD_PERSON'; payload: IPerson }
+  | { type: 'UPDATE_PERSON'; payload: Partial<IPerson> & { id: string } }
+  | { type: 'REMOVE_PERSON'; payload: string }
+  | { type: 'CLEAR_PEOPLE'; payload: null }
+  | { type: 'ADD_ITEM'; payload: Item }
+  | { type: 'UPDATE_ITEM'; payload: Item }
+  | { type: 'REMOVE_ITEM'; payload: string }
+  | { type: 'CLEAR_ITEMS'; payload: null }
+  | { type: 'LOAD_STATE'; payload: { people?: IPerson[]; items?: Item[] } };
