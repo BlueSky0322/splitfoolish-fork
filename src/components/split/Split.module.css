@@ -814,3 +814,14 @@
   color: var(--sf-text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+.currenciesTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--sf-accent);
+  background: color-mix(in srgb, var(--sf-accent) 14%, transparent);
+}

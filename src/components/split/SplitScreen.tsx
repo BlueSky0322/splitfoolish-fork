@@ -1,4 +1,12 @@
-import { ActionIcon, Button, Menu, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
+import {
+  ActionIcon,
+  Button,
+  Menu,
+  SegmentedControl,
+  Title,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
@@ -7,6 +15,7 @@ import {
   CaretRight,
   CloudCheck,
   ArrowsClockwise,
+  ArrowsLeftRight,
   CloudSlash,
   DotsThreeOutline,
   GearSix,
@@ -45,6 +54,7 @@ import {
 import { useProfile } from '../../profile/ProfileContext';
 import { currencySymbol } from '../../utils/money';
 import ErrorBoundary from '../ErrorBoundary';
+import CurrenciesSheet from './CurrenciesSheet';
 import PhotoStrip from '../photos/PhotoStrip';
 import { usePhotos } from '../photos/usePhotos';
 import EndSplit, { EndSplitTitle } from '../EndSplit';
@@ -91,7 +101,8 @@ type Dialog =
   /** fromShare: Cancel goes back to the share dialog it replaced */
   | { kind: 'end'; fromShare?: boolean }
   | { kind: 'settings' }
-  | { kind: 'photos' };
+  | { kind: 'photos' }
+  | { kind: 'currencies' };
 
 const MAX_AVATARS = 4;
 
@@ -198,6 +209,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const splitPhotoCount = meta?.attachments.filter((a) => a.itemId == null).length ?? 0;
 
   const currency = meta?.currency ?? 'MYR';
+  const otherCurrencies = new Set(
+    state.items.map((i) => i.original?.currency).filter((c): c is string => c != null),
+  ).size;
   // Shared by everyone in the split; ignored if that person was just removed
   const distributorId = state.people.some((p) => p.id === meta?.distributorId)
     ? meta?.distributorId ?? null
@@ -389,6 +403,15 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
           Photos
           {splitPhotoCount > 0 && <span className="sf-muted"> ({splitPhotoCount})</span>}
         </Menu.Item>
+        {otherCurrencies > 0 && (
+          <Menu.Item
+            leftSection={<ArrowsLeftRight size={16} />}
+            rightSection={<span className="sf-tag">{otherCurrencies}</span>}
+            onClick={() => setDialog({ kind: 'currencies' })}
+          >
+            Currencies
+          </Menu.Item>
+        )}
         <Menu.Item
           leftSection={<GearSix size={16} />}
           onClick={() => setDialog({ kind: 'settings' })}
@@ -692,6 +715,22 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
         )}
       </ResponsiveDialog>
       <ResponsiveDialog
+        opened={dialog?.kind === 'currencies'}
+        onClose={close}
+        title="Currencies"
+        width={460}
+      >
+        {dialog?.kind === 'currencies' && (
+          <CurrenciesSheet
+            currency={currency}
+            items={state.items}
+            saving={status === 'saving'}
+            onRefresh={actions.refreshRates}
+            onSetRate={actions.setRate}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
         opened={dialog?.kind === 'settings'}
         onClose={close}
         title="Split settings"
@@ -738,6 +777,17 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                       <span className="sf-tag">
                         {currency} · {currencySymbol(currency)}
                       </span>
+                    )}
+                    {otherCurrencies > 0 && (
+                      <Tooltip label="Currencies">
+                        <UnstyledButton
+                          className={classes.currenciesTag}
+                          onClick={() => setDialog({ kind: 'currencies' })}
+                          aria-label={`${otherCurrencies} other currencies`}
+                        >
+                          <ArrowsLeftRight size={12} />+{otherCurrencies}
+                        </UnstyledButton>
+                      </Tooltip>
                     )}
                   </div>
                   <SaveStatus

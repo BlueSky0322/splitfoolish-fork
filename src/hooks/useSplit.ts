@@ -11,7 +11,8 @@ import {
 import { ApiError, Change, ItemInput, SplitDetail, api } from '../api';
 import { AppContext } from '../context/AppContext/AppContext';
 import { ApiItem, toApiItem } from '../context/AppContext/app-reducer';
-import { AppReducerState } from '../interfaces/app-reducer';
+import { convertCents, convertParts } from '../../shared/rates';
+import { AppReducerState, IItem } from '../interfaces/app-reducer';
 import { readCache, removeCache, writeCache } from '../split-cache';
 import { whenCreated } from '../pending-creates';
 import { reloadHomeData } from './useHomeData';
@@ -39,6 +40,10 @@ export interface SplitActions {
   /** Puts back an item that was just removed (Undo) */
   restoreItem: (item: ApiItem) => boolean;
   clearItems: () => boolean;
+  /** Converts items in these currencies again at today's rate, leaving typed rates */
+  refreshRates: (currencies: string[]) => boolean;
+  /** Every item in a currency at a typed rate, or today's rate when null */
+  setRate: (currency: string, rate: number | null) => boolean;
 }
 
 /** Provided by the split page. Null outside it, e.g. in modals opened from elsewhere. */
@@ -60,6 +65,30 @@ const refuse = (message: string) => {
   notifications.show({ color: 'red', message });
   return false;
 };
+
+/** An item paid in another currency, converted again at a typed rate, as the server does it */
+function atRate(item: IItem, rate: number): IItem {
+  const original = item.original!;
+  const costCents = convertCents(Math.round(original.amount * 100), rate);
+  const exact =
+    item.splitMode === 'exact' && original.exact
+      ? Object.fromEntries(
+          [
+            ...convertParts(
+              Object.entries(original.exact).map(([id, amount]) => [id, Math.round(amount * 100)]),
+              rate,
+              costCents,
+            ),
+          ].map(([id, cents]) => [id, cents / 100]),
+        )
+      : item.exact;
+  return {
+    ...item,
+    cost: costCents / 100,
+    exact,
+    original: { ...original, rate, rateSource: 'manual', rateAt: Date.now() },
+  };
+}
 
 /**
  * Why a person can't be removed, or null if they can. Mirrors the server: someone who
@@ -366,6 +395,23 @@ export function useSplit(splitId: string) {
       clearItems: () => {
         dispatch({ type: 'CLEAR_ITEMS', payload: null });
         return queue({ op: 'clearItems' });
+      },
+      refreshRates: (currencies) => {
+        if (currencies.length === 0) return false;
+        // The server fetches the rates; its numbers show once saved
+        reloadAfterSave.current = true;
+        return queue({ op: 'refreshRates', currencies });
+      },
+      setRate: (currency, rate) => {
+        if (rate == null) {
+          reloadAfterSave.current = true;
+        } else {
+          for (const item of current.current.items) {
+            if (item.original?.currency !== currency) continue;
+            dispatch({ type: 'UPDATE_ITEM', payload: toApiItem(atRate(item, rate)) });
+          }
+        }
+        return queue({ op: 'setRate', currency, rate });
       },
     }),
     [dispatch, queue],
