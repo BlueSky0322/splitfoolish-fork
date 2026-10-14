@@ -3,7 +3,7 @@
 // request waits in the owner's Invites to be approved or declined, and you can withdraw it.
 
 import { Hono } from 'hono';
-import { AppEnv, ID, INVITE_TTL_MS, getRole, json, newId } from '../app';
+import { AppEnv, ID, INVITE_TTL_MS, clientId, getRole, json, newId, notifySplit } from '../app';
 import { newInviteToken } from '../split-content';
 
 const invites = new Hono<AppEnv>();
@@ -138,11 +138,14 @@ invites.post(`/invites/:inviteId${ID}/:action{accept|decline}`, async (c) => {
 
   if (!accept) {
     await db.prepare('DELETE FROM split_invites WHERE id = ?').bind(inviteId).run();
+    // The owner's list of who's waiting changes
+    notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
     return json({ ok: true });
   }
   if (isApprover) {
     // Approving joins them; they asked, so there's nothing more for them to accept
     await addEditor(db, invite.splitId, invite.email);
+    notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
     return json({ ok: true });
   }
   if (invite.needsApproval === 1) {
@@ -150,6 +153,7 @@ invites.post(`/invites/:inviteId${ID}/:action{accept|decline}`, async (c) => {
   }
   // Joining also clears the invite, so accepting twice lands in the split either way
   await addEditor(db, invite.splitId, email);
+  notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
   return json({ id: invite.splitId });
 });
 
@@ -212,6 +216,8 @@ invites.post(`/join/:token${ID}`, async (c) => {
     )
     .bind(split.id, email)
     .first<{ id: string; needsApproval: number }>();
+  // Shows up in the owner's list of who's waiting
+  notifySplit(c.env, c.executionCtx, split.id, clientId(c.req.raw));
   return json({
     status: invite!.needsApproval ? 'requested' : 'invited',
     id: split.id,

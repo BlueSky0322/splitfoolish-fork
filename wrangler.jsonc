@@ -9,24 +9,29 @@
   // until both are set. Locally, .dev.vars blanks them and sets DEV_USER_EMAIL.
   "vars": {
     "ACCESS_TEAM_DOMAIN": "ryanng-0611.cloudflareaccess.com",
-    "ACCESS_AUD": "0b9d523eaa0a5d680e662443a9922d5be39edf752659882fef24b4f1dda5438b"
+    "ACCESS_AUD": "0b9d523eaa0a5d680e662443a9922d5be39edf752659882fef24b4f1dda5438b",
   },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
+  // A room per split that tells everyone with it open when it changes
+  "durable_objects": { "bindings": [{ "name": "SPLIT_ROOM", "class_name": "SplitRoom" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SplitRoom"] }],
+  // Logs and traces in the dashboard, for a tenth of requests
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 },
   // Caps how many changes each account can make a minute (reads are not counted)
   "ratelimits": [
-    { "name": "API_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }
+    { "name": "API_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "splitfoolish-db",
       "database_id": "318166d8-116e-4922-877f-9e98dd357dd1",
-      "migrations_dir": "migrations"
-    }
-  ]
+      "migrations_dir": "migrations",
+    },
+  ],
 }

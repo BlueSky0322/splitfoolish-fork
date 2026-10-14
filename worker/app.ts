@@ -4,12 +4,15 @@
 import { createMiddleware } from 'hono/factory';
 import { AuthEnv } from './auth';
 import { RatesEnv } from './rates';
+import type { RoomMessage, SplitRoom } from './room';
 
 export interface Env extends AuthEnv, RatesEnv {
   DB: D1Database;
   ASSETS: Fetcher;
   /** Changes per account per minute */
   API_LIMITER: RateLimit;
+  /** One room per split, for telling the apps that have it open when it changes */
+  SPLIT_ROOM: DurableObjectNamespace<SplitRoom>;
   /** How long a currency change may take before opening the split retries it; for tests */
   RECONVERT_RETRY_MS?: string;
 }
@@ -35,6 +38,31 @@ export const json = (body: unknown, status = 200) =>
     status,
     headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' },
   });
+
+/** The room for a split, where everyone with it open is listening */
+export const splitRoom = (env: Env, splitId: string) =>
+  env.SPLIT_ROOM.get(env.SPLIT_ROOM.idFromName(splitId));
+
+/**
+ * Tells everyone with the split open that it changed, after the response is sent.
+ * `by` is the tab that made the change (X-Client-Id), which ignores it.
+ */
+export const notifySplit = (
+  env: Env,
+  ctx: { waitUntil: (p: Promise<unknown>) => void },
+  splitId: string,
+  by: string | null,
+) => {
+  const message: RoomMessage = { type: 'changed', by };
+  ctx.waitUntil(
+    splitRoom(env, splitId)
+      .broadcast(JSON.stringify(message))
+      .catch((err: unknown) => console.error(err)),
+  );
+};
+
+/** The tab that sent a request, as the app identifies itself */
+export const clientId = (req: Request) => req.headers.get('X-Client-Id')?.slice(0, 64) ?? null;
 
 export const notFound = () => json({ error: 'Not found' }, 404);
 
