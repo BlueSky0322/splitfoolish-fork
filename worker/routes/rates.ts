@@ -45,4 +45,45 @@ rates.get('/rates', async (c) => {
   }
 });
 
+/** At most this many currencies in Settings' "Rates in your splits" */
+const MAX_USED = 12;
+
+// The other currencies in your splits (theirs, and items paid in another one), how many
+// splits each is in, and today's rate into `to`, all in one go for Settings
+rates.get('/me/rates', async (c) => {
+  const to = c.req.query('to')?.toUpperCase() ?? '';
+  if (!CURRENCY.test(to)) return json({ error: 'Give to as a currency code, like MYR' }, 400);
+  const used = await c.env.DB.prepare(
+    `SELECT cur AS currency, count(DISTINCT split_id) AS splits FROM (
+       SELECT s.currency AS cur, s.id AS split_id
+         FROM splits s JOIN split_members m ON m.split_id = s.id WHERE m.email = ?1
+       UNION ALL
+       SELECT i.original_currency, i.split_id
+         FROM items i JOIN split_members m ON m.split_id = i.split_id
+         WHERE m.email = ?1 AND i.original_currency IS NOT NULL
+     ) WHERE cur != ?2 GROUP BY cur ORDER BY splits DESC, cur LIMIT ${MAX_USED}`,
+  )
+    .bind(c.var.email, to)
+    .all<{ currency: string; splits: number }>();
+
+  const prefer = await getRateSource(c.env.DB, c.var.email);
+  const currencies = await Promise.all(
+    used.results.map(async ({ currency, splits }) => {
+      try {
+        const { rate, source, fetchedAt } = await getRate(c.env, currency, to, undefined, {
+          prefer,
+        });
+        return { currency, splits, rate, source, fetchedAt };
+      } catch (err) {
+        // One rate missing doesn't hide the rest
+        if (err instanceof RatesUnavailable) {
+          return { currency, splits, rate: null, source: null, fetchedAt: null };
+        }
+        throw err;
+      }
+    }),
+  );
+  return json({ to, currencies });
+});
+
 export default rates;

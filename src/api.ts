@@ -250,6 +250,18 @@ export const api = {
         fresh ? '&fresh=1' : ''
       }`,
     ),
+  /** The other currencies in your splits, with today's rate into `to` (Settings) */
+  usedCurrencyRates: (to: string) =>
+    request<{
+      to: string;
+      currencies: {
+        currency: string;
+        splits: number;
+        rate: number | null;
+        source: 'wise' | 'frankfurter' | null;
+        fetchedAt: number | null;
+      }[];
+    }>('GET', `/api/me/rates?to=${encodeURIComponent(to)}`),
   /** Opening a share link: you're in the split already, have an invite, or asked to join */
   joinSplit: (token: string) =>
     request<
