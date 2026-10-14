@@ -316,6 +316,23 @@ describe('safeguards', () => {
     ).toBe(200);
   });
 
+  it('limits how many changes an account makes a minute, but never reading', async () => {
+    const owner = person('busy');
+    const { id } = await splitWith(owner);
+    const statuses: number[] = [];
+    for (let i = 0; i < 61; i++) {
+      statuses.push(
+        (await change(owner, id, { op: 'addPerson', id: hex(), name: `P${i}` })).status,
+      );
+    }
+    // One write went to creating the split
+    expect(statuses.filter((s) => s === 200)).toHaveLength(59);
+    expect(statuses.at(-1)).toBe(429);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).status).toBe(200);
+    // Someone else isn't held back
+    expect((await splitWith(person('calm'))).id).toBeTruthy();
+  });
+
   it('turns away request bodies that are too large', async () => {
     const res = await api.call(person('owner'), 'POST', '/api/splits', {
       name: 'x'.repeat(300_000),

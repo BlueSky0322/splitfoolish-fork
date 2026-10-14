@@ -197,8 +197,9 @@ export function useSplit(splitId: string) {
         setStatus('notfound');
         return;
       }
-      // The server couldn't get an exchange rate: nothing was wrong with the change itself
-      if (err instanceof ApiError && err.status !== 503) {
+      // No exchange rate yet (503) or too many changes this minute (429): nothing was
+      // wrong with the change itself, so it's kept and sent again
+      if (err instanceof ApiError && err.status !== 503 && err.status !== 429) {
         // Refused: everything queued after it was built on top of it, so start over
         notifications.show({ color: 'red', message: err.message });
         pending.current = [];
