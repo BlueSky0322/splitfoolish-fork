@@ -1,7 +1,8 @@
 // Exchange rates for converting items into a split's currency. Wise's live mid-market
 // rate when a token is set, else the ECB's daily rate from Frankfurter (free, no key).
-// Each pair is kept in Cloudflare's cache for a few minutes, so a busy day costs the
-// services a handful of requests, and an hour's-old rate still serves if both are down.
+// Each pair is kept in Cloudflare's cache and reused for 4 hours, so a day costs the
+// services a few requests per pair, and a day-old rate still serves if both are down.
+// Refresh in the Currencies sheet asks for one no older than 10 minutes.
 
 import { RateSource, isValidRate } from '../shared/rates';
 
@@ -23,7 +24,9 @@ export interface Rate {
 export class RatesUnavailable extends Error {}
 
 /** Fresh for this long; older copies are refetched but still used if that fails */
-const FRESH_MS = 10 * 60 * 1000;
+const FRESH_MS = 4 * 60 * 60 * 1000;
+/** How old a rate may be when someone presses Refresh */
+export const REFRESH_MAX_AGE_MS = 10 * 60 * 1000;
 /** How long Cloudflare keeps a copy at all */
 const KEEP_SECONDS = 24 * 60 * 60;
 const TIMEOUT_MS = 4000;
@@ -74,13 +77,15 @@ export async function getRate(
   from: string,
   to: string,
   deps: Deps = defaultDeps(),
+  /** Use a cached rate younger than this rather than fetching */
+  maxAgeMs = FRESH_MS,
 ): Promise<Rate> {
   if (from === to) return { rate: 1, source: 'frankfurter', fetchedAt: deps.now() };
 
   const key = cacheKey(from, to);
   const cached = deps.cache ? await deps.cache.match(key) : undefined;
   const saved = cached ? await cached.json<Rate>() : null;
-  if (saved && deps.now() - saved.fetchedAt < FRESH_MS) return saved;
+  if (saved && deps.now() - saved.fetchedAt < maxAgeMs) return saved;
 
   const sources: [Rate['source'], typeof fromWise][] = [
     ['wise', fromWise],

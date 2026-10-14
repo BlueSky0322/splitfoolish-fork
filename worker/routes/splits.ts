@@ -42,7 +42,7 @@ import {
   newInviteToken,
   removeAccessStatements,
 } from '../split-content';
-import { getRate } from '../rates';
+import { REFRESH_MAX_AGE_MS, getRate } from '../rates';
 import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
 import { listSplitSummaries } from '../summaries';
 
@@ -291,7 +291,8 @@ splits.post(`${SPLIT}/changes`, member, async (c) => {
     c.req.param('id'),
     body,
     { email: c.var.email, role: c.var.role },
-    (from, to) => getRate(c.env, from, to),
+    (from, to, recent) =>
+      getRate(c.env, from, to, undefined, recent ? REFRESH_MAX_AGE_MS : undefined),
   );
 });
 
