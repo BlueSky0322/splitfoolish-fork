@@ -62,25 +62,11 @@ describe('getRate', () => {
     });
   });
 
-  it('serves a cached rate while fresh, and refetches once it is old', async () => {
-    let now = 0;
-    const cache = memoryCache();
-    const s = services(wiseRate(4.2), ecbRate(4.1));
-    const deps = { fetch: s.fetch, cache, now: () => now };
-    await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps);
-    now = 5 * 60 * 1000;
-    await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps);
-    expect(s.calls.wise).toBe(1);
-    now = 11 * 60 * 1000;
-    await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps);
-    expect(s.calls.wise).toBe(2);
-  });
-
   it('uses an old rate when both services are down, and fails with none', async () => {
     let now = 0;
     const cache = memoryCache();
     await getRate({}, 'USD', 'MYR', { ...services(down, ecbRate(4.1)), cache, now: () => now });
-    now = 60 * 60 * 1000;
+    now = 5 * 60 * 60 * 1000;
     const outage = services(down, down);
     expect(
       (await getRate({}, 'USD', 'MYR', { fetch: outage.fetch, cache, now: () => now })).rate,
@@ -96,5 +82,24 @@ describe('getRate', () => {
       (await getRate({}, 'MYR', 'MYR', { fetch: s.fetch, cache: null, now: () => 1 })).rate,
     ).toBe(1);
     expect(s.calls.wise + s.calls.frankfurter).toBe(0);
+  });
+
+  it('reuses a cached rate for 4 hours, unless a recent one is asked for', async () => {
+    const cache = memoryCache();
+    let now = 0;
+    const s = services(wiseRate(4.2), ecbRate(4.1));
+    const deps = { fetch: s.fetch, cache, now: () => now };
+    await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps);
+    now = 3 * 60 * 60 * 1000;
+    expect((await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps)).fetchedAt).toBe(0);
+    expect(s.calls.wise).toBe(1);
+    // Refresh: anything older than 10 minutes is fetched again
+    expect((await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps, 10 * 60 * 1000)).fetchedAt).toBe(
+      now,
+    );
+    expect(s.calls.wise).toBe(2);
+    now += 4 * 60 * 60 * 1000;
+    await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps);
+    expect(s.calls.wise).toBe(3);
   });
 });
