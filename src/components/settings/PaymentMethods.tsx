@@ -1,12 +1,33 @@
-import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
+import { Autocomplete, Button, Select, TextInput, UnstyledButton } from '@mantine/core';
 import { PencilSimple, Plus } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { PaymentMethod } from '../../api';
+import {
+  BANK_TRANSFER,
+  COMMON_BANKS,
+  MAX_ACCOUNT_NAME,
+  MAX_BANK,
+  MAX_METHOD_DETAIL,
+  MAX_METHOD_TYPE,
+  PAYMENT_TYPES,
+  needsDetail,
+} from '../../../shared/payments';
 import { newId } from '../../hooks/useSplit';
+import { methodLine } from '../../utils/payments';
 import classes from './Settings.module.css';
 
-const TYPES = ['DuitNow', 'Bank transfer', "Touch 'n Go eWallet", 'PayNow', 'PayPal', 'Cash'];
+const OTHER = 'Other';
 const MAX_METHODS = 10;
+
+/** What the details field asks for, by type */
+const DETAIL_LABELS: Record<string, { label: string; placeholder: string }> = {
+  'DuitNow': { label: 'Phone number or DuitNow ID', placeholder: '012-345 6789' },
+  [BANK_TRANSFER]: { label: 'Account number', placeholder: '5140 1234 5678' },
+  "Touch 'n Go eWallet": { label: 'Phone number', placeholder: '012-345 6789' },
+  'PayNow': { label: 'Phone number or UEN', placeholder: '+65 9123 4567' },
+  'PayPal': { label: 'Email or PayPal.me link', placeholder: 'paypal.me/you' },
+};
+const DEFAULT_DETAIL = { label: 'Details', placeholder: 'How to pay you' };
 
 interface PaymentMethodsProps {
   methods: PaymentMethod[];
@@ -16,6 +37,13 @@ interface PaymentMethodsProps {
   grouped: boolean;
 }
 
+interface MethodValues {
+  type: string;
+  detail: string;
+  bank: string | null;
+  accountName: string | null;
+}
+
 function MethodForm({
   initial,
   onSave,
@@ -23,38 +51,89 @@ function MethodForm({
   onCancel,
 }: {
   initial?: PaymentMethod;
-  onSave: (method: { type: string; detail: string }) => void;
+  onSave: (method: MethodValues) => void;
   onRemove?: () => void;
   onCancel: () => void;
 }) {
-  const [type, setType] = useState(initial?.type ?? '');
+  // A type not on the list (saved before there was one) is edited as Other
+  const listed = (PAYMENT_TYPES as readonly string[]).includes(initial?.type ?? '');
+  const [kind, setKind] = useState<string>(initial ? (listed ? initial.type : OTHER) : 'DuitNow');
+  const [otherType, setOtherType] = useState(initial && !listed ? initial.type : '');
   const [detail, setDetail] = useState(initial?.detail ?? '');
-  const valid = type.trim() !== '' && detail.trim() !== '';
+  const [bank, setBank] = useState(initial?.bank ?? '');
+  const [accountName, setAccountName] = useState(initial?.accountName ?? '');
+
+  const isBank = kind === BANK_TRANSFER;
+  const type = kind === OTHER ? otherType.trim() : kind;
+  const asksDetail = needsDetail(type);
+  const valid =
+    type !== '' && (!asksDetail || detail.trim() !== '') && (!isBank || bank.trim() !== '');
+  const detailText = DETAIL_LABELS[kind] ?? DEFAULT_DETAIL;
+
   return (
     <form
       className={classes.methodForm}
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) onSave({ type: type.trim(), detail: detail.trim() });
+        if (!valid) return;
+        onSave({
+          type,
+          detail: asksDetail ? detail.trim() : '',
+          bank: isBank ? bank.trim() : null,
+          accountName: isBank ? accountName.trim() || null : null,
+        });
       }}
     >
-      <Autocomplete
+      <Select
         label="Type"
-        placeholder="DuitNow"
-        data={TYPES}
-        value={type}
-        onChange={setType}
-        maxLength={32}
+        data={[...PAYMENT_TYPES, OTHER]}
+        value={kind}
+        onChange={(v) => v && setKind(v)}
+        allowDeselect={false}
         comboboxProps={{ withinPortal: false }}
         data-autofocus
       />
-      <TextInput
-        label="Details"
-        placeholder="012-345 6789, or bank, account number and name"
-        value={detail}
-        onChange={(e) => setDetail(e.target.value)}
-        maxLength={120}
-      />
+      {kind === OTHER && (
+        <TextInput
+          label="Method name"
+          placeholder="GrabPay"
+          value={otherType}
+          onChange={(e) => setOtherType(e.target.value)}
+          maxLength={MAX_METHOD_TYPE}
+        />
+      )}
+      {isBank && (
+        <Autocomplete
+          label="Bank"
+          placeholder="Maybank, or any other bank"
+          data={[...COMMON_BANKS]}
+          value={bank}
+          onChange={setBank}
+          maxLength={MAX_BANK}
+          comboboxProps={{ withinPortal: false }}
+        />
+      )}
+      {asksDetail ? (
+        <TextInput
+          label={detailText.label}
+          placeholder={detailText.placeholder}
+          value={detail}
+          onChange={(e) => setDetail(e.target.value)}
+          maxLength={MAX_METHOD_DETAIL}
+        />
+      ) : (
+        <p className="sf-muted text-sm">People pay you in person; nothing else is needed.</p>
+      )}
+      {isBank && (
+        <TextInput
+          label="Account name"
+          description="Optional. The name on the account, so they know it's you."
+          placeholder="Ben Lim"
+          value={accountName}
+          onChange={(e) => setAccountName(e.target.value)}
+          maxLength={MAX_ACCOUNT_NAME}
+        />
+      )}
       <div className="flex gap-2">
         {onRemove && (
           <Button
@@ -90,11 +169,11 @@ const PaymentMethods = ({ methods, preferredId, onChange, grouped }: PaymentMeth
   // A method's id, or 'new' while adding one
   const [editing, setEditing] = useState<string | null>(null);
 
-  const save = async ({ type, detail }: { type: string; detail: string }) => {
+  const save = async (values: MethodValues) => {
     const next =
       editing === 'new'
-        ? [...methods, { id: newId(), type, detail }]
-        : methods.map((m) => (m.id === editing ? { ...m, type, detail } : m));
+        ? [...methods, { id: newId(), ...values }]
+        : methods.map((m) => (m.id === editing ? { ...m, ...values } : m));
     // The first one added is preferred until another is picked
     const preferred = preferredId ?? next[0]?.id ?? null;
     if (await onChange(next, preferred)) setEditing(null);
@@ -159,7 +238,7 @@ const PaymentMethods = ({ methods, preferredId, onChange, grouped }: PaymentMeth
                 />
                 <span className="min-w-0 flex-1">
                   <span className={classes.methodType}>{m.type}</span>
-                  <span className={classes.methodDetail}>{m.detail}</span>
+                  <span className={classes.methodDetail}>{methodLine(m) || 'In person'}</span>
                 </span>
                 {m.id === preferredId && <span className={classes.preferred}>Preferred</span>}
               </UnstyledButton>

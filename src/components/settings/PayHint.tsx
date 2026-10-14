@@ -2,6 +2,7 @@ import { Button, CopyButton } from '@mantine/core';
 import { Check, Copy } from '@phosphor-icons/react';
 import { PaymentMethod } from '../../api';
 import { formatMoney } from '../../utils/money';
+import { methodLine, methodName } from '../../utils/payments';
 import classes from './Settings.module.css';
 
 interface PayHintProps {
@@ -24,25 +25,30 @@ const PayHint = ({ name, amountCents, currency, methods }: PayHintProps) => {
         <span className="flex-1 text-sm">
           Pay {name} <span className="sf-tabular">{formatMoney(amountCents, currency)}</span>
         </span>
-        <CopyButton value={preferred.detail}>
-          {({ copied, copy }) => (
-            <Button
-              size="compact-sm"
-              variant="default"
-              leftSection={copied ? <Check size={14} /> : <Copy size={14} />}
-              onClick={copy}
-            >
-              {copied ? 'Copied' : 'Copy number'}
-            </Button>
-          )}
-        </CopyButton>
+        {preferred.detail && (
+          <CopyButton value={preferred.detail}>
+            {({ copied, copy }) => (
+              <Button
+                size="compact-sm"
+                variant="default"
+                leftSection={copied ? <Check size={14} /> : <Copy size={14} />}
+                onClick={copy}
+              >
+                {copied ? 'Copied' : 'Copy number'}
+              </Button>
+            )}
+          </CopyButton>
+        )}
       </div>
       <div className="text-sm">
-        {preferred.type} <span className="sf-tabular">{preferred.detail}</span>
+        {preferred.type} <span className="sf-tabular">{methodLine(preferred)}</span>
       </div>
       {others.length > 0 && (
         <div className="sf-muted text-xs">
-          Also accepts {others.map((m) => `${m.type} (${m.detail})`).join(', ')}
+          Also accepts{' '}
+          {others
+            .map((m) => (methodLine(m) ? `${methodName(m)} (${methodLine(m)})` : methodName(m)))
+            .join(', ')}
         </div>
       )}
     </div>

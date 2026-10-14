@@ -463,6 +463,52 @@ describe('profile, pictures and photos', () => {
     expect(profile.settings.theme).toBe('light');
   });
 
+  it("keeps a bank transfer's bank and account name, and lets cash go without details", async () => {
+    const me = person('me');
+    const friend = person('friend');
+    const { id } = await splitWith(me, friend);
+    const [bank, cash, wallet] = [hex(), hex(), hex()];
+    const put = await api.call(me, 'PUT', '/api/me/payment-methods', {
+      methods: [
+        {
+          id: bank,
+          type: 'Bank transfer',
+          detail: '5140 1234',
+          bank: 'Kenanga',
+          accountName: 'Mei Lin',
+        },
+        { id: cash, type: 'Cash', detail: '' },
+        // A bank only belongs on a bank transfer
+        { id: wallet, type: 'DuitNow', detail: '012-345', bank: 'Maybank' },
+      ],
+      preferredId: bank,
+    });
+    expect(put.data.error).toBeUndefined();
+    expect(put.status).toBe(200);
+    expect(put.data.paymentMethods).toEqual([
+      {
+        id: bank,
+        type: 'Bank transfer',
+        detail: '5140 1234',
+        bank: 'Kenanga',
+        accountName: 'Mei Lin',
+      },
+      { id: cash, type: 'Cash', detail: '', bank: null, accountName: null },
+      { id: wallet, type: 'DuitNow', detail: '012-345', bank: null, accountName: null },
+    ]);
+    // People in a split with you see the same
+    const members = (await api.call(friend, 'GET', `/api/splits/${id}`)).data.members as {
+      email: string;
+      paymentMethods: { bank: string | null }[];
+    }[];
+    expect(members.find((m) => m.email === me)?.paymentMethods[0].bank).toBe('Kenanga');
+
+    const missing = await api.call(me, 'PUT', '/api/me/payment-methods', {
+      methods: [{ id: hex(), type: 'DuitNow', detail: '' }],
+    });
+    expect(missing.status).toBe(400);
+  });
+
   it('shows a profile picture only to people who share a split, and refuses non-images', async () => {
     const me = person('me');
     const friend = person('friend');

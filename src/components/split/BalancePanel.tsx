@@ -11,6 +11,7 @@ import { PaymentMethod, SplitMember } from '../../api';
 import { IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
+import { methodName } from '../../utils/payments';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
 import classes from './Split.module.css';
@@ -94,9 +95,16 @@ const COPIED_MS = 1500;
 function PayLine({ methods }: { methods: PaymentMethod[] }) {
   const [preferred] = methods;
   if (preferred == null) return <span className={classes.payMethod}>No payment details yet</span>;
+  const holder = preferred.accountName ? `, ${preferred.accountName}` : '';
+  if (!preferred.detail) {
+    return <span className={classes.payMethod}>{methodName(preferred)}</span>;
+  }
   return (
     <>
-      <span className={classes.payMethod}>{preferred.type}</span>
+      <span className={classes.payMethod}>
+        {methodName(preferred)}
+        {holder}
+      </span>
       <CopyButton
         value={preferred.detail}
         timeout={COPIED_MS}
