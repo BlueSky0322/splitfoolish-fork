@@ -252,7 +252,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   );
   const cycleMobileSort = () => {
     const next = MOBILE_SORTS[(mobileSort + 1) % MOBILE_SORTS.length];
-    setPref({ sortKey: next.key, sortDir: next.dir });
+    void setPref({ sortKey: next.key, sortDir: next.dir });
   };
   const cycleGroup = () =>
     setPref({
@@ -318,7 +318,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     const ok = actions.addItem(input, id);
     if (ok) {
       close();
-      if (newPhotos.length > 0) photos.upload(newPhotos, id);
+      if (newPhotos.length > 0) void photos.upload(newPhotos, id);
     }
     return ok;
   };
@@ -628,7 +628,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
           <ResetLink
             splitId={splitId}
             onDone={() => {
-              refreshMeta();
+              refreshMeta().catch((err) => console.error(err));
               setDialog({ kind: 'members' });
             }}
             onCancel={() => setDialog({ kind: 'members' })}

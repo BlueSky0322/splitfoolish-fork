@@ -72,7 +72,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
           message: err instanceof Error ? err.message : 'Could not create the split',
         });
         updateHomeData((data) => ({ splits: (data.splits ?? []).filter((x) => x.id !== id) }));
-        removeCache(`split:${id}`);
+        void removeCache(`split:${id}`);
         if (new URLSearchParams(window.location.search).get('s') === id) navigate('');
       });
     // The picture shows from this device while it uploads after the split is created
@@ -85,7 +85,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
       );
     }
     // Shown from this copy until the server answers
-    writeCache(`split:${id}`, detail).finally(() => {
+    void writeCache(`split:${id}`, detail).finally(() => {
       onDone();
       navigate(`?s=${id}`);
     });

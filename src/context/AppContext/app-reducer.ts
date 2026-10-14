@@ -39,11 +39,11 @@ export const toApiItem = (item: IItem): ApiItem => ({
 export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draft, action) => {
   switch (action.type) {
     case 'ADD_PERSON':
-      draft.people.push(action.payload as IPerson);
+      draft.people.push(action.payload);
       break;
 
     case 'UPDATE_PERSON': {
-      const { id, ...changes } = action.payload as Partial<IPerson> & { id: string };
+      const { id, ...changes } = action.payload;
       const person = draft.people.find((p) => p.id === id);
       if (person == null) break;
       Object.assign(person, changes);
@@ -56,7 +56,7 @@ export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draf
     }
 
     case 'REMOVE_PERSON': {
-      const id = action.payload as string;
+      const id = action.payload;
       draft.people = draft.people.filter((p) => p.id !== id);
       for (const item of draft.items) {
         item.participants = item.participants.filter((p) => p.id !== id);
@@ -88,13 +88,14 @@ export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draf
       break;
 
     case 'LOAD_STATE': {
-      const people: IPerson[] = action.payload.people ?? [];
+      const people = action.payload.people ?? [];
       draft.people = people;
-      draft.items = (action.payload.items ?? []).map((i: ApiItem) => toClientItem(i, people));
+      draft.items = (action.payload.items ?? []).map((i) => toClientItem(i, people));
       break;
     }
 
     default:
-      throw new Error(`Unsupported action type '${action.type}'`);
+      // Unreachable for typed actions; kept for anything dispatched from plain JavaScript
+      throw new Error(`Unsupported action type '${(action as { type: string }).type}'`);
   }
 };

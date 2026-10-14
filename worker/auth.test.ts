@@ -58,10 +58,12 @@ beforeAll(async () => {
   const jwk = await crypto.subtle.exportKey('jwk', teamKey.publicKey);
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string) =>
-      url === `https://${TEAM}/cdn-cgi/access/certs`
-        ? Response.json({ keys: [{ ...jwk, kid: 'team-key' }] })
-        : new Response('not found', { status: 404 }),
+    vi.fn((url: string) =>
+      Promise.resolve(
+        url === `https://${TEAM}/cdn-cgi/access/certs`
+          ? Response.json({ keys: [{ ...jwk, kid: 'team-key' }] })
+          : new Response('not found', { status: 404 }),
+      ),
     ),
   );
 });
@@ -110,7 +112,7 @@ describe('getUserEmail with Cloudflare Access configured', () => {
         return `${header}.${encode({ ...validClaims(), email: 'attacker@example.com' })}.${signature}`;
       },
     ],
-    ['a malformed token', async () => 'not-a-jwt'],
+    ['a malformed token', () => Promise.resolve('not-a-jwt')],
   ])('rejects %s', async (_name, makeToken) => {
     expect(await getUserEmail(requestWith(await makeToken()), env)).toBeNull();
   });

@@ -44,9 +44,9 @@ export async function readJson(req: Request): Promise<Record<string, unknown> | 
   const text = await req.text();
   if (text.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
   try {
-    const body = JSON.parse(text);
+    const body: unknown = JSON.parse(text);
     if (body == null || typeof body !== 'object') throw new Error();
-    return body;
+    return body as Record<string, unknown>;
   } catch {
     return json({ error: 'Invalid JSON' }, 400);
   }

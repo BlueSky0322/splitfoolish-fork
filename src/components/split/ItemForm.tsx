@@ -64,15 +64,17 @@ function useEvaluated(expression: string) {
       setValue(plain);
       return;
     }
-    loadMath().then(({ evaluate }) => {
-      if (!current) return;
-      try {
-        const result = Number(evaluate(text));
-        setValue(Number.isFinite(result) ? result : null);
-      } catch {
-        setValue(null);
-      }
-    });
+    loadMath()
+      .then(({ evaluate }) => {
+        if (!current) return;
+        try {
+          const result = Number(evaluate(text));
+          setValue(Number.isFinite(result) ? result : null);
+        } catch {
+          setValue(null);
+        }
+      })
+      .catch((err) => console.error(err));
     return () => {
       current = false;
     };
@@ -117,7 +119,7 @@ const ItemForm = ({
   const [tried, setTried] = useState(false);
 
   useEffect(() => {
-    loadMath();
+    loadMath().catch((err) => console.error(err));
   }, []);
 
   const cost = useEvaluated(expression);

@@ -109,6 +109,8 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
+    // palette is a new object each render, so depending on it would redraw in a loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showItems]);
 
   const fileName = `${name.replace(/[^\w-]+/g, '-').toLowerCase() || 'split'}.png`;
