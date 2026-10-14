@@ -17,6 +17,7 @@ import ThemeToggle from './ui/ThemeToggle';
 import SplitAvatar from './ui/SplitAvatar';
 import UserAvatar from './ui/UserAvatar';
 import classes from './SplitsHome.module.css';
+import { InstallCard } from './ui/InstallApp';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -365,6 +366,8 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
         onChange={setFilter}
         fullWidth={!isDesktop}
       />
+
+      <InstallCard />
 
       {error && <div className="sf-negative">{error}</div>}
       {loading && <Loader size="sm" />}
