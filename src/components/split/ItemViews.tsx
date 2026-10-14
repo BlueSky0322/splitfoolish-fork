@@ -61,17 +61,9 @@ function ItemButton({
   );
 }
 
-/** The tick's place in a row: there on hover on a computer, and always while selecting */
-function CheckSlot({
-  item,
-  selection,
-  mobile,
-}: {
-  item: IItem;
-  selection?: RowSelection;
-  mobile: boolean;
-}) {
-  if (selection == null || (mobile && !selection.active)) return null;
+/** The tick in a row, while picking items */
+function CheckSlot({ item, selection }: { item: IItem; selection?: RowSelection }) {
+  if (selection == null || !selection.active) return null;
   return (
     <span
       className={classes.checkSlot}
@@ -214,7 +206,6 @@ export function ItemCards({
                   <CheckSlot
                     item={item}
                     selection={selection}
-                    mobile={mobile}
                   />
                   {Icon && !mobile && (
                     <Icon
@@ -403,7 +394,6 @@ export function ItemTable({
                     <CheckSlot
                       item={item}
                       selection={selection}
-                      mobile
                     />
                     <PersonAvatar
                       preview={false}
@@ -442,7 +432,6 @@ export function ItemTable({
                   <CheckSlot
                     item={item}
                     selection={selection}
-                    mobile={false}
                   />
                   <span className={classes.cellEllipsis}>
                     {item.name}

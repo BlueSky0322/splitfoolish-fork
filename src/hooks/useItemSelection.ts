@@ -13,6 +13,8 @@ export interface RowSelection {
 
 export function useItemSelection(order: string[]) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  // Computers: picking is switched on with a button, and stays on until Done
+  const [on, setOn] = useState(false);
   const anchor = useRef<string | null>(null);
   const orderKey = order.join();
 
@@ -48,14 +50,20 @@ export function useItemSelection(order: string[]) {
     [orderKey],
   );
 
+  /** Stops picking, letting go of everything picked */
   const clear = useCallback(() => {
     setSelected(new Set());
+    setOn(false);
     anchor.current = null;
   }, []);
+  /** Starts picking with nothing picked yet (computers) */
+  const start = useCallback(() => setOn(true), []);
   const selectAll = useCallback(() => setSelected(new Set(order)), [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const row: RowSelection = { selected, active: selected.size > 0, toggle };
-  return { row, selected, count: selected.size, clear, selectAll };
+  // Phones pick from a long press, so picking ends when nothing's left picked
+  const active = on || selected.size > 0;
+  const row: RowSelection = { selected, active, toggle };
+  return { row, selected, active, count: selected.size, clear, start, selectAll };
 }
 
 const LONG_PRESS_MS = 450;
