@@ -12,7 +12,8 @@ import {
 } from '@mantine/core';
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useContext, useEffect, useId, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { convertCents, convertParts, isValidRate } from '../../../shared/rates';
 import { SplitMode, itemShares } from '../../../shared/settle';
 import { MAX_NOTES_LENGTH } from '../../../shared/types';
@@ -26,6 +27,7 @@ import { useProfile } from '../../profile/ProfileContext';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../ui/CurrencySelect';
+import { DialogHeaderSlot } from '../ui/dialogHeader';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../utils/rates';
@@ -120,6 +122,9 @@ const ItemForm = ({
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isDesktop = useIsDesktop();
+  // Phones: the sheet's header takes Save and the menu (see DialogHeaderSlot)
+  const headerSlot = useContext(DialogHeaderSlot);
+  const formId = useId();
   // Items in another currency are edited as they were typed, in that currency
   const original = item?.original ?? null;
   const [expression, setExpression] = useState(
@@ -299,8 +304,58 @@ const ItemForm = ({
     );
   };
 
+  const moreMenu = (onDuplicate || onDelete) && (
+    <Menu
+      position={headerSlot ? 'bottom-end' : 'top-start'}
+      withinPortal={false}
+    >
+      <Menu.Target>
+        <ActionIcon
+          variant="default"
+          size={headerSlot ? 32 : 36}
+          aria-label="More actions"
+        >
+          <DotsThree
+            size={20}
+            weight="bold"
+          />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        {onDuplicate && (
+          <>
+            <Menu.Label>Duplicate</Menu.Label>
+            <Menu.Item
+              leftSection={<Copy size={16} />}
+              onClick={() => onDuplicate(true)}
+            >
+              Keep its date
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<CalendarBlank size={16} />}
+              onClick={() => onDuplicate(false)}
+            >
+              Dated today
+            </Menu.Item>
+          </>
+        )}
+        {onDuplicate && onDelete && <Menu.Divider />}
+        {onDelete && (
+          <Menu.Item
+            color="red"
+            leftSection={<Trash size={16} />}
+            onClick={() => (photos.length > 0 ? setConfirmDelete(true) : onDelete())}
+          >
+            Delete item
+          </Menu.Item>
+        )}
+      </Menu.Dropdown>
+    </Menu>
+  );
+
   return (
     <form
+      id={formId}
       onSubmit={submit}
       className={classes.form}
     >
@@ -596,56 +651,25 @@ const ItemForm = ({
             Delete
           </Button>
         </div>
+      ) : headerSlot ? (
+        // Phones: Save and the menu sit in the sheet's header, clear of the keyboard
+        createPortal(
+          <>
+            {moreMenu}
+            <Button
+              type="submit"
+              form={formId}
+              size="compact-md"
+              disabled={tried && !valid}
+            >
+              {item ? 'Save' : 'Add'}
+            </Button>
+          </>,
+          headerSlot,
+        )
       ) : (
         <div className={classes.actions}>
-          {(onDuplicate || onDelete) && (
-            <Menu
-              position="top-start"
-              withinPortal={false}
-            >
-              <Menu.Target>
-                <ActionIcon
-                  variant="default"
-                  size={36}
-                  aria-label="More actions"
-                >
-                  <DotsThree
-                    size={20}
-                    weight="bold"
-                  />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {onDuplicate && (
-                  <>
-                    <Menu.Label>Duplicate</Menu.Label>
-                    <Menu.Item
-                      leftSection={<Copy size={16} />}
-                      onClick={() => onDuplicate(true)}
-                    >
-                      Keep its date
-                    </Menu.Item>
-                    <Menu.Item
-                      leftSection={<CalendarBlank size={16} />}
-                      onClick={() => onDuplicate(false)}
-                    >
-                      Dated today
-                    </Menu.Item>
-                  </>
-                )}
-                {onDuplicate && onDelete && <Menu.Divider />}
-                {onDelete && (
-                  <Menu.Item
-                    color="red"
-                    leftSection={<Trash size={16} />}
-                    onClick={() => (photos.length > 0 ? setConfirmDelete(true) : onDelete())}
-                  >
-                    Delete item
-                  </Menu.Item>
-                )}
-              </Menu.Dropdown>
-            </Menu>
-          )}
+          {moreMenu}
           <span className="flex-1" />
           {/* On a phone the sheet's X closes it, so Save gets the room */}
           {isDesktop && (

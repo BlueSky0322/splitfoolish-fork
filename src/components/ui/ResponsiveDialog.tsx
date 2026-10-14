@@ -1,5 +1,6 @@
 import { Drawer, Modal } from '@mantine/core';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
+import { DialogHeaderSlot } from './dialogHeader';
 import { useIsMobile } from '../../hooks/useBreakpoints';
 import classes from './ResponsiveDialog.module.css';
 
@@ -21,6 +22,7 @@ const ResponsiveDialog = ({
   width = 440,
 }: ResponsiveDialogProps) => {
   const isMobile = useIsMobile();
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
 
   if (isMobile) {
     return (
@@ -29,7 +31,15 @@ const ResponsiveDialog = ({
         onClose={onClose}
         position="bottom"
         size="auto"
-        title={title}
+        title={
+          <span className={classes.sheetTitleRow}>
+            <span className="min-w-0 flex-1 truncate">{title}</span>
+            <span
+              ref={setSlot}
+              className={classes.headerSlot}
+            />
+          </span>
+        }
         classNames={{
           content: classes.sheet,
           header: classes.sheetHeader,
@@ -37,7 +47,7 @@ const ResponsiveDialog = ({
           body: classes.sheetBody,
         }}
       >
-        {children}
+        <DialogHeaderSlot.Provider value={slot}>{children}</DialogHeaderSlot.Provider>
       </Drawer>
     );
   }
