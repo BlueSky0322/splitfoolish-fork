@@ -142,15 +142,25 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * This tab, sent with every request so that when the server tells open splits about a
+ * change, the tab that made it knows to ignore it
+ */
+export const CLIENT_ID = crypto.randomUUID();
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
-  init: RequestInit = {},
+  { headers, ...init }: RequestInit & { headers?: Record<string, string> } = {},
 ): Promise<T> {
   const res = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers: {
+      'X-Client-Id': CLIENT_ID,
+      ...(body !== undefined && { 'Content-Type': 'application/json' }),
+      ...headers,
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     // Lets a call send something other than JSON, such as a photo
     ...init,
