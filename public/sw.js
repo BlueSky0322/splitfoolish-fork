@@ -17,9 +17,10 @@ const KEEP = [SHELL, ASSETS, IMAGES, FONTS];
 /** Same as SYNC_TAG in src/offline/outbox.ts */
 const SYNC_TAG = 'sf-outbox';
 
-// Profile pictures (always with ?v=) and photos of splits and receipts
+// Profile pictures and payment QR codes (always with ?v=), and photos of splits and receipts
 const isImage = (url) =>
-  (url.pathname.startsWith('/api/avatars/') && url.searchParams.has('v')) ||
+  ((url.pathname.startsWith('/api/avatars/') || url.pathname.startsWith('/api/payment-qr/')) &&
+    url.searchParams.has('v')) ||
   /^\/api\/splits\/[^/]+\/(attachments\/[^/]+|picture)$/.test(url.pathname);
 
 const isFont = (url) =>
