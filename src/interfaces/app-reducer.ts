@@ -22,6 +22,7 @@ export interface IItem {
   /** Amount per person id in currency units, when split by exact amounts */
   exact?: Record<string, number>;
   category: string | null;
+  notes?: string | null;
   createdAt: number;
   /** Entered in another currency: what was typed and the rate it was converted at */
   original?: ItemOriginal | null;

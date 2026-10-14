@@ -6,6 +6,7 @@
 import { RateSource, convertCents, convertParts, isValidRate } from '../shared/rates';
 import { SplitMode } from '../shared/settle';
 import type { Change, Item, ItemOriginal, Person } from '../shared/types';
+import { MAX_NOTES_LENGTH } from '../shared/types';
 
 export type { Change, Item, Person };
 
@@ -43,7 +44,7 @@ export const contentStatements = (db: D1Database, splitId: string) => [
   db
     .prepare(
       `SELECT id, name, cost_cents AS costCents, payer_id AS payerId, split_mode AS splitMode,
-         category, created_at AS createdAt, original_currency AS originalCurrency,
+         category, notes, created_at AS createdAt, original_currency AS originalCurrency,
          original_cents AS originalCents, rate, rate_source AS rateSource, rate_at AS rateAt
        FROM items WHERE split_id = ? ORDER BY position, rowid`,
     )
@@ -67,6 +68,7 @@ interface ItemRow {
   payerId: string;
   splitMode: SplitMode;
   category: string | null;
+  notes: string | null;
   createdAt: number;
   originalCurrency: string | null;
   originalCents: number | null;
@@ -111,6 +113,7 @@ export function assembleContent([people, items, participants]: D1Result<
             ? Object.fromEntries(rows.map((r) => [r.personId, (r.exactCents ?? 0) / 100]))
             : undefined,
         category: i.category,
+        notes: i.notes,
         createdAt: i.createdAt,
         original:
           i.originalCurrency == null
@@ -592,7 +595,28 @@ function readItem(model: Model, raw: unknown, rates: FetchedRates) {
     category = item.category.trim();
   }
 
-  return { id: item.id, name, costCents, payerId, splitMode, participants, category, converted };
+  let notes: string | null = null;
+  if (item.notes != null) {
+    if (typeof item.notes !== 'string') throw new Refused('Invalid notes');
+    // Kept as typed, line breaks and all; only blank space around them goes
+    const trimmed = item.notes.trim();
+    if (trimmed.length > MAX_NOTES_LENGTH) {
+      throw new Refused(`Notes can be up to ${MAX_NOTES_LENGTH} characters`);
+    }
+    notes = trimmed === '' ? null : trimmed;
+  }
+
+  return {
+    id: item.id,
+    name,
+    costCents,
+    payerId,
+    splitMode,
+    participants,
+    category,
+    notes,
+    converted,
+  };
 }
 
 const insertParticipants = (
@@ -777,9 +801,9 @@ function plan(
         db
           .prepare(
             `INSERT INTO items
-               (id, split_id, name, cost_cents, payer_id, position, split_mode, category, created_at,
-                original_currency, original_cents, rate, rate_source, rate_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               (id, split_id, name, cost_cents, payer_id, position, split_mode, category, notes,
+                created_at, original_currency, original_cents, rate, rate_source, rate_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             item.id,
@@ -790,6 +814,7 @@ function plan(
             model.nextItemPosition++,
             item.splitMode,
             item.category,
+            item.notes,
             readCreatedAt(change.item),
             ...conversionValues(item.converted),
           ),
@@ -811,7 +836,7 @@ function plan(
         db
           .prepare(
             `UPDATE items SET name = ?, cost_cents = ?, payer_id = ?, split_mode = ?, category = ?,
-               original_currency = ?, original_cents = ?, rate = ?, rate_source = ?, rate_at = ?
+               notes = ?, original_currency = ?, original_cents = ?, rate = ?, rate_source = ?, rate_at = ?
              WHERE id = ?`,
           )
           .bind(
@@ -820,6 +845,7 @@ function plan(
             item.payerId,
             item.splitMode,
             item.category,
+            item.notes,
             ...conversionValues(item.converted),
             item.id,
           ),

@@ -18,6 +18,7 @@ export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
     shares: item.shares,
     exact: item.exact,
     category: item.category ?? null,
+    notes: item.notes ?? null,
     createdAt: item.createdAt ?? 0,
     original: item.original ?? null,
   };
@@ -33,6 +34,7 @@ export const toApiItem = (item: IItem): ApiItem => ({
   shares: item.shares,
   exact: item.exact,
   category: item.category,
+  notes: item.notes ?? null,
   createdAt: item.createdAt,
   original: item.original,
 });

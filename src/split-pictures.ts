@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { api } from './api';
 import { reloadHomeData, updateHomeData } from './hooks/useHomeData';
 import { whenCreated } from './pending-creates';
-import { AVATAR, shrinkImage } from './utils/image';
+import { shrinkAvatar } from './utils/image';
 
 // Split pictures being uploaded, shown from this device in the meantime
 
@@ -25,7 +25,7 @@ export async function uploadSplitPicture(
   file: File,
   onSaved?: (pictureVersion: number) => void,
 ) {
-  const picture = await shrinkImage(file, AVATAR.maxSide, AVATAR.maxBytes);
+  const picture = await shrinkAvatar(file);
   const url = URL.createObjectURL(picture);
   previews.set(splitId, url);
   notify();

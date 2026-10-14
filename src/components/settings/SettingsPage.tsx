@@ -16,7 +16,7 @@ import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { clearCache } from '../../split-cache';
 import { ACCENTS, Accent, isAccent } from '../../theme/accents';
-import { AVATAR, shrinkImage } from '../../utils/image';
+import { shrinkAvatar } from '../../utils/image';
 import { listCurrencies } from '../../utils/money';
 import UserAvatar from '../ui/UserAvatar';
 import PayHint from './PayHint';
@@ -122,7 +122,7 @@ const SettingsPage = () => {
     setAvatarBusy(true);
     let preview: string | null = null;
     try {
-      const photo = await shrinkImage(file, AVATAR.maxSide, AVATAR.maxBytes);
+      const photo = await shrinkAvatar(file);
       preview = URL.createObjectURL(photo);
       const shown = preview;
       patch((p) => ({ ...p, avatarPreview: shown }));
@@ -414,6 +414,7 @@ const SettingsPage = () => {
               <div className="flex items-center gap-3 flex-wrap">
                 <span className={classes.chip}>
                   <UserAvatar
+                    preview={false}
                     name={myName}
                     email={profile.email}
                     avatarVersion={profile.avatarVersion}

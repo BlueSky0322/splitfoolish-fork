@@ -1,5 +1,5 @@
 import { ActionIcon, UnstyledButton } from '@mantine/core';
-import { ArrowDown, ArrowUp, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
+import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
 import { categoryIcon } from '../../split/categories';
@@ -32,6 +32,20 @@ function PhotoBadge({ count }: { count?: number }) {
     >
       <Paperclip size={12} />
       {count > 1 && count}
+    </span>
+  );
+}
+
+/** Shown when an item has notes; hovering shows them */
+function NotesBadge({ notes }: { notes?: string | null }) {
+  if (!notes) return null;
+  return (
+    <span
+      className={classes.photoBadge}
+      title={notes}
+      aria-label="Has notes"
+    >
+      <Note size={12} />
     </span>
   );
 }
@@ -143,6 +157,7 @@ export function ItemCards({
                     <div className={classes.itemName}>
                       {item.name}
                       <PhotoBadge count={photoCounts.get(item.id)} />
+                      <NotesBadge notes={item.notes} />
                     </div>
                     <div className={classes.itemMeta}>
                       {mobile
@@ -306,6 +321,7 @@ export function ItemTable({
                 >
                   <span className={classes.payerCell}>
                     <PersonAvatar
+                      preview={false}
                       person={item.payer}
                       size={26}
                     />
@@ -338,6 +354,7 @@ export function ItemTable({
                 <span className={classes.cellEllipsis}>
                   {item.name}
                   <PhotoBadge count={photoCounts.get(item.id)} />
+                  <NotesBadge notes={item.notes} />
                 </span>
                 <span className={classes.payerCell}>
                   <PersonAvatar

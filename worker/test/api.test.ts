@@ -125,6 +125,33 @@ describe('changing a split', () => {
     expect((await change(owner, id, item({ [a]: 10, [b]: 10 }))).status).toBe(409);
     expect((await change(owner, id, item({ [a]: 10, [b]: 20 }))).status).toBe(200);
   });
+
+  it('keeps notes on items, line breaks included, and limits their length', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const a = hex();
+    const itemId = hex();
+    await change(owner, id, { op: 'addPerson', id: a, name: 'A' });
+    const item = (notes: unknown) => ({
+      id: itemId,
+      name: 'Dinner',
+      cost: 30,
+      payerId: a,
+      participantIds: [a],
+      notes,
+    });
+    expect(
+      (await change(owner, id, { op: 'addItem', item: item('  Two mains\nOne dessert  ') })).status,
+    ).toBe(200);
+    const notesOf = async () =>
+      (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0].notes;
+    expect(await notesOf()).toBe('Two mains\nOne dessert');
+    expect(
+      (await change(owner, id, { op: 'updateItem', item: item('x'.repeat(2001)) })).status,
+    ).toBe(409);
+    expect((await change(owner, id, { op: 'updateItem', item: item('   ') })).status).toBe(200);
+    expect(await notesOf()).toBeNull();
+  });
 });
 
 describe('share link invites', () => {
