@@ -1,4 +1,5 @@
 import { ArrowRight } from '@phosphor-icons/react';
+import { ReactNode } from 'react';
 import { IPerson } from '../../interfaces/app-reducer';
 import { formatMoney } from '../../utils/money';
 import PersonAvatar from './PersonAvatar';
@@ -11,12 +12,24 @@ interface TransferRowProps {
   currency: string;
   /** lg for Settle up on phones, xl for the share image */
   size?: 'md' | 'lg' | 'xl';
+  /** Reads "You pay …" */
+  fromMe?: boolean;
+  /** A second line in the same box, e.g. how to pay */
+  payLine?: ReactNode;
 }
 
 // "Chen pays Ben RM 102.50", used in the balance panel, Settle up and the share image
-const TransferRow = ({ from, to, amountCents, currency, size = 'md' }: TransferRowProps) => {
+const TransferRow = ({
+  from,
+  to,
+  amountCents,
+  currency,
+  size = 'md',
+  fromMe = false,
+  payLine,
+}: TransferRowProps) => {
   const avatar = { md: 26, lg: 30, xl: 52 }[size];
-  return (
+  const row = (
     <div
       className={classes.transfer}
       data-size={size}
@@ -34,9 +47,19 @@ const TransferRow = ({ from, to, amountCents, currency, size = 'md' }: TransferR
         size={avatar}
       />
       <span className={classes.transferText}>
-        {from.name} pays {to.name}
+        {fromMe ? `You pay ${to.name}` : `${from.name} pays ${to.name}`}
       </span>
       <span className={classes.transferAmount}>{formatMoney(amountCents, currency)}</span>
+    </div>
+  );
+  if (payLine == null) return row;
+  return (
+    <div
+      className={classes.transferGroup}
+      data-size={size}
+    >
+      {row}
+      <div className={classes.payLine}>{payLine}</div>
     </div>
   );
 };

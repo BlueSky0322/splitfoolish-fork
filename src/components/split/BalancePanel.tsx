@@ -1,10 +1,16 @@
-import { Button, Select } from '@mantine/core';
-import { ShareNetwork } from '@phosphor-icons/react';
-import { SplitMember } from '../../api';
+import { Button, CopyButton, Select, UnstyledButton } from '@mantine/core';
+import {
+  CaretLeft,
+  CaretRight,
+  ChartBarHorizontal,
+  Copy,
+  ShareNetwork,
+} from '@phosphor-icons/react';
+import { useState } from 'react';
+import { PaymentMethod, SplitMember } from '../../api';
 import { IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
-import PayHint from '../settings/PayHint';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
 import classes from './Split.module.css';
@@ -82,6 +88,37 @@ export function BalanceHero({
   );
 }
 
+const COPIED_MS = 1500;
+
+/** Under a transfer you make: how they like to be paid, and their number to copy */
+function PayLine({ methods }: { methods: PaymentMethod[] }) {
+  const [preferred] = methods;
+  if (preferred == null) return <span className={classes.payMethod}>No payment details yet</span>;
+  return (
+    <>
+      <span className={classes.payMethod}>{preferred.type}</span>
+      <CopyButton
+        value={preferred.detail}
+        timeout={COPIED_MS}
+      >
+        {({ copied, copy }) => (
+          <UnstyledButton
+            className={classes.payChip}
+            onClick={copy}
+            aria-label={copied ? 'Copied' : `Copy ${preferred.detail}`}
+          >
+            {copied ? 'Copied' : preferred.detail}
+            <Copy size={13} />
+          </UnstyledButton>
+        )}
+      </CopyButton>
+    </>
+  );
+}
+
+const ROUTE_HELP =
+  'Pick someone to collect and pay out for the group. Everyone then pays, or is paid by, just that person.';
+
 const BalancePanel = ({
   people,
   summary,
@@ -100,6 +137,57 @@ const BalancePanel = ({
   const byId = new Map(people.map((p) => [p.id, p]));
   const mine = me ? summary.balances.get(me.id) : null;
   const count = summary.transfers.length;
+  const isSheet = variant === 'sheet';
+  // The sheet keeps balances and routing on a second view (4f)
+  const [view, setView] = useState<'transfers' | 'balances'>('transfers');
+
+  const bars = people.length > 0 && summary.hasItems && (
+    <section className={classes.panelSection}>
+      <h6 className="sf-label">Balances</h6>
+      <BalanceBars
+        people={people}
+        balances={summary.balances}
+      />
+    </section>
+  );
+  const route = (
+    <Select
+      label="Route payments through"
+      description={isSheet ? ROUTE_HELP : undefined}
+      inputWrapperOrder={['label', 'input', 'description']}
+      data={[
+        { value: '', label: 'Nobody, fewest transfers' },
+        ...people.map((p) => ({ value: p.id, label: p.name })),
+      ]}
+      value={distributorId ?? ''}
+      onChange={(v) => {
+        onDistributorChange(v || null);
+        if (isSheet) setView('transfers');
+      }}
+      allowDeselect={false}
+      // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
+      comboboxProps={{ withinPortal: !isSheet }}
+    />
+  );
+
+  if (isSheet && view === 'balances') {
+    return (
+      <div className={classes.sheetPanel}>
+        <Button
+          variant="subtle"
+          color="gray"
+          className={classes.sheetBack}
+          leftSection={<CaretLeft size={16} />}
+          onClick={() => setView('transfers')}
+        >
+          Settle up
+        </Button>
+        {bars}
+        <hr className="sf-rule" />
+        {route}
+      </div>
+    );
+  }
 
   return (
     <div className={variant === 'panel' ? classes.panel : classes.sheetPanel}>
@@ -151,16 +239,10 @@ const BalancePanel = ({
                     to={to}
                     amountCents={t.amountCents}
                     currency={currency}
-                    size={variant === 'sheet' ? 'lg' : 'md'}
+                    size={isSheet ? 'lg' : 'md'}
+                    fromMe={yours}
+                    payLine={yours ? <PayLine methods={methodsFor(to)} /> : undefined}
                   />
-                  {yours && (
-                    <PayHint
-                      name={to.name}
-                      amountCents={t.amountCents}
-                      currency={currency}
-                      methods={methodsFor(to)}
-                    />
-                  )}
                 </div>
               );
             })}
@@ -168,28 +250,21 @@ const BalancePanel = ({
         )}
       </section>
 
-      {people.length > 0 && summary.hasItems && (
-        <section className={classes.panelSection}>
-          <h6 className="sf-label">Balances</h6>
-          <BalanceBars
-            people={people}
-            balances={summary.balances}
-          />
-        </section>
+      {isSheet ? (
+        <UnstyledButton
+          className={classes.sheetRow}
+          onClick={() => setView('balances')}
+        >
+          <ChartBarHorizontal size={18} />
+          <span className="flex-1">Balances and routing</span>
+          <CaretRight size={16} />
+        </UnstyledButton>
+      ) : (
+        <>
+          {bars}
+          {route}
+        </>
       )}
-
-      <Select
-        label="Route payments through"
-        data={[
-          { value: '', label: 'Nobody, fewest transfers' },
-          ...people.map((p) => ({ value: p.id, label: p.name })),
-        ]}
-        value={distributorId ?? ''}
-        onChange={(v) => onDistributorChange(v || null)}
-        allowDeselect={false}
-        // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
-        comboboxProps={{ withinPortal: variant === 'panel' }}
-      />
       <Button
         variant="default"
         leftSection={<ShareNetwork size={16} />}
