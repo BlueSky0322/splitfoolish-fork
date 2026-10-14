@@ -1,5 +1,6 @@
 // What the client and the Worker send each other about a split's bill. One copy, so
 // the two sides can't drift apart.
+import type { RateSource } from './rates';
 import type { SplitMode } from './settle';
 
 export type { SplitMode };
@@ -27,6 +28,24 @@ export interface Item {
   exact?: Record<string, number>;
   category: string | null;
   createdAt: number;
+  /** Set when the item was entered in a currency other than the split's */
+  original?: ItemOriginal | null;
+}
+
+/**
+ * An item as entered in another currency. The app sends currency, amount (and exact,
+ * for exact splits); the server converts it and fills in the rate. To use a rate of
+ * their own, people send rate with rateSource 'manual'.
+ */
+export interface ItemOriginal {
+  currency: string;
+  amount: number;
+  /** Exact split amounts in this currency, by person id */
+  exact?: Record<string, number>;
+  rate?: number;
+  rateSource?: RateSource;
+  /** When the rate was fetched or typed, in ms */
+  rateAt?: number;
 }
 
 /** One change to a split's people or items; ids are made by the client */

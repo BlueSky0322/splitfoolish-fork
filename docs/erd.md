@@ -62,12 +62,18 @@ erDiagram
         text category
         int position
         int created_at
+        text original_currency "null: entered in the split's currency"
+        int original_cents "as typed, in original_currency"
+        real rate "original to split currency, as saved"
+        text rate_source "wise, frankfurter or manual"
+        int rate_at
     }
     item_participants {
         text item_id PK, FK
         text person_id PK, FK
         int shares "for split_mode shares"
         int exact_cents "for split_mode exact"
+        int original_exact_cents "as typed, for items in another currency"
     }
     attachments {
         text id PK
@@ -134,6 +140,11 @@ erDiagram
 - **Large values live apart.** Picture and photo bytes sit in `avatars`,
   `split_pictures` and `attachment_data`, so reading names or listing splits and
   photos never loads images.
+- **Other currencies.** An item entered in another currency keeps what was typed
+  (`original_currency`, `original_cents`) and the rate it was converted at, while
+  `cost_cents` holds the amount in the split's currency, worked out once by the server
+  when the item is saved. Totals never drift as rates move, and settling up only ever
+  sees one currency. Editing an item without changing its amount keeps its rate.
 - **Shared, not per person.** Who to route payments through is a property of the split
   (`splits.distributor_person_id`), so everyone in it sees the same transfers.
 - **Deleting cleans up.** Deleting a split removes its members, invites, people, items,

@@ -1,5 +1,5 @@
 import { SplitMode } from '../../shared/settle';
-import type { Item } from '../../shared/types';
+import type { Item, ItemOriginal } from '../../shared/types';
 
 export interface IPerson {
   id: string;
@@ -23,6 +23,8 @@ export interface IItem {
   exact?: Record<string, number>;
   category: string | null;
   createdAt: number;
+  /** Entered in another currency: what was typed and the rate it was converted at */
+  original?: ItemOriginal | null;
 }
 
 export interface AppReducerState {
