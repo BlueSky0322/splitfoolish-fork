@@ -82,8 +82,9 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
             </CopyButton>
           </div>
           <p className={classes.help}>
-            Anyone who opens it and signs in can view and edit this split. It changes when you
-            remove someone, so they can't use it to come back.
+            Anyone who opens it and signs in gets an invite to accept; once they do, they can view
+            and edit this split. It changes when you remove someone, so they can't use it to come
+            back.
           </p>
           <UnstyledButton
             className={`${classes.textAction} self-start`}
@@ -146,12 +147,14 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
               />
               <div className="min-w-0 flex-1">
                 <div className={classes.email}>{i.email}</div>
-                <div className={classes.role}>Invited · expires {shortDate(i.expiresAt)}</div>
+                <div className={classes.role}>
+                  Opened the link, hasn't accepted · expires {shortDate(i.expiresAt)}
+                </div>
               </div>
               <UnstyledButton
                 className={classes.textAction}
                 disabled={busy}
-                aria-label={`Revoke invite for ${i.email}`}
+                aria-label={`Withdraw invite for ${i.email}`}
                 onClick={() =>
                   optimistic(
                     (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== i.id) }),
@@ -159,7 +162,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
                   )
                 }
               >
-                Revoke
+                Withdraw
               </UnstyledButton>
             </div>
           ))}

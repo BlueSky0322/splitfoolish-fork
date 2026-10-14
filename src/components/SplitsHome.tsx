@@ -61,7 +61,11 @@ const splitMeta = (split: SplitSummary) =>
     split.currency,
   )}`;
 
+// The invite you just picked up from a share link, picked out in the list
+const linkedInviteId = () => new URLSearchParams(window.location.search).get('invite');
+
 function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
+  const highlight = linkedInviteId();
   const [busy, setBusy] = useState<string | null>(null);
 
   // The invite leaves the list straight away; the server catches up in the background
@@ -96,6 +100,7 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
         <div
           key={invite.id}
           className={classes.inviteRow}
+          data-highlight={invite.id === highlight || undefined}
         >
           <div className="min-w-0 flex-1">
             <div className={classes.rowTitle}>{invite.splitName}</div>
@@ -163,7 +168,9 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
         </div>
         {loading && <Loader size="sm" />}
         {invites != null && invites.length === 0 && (
-          <div className="sf-muted">No pending invites.</div>
+          <div className="sf-muted">
+            No pending invites. Open a share link from a split to get one.
+          </div>
         )}
         {invites != null && invites.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -246,7 +253,9 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
       {filter === 'invites' ? (
         <>
           {invites != null && invites.length === 0 && (
-            <div className="sf-muted text-center">No pending invites.</div>
+            <div className="sf-muted text-center">
+              No pending invites. Open a share link from a split to get one.
+            </div>
           )}
           {invites != null && invites.length > 0 && (
             <InviteList
