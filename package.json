@@ -24,6 +24,7 @@
     "@mantine/notifications": "^7.9.2",
     "@phosphor-icons/react": "2.1.7",
     "clsx": "^2.1.1",
+    "hono": "4.13.13",
     "html2canvas": "^1.4.1",
     "idb-keyval": "^6",
     "immer": "^10.1.1",

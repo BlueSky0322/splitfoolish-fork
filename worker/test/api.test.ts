@@ -234,3 +234,73 @@ describe('safeguards', () => {
     expect(res.status).toBe(413);
   });
 });
+
+describe('profile, pictures and photos', () => {
+  // The smallest bytes that pass as a JPEG
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
+  const upload = (who: string, method: string, path: string) =>
+    api.call(who, method, path, jpeg, { 'Content-Type': 'image/jpeg' });
+
+  it('saves the profile, settings and payment methods', async () => {
+    const me = person('me');
+    expect(
+      (await api.call(me, 'PATCH', '/api/me', { displayName: 'Mei', settings: { theme: 'light' } }))
+        .status,
+    ).toBe(200);
+    const methods = [{ id: hex(), type: 'DuitNow', detail: '012-345' }];
+    const put = await api.call(me, 'PUT', '/api/me/payment-methods', {
+      methods,
+      preferredId: methods[0].id,
+    });
+    expect(put.status).toBe(200);
+    const profile = (await api.call(me, 'GET', '/api/me')).data;
+    expect(profile.displayName).toBe('Mei');
+    expect(profile.settings.theme).toBe('light');
+  });
+
+  it('shows a profile picture only to people who share a split, and refuses non-images', async () => {
+    const me = person('me');
+    const friend = person('friend');
+    expect((await upload(me, 'PUT', '/api/me/avatar')).status).toBe(200);
+    const path = `/api/avatars/${encodeURIComponent(me)}`;
+    expect((await api.call(me, 'GET', path)).status).toBe(200);
+    expect((await api.call(friend, 'GET', path)).status).toBe(404);
+    await splitWith(me, friend);
+    expect((await api.call(friend, 'GET', path)).status).toBe(200);
+    const bad = await api.call(me, 'PUT', '/api/me/avatar', 'not an image', {
+      'Content-Type': 'text/plain',
+    });
+    expect(bad.status).toBe(415);
+  });
+
+  it('lets members add photos and see the split picture, and only the owner change it', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const stranger = person('stranger');
+    const { id } = await splitWith(owner, editor);
+
+    const added = await upload(editor, 'POST', `/api/splits/${id}/attachments`);
+    expect(added.status).toBe(201);
+    expect(
+      (await api.call(owner, 'GET', `/api/splits/${id}/attachments/${added.data.id}`)).status,
+    ).toBe(200);
+    expect(
+      (await api.call(stranger, 'GET', `/api/splits/${id}/attachments/${added.data.id}`)).status,
+    ).toBe(404);
+
+    expect((await upload(editor, 'PUT', `/api/splits/${id}/picture`)).status).toBe(403);
+    expect((await upload(owner, 'PUT', `/api/splits/${id}/picture`)).status).toBe(200);
+    expect((await api.call(editor, 'GET', `/api/splits/${id}/picture`)).status).toBe(200);
+
+    expect((await api.call(owner, 'PATCH', `/api/splits/${id}`, { name: 'Renamed' })).status).toBe(
+      200,
+    );
+    expect((await api.call(editor, 'GET', `/api/splits/${id}`)).data.name).toBe('Renamed');
+  });
+
+  it('answers unknown API paths with a JSON 404', async () => {
+    const res = await api.call(person('x'), 'GET', '/api/nope');
+    expect(res.status).toBe(404);
+    expect(res.data.error).toBe('Not found');
+  });
+});
