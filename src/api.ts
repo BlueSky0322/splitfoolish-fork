@@ -20,11 +20,8 @@ export interface SplitSummary {
 
 export type ThemeSetting = 'dark' | 'light' | 'auto';
 
-export interface PaymentMethod {
-  id: string;
-  type: string;
-  detail: string;
-}
+export type { PaymentMethod } from '../shared/payments';
+import type { PaymentMethod } from '../shared/payments';
 
 export interface Settings {
   theme: ThemeSetting;

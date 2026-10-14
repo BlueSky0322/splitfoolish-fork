@@ -126,8 +126,10 @@ erDiagram
     payment_methods {
         text id PK
         text email FK
-        text type "e.g. DuitNow"
-        text detail
+        text type "from a fixed list, or Other named freely"
+        text detail "number, ID or link; empty for Cash"
+        text bank "bank transfers: any bank"
+        text account_name "bank transfers: optional"
         int position
         int is_preferred "at most one per account"
     }
