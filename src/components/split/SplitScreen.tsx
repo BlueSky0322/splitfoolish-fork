@@ -46,8 +46,9 @@ import { currencySymbol } from '../../utils/money';
 import ErrorBoundary from '../ErrorBoundary';
 import PhotoStrip from '../photos/PhotoStrip';
 import { usePhotos } from '../photos/usePhotos';
-import EndSplit from '../EndSplit';
-import SplitMembers from '../SplitMembers';
+import EndSplit, { EndSplitTitle } from '../EndSplit';
+import ResetLink from '../ResetLink';
+import SplitMembers, { ShareTitle } from '../SplitMembers';
 import Fab from '../ui/Fab';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from '../ui/SplitAvatar';
@@ -85,7 +86,9 @@ type Dialog =
   | { kind: 'settle' }
   | { kind: 'share' }
   | { kind: 'members' }
-  | { kind: 'end' }
+  | { kind: 'reset' }
+  /** fromShare: Cancel goes back to the share dialog it replaced */
+  | { kind: 'end'; fromShare?: boolean }
   | { kind: 'settings' }
   | { kind: 'photos' };
 
@@ -376,7 +379,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
           leftSection={<UserPlus size={16} />}
           onClick={() => setDialog({ kind: 'members' })}
         >
-          Sharing and members
+          Share split
         </Menu.Item>
         <Menu.Item
           leftSection={<Images size={16} />}
@@ -601,8 +604,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       <ResponsiveDialog
         opened={dialog?.kind === 'members'}
         onClose={close}
-        title={meta ? `Share ${meta.name}` : 'Share'}
-        width={520}
+        title={<ShareTitle name={meta?.name ?? ''} />}
+        width={460}
       >
         {dialog?.kind === 'members' && myEmail && meta && (
           <SplitMembers
@@ -610,13 +613,33 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             myEmail={myEmail}
             onChange={refreshMeta}
             setMeta={setMeta}
+            onReset={() => setDialog({ kind: 'reset' })}
+            onEnd={() => setDialog({ kind: 'end', fromShare: true })}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'reset'}
+        onClose={() => setDialog({ kind: 'members' })}
+        title="Reset share link?"
+        width={400}
+      >
+        {dialog?.kind === 'reset' && (
+          <ResetLink
+            splitId={splitId}
+            onDone={() => {
+              refreshMeta();
+              setDialog({ kind: 'members' });
+            }}
+            onCancel={() => setDialog({ kind: 'members' })}
           />
         )}
       </ResponsiveDialog>
       <ResponsiveDialog
         opened={dialog?.kind === 'end'}
         onClose={close}
-        title={meta?.role === 'owner' ? 'Delete split' : 'Leave split'}
+        title={<EndSplitTitle isOwner={meta?.role === 'owner'} />}
+        width={420}
       >
         {dialog?.kind === 'end' && myEmail && meta && (
           <EndSplit
@@ -624,7 +647,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             name={meta.name}
             isOwner={meta.role === 'owner'}
             myEmail={myEmail}
-            onCancel={close}
+            onCancel={() => (dialog.fromShare ? setDialog({ kind: 'members' }) : close())}
           />
         )}
       </ResponsiveDialog>

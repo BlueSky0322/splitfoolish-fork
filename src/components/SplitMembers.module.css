@@ -1,3 +1,83 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* Title with the split's name under it */
+.titleBlock {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.titleSub {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sf-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The link, with copy inside it */
+.linkBox {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--sf-border);
+  background: var(--sf-input-bg, transparent);
+}
+
+.linkIcon {
+  flex-shrink: 0;
+  opacity: 0.55;
+}
+
+.linkText {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.copied {
+  font-size: 12px;
+  color: var(--sf-accent);
+}
+
+.reset {
+  color: var(--sf-text-muted);
+}
+
+.reset:hover {
+  color: var(--sf-text);
+}
+
+.help {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--sf-text-muted);
+}
+
+.tall:global(.mantine-Button-root) {
+  height: 48px;
+}
+
+.half:global(.mantine-Button-root) {
+  height: 44px;
+}
+
 .rows {
   display: flex;
   flex-direction: column;
@@ -6,29 +86,29 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 50px;
+  gap: 12px;
+  min-height: 48px;
+  padding: 4px 0;
 }
 
-.row + .row {
-  border-top: 1px solid var(--sf-divider);
-}
-
-.email {
+.name {
   font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.role {
+.email {
   font-size: 12px;
   color: var(--sf-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .textAction {
   color: var(--sf-accent);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .textAction:hover {
@@ -39,24 +119,46 @@
   opacity: 0.45;
 }
 
-.confirm {
+/* Delete or leave, below a fading rule */
+.footer {
+  position: relative;
+  padding-top: 14px;
+}
+
+.footer::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--sf-divider) 48px,
+    var(--sf-divider) calc(100% - 48px),
+    transparent
+  );
+}
+
+/* 3d: delete or leave confirm */
+.endTitle {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--sf-tint);
+  align-items: center;
+  gap: 12px;
 }
 
-/* Same height as the link beside it */
-.copyButton:global(.mantine-Button-root) {
+.endIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
   height: 36px;
-  min-width: 96px;
   flex-shrink: 0;
+  border-radius: 999px;
+  color: var(--sf-negative);
+  background: color-mix(in srgb, var(--sf-negative) 16%, transparent);
 }
 
-.help {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--sf-text-muted);
+.endName {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
