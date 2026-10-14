@@ -38,7 +38,7 @@ const EndSplit = ({ splitId, name, isOwner, myEmail, onCancel }: EndSplitProps) 
               ? err.message
               : `Could not ${isOwner ? 'delete' : 'leave'} the split`,
         });
-        reloadHomeData();
+        void reloadHomeData();
       });
   };
 

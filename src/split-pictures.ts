@@ -53,7 +53,7 @@ export async function removeSplitPicture(splitId: string) {
   try {
     await api.removeSplitPicture(splitId);
   } catch (err) {
-    reloadHomeData();
+    void reloadHomeData();
     throw err;
   }
 }

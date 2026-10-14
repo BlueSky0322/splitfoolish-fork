@@ -4,7 +4,7 @@ interface IDBContextValue {
   db?: IDBDatabase;
 }
 
-export const IDBContext = createContext<IDBContextValue>({} as IDBContextValue);
+export const IDBContext = createContext<IDBContextValue>({});
 
 interface IDBContextProviderProps {
   children: ReactNode;
@@ -99,6 +99,8 @@ export const IDBContextProvider: React.FC<IDBContextProviderProps> = ({
         console.log('IDBContextProvider: Closing connection');
       }
     };
+    // Reopens only when the schema changes; depending on db would reopen on every open
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schema]);
 
   return <IDBContext.Provider value={{ db }}>{children}</IDBContext.Provider>;

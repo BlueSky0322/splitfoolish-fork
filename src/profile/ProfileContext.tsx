@@ -22,11 +22,18 @@ export interface Appearance {
   accent: Accent;
 }
 
+const isTheme = (value: unknown): value is ThemeSetting =>
+  value === 'dark' || value === 'light' || value === 'auto';
+
 export function readAppearance(): Appearance {
   try {
-    const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) ?? '{}');
+    // Whatever was saved, checked field by field
+    const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) ?? '{}') as {
+      theme?: unknown;
+      accent?: unknown;
+    };
     return {
-      theme: ['dark', 'light', 'auto'].includes(saved.theme) ? saved.theme : 'auto',
+      theme: isTheme(saved.theme) ? saved.theme : 'auto',
       accent: isAccent(saved.accent) ? saved.accent : 'blurple',
     };
   } catch {

@@ -93,11 +93,11 @@ const SettingsPage = () => {
   const saveName = () => {
     const trimmed = name.trim();
     if (trimmed === (profile.displayName ?? '')) return;
-    track(update({ displayName: trimmed || null }));
+    void track(update({ displayName: trimmed || null }));
   };
 
   // Shown straight away; put back if the server refuses it
-  const savePayments = async (methods: PaymentMethod[], preferredId: string | null) => {
+  const savePayments = (methods: PaymentMethod[], preferredId: string | null) => {
     const before = {
       paymentMethods: profile.paymentMethods,
       preferredPaymentMethodId: profile.preferredPaymentMethodId,
@@ -107,7 +107,7 @@ const SettingsPage = () => {
       patch((p) => ({ ...p, ...before }));
       fail(err, 'Could not save your payment methods');
     });
-    return true;
+    return Promise.resolve(true);
   };
 
   // The new picture shows from this device while it uploads
@@ -221,7 +221,7 @@ const SettingsPage = () => {
             title={ACCENTS[key].label}
             className={classes.swatch}
             data-selected={accent === key || undefined}
-            style={{ '--swatch': ACCENTS[key].ramp[4] } as React.CSSProperties}
+            style={{ '--swatch': ACCENTS[key].ramp[4] }}
             onClick={() => track(updateSettings({ accent: key }))}
           />
         ))}

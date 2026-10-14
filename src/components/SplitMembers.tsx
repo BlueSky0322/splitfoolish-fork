@@ -64,7 +64,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset, onEnd }: Spli
     setMeta((m) => (m ? show(m) : m));
     request().catch((err) => {
       showError(err);
-      onChange();
+      onChange().catch((e) => console.error(e));
     });
   };
 

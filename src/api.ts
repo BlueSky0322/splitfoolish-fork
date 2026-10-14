@@ -133,8 +133,11 @@ async function request<T>(
     // Lets a call send something other than JSON, such as a photo
     ...init,
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, data.error ?? `${method} ${path} failed`);
+  const data = (await res.json().catch(() => ({}))) as unknown;
+  if (!res.ok) {
+    const { error } = data as { error?: string };
+    throw new ApiError(res.status, error ?? `${method} ${path} failed`);
+  }
   return data as T;
 }
 

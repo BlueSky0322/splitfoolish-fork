@@ -78,7 +78,7 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
         setBusy(invite.id);
         // Joining has to finish before the split can be opened
         const { id } = await api.acceptInvite(invite.id);
-        reloadHomeData();
+        void reloadHomeData();
         navigate(`?s=${id}`);
         return;
       }
@@ -88,7 +88,7 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
         color: 'red',
         message: err instanceof Error ? err.message : 'Could not answer the invite',
       });
-      reloadHomeData();
+      void reloadHomeData();
     } finally {
       setBusy(null);
     }

@@ -33,7 +33,7 @@ export function reloadHomeData(): Promise<void> {
     .then(([{ splits }, { invites }]) => {
       freshLoaded = true;
       setState({ splits, invites, error: null });
-      writeCache('home-v2', { splits, invites });
+      void writeCache('home-v2', { splits, invites });
     })
     .catch(() => setState({ error: 'Could not load your splits.' }))
     .finally(() => {
@@ -56,12 +56,12 @@ export function useHomeData() {
   useEffect(() => {
     if (!cacheRead) {
       cacheRead = true;
-      readCache<{ splits: SplitSummary[]; invites: MyInvite[] }>('home-v2').then((cached) => {
+      void readCache<{ splits: SplitSummary[]; invites: MyInvite[] }>('home-v2').then((cached) => {
         if (cached == null || freshLoaded) return;
         setState({ splits: cached.splits, invites: cached.invites });
       });
     }
-    reloadHomeData();
+    void reloadHomeData();
   }, []);
 
   return data;
