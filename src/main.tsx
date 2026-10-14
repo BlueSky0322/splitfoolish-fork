@@ -17,6 +17,7 @@ import { queryClient } from './query-client.ts';
 import { Accent } from './theme/accents.ts';
 import { buildTheme, cssVariablesResolver } from './theme/theme.ts';
 import './theme/tokens.css';
+import { trackKeyboardInset } from './keyboard-inset';
 
 const initialAppearance = readAppearance();
 
@@ -56,6 +57,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </React.StrictMode>,
 );
+
+// Bottom sheets stay above the on-screen keyboard
+trackKeyboardInset();
 
 // Installable app: the service worker only keeps the built files for offline starts
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
