@@ -429,6 +429,95 @@ describe('items in another currency', () => {
   });
 });
 
+describe("a currency's rate across the split", () => {
+  async function phpSplit() {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const [a, b] = [hex(), hex()];
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: a, name: 'A' },
+      { op: 'addPerson', id: b, name: 'B' },
+    );
+    const item = (extra: Record<string, unknown>) => ({
+      id: hex(),
+      name: 'Jeepney',
+      cost: 0,
+      payerId: a,
+      participantIds: [a, b],
+      ...extra,
+    });
+    const items = async () =>
+      (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items as {
+        name: string;
+        cost: number;
+        exact: Record<string, number>;
+        original: { rate: number; rateSource: string };
+      }[];
+    return { owner, editor, id, a, b, item, items };
+  }
+
+  it('puts every item in a currency on a typed rate, exact splits included, then back on the live one', async () => {
+    const { owner, id, a, b, item, items } = await phpSplit();
+    api.rates.set('PHP', 'MYR', 0.08);
+    await change(
+      owner,
+      id,
+      { op: 'addItem', item: item({ name: 'Taxi', original: { currency: 'PHP', amount: 1000 } }) },
+      {
+        op: 'addItem',
+        item: item({
+          name: 'Dinner',
+          splitMode: 'exact',
+          original: { currency: 'PHP', amount: 10, exact: { [a]: 3.33, [b]: 6.67 } },
+        }),
+      },
+    );
+    expect((await items()).map((i) => i.cost)).toEqual([80, 0.8]);
+
+    expect((await change(owner, id, { op: 'setRate', currency: 'PHP', rate: 0.1 })).status).toBe(
+      200,
+    );
+    const typed = await items();
+    expect(typed.map((i) => i.cost)).toEqual([100, 1]);
+    expect(typed.every((i) => i.original.rateSource === 'manual')).toBe(true);
+    expect(Math.round((typed[1].exact[a] + typed[1].exact[b]) * 100)).toBe(100);
+
+    // Refreshing leaves typed rates alone; asking for the live rate replaces them
+    await change(owner, id, { op: 'refreshRates', currencies: ['PHP'] });
+    expect((await items()).map((i) => i.cost)).toEqual([100, 1]);
+    await change(owner, id, { op: 'setRate', currency: 'PHP', rate: null });
+    const live = await items();
+    expect(live.map((i) => i.cost)).toEqual([80, 0.8]);
+    expect(live.every((i) => i.original.rateSource === 'wise')).toBe(true);
+  });
+
+  it('lets any member change rates, refuses bad ones, and answers 503 when no rate can be had', async () => {
+    const { owner, editor, id, item, items } = await phpSplit();
+    await change(owner, id, {
+      op: 'addItem',
+      item: item({
+        original: { currency: 'VND', amount: 100000, rate: 0.0002, rateSource: 'manual' },
+      }),
+    });
+    expect(
+      (await change(editor, id, { op: 'setRate', currency: 'VND', rate: 0.0003 })).status,
+    ).toBe(200);
+    expect((await items())[0].cost).toBe(30);
+    expect((await change(owner, id, { op: 'setRate', currency: 'VND', rate: 0 })).status).toBe(409);
+    expect((await change(owner, id, { op: 'setRate', currency: 'MYR', rate: 1 })).status).toBe(409);
+    // Nothing to fetch when every item is on a typed rate
+    expect((await change(owner, id, { op: 'refreshRates', currencies: ['VND'] })).status).toBe(200);
+    // No VND rate anywhere: the change waits rather than failing
+    expect((await change(owner, id, { op: 'setRate', currency: 'VND', rate: null })).status).toBe(
+      503,
+    );
+    expect((await items())[0].cost).toBe(30);
+  });
+});
+
 describe('changing a split currency', () => {
   /** Opens the split until its items are converted, or gives up after a few seconds */
   async function waitConverted(who: string, id: string) {

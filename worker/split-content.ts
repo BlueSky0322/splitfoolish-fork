@@ -171,6 +171,8 @@ interface ModelItem {
   payerId: string;
   participantIds: string[];
   splitMode: SplitMode;
+  /** Exact split amounts as typed in the item's own currency, by person id */
+  originalExact: Map<string, number>;
   /** The rate it was converted at, kept when an edit doesn't change the amount */
   converted: {
     currency: string;
@@ -212,8 +214,9 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
       .bind(splitId),
     db
       .prepare(
-        `SELECT ip.item_id AS itemId, ip.person_id AS personId FROM item_participants ip
-         JOIN items i ON i.id = ip.item_id WHERE i.split_id = ?`,
+        `SELECT ip.item_id AS itemId, ip.person_id AS personId,
+           ip.original_exact_cents AS originalExactCents
+         FROM item_participants ip JOIN items i ON i.id = ip.item_id WHERE i.split_id = ?`,
       )
       .bind(splitId),
     db
@@ -253,6 +256,7 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
         {
           payerId: i.payerId,
           participantIds: [] as string[],
+          originalExact: new Map<string, number>(),
           splitMode: i.splitMode,
           converted:
             i.currency == null || i.cents == null || i.rate == null
@@ -275,8 +279,15 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
     nextPersonPosition: (positions.results[0] as { person: number }).person,
     nextItemPosition: (positions.results[0] as { item: number }).item,
   };
-  for (const row of participants.results as { itemId: string; personId: string }[]) {
-    model.items.get(row.itemId)?.participantIds.push(row.personId);
+  for (const row of participants.results as {
+    itemId: string;
+    personId: string;
+    originalExactCents: number | null;
+  }[]) {
+    const item = model.items.get(row.itemId);
+    item?.participantIds.push(row.personId);
+    if (row.originalExactCents != null)
+      item?.originalExact.set(row.personId, row.originalExactCents);
   }
   return model;
 }
@@ -347,6 +358,20 @@ const reusableConversion = (model: Model, itemId: unknown, original: OriginalInp
 export function currenciesToFetch(model: Model, changes: Change[]): Set<string> {
   const needed = new Set<string>();
   for (const change of changes) {
+    if (change?.op === 'refreshRates' || change?.op === 'setRate') {
+      try {
+        // Only for currencies some item would take the fetched rate in
+        const { currencies, keepManual } = readRateChange(model, change);
+        for (const item of model.items.values()) {
+          const c = item.converted;
+          if (c == null || !currencies.includes(c.currency)) continue;
+          if (!(keepManual && c.source === 'manual')) needed.add(c.currency);
+        }
+      } catch {
+        // Refused properly when the batch is checked
+      }
+      continue;
+    }
     if (change?.op !== 'addItem' && change?.op !== 'updateItem') continue;
     try {
       const item = (change.item ?? {}) as unknown as Record<string, unknown>;
@@ -358,6 +383,95 @@ export function currenciesToFetch(model: Model, changes: Change[]): Set<string> 
     }
   }
   return needed;
+}
+
+const MAX_RATE_CURRENCIES = 50;
+
+/** The currencies a rate change is about, and the typed rate if there is one */
+function readRateChange(
+  model: Model,
+  change: Extract<Change, { op: 'refreshRates' | 'setRate' }>,
+): { currencies: string[]; manualRate: number | null; keepManual: boolean } {
+  const isCode = (c: unknown): c is string => typeof c === 'string' && /^[A-Z]{3}$/.test(c);
+  if (change.op === 'refreshRates') {
+    const list = change.currencies;
+    if (!Array.isArray(list) || list.length > MAX_RATE_CURRENCIES || !list.every(isCode)) {
+      throw new Refused('Invalid currency');
+    }
+    return {
+      currencies: [...new Set(list)].filter((c) => c !== model.currency),
+      manualRate: null,
+      keepManual: true,
+    };
+  }
+  if (!isCode(change.currency) || change.currency === model.currency) {
+    throw new Refused('Invalid currency');
+  }
+  if (change.rate != null && !isValidRate(change.rate)) {
+    throw new Refused('Enter an exchange rate above 0');
+  }
+  return {
+    currencies: change.rate == null ? [change.currency] : [],
+    manualRate: change.rate ?? null,
+    keepManual: false,
+  };
+}
+
+const exactOriginals = (participants: { personId: string; originalExactCents: number | null }[]) =>
+  new Map(
+    participants
+      .filter((p) => p.originalExactCents != null)
+      .map((p) => [p.personId, p.originalExactCents!]),
+  );
+
+/** Converts the items paid in some currencies again, at a new rate each */
+function rateStatements(
+  db: D1Database,
+  model: Model,
+  change: Extract<Change, { op: 'refreshRates' | 'setRate' }>,
+  rates: FetchedRates,
+): D1PreparedStatement[] {
+  const { manualRate, keepManual } = readRateChange(model, change);
+  const currencies = change.op === 'setRate' ? [change.currency] : change.currencies;
+  const statements: D1PreparedStatement[] = [];
+  for (const [id, item] of model.items) {
+    const c = item.converted;
+    if (c == null || !currencies.includes(c.currency)) continue;
+    if (keepManual && c.source === 'manual') continue;
+    const fetched = manualRate == null ? rates.get(c.currency) : null;
+    // Only when the batch changed things in a way the first read didn't foresee
+    if (manualRate == null && fetched == null) {
+      throw new Refused('The exchange rate changed. Try again.');
+    }
+    const next = {
+      ...c,
+      rate: manualRate ?? fetched!.rate,
+      source: manualRate == null ? fetched!.source : ('manual' as const),
+      at: manualRate == null ? fetched!.fetchedAt : Date.now(),
+    };
+    item.converted = next;
+    const costCents = convertCents(c.cents, next.rate);
+    statements.push(
+      db
+        .prepare(
+          'UPDATE items SET cost_cents = ?, rate = ?, rate_source = ?, rate_at = ? WHERE id = ?',
+        )
+        .bind(costCents, next.rate, next.source, next.at, id),
+    );
+    if (item.splitMode === 'exact') {
+      const parts = convertParts([...item.originalExact], next.rate, costCents);
+      for (const [personId, cents] of parts) {
+        statements.push(
+          db
+            .prepare(
+              'UPDATE item_participants SET exact_cents = ? WHERE item_id = ? AND person_id = ?',
+            )
+            .bind(cents, id, personId),
+        );
+      }
+    }
+  }
+  return statements;
 }
 
 function readItem(model: Model, raw: unknown, rates: FetchedRates) {
@@ -640,6 +754,7 @@ function plan(
       model.items.set(item.id, {
         payerId: item.payerId,
         participantIds: item.participants.map((p) => p.personId),
+        originalExact: exactOriginals(item.participants),
         splitMode: item.splitMode,
         converted: item.converted,
       });
@@ -673,6 +788,7 @@ function plan(
       model.items.set(item.id, {
         payerId: item.payerId,
         participantIds: item.participants.map((p) => p.personId),
+        originalExact: exactOriginals(item.participants),
         splitMode: item.splitMode,
         converted: item.converted,
       });
@@ -733,10 +849,17 @@ function plan(
         db.prepare('DELETE FROM items WHERE split_id = ?').bind(splitId),
       ];
 
+    case 'refreshRates':
+    case 'setRate':
+      return rateStatements(db, model, change, rates);
+
     default:
       throw new Refused('Unknown change');
   }
 }
+
+/** Changes that convert amounts, held back while the split changes currency */
+const CONVERTING_OPS = new Set<unknown>(['addItem', 'updateItem', 'refreshRates', 'setRate']);
 
 /** Applies a batch of changes all-or-nothing. On refusal, says which change and why. */
 export async function applyChanges(
@@ -763,10 +886,7 @@ export async function applyChanges(
 
   // Items can't be added or edited while they're being converted into a new currency;
   // the app keeps the change and sends it again shortly
-  if (
-    model.converting &&
-    (changes as Change[]).some((c) => c?.op === 'addItem' || c?.op === 'updateItem')
-  ) {
+  if (model.converting && (changes as Change[]).some((c) => CONVERTING_OPS.has(c?.op))) {
     return json({ error: 'Converting amounts to the new currency. Saving in a moment.' }, 503);
   }
 
