@@ -44,6 +44,8 @@ export function SortableSplits({
       sensors={sensors}
       collisionDetection={closestCenter}
       modifiers={layout === 'list' ? IN_LIST : undefined}
+      // Focus stays where the person left it, rather than ringing the split just clicked
+      accessibility={{ restoreFocus: false }}
       onDragStart={markDragged}
       onDragEnd={onDragEnd}
       onDragCancel={markDragged}
