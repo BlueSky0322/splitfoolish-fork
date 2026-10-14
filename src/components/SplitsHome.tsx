@@ -10,6 +10,7 @@ import { nameFor, useProfile } from '../profile/ProfileContext';
 import { formatMoney } from '../utils/money';
 import { useOpenNewSplit } from './NewSplitDialog';
 import Fab from './ui/Fab';
+import ThemeToggle from './ui/ThemeToggle';
 import SplitAvatar from './ui/SplitAvatar';
 import UserAvatar from './ui/UserAvatar';
 import classes from './SplitsHome.module.css';
@@ -224,18 +225,21 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
             New split
           </Button>
         ) : (
-          <UnstyledButton
-            onClick={() => navigate('?settings')}
-            aria-label="Settings"
-          >
-            <UserAvatar
-              name={profile ? nameFor(profile.email, profile.displayName) : ''}
-              email={profile?.email}
-              avatarVersion={profile?.avatarVersion}
-              previewSrc={profile?.avatarPreview}
-              size={32}
-            />
-          </UnstyledButton>
+          <div className={classes.headerActions}>
+            <ThemeToggle size={36} />
+            <UnstyledButton
+              onClick={() => navigate('?settings')}
+              aria-label="Settings"
+            >
+              <UserAvatar
+                name={profile ? nameFor(profile.email, profile.displayName) : ''}
+                email={profile?.email}
+                avatarVersion={profile?.avatarVersion}
+                previewSrc={profile?.avatarPreview}
+                size={32}
+              />
+            </UnstyledButton>
+          </div>
         )}
       </div>
 
