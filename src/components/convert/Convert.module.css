@@ -232,18 +232,36 @@
   color: var(--sf-negative);
 }
 
+/* The rule between the rows stops either side of the swap button. The negative margin
+   takes the button's height back, so the rows sit as close as the rule alone would. */
 .swapLine {
   position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -20px 16px;
+}
+
+.swapLine::before,
+.swapLine::after {
+  content: '';
+  flex: 1;
   height: 1px;
-  margin: 0 16px;
   background: var(--sf-divider);
 }
 
-.swapRound {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+/* Stays put when pressed: Mantine nudges buttons down a pixel, which moved it out from
+   under the finger before the tap finished */
+.swapRound:global(.mantine-ActionIcon-root),
+.swapRound:global(.mantine-ActionIcon-root):active {
+  flex-shrink: 0;
+  transform: none;
+  background: var(--sf-surface);
+}
+
+.swapRound:global(.mantine-ActionIcon-root):active {
+  background: var(--sf-hover);
 }
 
 .mobilePage .rateLine {
