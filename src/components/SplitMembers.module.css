@@ -47,3 +47,16 @@
   border-radius: 8px;
   background: var(--sf-tint);
 }
+
+/* Same height as the link beside it */
+.copyButton:global(.mantine-Button-root) {
+  height: 36px;
+  min-width: 96px;
+  flex-shrink: 0;
+}
+
+.help {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--sf-text-muted);
+}
