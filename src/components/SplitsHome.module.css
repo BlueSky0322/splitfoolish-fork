@@ -157,6 +157,7 @@
 }
 
 .balanceAmount {
+  font-family: var(--sf-font-num);
   font-size: 17px;
   font-variant-numeric: tabular-nums;
 }

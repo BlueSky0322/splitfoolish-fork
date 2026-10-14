@@ -112,6 +112,7 @@
 }
 
 .itemAmount {
+  font-family: var(--sf-font-num);
   width: 200px;
   text-align: right;
   font-variant-numeric: tabular-nums;

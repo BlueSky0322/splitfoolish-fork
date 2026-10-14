@@ -38,6 +38,7 @@ erDiagram
         text email PK "the account"
         text role "owner or editor"
         text share_token UK "a member's own share link"
+        int sort_position "their own order for My splits; null comes first"
         int joined_at
     }
     split_invites {

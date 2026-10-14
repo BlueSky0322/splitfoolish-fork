@@ -11,7 +11,8 @@ export async function listSplitSummaries(db: D1Database, email: string) {
            (SELECT count(*) FROM split_members WHERE split_id = s.id) AS memberCount,
            (SELECT version FROM split_pictures WHERE split_id = s.id) AS pictureVersion
          FROM splits s JOIN split_members m ON m.split_id = s.id
-         WHERE m.email = ? ORDER BY s.updated_at DESC`,
+         WHERE m.email = ?
+         ORDER BY m.sort_position IS NOT NULL, m.sort_position, s.updated_at DESC`,
       )
       .bind(email),
     db

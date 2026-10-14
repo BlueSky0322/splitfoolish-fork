@@ -1,6 +1,7 @@
 import { ActionIcon, Button, Loader, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Check, Plus, X } from '@phosphor-icons/react';
+import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { useState } from 'react';
 import { MyInvite, SplitSummary, actionableInvites, api } from '../api';
 import { useIsDesktop } from '../hooks/useBreakpoints';
@@ -10,6 +11,8 @@ import { nameFor, useProfile } from '../profile/ProfileContext';
 import { formatMoney } from '../utils/money';
 import { useOpenNewSplit } from './NewSplitDialog';
 import Fab from './ui/Fab';
+import { justDragged, useSortableSplit } from '../hooks/useSortableSplit';
+import { SortableSplits } from './ui/SortableSplits';
 import ThemeToggle from './ui/ThemeToggle';
 import SplitAvatar from './ui/SplitAvatar';
 import UserAvatar from './ui/UserAvatar';
@@ -188,6 +191,63 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
   );
 }
 
+const openSplit = (id: string) => {
+  if (!justDragged()) navigate(`?s=${id}`);
+};
+
+/** A split on desktop: a card you can drag into your own order */
+function SplitCard({ split }: { split: SplitSummary }) {
+  const sortable = useSortableSplit(split.id);
+  return (
+    <UnstyledButton
+      {...sortable}
+      className={`sf-card ${classes.splitCard}`}
+      onClick={() => openSplit(split.id)}
+    >
+      <div className={classes.cardTop}>
+        <SplitAvatar
+          splitId={split.id}
+          name={split.name}
+          pictureVersion={split.pictureVersion}
+          size={40}
+        />
+        <span className={`${classes.rowTitle} ${classes.cardTitle}`}>{split.name}</span>
+        <span className="sf-tag">{roleLabel(split)}</span>
+      </div>
+      <div className={classes.cardBottom}>
+        <div className={classes.rowMeta}>{splitMeta(split)}</div>
+        <Balance split={split} />
+      </div>
+    </UnstyledButton>
+  );
+}
+
+/** A split on phones: a row; press and hold to drag */
+function SplitListRow({ split }: { split: SplitSummary }) {
+  const sortable = useSortableSplit(split.id);
+  return (
+    <UnstyledButton
+      {...sortable}
+      className={classes.splitRow}
+      onClick={() => openSplit(split.id)}
+    >
+      <SplitAvatar
+        splitId={split.id}
+        name={split.name}
+        pictureVersion={split.pictureVersion}
+        size={36}
+      />
+      <div className="min-w-0 flex-1">
+        <div className={classes.rowTitle}>{split.name}</div>
+        <div className={classes.rowMeta}>
+          {roleLabel(split)} · {splitMeta(split)}
+        </div>
+      </div>
+      <Balance split={split} />
+    </UnstyledButton>
+  );
+}
+
 const SplitsHome = ({ tab }: { tab: string | null }) => {
   const { splits, invites, error } = useHomeData();
   const { profile } = useProfile();
@@ -322,55 +382,31 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
             </div>
           )}
           {shown != null && shown.length > 0 && isDesktop && (
-            <div className={classes.grid}>
-              {shown.map((s) => (
-                <UnstyledButton
-                  key={s.id}
-                  className={`sf-card ${classes.splitCard}`}
-                  onClick={() => navigate(`?s=${s.id}`)}
-                >
-                  <div className={classes.cardTop}>
-                    <SplitAvatar
-                      splitId={s.id}
-                      name={s.name}
-                      pictureVersion={s.pictureVersion}
-                      size={40}
-                    />
-                    <span className={`${classes.rowTitle} ${classes.cardTitle}`}>{s.name}</span>
-                    <span className="sf-tag">{roleLabel(s)}</span>
-                  </div>
-                  <div className={classes.cardBottom}>
-                    <div className={classes.rowMeta}>{splitMeta(s)}</div>
-                    <Balance split={s} />
-                  </div>
-                </UnstyledButton>
-              ))}
-            </div>
+            <SortableSplits
+              ids={shown.map((s) => s.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className={classes.grid}>
+                {shown.map((s) => (
+                  <SplitCard
+                    key={s.id}
+                    split={s}
+                  />
+                ))}
+              </div>
+            </SortableSplits>
           )}
           {shown != null && shown.length > 0 && !isDesktop && (
-            <div className={`sf-card ${classes.list}`}>
-              {shown.map((s) => (
-                <UnstyledButton
-                  key={s.id}
-                  className={classes.splitRow}
-                  onClick={() => navigate(`?s=${s.id}`)}
-                >
-                  <SplitAvatar
-                    splitId={s.id}
-                    name={s.name}
-                    pictureVersion={s.pictureVersion}
-                    size={36}
+            <SortableSplits ids={shown.map((s) => s.id)}>
+              <div className={`sf-card ${classes.list}`}>
+                {shown.map((s) => (
+                  <SplitListRow
+                    key={s.id}
+                    split={s}
                   />
-                  <div className="min-w-0 flex-1">
-                    <div className={classes.rowTitle}>{s.name}</div>
-                    <div className={classes.rowMeta}>
-                      {roleLabel(s)} · {splitMeta(s)}
-                    </div>
-                  </div>
-                  <Balance split={s} />
-                </UnstyledButton>
-              ))}
-            </div>
+                ))}
+              </div>
+            </SortableSplits>
           )}
         </>
       )}

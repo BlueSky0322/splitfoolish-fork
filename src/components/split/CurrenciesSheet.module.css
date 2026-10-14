@@ -37,6 +37,7 @@
 }
 
 .rate {
+  font-family: var(--sf-font-num);
   font-variant-numeric: tabular-nums;
 }
 

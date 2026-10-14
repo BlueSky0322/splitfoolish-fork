@@ -10,6 +10,7 @@ import {
 } from '@phosphor-icons/react';
 import { ReactNode } from 'react';
 import { actionableInvites } from '../../api';
+import { SplitSummary } from '../../api';
 import { useHomeData } from '../../hooks/useHomeData';
 import { Route, navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
@@ -17,6 +18,8 @@ import { useOpenNewSplit } from '../NewSplitDialog';
 import BalanceTag from '../ui/BalanceTag';
 import SplitAvatar from '../ui/SplitAvatar';
 import ThemeToggle from '../ui/ThemeToggle';
+import { justDragged, useSortableSplit } from '../../hooks/useSortableSplit';
+import { SortableSplits } from '../ui/SortableSplits';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
 
@@ -50,6 +53,65 @@ const NavItem = ({
     {badge ? <span className="sf-count-badge">{badge}</span> : null}
   </UnstyledButton>
 );
+
+const openSplit = (id: string) => {
+  if (!justDragged()) navigate(`?s=${id}`);
+};
+
+/** A split in the open sidebar: drag to reorder, click to open */
+function SplitRow({ split, active }: { split: SplitSummary; active: boolean }) {
+  const sortable = useSortableSplit(split.id);
+  return (
+    <UnstyledButton
+      {...sortable}
+      className={classes.splitRow}
+      data-active={active || undefined}
+      aria-current={active ? 'page' : undefined}
+      onClick={() => openSplit(split.id)}
+    >
+      <SplitAvatar
+        splitId={split.id}
+        name={split.name}
+        pictureVersion={split.pictureVersion}
+        size={22}
+        active={active}
+      />
+      <span className={classes.splitName}>{split.name}</span>
+      <BalanceTag
+        cents={split.myBalanceCents}
+        currency={split.currency}
+        hasItems={split.totalCents > 0}
+      />
+    </UnstyledButton>
+  );
+}
+
+/** A split in the collapsed sidebar */
+function RailTile({ split, active }: { split: SplitSummary; active: boolean }) {
+  const sortable = useSortableSplit(split.id);
+  return (
+    <Tooltip
+      label={split.name}
+      position="right"
+    >
+      <UnstyledButton
+        {...sortable}
+        className={classes.railTile}
+        data-active={active || undefined}
+        onClick={() => openSplit(split.id)}
+        aria-label={split.name}
+      >
+        <SplitAvatar
+          splitId={split.id}
+          name={split.name}
+          pictureVersion={split.pictureVersion}
+          size={36}
+          active={active}
+        />
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
 
 const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
   const { splits, invites } = useHomeData();
@@ -120,28 +182,15 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
         </Tooltip>
         <div className={classes.railDivider} />
         <div className={classes.railSplits}>
-          {splits?.map((s) => (
-            <Tooltip
-              key={s.id}
-              label={s.name}
-              position="right"
-            >
-              <UnstyledButton
-                className={classes.railTile}
-                data-active={s.id === activeSplitId || undefined}
-                onClick={() => navigate(`?s=${s.id}`)}
-                aria-label={s.name}
-              >
-                <SplitAvatar
-                  splitId={s.id}
-                  name={s.name}
-                  pictureVersion={s.pictureVersion}
-                  size={36}
-                  active={s.id === activeSplitId}
-                />
-              </UnstyledButton>
-            </Tooltip>
-          ))}
+          <SortableSplits ids={splits?.map((s) => s.id) ?? []}>
+            {splits?.map((s) => (
+              <RailTile
+                key={s.id}
+                split={s}
+                active={s.id === activeSplitId}
+              />
+            ))}
+          </SortableSplits>
         </div>
         <div className={classes.railTheme}>
           <ThemeToggle size={36} />
@@ -157,11 +206,17 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
       aria-label="Main"
     >
       <div className={classes.brand}>
-        <ArrowsSplit
-          size={22}
-          className={classes.brandIcon}
-        />
-        <span className="flex-1">Splitfoolish</span>
+        <UnstyledButton
+          className={classes.brandLink}
+          onClick={() => navigate('')}
+          aria-label="Splitfoolish, go to My splits"
+        >
+          <ArrowsSplit
+            size={22}
+            className={classes.brandIcon}
+          />
+          <span>Splitfoolish</span>
+        </UnstyledButton>
         <ThemeToggle />
         <Tooltip label="Collapse sidebar  [">
           <ActionIcon
@@ -219,29 +274,15 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
               </span>
             </UnstyledButton>
             <div className={classes.splitList}>
-              {splits?.map((s) => (
-                <UnstyledButton
-                  key={s.id}
-                  className={classes.splitRow}
-                  data-active={s.id === activeSplitId || undefined}
-                  aria-current={s.id === activeSplitId ? 'page' : undefined}
-                  onClick={() => navigate(`?s=${s.id}`)}
-                >
-                  <SplitAvatar
-                    splitId={s.id}
-                    name={s.name}
-                    pictureVersion={s.pictureVersion}
-                    size={22}
+              <SortableSplits ids={splits?.map((s) => s.id) ?? []}>
+                {splits?.map((s) => (
+                  <SplitRow
+                    key={s.id}
+                    split={s}
                     active={s.id === activeSplitId}
                   />
-                  <span className={classes.splitName}>{s.name}</span>
-                  <BalanceTag
-                    cents={s.myBalanceCents}
-                    currency={s.currency}
-                    hasItems={s.totalCents > 0}
-                  />
-                </UnstyledButton>
-              ))}
+                ))}
+              </SortableSplits>
             </div>
           </div>
         </>
