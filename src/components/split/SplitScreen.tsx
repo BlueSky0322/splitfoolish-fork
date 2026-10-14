@@ -25,10 +25,8 @@ import {
   Rows,
   ShareNetwork,
   SortDescending,
-  SignOut,
   StackSimple,
   Table,
-  Trash,
   UserPlus,
   UsersThree,
   X,
@@ -98,8 +96,8 @@ type Dialog =
   | { kind: 'share' }
   | { kind: 'members' }
   | { kind: 'reset' }
-  /** fromShare: Cancel goes back to the share dialog it replaced */
-  | { kind: 'end'; fromShare?: boolean }
+  /** Opened from Split settings, where Cancel goes back to */
+  | { kind: 'end' }
   | { kind: 'settings' }
   | { kind: 'photos' }
   | { kind: 'currencies' };
@@ -418,18 +416,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
         >
           Split settings
         </Menu.Item>
-        {meta && (
-          <>
-            <Menu.Divider />
-            <Menu.Item
-              color="red"
-              leftSection={meta.role === 'owner' ? <Trash size={16} /> : <SignOut size={16} />}
-              onClick={() => setDialog({ kind: 'end' })}
-            >
-              {meta.role === 'owner' ? 'Delete split' : 'Leave split'}
-            </Menu.Item>
-          </>
-        )}
       </Menu.Dropdown>
     </Menu>
   );
@@ -653,7 +639,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             onChange={refreshMeta}
             setMeta={setMeta}
             onReset={() => setDialog({ kind: 'reset' })}
-            onEnd={() => setDialog({ kind: 'end', fromShare: true })}
           />
         )}
       </ResponsiveDialog>
@@ -686,7 +671,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             name={meta.name}
             isOwner={meta.role === 'owner'}
             myEmail={myEmail}
-            onCancel={() => (dialog.fromShare ? setDialog({ kind: 'members' }) : close())}
+            onCancel={() => setDialog({ kind: 'settings' })}
           />
         )}
       </ResponsiveDialog>
@@ -742,6 +727,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             currency={meta.currency}
             pictureVersion={pictureVersion}
             canEdit={meta.role === 'owner'}
+            onEnd={() => setDialog({ kind: 'end' })}
             onSaved={(changes) => {
               setMeta((m) => (m ? { ...m, ...changes } : m));
               updateHomeData((data) => ({

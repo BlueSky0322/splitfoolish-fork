@@ -1,14 +1,6 @@
 import { ActionIcon, Button, CopyButton, Tooltip, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import {
-  ArrowClockwise,
-  Check,
-  Copy,
-  LinkSimple,
-  ShareNetwork,
-  SignOut,
-  Trash,
-} from '@phosphor-icons/react';
+import { ArrowClockwise, Check, Copy, LinkSimple, ShareNetwork } from '@phosphor-icons/react';
 import { SplitInvite, api, inviteUrl } from '../api';
 import { reloadHomeData } from '../hooks/useHomeData';
 import { useIsMobile } from '../hooks/useBreakpoints';
@@ -26,8 +18,6 @@ interface SplitMembersProps {
   setMeta: (update: (meta: SplitMeta | null) => SplitMeta | null) => void;
   /** Swaps this for the reset-link confirm (3b) */
   onReset: () => void;
-  /** Swaps this for the delete or leave confirm (3d) */
-  onEnd: () => void;
 }
 
 const COPIED_MS = 1500;
@@ -54,7 +44,7 @@ export const ShareTitle = ({ name }: { name: string }) => (
 
 // Sharing (3a desktop, 3c phone): the share link, who's in the split, who's yet to
 // accept, and deleting or leaving the split
-const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset, onEnd }: SplitMembersProps) => {
+const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMembersProps) => {
   const isMobile = useIsMobile();
   const isOwner = meta.role === 'owner';
   const link = meta.inviteToken ? inviteUrl(meta.inviteToken) : null;
@@ -313,18 +303,6 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset, onEnd }: Spli
           </div>
         </div>
       )}
-
-      <div className={classes.footer}>
-        <Button
-          variant="default"
-          fullWidth
-          className={`sf-danger-outline ${isMobile ? classes.tall : ''}`}
-          leftSection={isOwner ? <Trash size={16} /> : <SignOut size={16} />}
-          onClick={onEnd}
-        >
-          {isOwner ? 'Delete split' : 'Leave split'}
-        </Button>
-      </div>
     </div>
   );
 };
