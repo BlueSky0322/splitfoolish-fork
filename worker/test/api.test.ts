@@ -569,9 +569,17 @@ describe('profile, pictures and photos', () => {
         detail: '5140 1234',
         bank: 'Kenanga',
         accountName: 'Mei Lin',
+        qrVersion: null,
       },
-      { id: cash, type: 'Cash', detail: '', bank: null, accountName: null },
-      { id: wallet, type: 'DuitNow', detail: '012-345', bank: null, accountName: null },
+      { id: cash, type: 'Cash', detail: '', bank: null, accountName: null, qrVersion: null },
+      {
+        id: wallet,
+        type: 'DuitNow',
+        detail: '012-345',
+        bank: null,
+        accountName: null,
+        qrVersion: null,
+      },
     ]);
     // People in a split with you see the same
     const members = (await api.call(friend, 'GET', `/api/splits/${id}`)).data.members as {
@@ -599,6 +607,41 @@ describe('profile, pictures and photos', () => {
       'Content-Type': 'text/plain',
     });
     expect(bad.status).toBe(415);
+  });
+
+  it('keeps QR code payment methods, shown only to people who share a split', async () => {
+    const me = person('me');
+    const friend = person('friend');
+    const other = person('other');
+    const id = hex();
+    const qr = { id, type: 'QR code', detail: 'DuitNow QR' };
+    const save = (who: string, methods: unknown[]) =>
+      api.call(who, 'PUT', '/api/me/payment-methods', { methods, preferredId: id });
+
+    // The image comes first; a QR code method without one is refused
+    expect((await save(me, [qr])).status).toBe(400);
+    const uploaded = await upload(me, 'PUT', `/api/me/payment-qr/${id}`);
+    expect(uploaded.status).toBe(200);
+    const saved = await save(me, [qr]);
+    expect(saved.status).toBe(200);
+    expect(saved.data.paymentMethods[0].qrVersion).toBe(uploaded.data.qrVersion);
+
+    // Someone else can't put their code on your method
+    expect((await upload(other, 'PUT', `/api/me/payment-qr/${id}`)).status).toBe(400);
+
+    const path = `/api/payment-qr/${id}`;
+    expect((await api.call(me, 'GET', path)).status).toBe(200);
+    expect((await api.call(friend, 'GET', path)).status).toBe(404);
+    const { id: splitId } = await splitWith(me, friend);
+    expect((await api.call(friend, 'GET', path)).status).toBe(200);
+    const members = (await api.call(friend, 'GET', `/api/splits/${splitId}`)).data.members;
+    const mine = members.find((m: { email: string }) => m.email === me).paymentMethods;
+    expect(mine[0]).toMatchObject({ type: 'QR code', detail: 'DuitNow QR' });
+    expect(mine[0].qrVersion).toBe(uploaded.data.qrVersion);
+
+    // Removing the method removes its code
+    expect((await save(me, [])).status).toBe(200);
+    expect((await api.call(me, 'GET', path)).status).toBe(404);
   });
 
   it('lets members add photos and see the split picture, and only the owner change it', async () => {

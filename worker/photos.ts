@@ -6,6 +6,8 @@
 // D1 allows up to 2 MB per value; browser-shrunk photos are usually a few hundred KB
 const MAX_PHOTO_BYTES = 1_500_000;
 const MAX_AVATAR_BYTES = 256_000;
+/** A QR code is shrunk to about 1000px, sharp enough to scan from another phone */
+const MAX_QR_BYTES = 512_000;
 const MAX_PHOTOS_PER_SPLIT = 300;
 
 import { ensureProfile } from './profiles';
@@ -176,6 +178,67 @@ export async function putAvatar(req: Request, db: D1Database, email: string) {
   return json({ avatarVersion: version });
 }
 
+/** Whether two people are in a split together, so each can see the other's pictures */
+async function sharesSplit(db: D1Database, viewer: string, email: string) {
+  if (viewer === email) return true;
+  const shared = await db
+    .prepare(
+      `SELECT 1 FROM split_members a JOIN split_members b ON a.split_id = b.split_id
+       WHERE a.email = ? AND b.email = ? LIMIT 1`,
+    )
+    .bind(viewer, email)
+    .first();
+  return shared != null;
+}
+
+/**
+ * Stores the QR code for one of your payment methods. Sent before the method itself
+ * is saved (so a new method's id may not exist yet); an id that's someone else's is
+ * refused.
+ */
+export async function putPaymentQr(req: Request, db: D1Database, email: string, id: string) {
+  if (!/^[0-9a-f]{16}$/.test(id)) return json({ error: 'Invalid payment method' }, 400);
+  const owner = await db
+    .prepare(
+      `SELECT email FROM payment_methods WHERE id = ?1
+       UNION SELECT email FROM payment_qr_codes WHERE method_id = ?1`,
+    )
+    .bind(id)
+    .first<{ email: string }>();
+  if (owner != null && owner.email !== email) {
+    return json({ error: 'Invalid payment method' }, 400);
+  }
+  const image = await readImage(req, MAX_QR_BYTES);
+  if (image instanceof Response) return image;
+
+  const version = Date.now();
+  await db.batch([
+    ensureProfile(db, email),
+    db
+      .prepare(
+        `INSERT INTO payment_qr_codes (method_id, email, content_type, version, data)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT (method_id) DO UPDATE SET content_type = ?3, version = ?4, data = ?5`,
+      )
+      .bind(id, email, image.contentType, version, image.bytes),
+  ]);
+  return json({ qrVersion: version });
+}
+
+/** A payment method's QR code, seen by its owner and the people they share a split with */
+export async function getPaymentQr(db: D1Database, viewer: string, id: string) {
+  const row = await db
+    .prepare(
+      'SELECT email, content_type AS contentType, data FROM payment_qr_codes WHERE method_id = ?',
+    )
+    .bind(id)
+    .first<{ email: string; contentType: string; data: ArrayBuffer | number[] }>();
+  if (row == null || !(await sharesSplit(db, viewer, row.email))) {
+    return json({ error: 'Not found' }, 404);
+  }
+  return imageResponse(row.data, row.contentType);
+}
+
 export async function deleteAvatar(db: D1Database, email: string) {
   await db.prepare('DELETE FROM avatars WHERE email = ?').bind(email).run();
   return json({ ok: true });
@@ -183,16 +246,7 @@ export async function deleteAvatar(db: D1Database, email: string) {
 
 /** Profile pictures are visible to their owner and to people they share a split with */
 export async function getAvatar(db: D1Database, viewer: string, email: string) {
-  if (viewer !== email) {
-    const shared = await db
-      .prepare(
-        `SELECT 1 FROM split_members a JOIN split_members b ON a.split_id = b.split_id
-         WHERE a.email = ? AND b.email = ? LIMIT 1`,
-      )
-      .bind(viewer, email)
-      .first();
-    if (shared == null) return json({ error: 'Not found' }, 404);
-  }
+  if (!(await sharesSplit(db, viewer, email))) return json({ error: 'Not found' }, 404);
   const row = await db
     .prepare('SELECT content_type AS contentType, data FROM avatars WHERE email = ?')
     .bind(email)

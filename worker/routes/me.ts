@@ -3,7 +3,7 @@
 
 import { Hono } from 'hono';
 import { AppEnv, json, readJson } from '../app';
-import { deleteAvatar, getAvatar, putAvatar } from '../photos';
+import { deleteAvatar, getAvatar, getPaymentQr, putAvatar, putPaymentQr } from '../photos';
 import { getProfile, patchProfile, putPaymentMethods } from '../profiles';
 
 const me = new Hono<AppEnv>();
@@ -24,6 +24,12 @@ me.put('/me/payment-methods', async (c) => {
 
 me.put('/me/avatar', (c) => putAvatar(c.req.raw, c.env.DB, c.var.email));
 me.delete('/me/avatar', (c) => deleteAvatar(c.env.DB, c.var.email));
+
+// A QR code is uploaded first, then saved with its method in the list above
+me.put('/me/payment-qr/:id', (c) =>
+  putPaymentQr(c.req.raw, c.env.DB, c.var.email, c.req.param('id')),
+);
+me.get('/payment-qr/:id', (c) => getPaymentQr(c.env.DB, c.var.email, c.req.param('id')));
 
 me.get('/avatars/:email', (c) =>
   getAvatar(c.env.DB, c.var.email, c.req.param('email').toLowerCase()),

@@ -4,6 +4,7 @@ import {
   CaretRight,
   ChartBarHorizontal,
   Copy,
+  QrCode,
   ShareNetwork,
 } from '@phosphor-icons/react';
 import { useState } from 'react';
@@ -11,7 +12,8 @@ import { PaymentMethod, SplitMember } from '../../api';
 import { IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
-import { methodName } from '../../utils/payments';
+import { isQr, methodName } from '../../utils/payments';
+import QrViewer from '../settings/QrViewer';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
 import classes from './Split.module.css';
@@ -92,9 +94,47 @@ export function BalanceHero({
 const COPIED_MS = 1500;
 
 /** Under a transfer you make: how they like to be paid, and their number to copy */
-function PayLine({ methods }: { methods: PaymentMethod[] }) {
+function PayLine({
+  methods,
+  to,
+  member,
+  amountCents,
+  currency,
+}: {
+  methods: PaymentMethod[];
+  to: IPerson;
+  member: SplitMember | undefined;
+  amountCents: number;
+  currency: string;
+}) {
+  const [showQr, setShowQr] = useState(false);
   const [preferred] = methods;
   if (preferred == null) return <span className={classes.payMethod}>No payment details yet</span>;
+  // Their preferred way is a QR code: show it, with the amount, to scan (7c, 7d)
+  if (isQr(preferred) && preferred.qrVersion != null) {
+    return (
+      <>
+        <span className={classes.payMethod}>{methodName(preferred)}</span>
+        <UnstyledButton
+          className={classes.payChip}
+          onClick={() => setShowQr(true)}
+        >
+          <QrCode size={13} />
+          Show QR
+        </UnstyledButton>
+        <QrViewer
+          opened={showQr}
+          onClose={() => setShowQr(false)}
+          name={to.name}
+          email={member?.email ?? null}
+          avatarVersion={member?.avatarVersion ?? null}
+          amountCents={amountCents}
+          currency={currency}
+          methods={methods}
+        />
+      </>
+    );
+  }
   const holder = preferred.accountName ? `, ${preferred.accountName}` : '';
   if (!preferred.detail) {
     return <span className={classes.payMethod}>{methodName(preferred)}</span>;
@@ -140,8 +180,8 @@ const BalancePanel = ({
   variant = 'panel',
 }: BalancePanelProps) => {
   // When you owe someone linked to an account, show how they like to be paid
-  const methodsFor = (person: IPerson) =>
-    members.find((m) => m.email === person.memberEmail)?.paymentMethods ?? [];
+  const memberFor = (person: IPerson) => members.find((m) => m.email === person.memberEmail);
+  const methodsFor = (person: IPerson) => memberFor(person)?.paymentMethods ?? [];
   const byId = new Map(people.map((p) => [p.id, p]));
   const mine = me ? summary.balances.get(me.id) : null;
   const count = summary.transfers.length;
@@ -249,7 +289,17 @@ const BalancePanel = ({
                     currency={currency}
                     size={isSheet ? 'lg' : 'md'}
                     fromMe={yours}
-                    payLine={yours ? <PayLine methods={methodsFor(to)} /> : undefined}
+                    payLine={
+                      yours ? (
+                        <PayLine
+                          methods={methodsFor(to)}
+                          to={to}
+                          member={memberFor(to)}
+                          amountCents={t.amountCents}
+                          currency={currency}
+                        />
+                      ) : undefined
+                    }
                   />
                 </div>
               );

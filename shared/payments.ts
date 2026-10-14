@@ -3,6 +3,8 @@
 
 export const BANK_TRANSFER = 'Bank transfer';
 export const CASH = 'Cash';
+/** A QR code to scan (a DuitNow QR, say): an image, with an optional label as its detail */
+export const QR_CODE = 'QR code';
 
 /** The types offered when adding a method; anything else is shown as Other */
 export const PAYMENT_TYPES = [
@@ -11,6 +13,7 @@ export const PAYMENT_TYPES = [
   "Touch 'n Go eWallet",
   'PayNow',
   'PayPal',
+  QR_CODE,
   CASH,
 ] as const;
 
@@ -51,7 +54,9 @@ export interface PaymentMethod {
   /** Bank transfers only */
   bank?: string | null;
   accountName?: string | null;
+  /** QR codes only: the image's version, for its URL; null until one is uploaded */
+  qrVersion?: number | null;
 }
 
-/** Cash needs nothing written down; every other type needs its details */
-export const needsDetail = (type: string) => type !== CASH;
+/** Cash needs nothing written down, and a QR code's label is optional; the rest need details */
+export const needsDetail = (type: string) => type !== CASH && type !== QR_CODE;

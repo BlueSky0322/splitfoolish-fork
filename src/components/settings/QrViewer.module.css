@@ -1,0 +1,92 @@
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.payWho {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sf-text-muted);
+}
+
+.amount {
+  display: block;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.15;
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Light in both themes, so the code scans from another phone's camera */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 18px;
+  background: #f3f4f8;
+  color: #1c1d22;
+}
+
+.label {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.code {
+  display: block;
+  width: min(260px, 100%);
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.hint {
+  font-size: 13px;
+  color: #5b5e6b;
+  text-align: center;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.actions :global(.mantine-Button-root) {
+  height: 48px;
+}
+
+.others {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--sf-divider);
+}
+
+.other {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px;
+  font-size: 15px;
+}
+
+.other + .other {
+  border-top: 1px solid var(--sf-divider);
+}
+
+.otherDetail {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+  font-variant-numeric: tabular-nums;
+}
