@@ -12,6 +12,7 @@ import { notifications } from '@mantine/notifications';
 import {
   CaretDown,
   CaretLeft,
+  CheckSquare,
   CaretRight,
   CloudCheck,
   ArrowsClockwise,
@@ -273,7 +274,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
 
   // Several items picked at once, in the order they're shown (for shift-click ranges)
   const selection = useItemSelection(groups.flatMap((g) => g.items.map((i) => i.id)));
-  const selecting = selection.count > 0;
+  const selecting = selection.active;
   const [moving, setMoving] = useState(false);
 
   // Phones: the back button stops selecting rather than leaving the split
@@ -1044,6 +1045,17 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                   </Menu>
                   {filterChip}
                   <span className={classes.toolbarSpacer} />
+                  {state.items.length > 0 && (
+                    <Button
+                      variant={selecting ? 'light' : 'default'}
+                      size="xs"
+                      leftSection={<CheckSquare size={14} />}
+                      onClick={selecting ? selection.clear : selection.start}
+                      aria-pressed={selecting}
+                    >
+                      {selecting ? 'Done' : 'Select'}
+                    </Button>
+                  )}
                   {viewToggle}
                 </div>
               )}
