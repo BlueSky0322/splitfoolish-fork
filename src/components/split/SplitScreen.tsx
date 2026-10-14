@@ -315,16 +315,28 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const heroRef = useRef<HTMLDivElement>(null);
   const [heroHidden, setHeroHidden] = useState(false);
   const hasMeta = meta != null;
+  const barRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = heroRef.current;
     if (isDesktop || el == null) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setHeroHidden(!entry.isIntersecting && entry.boundingClientRect.top < 0),
-      // Collapses as the buttons pass under the bar, not after they're long gone
-      { rootMargin: '-56px 0px 0px 0px' },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+    // Checked on every scroll (once a frame): the buttons count as gone once their bottom
+    // edge has passed under the bar, however slowly the page moved there
+    let frame = 0;
+    const check = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const barBottom = barRef.current?.getBoundingClientRect().bottom ?? 0;
+        setHeroHidden(el.getBoundingClientRect().bottom <= barBottom);
+      });
+    };
+    check();
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
   }, [isDesktop, hasMeta]);
 
   if (status === 'notfound') {
@@ -1101,6 +1113,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
           {moveDialog}
           {/* Once the balance and its buttons scroll away, the bar keeps them in reach */}
           <div
+            ref={barRef}
             className={classes.topBar}
             data-collapsed={heroHidden || undefined}
           >
