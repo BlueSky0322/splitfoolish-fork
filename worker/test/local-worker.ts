@@ -123,6 +123,8 @@ export async function startLocalWorker(): Promise<LocalWorker> {
       `FRANKFURTER_BASE:${rates.base}`,
       '--var',
       'WISE_TOKEN:test-token',
+      '--var',
+      'RECONVERT_RETRY_MS:0',
       '--log-level',
       'warn',
     ],

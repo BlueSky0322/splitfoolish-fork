@@ -428,3 +428,95 @@ describe('items in another currency', () => {
     expect((await items())[0]).toMatchObject({ cost: 12, original: null });
   });
 });
+
+describe('changing a split currency', () => {
+  /** Opens the split until its items are converted, or gives up after a few seconds */
+  async function waitConverted(who: string, id: string) {
+    for (let i = 0; i < 40; i++) {
+      const split = (await api.call(who, 'GET', `/api/splits/${id}`)).data;
+      if (!split.converting) return split;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    throw new Error('Still converting');
+  }
+
+  it('converts every item in the background, and changing back restores them exactly', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [a, b] = [hex(), hex()];
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: a, name: 'A' },
+      { op: 'addPerson', id: b, name: 'B' },
+    );
+    api.rates.set('JPY', 'MYR', 0.03);
+    const plain = {
+      id: hex(),
+      name: 'Taxi',
+      cost: 10,
+      payerId: a,
+      participantIds: [a, b],
+      splitMode: 'exact',
+      exact: { [a]: 3, [b]: 7 },
+    };
+    const yen = {
+      id: hex(),
+      name: 'Sushi',
+      cost: 0,
+      payerId: a,
+      participantIds: [a, b],
+      original: { currency: 'JPY', amount: 1000 },
+    };
+    await change(owner, id, { op: 'addItem', item: plain }, { op: 'addItem', item: yen });
+
+    api.rates.set('MYR', 'EUR', 0.2);
+    api.rates.set('JPY', 'EUR', 0.006);
+    const patched = await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: 'EUR' });
+    expect(patched.data.converting).toBe(true);
+    let split = await waitConverted(owner, id);
+    const byName = (name: string) => split.items.find((i: { name: string }) => i.name === name);
+    expect(split.currency).toBe('EUR');
+    expect(byName('Taxi')).toMatchObject({
+      cost: 2,
+      original: { currency: 'MYR', amount: 10, rate: 0.2 },
+    });
+    expect(Math.round((byName('Taxi').exact[a] + byName('Taxi').exact[b]) * 100)).toBe(200);
+    expect(byName('Sushi')).toMatchObject({ cost: 6, original: { currency: 'JPY', amount: 1000 } });
+
+    await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: 'MYR' });
+    split = await waitConverted(owner, id);
+    expect(byName('Taxi')).toMatchObject({ cost: 10, original: null, exact: { [a]: 3, [b]: 7 } });
+    expect(byName('Sushi')).toMatchObject({
+      cost: 30,
+      original: { currency: 'JPY', amount: 1000 },
+    });
+  });
+
+  it('holds item changes until converted, and finishes once rates are back', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const a = hex();
+    await change(owner, id, { op: 'addPerson', id: a, name: 'A' });
+    await change(owner, id, {
+      op: 'addItem',
+      item: { id: hex(), name: 'Tea', cost: 10, payerId: a, participantIds: [a] },
+    });
+
+    api.rates.down('wise', true);
+    api.rates.down('frankfurter', true);
+    await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: 'GBP' });
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.converting).toBe(true);
+    const held = await change(owner, id, {
+      op: 'addItem',
+      item: { id: hex(), name: 'Cake', cost: 5, payerId: a, participantIds: [a] },
+    });
+    expect(held.status).toBe(503);
+
+    api.rates.down('wise', false);
+    api.rates.down('frankfurter', false);
+    api.rates.set('MYR', 'GBP', 0.17);
+    const split = await waitConverted(owner, id);
+    expect(split.items[0]).toMatchObject({ cost: 1.7, original: { currency: 'MYR', amount: 10 } });
+  });
+});

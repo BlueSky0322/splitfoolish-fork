@@ -116,3 +116,10 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* An item paid in another currency: what was paid, under the converted amount */
+.itemOriginal {
+  display: block;
+  font-size: 10px;
+  opacity: 0.6;
+}
