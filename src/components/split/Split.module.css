@@ -370,6 +370,27 @@
   white-space: nowrap;
 }
 
+/* An item's notes: one line under its name, tinted to tell it from the details */
+.itemNotes {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--sf-accent) 55%, var(--sf-text-muted));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The item's name in the table opens it */
+.nameLink {
+  color: inherit;
+  font: inherit;
+}
+
+.nameLink:hover {
+  color: var(--sf-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .itemMeta {
   font-size: 12px;
   color: var(--sf-text-muted);
