@@ -82,14 +82,15 @@ interface ViewPrefs {
   sortDir: SortDir;
 }
 
-const DEFAULT_PREFS: ViewPrefs = { view: 'card', groupBy: 'day', sortKey: 'date', sortDir: 'asc' };
+const DEFAULT_PREFS: ViewPrefs = { view: 'card', groupBy: 'day', sortKey: 'date', sortDir: 'desc' };
 const GROUP_ORDER: GroupBy[] = ['none', 'day', 'payer', 'category'];
 // Item and payer read best A to Z; amounts largest first
 const FIRST_DIR: Record<SortKey, SortDir> = {
   name: 'asc',
   payer: 'asc',
   amount: 'desc',
-  date: 'asc',
+  // Newest first
+  date: 'desc',
 };
 
 type Dialog =

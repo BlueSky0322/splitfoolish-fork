@@ -13,12 +13,17 @@ export interface InstallState {
   canPrompt: boolean;
   /** iPhone or iPad: installing is done by hand from the Share menu */
   ios: boolean;
+  /**
+   * Android: the browser's menu can always install it; Chrome's own prompt only comes
+   * after a tap and some time on the page
+   */
+  android: boolean;
   /** Running as the installed app, or installed just now */
   installed: boolean;
 }
 
 let deferred: InstallPromptEvent | null = null;
-let state: InstallState = { canPrompt: false, ios: false, installed: false };
+let state: InstallState = { canPrompt: false, ios: false, android: false, installed: false };
 const listeners = new Set<() => void>();
 
 const set = (patch: Partial<InstallState>) => {
@@ -55,7 +60,17 @@ export function trackInstall() {
   const ua = navigator.userAgent;
   const ios =
     /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-  state = { canPrompt: false, ios, installed: standalone() || installedBefore() };
+  const android = /android/i.test(ua);
+  state = { canPrompt: false, ios, android, installed: standalone() || installedBefore() };
+  // Chrome on Android can tell, from a browser tab, that the app is already installed
+  // (see related_applications in the manifest)
+  const nav = navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> };
+  nav
+    .getInstalledRelatedApps?.()
+    .then((apps) => {
+      if (apps.length > 0) rememberInstalled();
+    })
+    .catch(() => undefined);
   window.addEventListener('beforeinstallprompt', (e) => {
     // Shown from the app's own buttons instead of the browser's banner
     e.preventDefault();

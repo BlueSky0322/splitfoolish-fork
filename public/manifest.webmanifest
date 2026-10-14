@@ -7,6 +7,13 @@
   "display": "standalone",
   "background_color": "#161826",
   "theme_color": "#161826",
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://splitfoolish.shitty-app.workers.dev/manifest.webmanifest"
+    }
+  ],
+  "prefer_related_applications": false,
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },

@@ -1,7 +1,7 @@
 import { Button, CloseButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { DownloadSimple, Export, PlusSquare } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { DotsThreeVertical, DownloadSimple, Export, PlusSquare } from '@phosphor-icons/react';
+import { ReactNode, useState } from 'react';
 import { useInstall } from '../../hooks/useInstall';
 import ResponsiveDialog from './ResponsiveDialog';
 import classes from './InstallApp.module.css';
@@ -21,32 +21,77 @@ const snoozed = () => {
   }
 };
 
-/** Safari on iPhone and iPad has no install button: the steps, with its own icons */
-function IosSteps({ opened, onClose }: { opened: boolean; onClose: () => void }) {
+type Platform = 'ios' | 'android';
+
+const STEPS: Record<Platform, { title: string; steps: { icon: ReactNode; text: ReactNode }[] }> = {
+  // Safari on iPhone and iPad has no install button
+  ios: {
+    title: 'Add Splitfoolish to your Home Screen',
+    steps: [
+      {
+        icon: <Export size={18} />,
+        text: (
+          <>
+            Tap <strong>Share</strong> in Safari's toolbar
+          </>
+        ),
+      },
+      {
+        icon: <PlusSquare size={18} />,
+        text: (
+          <>
+            Choose <strong>Add to Home Screen</strong>
+          </>
+        ),
+      },
+    ],
+  },
+  // Before Chrome offers its own prompt (or in other Android browsers), the menu has it
+  android: {
+    title: 'Install Splitfoolish',
+    steps: [
+      {
+        icon: (
+          <DotsThreeVertical
+            size={18}
+            weight="bold"
+          />
+        ),
+        text: (
+          <>
+            Tap the <strong>menu</strong> (⋮) at the top right of your browser
+          </>
+        ),
+      },
+      {
+        icon: <DownloadSimple size={18} />,
+        text: (
+          <>
+            Choose <strong>Install app</strong> or <strong>Add to Home screen</strong>
+          </>
+        ),
+      },
+    ],
+  },
+};
+
+/** The steps to install by hand, with the browser's own icons */
+function InstallSteps({ platform, onClose }: { platform: Platform | null; onClose: () => void }) {
+  const shown = STEPS[platform ?? 'ios'];
   return (
     <ResponsiveDialog
-      opened={opened}
+      opened={platform != null}
       onClose={onClose}
-      title="Add Splitfoolish to your Home Screen"
+      title={shown.title}
       width={400}
     >
       <ol className={classes.steps}>
-        <li>
-          <span className={classes.stepIcon}>
-            <Export size={18} />
-          </span>
-          <span>
-            Tap <strong>Share</strong> in Safari's toolbar
-          </span>
-        </li>
-        <li>
-          <span className={classes.stepIcon}>
-            <PlusSquare size={18} />
-          </span>
-          <span>
-            Choose <strong>Add to Home Screen</strong>
-          </span>
-        </li>
+        {shown.steps.map(({ icon, text }, ix) => (
+          <li key={ix}>
+            <span className={classes.stepIcon}>{icon}</span>
+            <span>{text}</span>
+          </li>
+        ))}
         <li>
           <span className={classes.stepIcon}>
             <img
@@ -55,7 +100,8 @@ function IosSteps({ opened, onClose }: { opened: boolean; onClose: () => void })
             />
           </span>
           <span>
-            Tap <strong>Add</strong>, then open Splitfoolish from your Home Screen
+            Tap <strong>{platform === 'android' ? 'Install' : 'Add'}</strong>, then open
+            Splitfoolish from your home screen
           </span>
         </li>
       </ol>
@@ -66,28 +112,28 @@ function IosSteps({ opened, onClose }: { opened: boolean; onClose: () => void })
 /** Installs straight away where the browser can, else shows the iOS steps */
 function useInstallAction() {
   const install = useInstall();
-  const [showSteps, setShowSteps] = useState(false);
+  const [steps, setSteps] = useState<Platform | null>(null);
   const run = async () => {
     if (install.canPrompt) {
       if (await install.prompt()) {
         notifications.show({ message: 'Installed. Open Splitfoolish from your home screen.' });
       }
-    } else if (install.ios) {
-      setShowSteps(true);
+    } else if (install.ios || install.android) {
+      setSteps(install.ios ? 'ios' : 'android');
     }
   };
-  const steps = (
-    <IosSteps
-      opened={showSteps}
-      onClose={() => setShowSteps(false)}
+  const stepsDialog = (
+    <InstallSteps
+      platform={steps}
+      onClose={() => setSteps(null)}
     />
   );
-  return { install, run, steps };
+  return { install, run, stepsDialog };
 }
 
 /** On My splits, until it's installed or put off */
 export function InstallCard() {
-  const { install, run, steps } = useInstallAction();
+  const { install, run, stepsDialog: steps } = useInstallAction();
   const [hidden, setHidden] = useState(snoozed);
   if (!install.available || hidden) return steps;
   const dismiss = () => {
@@ -145,7 +191,7 @@ export function InstallCard() {
 
 /** Settings: install it, or how, or that it already is */
 export function InstallField() {
-  const { install, run, steps } = useInstallAction();
+  const { install, run, stepsDialog: steps } = useInstallAction();
   if (install.installed) {
     return (
       <p className={classes.note}>
