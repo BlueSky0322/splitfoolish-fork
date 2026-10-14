@@ -49,6 +49,7 @@ export const useSplitActions = () => useContext(SplitActionsContext);
 /** Changes are sent together once there's been a pause this long */
 const SAVE_DELAY_MS = 500;
 const RETRY_DELAY_MS = 3000;
+const CONVERT_POLL_MS = 3000;
 
 export const newId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) =>
@@ -384,6 +385,20 @@ export function useSplit(splitId: string) {
       await new Promise((r) => setTimeout(r, 100));
     }
   }, [save]);
+
+  // While the server converts the items into a new currency, fetch them until it's done
+  const converting = meta?.converting ?? false;
+  useEffect(() => {
+    if (!converting) return;
+    const timer = setInterval(() => {
+      load().catch((err) => console.error(err));
+    }, CONVERT_POLL_MS);
+    return () => {
+      clearInterval(timer);
+      // Done (or left): the sidebar and My splits show the converted totals
+      void reloadHomeData();
+    };
+  }, [converting, load]);
 
   return { status, meta, setMeta, refreshMeta, actions, retry, whenSaved };
 }

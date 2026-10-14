@@ -10,15 +10,20 @@ interface SplitSettingsProps {
   currency: string;
   pictureVersion: number | null;
   canEdit: boolean;
-  onSaved: (changes: { name?: string; currency?: string; pictureVersion?: number | null }) => void;
+  onSaved: (changes: {
+    name?: string;
+    currency?: string;
+    pictureVersion?: number | null;
+    converting?: boolean;
+  }) => void;
   onClose: () => void;
 }
 
 const fail = (err: unknown, fallback: string) =>
   notifications.show({ color: 'red', message: err instanceof Error ? err.message : fallback });
 
-// Rename a split, change its currency or picture. Amounts stay as they are: changing
-// the currency relabels them, it doesn't convert them.
+// Rename a split, change its currency or picture. A new currency converts every item
+// on the server, in the background.
 const SplitSettings = ({
   splitId,
   name,
@@ -32,7 +37,12 @@ const SplitSettings = ({
   const save = (values: SplitFormValues) => {
     onClose();
     if (values.name !== name || values.currency !== currency) {
-      onSaved({ name: values.name, currency: values.currency });
+      // A new currency converts every item, in the background
+      onSaved({
+        name: values.name,
+        currency: values.currency,
+        ...(values.currency !== currency && { converting: true }),
+      });
       api
         .updateSplit(splitId, { name: values.name, currency: values.currency })
         .then(() => reloadHomeData())
@@ -60,7 +70,7 @@ const SplitSettings = ({
       initial={{ name, currency, pictureVersion }}
       canEdit={canEdit}
       submitLabel="Save"
-      currencyHelp="Changing it relabels the amounts; it doesn't convert them."
+      currencyHelp="Changing it converts every item at today's rate. Items keep what was originally paid, so changing back restores them."
       onSubmit={save}
       onCancel={onClose}
     />

@@ -98,6 +98,8 @@ export interface SplitDetail {
   /** Everyone settles up through this person; null for the fewest transfers */
   distributorId: string | null;
   pictureVersion: number | null;
+  /** Its items are being converted into a new currency, in the background */
+  converting?: boolean;
   role: Role;
   members: SplitMember[];
   /** Pending email invites; only sent to the owner */

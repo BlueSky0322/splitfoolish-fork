@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import {
   AppEnv,
+  Env,
   ID,
   MAX_NAME_LENGTH,
   Role,
@@ -41,9 +42,22 @@ import {
   removeAccessStatements,
 } from '../split-content';
 import { getRate } from '../rates';
+import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
 import { listSplitSummaries } from '../summaries';
 
 const splits = new Hono<AppEnv>();
+
+/** Converts the split's items after the response is sent; failures are retried later */
+const startReconvert = (
+  env: Env,
+  ctx: { waitUntil: (p: Promise<unknown>) => void },
+  splitId: string,
+) =>
+  ctx.waitUntil(
+    reconvertSplit(env.DB, splitId, (from, to) => getRate(env, from, to)).catch((err) =>
+      console.error(err),
+    ),
+  );
 
 splits.get('/splits', async (c) =>
   json({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
@@ -104,7 +118,8 @@ splits.get(SPLIT, async (c) => {
       db
         .prepare(
           `SELECT s.name, s.currency, s.invite_token AS inviteToken,
-             s.distributor_person_id AS distributorId, p.version AS pictureVersion
+             s.distributor_person_id AS distributorId, p.version AS pictureVersion,
+             s.converting_since AS convertingSince
            FROM splits s LEFT JOIN split_pictures p ON p.split_id = s.id WHERE s.id = ?`,
         )
         .bind(id),
@@ -126,10 +141,18 @@ splits.get(SPLIT, async (c) => {
         inviteToken: string;
         distributorId: string | null;
         pictureVersion: number | null;
+        convertingSince: number | null;
       }
     | undefined;
   // Non-members get the same 404 as a missing split, so ids can't be probed
   if (role == null || split == null) return notFound();
+
+  // A conversion that should have finished by now (say, the rates were down): try again
+  const converting = split.convertingSince != null;
+  const retryAfter = Number(c.env.RECONVERT_RETRY_MS ?? RETRY_AFTER_MS);
+  if (converting && Date.now() - split.convertingSince! >= retryAfter) {
+    startReconvert(c.env, c.executionCtx, id);
+  }
 
   return json({
     id,
@@ -137,6 +160,7 @@ splits.get(SPLIT, async (c) => {
     currency: split.currency,
     distributorId: split.distributorId,
     pictureVersion: split.pictureVersion,
+    converting,
     role,
     members: assembleMembers([memberRows, methodRows]),
     invites: role === 'owner' ? inviteRows.results : undefined,
@@ -158,13 +182,28 @@ splits.patch(SPLIT, member, ownerOnly('Only the owner can change split settings'
     if (name == null) return json({ error: `Name must be 1-${MAX_NAME_LENGTH} characters` }, 400);
     statements.push(db.prepare('UPDATE splits SET name = ? WHERE id = ?').bind(name, id));
   }
+  let converting = false;
   if ('currency' in body) {
     if (typeof body.currency !== 'string' || !CURRENCY.test(body.currency)) {
       return json({ error: 'Invalid currency' }, 400);
     }
-    statements.push(
-      db.prepare('UPDATE splits SET currency = ? WHERE id = ?').bind(body.currency, id),
-    );
+    // Items are converted afterwards, in the background. Until that's done, plain items
+    // are still in the currency the split had before this conversion started.
+    const changed = await db
+      .prepare('SELECT 1 FROM splits WHERE id = ? AND currency != ?')
+      .bind(id, body.currency)
+      .first();
+    if (changed) {
+      converting = true;
+      statements.push(
+        db
+          .prepare(
+            `UPDATE splits SET converting_from = coalesce(converting_from, currency),
+               converting_since = ?, currency = ? WHERE id = ?`,
+          )
+          .bind(Date.now(), body.currency, id),
+      );
+    }
   }
   if (statements.length > 0) {
     await db.batch([
@@ -172,7 +211,8 @@ splits.patch(SPLIT, member, ownerOnly('Only the owner can change split settings'
       db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), id),
     ]);
   }
-  return json({ ok: true });
+  if (converting) startReconvert(c.env, c.executionCtx, id);
+  return json({ ok: true, converting });
 });
 
 splits.delete(SPLIT, member, ownerOnly('Only the owner can delete this split'), async (c) => {

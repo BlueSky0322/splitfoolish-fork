@@ -28,6 +28,8 @@ erDiagram
         text currency "ISO 4217, e.g. MYR"
         text distributor_person_id FK "null: fewest transfers"
         text invite_token UK "share link"
+        text converting_from "while items are converted to a new currency"
+        int converting_since
         int created_at
         int updated_at
     }
@@ -145,6 +147,11 @@ erDiagram
   `cost_cents` holds the amount in the split's currency, worked out once by the server
   when the item is saved. Totals never drift as rates move, and settling up only ever
   sees one currency. Editing an item without changing its amount keeps its rate.
+- **Changing a split's currency.** The new currency is saved at once and the items
+  are converted in the background (`converting_from` and `converting_since` mark it).
+  Plain items become "paid in the old currency", items paid in the new one become
+  plain again, so changing back restores the exact amounts. Items can't be added or
+  edited until it's done; the app holds such changes and sends them again.
 - **Shared, not per person.** Who to route payments through is a property of the split
   (`splits.distributor_person_id`), so everyone in it sees the same transfers.
 - **Deleting cleans up.** Deleting a split removes its members, invites, people, items,
