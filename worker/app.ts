@@ -3,8 +3,9 @@
 
 import { createMiddleware } from 'hono/factory';
 import { AuthEnv } from './auth';
+import { RatesEnv } from './rates';
 
-export interface Env extends AuthEnv {
+export interface Env extends AuthEnv, RatesEnv {
   DB: D1Database;
   ASSETS: Fetcher;
 }
