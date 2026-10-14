@@ -111,8 +111,11 @@ export async function startLocalWorker(): Promise<LocalWorker> {
       const res = await fetch(base + path, {
         method,
         headers: { 'X-Dev-User': who, 'Content-Type': 'application/json', ...headers },
+        // Bytes (a photo) and strings go as they are; anything else as JSON
         body:
-          body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+          body === undefined || typeof body === 'string' || body instanceof Uint8Array
+            ? (body as BodyInit | undefined)
+            : JSON.stringify(body),
       });
       const text = await res.text();
       let data: any = null;
