@@ -31,7 +31,7 @@ import {
   UsersThree,
   X,
 } from '@phosphor-icons/react';
-import { ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Attachment, ItemInput } from '../../api';
 import { AppContext } from '../../context/AppContext/AppContext';
 import { toApiItem } from '../../context/AppContext/app-reducer';
@@ -66,6 +66,8 @@ import PersonAvatar, { AvatarVersionsContext } from './PersonAvatar';
 import BalancePanel, { BalanceHero } from './BalancePanel';
 import ItemForm from './ItemForm';
 import { ItemCards, ItemTable } from './ItemViews';
+import { DesktopSelectionBar, MobileSelectionBar, MoveDateDialog } from './ItemSelection';
+import { useItemSelection } from '../../hooks/useItemSelection';
 import PeopleSheet from './PeopleSheet';
 import ShareImage from './ShareImage';
 import SplitSettings from './SplitSettings';
@@ -269,6 +271,44 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const groups = groupItems(shownItems, prefs.groupBy, prefs.sortKey, prefs.sortDir);
   const grouped = prefs.groupBy !== 'none';
 
+  // Several items picked at once, in the order they're shown (for shift-click ranges)
+  const selection = useItemSelection(groups.flatMap((g) => g.items.map((i) => i.id)));
+  const selecting = selection.count > 0;
+  const [moving, setMoving] = useState(false);
+
+  // Phones: the back button stops selecting rather than leaving the split
+  useEffect(() => {
+    if (isDesktop || !selecting) return;
+    window.history.pushState({ sfSelecting: true }, '');
+    const onBack = () => selection.clear();
+    window.addEventListener('popstate', onBack);
+    return () => {
+      window.removeEventListener('popstate', onBack);
+      if ((window.history.state as { sfSelecting?: boolean } | null)?.sfSelecting) {
+        window.history.back();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDesktop, selecting]);
+
+  // Computers: Esc lets go of the selection; Delete removes it (with Undo)
+  const keysRef = useRef({ clear: selection.clear, remove: () => {} });
+  keysRef.current.clear = selection.clear;
+  useEffect(() => {
+    if (!isDesktop || !selecting) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"], [role="dialog"]')) return;
+      if (e.key === 'Escape') keysRef.current.clear();
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        keysRef.current.remove();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDesktop, selecting]);
+
   if (status === 'notfound') {
     return (
       <StateCard
@@ -304,6 +344,93 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     setPref({
       groupBy: GROUP_ORDER[(GROUP_ORDER.indexOf(prefs.groupBy) + 1) % GROUP_ORDER.length],
     });
+
+  /** Deletes the picked items: with Undo, or after asking when photos would go too */
+  const deleteSelected = () => {
+    const items = state.items.filter((i) => selection.selected.has(i.id));
+    if (items.length === 0) return;
+    const photoCount = items.reduce((n, i) => n + photos.photosOf(i.id).length, 0);
+    const label = items.length === 1 ? items[0].name : `${items.length} items`;
+    const remove = () => {
+      const saved = items.map(toApiItem);
+      for (const item of items) {
+        actions.removeItem(item.id);
+        photos.forgetItem(item.id);
+      }
+      selection.clear();
+      if (photoCount > 0) {
+        notifications.show({ message: `Deleted ${label} and their photos` });
+        return;
+      }
+      const id = notifications.show({
+        message: (
+          <div className="flex items-center justify-between gap-3">
+            <span>Deleted {label}</span>
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              onClick={() => {
+                for (const item of saved) actions.restoreItem(item);
+                notifications.hide(id);
+              }}
+            >
+              Undo
+            </Button>
+          </div>
+        ),
+        autoClose: 6000,
+      });
+    };
+    if (photoCount === 0) {
+      remove();
+      return;
+    }
+    modals.openConfirmModal({
+      title: `Delete ${label}?`,
+      children: (
+        <p className="text-sm">
+          {photoCount === 1 ? 'A photo' : `${photoCount} photos`} will be deleted too. This can't be
+          undone.
+        </p>
+      ),
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: remove,
+    });
+  };
+
+  const moveSelected = (day: Date) => {
+    const count = selection.count;
+    actions.moveItemsToDay([...selection.selected], day);
+    setMoving(false);
+    selection.clear();
+    notifications.show({
+      message: `Moved ${count === 1 ? '1 item' : `${count} items`} to ${day.toLocaleDateString(
+        undefined,
+        { weekday: 'short', day: 'numeric', month: 'short' },
+      )}`,
+    });
+  };
+
+  keysRef.current.remove = deleteSelected;
+
+  const selectionProps = {
+    count: selection.count,
+    total: state.items.length,
+    onSelectAll: selection.selectAll,
+    onClear: selection.clear,
+    onMove: () => setMoving(true),
+    onDelete: deleteSelected,
+  };
+
+  const moveDialog = (
+    <MoveDateDialog
+      opened={moving}
+      count={selection.count}
+      onMove={moveSelected}
+      onClose={() => setMoving(false)}
+    />
+  );
 
   const deleteItem = (item: IItem, confirmed = false) => {
     const count = photos.photosOf(item.id).length;
@@ -541,6 +668,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       onEdit={(item) => setDialog({ kind: 'edit', item })}
       onDelete={deleteItem}
       photoCounts={photoCounts}
+      selection={selection.row}
       sortKey={prefs.sortKey}
       sortDir={prefs.sortDir}
       onSort={sortBy}
@@ -558,6 +686,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       onEdit={(item) => setDialog({ kind: 'edit', item })}
       onDelete={deleteItem}
       photoCounts={photoCounts}
+      selection={selection.row}
     />
   );
 
@@ -922,6 +1051,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
                 {list}
               </ErrorBoundary>
+              {selecting && <DesktopSelectionBar {...selectionProps} />}
+              {moveDialog}
             </div>
             <aside className={classes.aside}>{panel}</aside>
           </div>
@@ -937,6 +1068,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     <SplitActionsContext.Provider value={actions}>
       <AvatarVersionsContext.Provider value={avatarVersions}>
         <div className={classes.mobile}>
+          {selecting && <MobileSelectionBar {...selectionProps} />}
+          {moveDialog}
           <div className={classes.topBar}>
             <Button
               variant="subtle"
@@ -1060,7 +1193,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             {list}
           </ErrorBoundary>
         </div>
-        {!noPeople && loaded && (
+        {!noPeople && loaded && !selecting && (
           <Fab
             label="Add item"
             onClick={() => setDialog({ kind: 'add' })}

@@ -67,6 +67,8 @@ export type Change =
   | { op: 'addItem'; item: Item }
   | { op: 'updateItem'; item: Item }
   | { op: 'removeItem'; id: string }
+  /** Moves an item to another day: when it's dated, in ms, not after today */
+  | { op: 'setItemDate'; id: string; createdAt: number }
   | { op: 'clearItems' }
   /** Converts items in these currencies again at today's rate; items on a typed rate stay */
   | { op: 'refreshRates'; currencies: string[] }

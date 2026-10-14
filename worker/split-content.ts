@@ -479,6 +479,7 @@ function rateStatements(
 
 /** Earliest date an item may say it was added on: before this app existed */
 const EARLIEST_ITEM = Date.UTC(2000, 0, 1);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * When a new item was added: the time it brings with it (a duplicate keeping its
@@ -867,6 +868,22 @@ function plan(
         db.prepare('DELETE FROM item_participants WHERE item_id = ?').bind(change.id),
         db.prepare('DELETE FROM items WHERE id = ?').bind(change.id),
       ];
+
+    case 'setItemDate': {
+      // Already removed (by someone else): nothing to move
+      if (typeof change.id !== 'string' || !model.items.has(change.id)) return [];
+      const at = change.createdAt;
+      // A day's grace past now, for clocks and time zones ahead of the server's
+      if (
+        typeof at !== 'number' ||
+        !Number.isInteger(at) ||
+        at < EARLIEST_ITEM ||
+        at > Date.now() + DAY_MS
+      ) {
+        throw new Refused('Pick a date that has already come');
+      }
+      return [db.prepare('UPDATE items SET created_at = ? WHERE id = ?').bind(at, change.id)];
+    }
 
     case 'clearItems':
       model.items.clear();
