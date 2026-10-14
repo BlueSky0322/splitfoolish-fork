@@ -304,3 +304,29 @@ describe('profile, pictures and photos', () => {
     expect(res.data.error).toBe('Not found');
   });
 });
+
+describe('exchange rates', () => {
+  it('converts with Wise, falls back to Frankfurter, and says when neither has a rate', async () => {
+    const me = person('me');
+    api.rates.set('USD', 'MYR', 4.2);
+    const res = await api.call(me, 'GET', '/api/rates?from=usd&to=MYR&amount=10.5');
+    expect(res.status).toBe(200);
+    expect(res.data).toMatchObject({ from: 'USD', to: 'MYR', rate: 4.2, source: 'wise' });
+    expect(res.data.convertedCents).toBe(4410);
+
+    api.rates.set('SGD', 'MYR', 3.3);
+    api.rates.down('wise', true);
+    const fallback = await api.call(me, 'GET', '/api/rates?from=SGD&to=MYR');
+    api.rates.down('wise', false);
+    expect(fallback.data).toMatchObject({ rate: 3.3, source: 'frankfurter' });
+
+    expect((await api.call(me, 'GET', '/api/rates?from=XXX&to=MYR')).status).toBe(503);
+  });
+
+  it('refuses bad currency codes and amounts', async () => {
+    const me = person('me');
+    expect((await api.call(me, 'GET', '/api/rates?from=US&to=MYR')).status).toBe(400);
+    expect((await api.call(me, 'GET', '/api/rates?from=USD&to=MYR&amount=-1')).status).toBe(400);
+    expect((await api.call(me, 'GET', '/api/rates?from=USD&to=MYR&amount=abc')).status).toBe(400);
+  });
+});
