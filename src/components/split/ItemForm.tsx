@@ -21,6 +21,7 @@ import { loadMath } from '../../utils/math';
 import PhotoStrip from '../photos/PhotoStrip';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
+import { SOURCE_LABELS, describeRate } from '../../utils/rates';
 
 interface ItemFormProps {
   splitId: string;
@@ -51,12 +52,6 @@ const MODES: { value: SplitMode; label: string }[] = [
 const MAX_SHARES = 999;
 const toCents = (amount: number) => Math.round(amount * 100);
 const RATE_FRESH_MS = 5 * 60 * 1000;
-
-const SOURCE_LABELS = { wise: 'Wise', frankfurter: 'ECB', manual: 'your rate' } as const;
-
-/** How a rate reads: "1 JPY = 0.0297 MYR", with as many digits as small rates need */
-const describeRate = (rate: number, from: string, to: string) =>
-  `1 ${from} = ${rate.toLocaleString(undefined, { maximumSignificantDigits: 4 })} ${to}`;
 
 /** The split's currency first, then the common ones (and the item's, if it's another) */
 const currencyOptions = (splitCurrency: string, current: string) => [

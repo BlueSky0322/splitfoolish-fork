@@ -62,4 +62,8 @@ export type Change =
   | { op: 'addItem'; item: Item }
   | { op: 'updateItem'; item: Item }
   | { op: 'removeItem'; id: string }
-  | { op: 'clearItems' };
+  | { op: 'clearItems' }
+  /** Converts items in these currencies again at today's rate; items on a typed rate stay */
+  | { op: 'refreshRates'; currencies: string[] }
+  /** Every item in this currency at a typed rate, or at today's rate when null */
+  | { op: 'setRate'; currency: string; rate: number | null };
