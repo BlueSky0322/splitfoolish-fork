@@ -1,0 +1,129 @@
+/* The tick in front of an item */
+.check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid var(--sf-border);
+  background: var(--sf-surface);
+  color: #fff;
+  position: relative;
+  z-index: 1;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+}
+
+.check[data-checked] {
+  border-color: var(--sf-accent);
+  background: var(--sf-accent);
+}
+
+/* Phones: round, like a photo picker */
+@media (max-width: 1023px) {
+  .check {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+  }
+}
+
+.mobileBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: calc(6px + env(safe-area-inset-top)) 8px 6px 4px;
+  background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-md);
+  animation: slide-down 160ms ease-out;
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+  }
+}
+
+.count {
+  flex: 1;
+  padding: 0 6px;
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.danger:global(.mantine-ActionIcon-root) {
+  color: var(--sf-negative);
+}
+
+/* Computers: a bar that stays at the bottom of the list while it scrolls */
+.desktopDock {
+  position: sticky;
+  bottom: 20px;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+  pointer-events: none;
+}
+
+.desktopBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-divider);
+  box-shadow: var(--sf-shadow-lg);
+  pointer-events: auto;
+  animation: rise 160ms ease-out;
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+
+.desktopBar .count {
+  flex: none;
+  padding: 0 6px 0 0;
+  font-size: 14px;
+}
+
+.divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--sf-divider);
+}
+
+.chip {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--sf-divider);
+  font-size: 14px;
+}
+
+.chip[data-selected] {
+  border-color: var(--sf-accent);
+  color: var(--sf-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileBar,
+  .desktopBar {
+    animation: none;
+  }
+}
