@@ -1,20 +1,9 @@
 import { ImmerReducer } from 'use-immer';
-import { SplitMode } from '../../../shared/settle';
+import type { Item } from '../../../shared/types';
 import { AppReducerAction, AppReducerState, IItem, IPerson } from '../../interfaces/app-reducer.ts';
 
 /** An item as the API returns it, referring to people by id */
-export interface ApiItem {
-  id: string;
-  name: string;
-  cost: number;
-  payerId: string;
-  participantIds: string[];
-  splitMode: SplitMode;
-  shares?: Record<string, number>;
-  exact?: Record<string, number>;
-  category: string | null;
-  createdAt: number;
-}
+export type ApiItem = Item;
 
 export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
   const byId = new Map(people.map((p) => [p.id, p]));

@@ -4,29 +4,9 @@
 // people editing the same split don't overwrite each other.
 
 import { SplitMode } from '../shared/settle';
+import type { Change, Item, Person } from '../shared/types';
 
-export interface Person {
-  id: string;
-  name: string;
-  /** The account this person is, when linked */
-  memberEmail: string | null;
-}
-
-export interface Item {
-  id: string;
-  name: string;
-  /** In currency units; stored as integer cents */
-  cost: number;
-  payerId: string;
-  participantIds: string[];
-  splitMode: SplitMode;
-  /** Shares per participant, when split by shares */
-  shares?: Record<string, number>;
-  /** Amount per participant in currency units, when split by exact amounts */
-  exact?: Record<string, number>;
-  category: string | null;
-  createdAt: number;
-}
+export type { Change, Item, Person };
 
 const MAX_NAME_LENGTH = 80;
 const MAX_CATEGORY_LENGTH = 32;
@@ -128,21 +108,6 @@ export function assembleContent([people, items, participants]: D1Result<
     }),
   };
 }
-
-export type Change =
-  | { op: 'addPerson'; id: string; name: string; memberEmail?: string | null }
-  | { op: 'renamePerson'; id: string; name: string }
-  /** Link a person to a member's account ("This is me"), or unlink with null */
-  | { op: 'linkPerson'; id: string; memberEmail: string | null }
-  /** fromItems: also take them off items they share (never items they paid for) */
-  | { op: 'removePerson'; id: string; fromItems?: boolean }
-  | { op: 'clearPeople' }
-  /** Settle up through this person ("route payments through"), or null for fewest transfers */
-  | { op: 'setDistributor'; personId: string | null }
-  | { op: 'addItem'; item: Item }
-  | { op: 'updateItem'; item: Item }
-  | { op: 'removeItem'; id: string }
-  | { op: 'clearItems' };
 
 const MAX_CHANGES = 200;
 // Ids are made by the client so its changes can refer to people and items it just added

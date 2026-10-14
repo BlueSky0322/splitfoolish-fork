@@ -1,7 +1,7 @@
-import { ApiItem } from './context/AppContext/app-reducer';
+import type { Change, Item as ApiItem, Role } from '../shared/types';
 import { IPerson } from './interfaces/app-reducer';
 
-export type Role = 'owner' | 'editor';
+export type { Change, Role };
 
 export interface SplitSummary {
   id: string;
@@ -104,24 +104,12 @@ export interface SplitDetail {
   invites?: SplitInvite[];
   inviteToken?: string;
   attachments: Attachment[];
+  // Copies cached on this device may predate memberEmail, so it's optional here
   people: IPerson[];
   items: ApiItem[];
 }
 
 export type ItemInput = Omit<ApiItem, 'id' | 'createdAt'>;
-
-/** One change to a split's people or items; ids are made by the client */
-export type Change =
-  | { op: 'addPerson'; id: string; name: string; memberEmail?: string | null }
-  | { op: 'renamePerson'; id: string; name: string }
-  | { op: 'linkPerson'; id: string; memberEmail: string | null }
-  | { op: 'removePerson'; id: string; fromItems?: boolean }
-  | { op: 'clearPeople' }
-  | { op: 'setDistributor'; personId: string | null }
-  | { op: 'addItem'; item: ApiItem }
-  | { op: 'updateItem'; item: ApiItem }
-  | { op: 'removeItem'; id: string }
-  | { op: 'clearItems' };
 
 export class ApiError extends Error {
   constructor(
