@@ -15,8 +15,10 @@ import {
   Rows,
   ShareNetwork,
   SortDescending,
+  SignOut,
   StackSimple,
   Table,
+  Trash,
   UserPlus,
   UsersThree,
   X,
@@ -44,6 +46,7 @@ import { currencySymbol } from '../../utils/money';
 import ErrorBoundary from '../ErrorBoundary';
 import PhotoStrip from '../photos/PhotoStrip';
 import { usePhotos } from '../photos/usePhotos';
+import EndSplit from '../EndSplit';
 import SplitMembers from '../SplitMembers';
 import Fab from '../ui/Fab';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
@@ -82,6 +85,7 @@ type Dialog =
   | { kind: 'settle' }
   | { kind: 'share' }
   | { kind: 'members' }
+  | { kind: 'end' }
   | { kind: 'settings' }
   | { kind: 'photos' };
 
@@ -387,6 +391,18 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
         >
           Split settings
         </Menu.Item>
+        {meta && (
+          <>
+            <Menu.Divider />
+            <Menu.Item
+              color="red"
+              leftSection={meta.role === 'owner' ? <Trash size={16} /> : <SignOut size={16} />}
+              onClick={() => setDialog({ kind: 'end' })}
+            >
+              {meta.role === 'owner' ? 'Delete split' : 'Leave split'}
+            </Menu.Item>
+          </>
+        )}
       </Menu.Dropdown>
     </Menu>
   );
@@ -535,6 +551,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             myEmail={myEmail}
             members={meta?.members ?? []}
             invites={meta?.invites ?? []}
+            isOwner={meta?.role === 'owner'}
             initialPersonId={dialog.personId}
             onShowItems={showItemsOf}
           />
@@ -593,6 +610,21 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             myEmail={myEmail}
             onChange={refreshMeta}
             setMeta={setMeta}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'end'}
+        onClose={close}
+        title={meta?.role === 'owner' ? 'Delete split' : 'Leave split'}
+      >
+        {dialog?.kind === 'end' && myEmail && meta && (
+          <EndSplit
+            splitId={splitId}
+            name={meta.name}
+            isOwner={meta.role === 'owner'}
+            myEmail={myEmail}
+            onCancel={close}
           />
         )}
       </ResponsiveDialog>
@@ -716,7 +748,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                     className={classes.linkButton}
                     onClick={() => openPeople()}
                   >
-                    Edit people
+                    {meta?.role === 'owner' ? 'Edit people' : 'See people'}
                   </button>
                 </div>
               )}

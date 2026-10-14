@@ -159,6 +159,14 @@ export function useSplit(splitId: string) {
       }
     } catch (err) {
       inFlight.current = false;
+      // Removed from the split (or it was deleted) while it was open
+      if (err instanceof ApiError && err.status === 404) {
+        pending.current = [];
+        removeCache(cacheKey);
+        reloadHomeData();
+        setStatus('notfound');
+        return;
+      }
       if (err instanceof ApiError) {
         // Refused: everything queued after it was built on top of it, so start over
         notifications.show({ color: 'red', message: err.message });
@@ -174,7 +182,7 @@ export function useSplit(splitId: string) {
       setStatus('error');
       timer.current = setTimeout(save, RETRY_DELAY_MS);
     }
-  }, [splitId, load]);
+  }, [splitId, load, cacheKey]);
 
   const queue = useCallback(
     (change: Change) => {
@@ -306,6 +314,15 @@ export function useSplit(splitId: string) {
         const blocker = removeBlocker(current.current, personId, fromItems);
         if (blocker) return refuse(blocker);
         dispatch({ type: 'REMOVE_PERSON', payload: personId });
+        // Someone with an account loses access too, and the share link changes
+        const email = person.memberEmail;
+        if (
+          email != null &&
+          metaRef.current?.members.some((m) => m.email === email && m.role !== 'owner')
+        ) {
+          setMeta((m) => (m ? { ...m, members: m.members.filter((x) => x.email !== email) } : m));
+          reloadAfterSave.current = true;
+        }
         return queue({ op: 'removePerson', id: personId, fromItems });
       },
       clearPeople: () => {
