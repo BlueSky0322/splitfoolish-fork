@@ -355,6 +355,35 @@ describe('live updates', () => {
   });
 });
 
+describe('ordering my splits', () => {
+  const myOrder = async (who: string) =>
+    ((await api.call(who, 'GET', '/api/splits')).data.splits as { id: string }[]).map((s) => s.id);
+
+  it('keeps each person their own order, with new splits first', async () => {
+    const owner = person('owner');
+    const member = person('member');
+    const a = (await splitWith(owner, member)).id;
+    const b = (await splitWith(owner, member)).id;
+    const c = (await splitWith(owner)).id;
+    expect(await myOrder(owner)).toEqual([c, b, a]);
+
+    expect((await api.call(owner, 'PUT', '/api/splits/order', { ids: [a, c, b] })).status).toBe(
+      200,
+    );
+    expect(await myOrder(owner)).toEqual([a, c, b]);
+    // Someone else's order is theirs
+    expect(await myOrder(member)).toEqual([b, a]);
+
+    const d = (await splitWith(owner)).id;
+    expect(await myOrder(owner)).toEqual([d, a, c, b]);
+    // Ids of splits you're not in change nothing
+    const outsider = person('outsider');
+    await api.call(outsider, 'PUT', '/api/splits/order', { ids: [b, a] });
+    expect(await myOrder(owner)).toEqual([d, a, c, b]);
+    expect((await api.call(owner, 'PUT', '/api/splits/order', { ids: 'nope' })).status).toBe(400);
+  });
+});
+
 describe('safeguards', () => {
   it('refuses changes started by another site', async () => {
     const owner = person('owner');

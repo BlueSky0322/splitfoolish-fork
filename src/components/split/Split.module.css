@@ -321,6 +321,7 @@
 }
 
 .itemShare {
+  font-family: var(--sf-font-num);
   font-size: 12px;
   color: var(--sf-text-muted);
   white-space: nowrap;
@@ -328,6 +329,7 @@
 }
 
 .itemAmount {
+  font-family: var(--sf-font-num);
   width: 96px;
   text-align: right;
   font-size: 15px;
@@ -510,6 +512,7 @@
 }
 
 .tableGroupTotal {
+  font-family: var(--sf-font-num);
   margin-left: auto;
   font-size: 14px;
   font-weight: 500;
@@ -539,6 +542,7 @@
 }
 
 .num {
+  font-family: var(--sf-font-num);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -560,6 +564,7 @@
 }
 
 .heroAmount {
+  font-family: var(--sf-font-num);
   font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -577,6 +582,7 @@
 }
 
 .statValue {
+  font-family: var(--sf-font-num);
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
@@ -627,6 +633,7 @@
 }
 
 .transferAmount {
+  font-family: var(--sf-font-num);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -669,6 +676,7 @@
 }
 
 .payChip {
+  font-family: var(--sf-font-num);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -755,6 +763,7 @@
 }
 
 .barAmount {
+  font-family: var(--sf-font-num);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -795,6 +804,7 @@
 }
 
 .personBalance {
+  font-family: var(--sf-font-num);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -869,6 +879,7 @@
 
 /* An item paid in another currency: the amount as paid, under the converted one */
 .originalAmount {
+  font-family: var(--sf-font-num);
   display: block;
   font-size: 11px;
   font-weight: 400;

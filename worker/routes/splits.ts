@@ -48,6 +48,9 @@ import { listSplitSummaries } from '../summaries';
 
 const splits = new Hono<AppEnv>();
 
+const MAX_ORDERED = 500;
+const SPLIT_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
 /** Converts the split's items after the response is sent; failures are retried later */
 const startReconvert = (
   env: Env,
@@ -63,6 +66,31 @@ const startReconvert = (
 splits.get('/splits', async (c) =>
   json({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
 );
+
+// Your own order for your splits, as dragged in the app: every id, first to last
+splits.put('/splits/order', async (c) => {
+  const db = c.env.DB;
+  const body = await readJson(c.req.raw);
+  if (body instanceof Response) return body;
+  const ids = body.ids;
+  if (
+    !Array.isArray(ids) ||
+    ids.length > MAX_ORDERED ||
+    !ids.every((id) => typeof id === 'string' && SPLIT_ID.test(id))
+  ) {
+    return json({ error: 'Send the split ids in order' }, 400);
+  }
+  if (ids.length === 0) return json({ ok: true });
+  // Splits you're not in are skipped: the update only touches your own rows
+  await db.batch(
+    [...new Set(ids as string[])].map((id, position) =>
+      db
+        .prepare('UPDATE split_members SET sort_position = ? WHERE split_id = ? AND email = ?')
+        .bind(position, id, c.var.email),
+    ),
+  );
+  return json({ ok: true });
+});
 
 splits.post('/splits', async (c) => {
   const db = c.env.DB;

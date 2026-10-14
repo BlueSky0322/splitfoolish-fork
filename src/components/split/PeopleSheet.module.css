@@ -39,6 +39,7 @@
 }
 
 .balance {
+  font-family: var(--sf-font-num);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -95,6 +96,7 @@
 }
 
 .statValue {
+  font-family: var(--sf-font-num);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }

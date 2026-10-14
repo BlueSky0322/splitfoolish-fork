@@ -189,6 +189,8 @@ export const api = {
   removeAvatar: () => request<{ ok: true }>('DELETE', '/api/me/avatar'),
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
   /** id is made by the app, so the new split can open before this finishes */
+  /** Your own order for your splits: every id, first to last */
+  reorderSplits: (ids: string[]) => request<{ ok: true }>('PUT', '/api/splits/order', { ids }),
   createSplit: (id: string, name: string, currency: string) =>
     request<{ id: string }>('POST', '/api/splits', { id, name, currency }),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
