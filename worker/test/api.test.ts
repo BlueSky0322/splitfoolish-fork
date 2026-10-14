@@ -725,6 +725,57 @@ describe('exchange rates', () => {
     expect((await api.call(me, 'GET', '/api/rates?from=XXX&to=MYR')).status).toBe(503);
   });
 
+  it("lists the other currencies in your splits with today's rate, for Settings", async () => {
+    const me = person('me');
+    const stranger = person('stranger');
+    api.rates.set('JPY', 'MYR', 0.03);
+    api.rates.set('SGD', 'MYR', 3.4);
+    api.rates.set('SGD', 'JPY', 113);
+    await api.call(me, 'POST', '/api/splits', { name: 'Home', currency: 'MYR' });
+    const { data: tokyo } = await api.call(me, 'POST', '/api/splits', {
+      name: 'Tokyo',
+      currency: 'JPY',
+    });
+    // An item in Singapore dollars in the MYR split... and one in the JPY split
+    const { data: home } = await api.call(me, 'GET', '/api/splits');
+    const homeId = home.splits.find((s: { name: string }) => s.name === 'Home').id;
+    for (const id of [homeId, tokyo.id]) {
+      const p = hex();
+      await change(
+        me,
+        id,
+        { op: 'addPerson', id: p, name: 'Me' },
+        {
+          op: 'addItem',
+          item: {
+            id: hex(),
+            name: 'Dinner',
+            cost: 10,
+            payerId: p,
+            participantIds: [p],
+            original: { currency: 'SGD', amount: 10 },
+          },
+        },
+      );
+    }
+    const res = await api.call(me, 'GET', '/api/me/rates?to=MYR');
+    expect(res.status).toBe(200);
+    // Most-used first, each with a rate; MYR itself isn't listed. (Rates are cached across
+    // tests, so only their presence is checked.)
+    expect(
+      res.data.currencies.map((c: { currency: string; splits: number; rate: number }) => [
+        c.currency,
+        c.splits,
+        typeof c.rate,
+      ]),
+    ).toEqual([
+      ['SGD', 2, 'number'],
+      ['JPY', 1, 'number'],
+    ]);
+    // Only your own splits count
+    expect((await api.call(stranger, 'GET', '/api/me/rates?to=MYR')).data.currencies).toEqual([]);
+  });
+
   it('uses the rate source each person picked in Settings', async () => {
     const wiseFan = person('wisefan');
     const ecbFan = person('ecbfan');

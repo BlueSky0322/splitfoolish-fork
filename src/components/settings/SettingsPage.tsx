@@ -1,479 +1,267 @@
+import { Title, UnstyledButton } from '@mantine/core';
 import {
-  Button,
-  FileButton,
-  SegmentedControl,
-  TextInput,
-  Title,
-  UnstyledButton,
-  Select,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { CaretLeft, Check, LockSimple, Plus, SignOut } from '@phosphor-icons/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { PaymentMethod, ThemeSetting, api } from '../../api';
-import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
+  CaretLeft,
+  CaretRight,
+  CurrencyCircleDollar,
+  DownloadSimple,
+  HandCoins,
+  Icon,
+  Palette,
+  SignOut,
+  UserCircle,
+} from '@phosphor-icons/react';
+import { ReactNode, useEffect, useState } from 'react';
+import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { clearCache } from '../../split-cache';
-import { ACCENTS, Accent, isAccent } from '../../theme/accents';
-import { shrinkAvatar } from '../../utils/image';
-import { listCurrencies } from '../../utils/money';
-import UserAvatar from '../ui/UserAvatar';
-import PayHint from './PayHint';
-import PaymentMethods from './PaymentMethods';
-import classes from './Settings.module.css';
 import { InstallField } from '../ui/InstallApp';
+import UserAvatar from '../ui/UserAvatar';
+import AppearanceSection from './AppearanceSection';
+import CurrencySection from './CurrencySection';
+import PaymentsSection from './PaymentsSection';
+import ProfileSection from './ProfileSection';
+import SettingsCard from './SettingsCard';
+import { Track, useSaveIndicator } from './useSaveIndicator';
+import classes from './SettingsLayout.module.css';
 
-const MAX_DISPLAY_NAME = 32;
-const SAVED_FOR_MS = 2000;
-
-export async function signOut() {
+async function signOut() {
   await clearCache();
   window.location.href = '/cdn-cgi/access/logout';
 }
 
-const fail = (err: unknown, fallback: string) =>
-  notifications.show({ color: 'red', message: err instanceof Error ? err.message : fallback });
+type SectionId = 'profile' | 'getting-paid' | 'currency' | 'appearance' | 'app';
 
-/** "Saving" while changes are on their way, then "Saved" for a moment */
-function useSaveIndicator() {
-  const [pending, setPending] = useState(0);
-  const [justSaved, setJustSaved] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  const track = async <T,>(work: Promise<T>) => {
-    clearTimeout(timer.current);
-    setJustSaved(false);
-    setPending((n) => n + 1);
-    try {
-      return await work;
-    } finally {
-      setPending((n) => n - 1);
-      setJustSaved(true);
-      timer.current = setTimeout(() => setJustSaved(false), SAVED_FOR_MS);
-    }
-  };
-
-  const note = (
-    <span
-      className={classes.saved}
-      data-visible={pending > 0 || justSaved || undefined}
-      aria-live="polite"
-    >
-      {pending > 0 ? (
-        'Saving'
-      ) : justSaved ? (
-        <>
-          <Check size={14} /> Saved
-        </>
-      ) : null}
-    </span>
-  );
-
-  return { track, note };
+interface Section {
+  id: SectionId;
+  label: string;
+  icon: Icon;
+  /** Under the page's title */
+  blurb: string;
+  render: (track: Track) => ReactNode;
 }
 
-// Settings (2a). Everything saves as it changes.
-/** The Select value for "use the currency used last" */
-const LAST_USED = 'last';
+const GROUPS: { label: string; sections: Section[] }[] = [
+  {
+    label: 'You',
+    sections: [
+      {
+        id: 'profile',
+        label: 'Profile',
+        icon: UserCircle,
+        blurb: 'How you appear to people in your splits.',
+        render: (track) => <ProfileSection track={track} />,
+      },
+      {
+        id: 'getting-paid',
+        label: 'Getting paid',
+        icon: HandCoins,
+        blurb: 'Shown to people who owe you, next to their transfer in Settle up.',
+        render: (track) => <PaymentsSection track={track} />,
+      },
+    ],
+  },
+  {
+    label: 'App',
+    sections: [
+      {
+        id: 'currency',
+        label: 'Currency',
+        icon: CurrencyCircleDollar,
+        blurb: "What new splits use, where rates come from, and today's rates.",
+        render: (track) => <CurrencySection track={track} />,
+      },
+      {
+        id: 'appearance',
+        label: 'Appearance',
+        icon: Palette,
+        blurb: 'How Splitfoolish looks on this device.',
+        render: (track) => <AppearanceSection track={track} />,
+      },
+      {
+        id: 'app',
+        label: 'Install app',
+        icon: DownloadSimple,
+        blurb: 'Splitfoolish as an app on your phone or computer.',
+        render: () => (
+          <SettingsCard>
+            <InstallField />
+          </SettingsCard>
+        ),
+      },
+    ],
+  },
+];
 
-const SettingsPage = () => {
-  const { profile, update, updateSettings, patch } = useProfile();
-  const isDesktop = useIsDesktop();
-  const isMobile = useIsMobile();
-  const currencies = useMemo(listCurrencies, []);
-  const [name, setName] = useState(profile?.displayName ?? '');
-  const [avatarBusy, setAvatarBusy] = useState(false);
-  const { track, note } = useSaveIndicator();
+const SECTIONS = GROUPS.flatMap((g) => g.sections);
 
-  // Fill the name in once the profile arrives
+const sectionFromHash = () => {
+  const id = window.location.hash.slice(1);
+  return SECTIONS.find((s) => s.id === id) ?? null;
+};
+
+/** The section in the address (?settings#currency), following back and forward */
+function useSectionHash() {
+  const [section, setSection] = useState(sectionFromHash);
   useEffect(() => {
-    setName(profile?.displayName ?? '');
-  }, [profile?.displayName]);
+    const update = () => setSection(sectionFromHash());
+    window.addEventListener('hashchange', update);
+    window.addEventListener('popstate', update);
+    window.addEventListener('routechange', update);
+    return () => {
+      window.removeEventListener('hashchange', update);
+      window.removeEventListener('popstate', update);
+      window.removeEventListener('routechange', update);
+    };
+  }, []);
+  return section;
+}
 
+/** Opened from the phone's Settings list, so Back returns to it */
+const FROM_LIST = 'sfSettingsFromList';
+
+const open = (id: SectionId, fromList: boolean) => {
+  navigate(`?settings#${id}`);
+  if (fromList) window.history.replaceState({ [FROM_LIST]: true }, '');
+};
+
+// Settings (9a–9d): a menu of sections, each its own page. Computers show the menu beside
+// the open page; phones show the menu as the Settings home, opening each page full
+// screen. Everything saves as it changes.
+const SettingsPage = () => {
+  const { profile } = useProfile();
+  const isDesktop = useIsDesktop();
+  const hashed = useSectionHash();
+  const { track, note } = useSaveIndicator();
   if (profile == null) return null;
   const myName = nameFor(profile.email, profile.displayName);
-  const accent: Accent = isAccent(profile.settings.accent) ? profile.settings.accent : 'blurple';
 
-  const saveName = () => {
-    const trimmed = name.trim();
-    if (trimmed === (profile.displayName ?? '')) return;
-    void track(update({ displayName: trimmed || null }));
-  };
-
-  // Shown straight away; put back if the server refuses it
-  const savePayments = (methods: PaymentMethod[], preferredId: string | null) => {
-    const before = {
-      paymentMethods: profile.paymentMethods,
-      preferredPaymentMethodId: profile.preferredPaymentMethodId,
-    };
-    patch((p) => ({ ...p, paymentMethods: methods, preferredPaymentMethodId: preferredId }));
-    track(api.setPaymentMethods(methods, preferredId)).catch((err) => {
-      patch((p) => ({ ...p, ...before }));
-      fail(err, 'Could not save your payment methods');
-    });
-    return Promise.resolve(true);
-  };
-
-  // The new picture shows from this device while it uploads
-  const changeAvatar = async (file: File | null) => {
-    if (file == null) return;
-    setAvatarBusy(true);
-    let preview: string | null = null;
-    try {
-      const photo = await shrinkAvatar(file);
-      preview = URL.createObjectURL(photo);
-      const shown = preview;
-      patch((p) => ({ ...p, avatarPreview: shown }));
-      const { avatarVersion } = await track(api.setAvatar(photo));
-      patch((p) => ({ ...p, avatarVersion }));
-    } catch (err) {
-      fail(err, 'Could not change your picture');
-    } finally {
-      // Keep showing the local copy until the uploaded one has loaded
-      const shown = preview;
-      if (shown) {
-        setTimeout(() => {
-          patch((p) => (p.avatarPreview === shown ? { ...p, avatarPreview: null } : p));
-          URL.revokeObjectURL(shown);
-        }, 3000);
-      }
-      setAvatarBusy(false);
-    }
-  };
-
-  const removeAvatar = () => {
-    const before = profile.avatarVersion;
-    patch((p) => ({ ...p, avatarVersion: null, avatarPreview: null }));
-    track(api.removeAvatar()).catch((err) => {
-      patch((p) => ({ ...p, avatarVersion: before }));
-      fail(err, 'Could not remove your picture');
-    });
-  };
-
-  const pictureButtons = (
-    <div className={classes.pictureButtons}>
-      <FileButton
-        onChange={changeAvatar}
-        accept="image/*"
-      >
-        {(props) => (
-          <UnstyledButton
-            className={classes.textAction}
-            disabled={avatarBusy}
-            {...props}
-          >
-            {profile.avatarVersion ? 'Change picture' : 'Add picture'}
-          </UnstyledButton>
-        )}
-      </FileButton>
-      {(profile.avatarVersion || profile.avatarPreview) && (
-        <UnstyledButton
-          className={`${classes.textAction} ${classes.quiet}`}
-          disabled={avatarBusy}
-          onClick={removeAvatar}
-        >
-          Remove
-        </UnstyledButton>
-      )}
-    </div>
-  );
-
-  const nameField = (
-    <TextInput
-      label="Display name"
-      description={isMobile ? undefined : 'Shown to people in your splits instead of your email.'}
-      placeholder={profile.email.split('@')[0]}
-      value={name}
-      maxLength={MAX_DISPLAY_NAME}
-      onChange={(e) => setName(e.target.value)}
-      onBlur={saveName}
-      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-    />
-  );
-
-  const themeField = (
-    <div className={classes.field}>
-      <div className={classes.fieldLabel}>Theme</div>
-      <SegmentedControl
-        className={isMobile ? undefined : classes.themeControl}
-        fullWidth={isMobile}
-        data={[
-          { value: 'dark', label: 'Dark' },
-          { value: 'light', label: 'Light' },
-          { value: 'auto', label: isMobile ? 'Device' : 'Match device' },
-        ]}
-        value={profile.settings.theme}
-        onChange={(theme) => track(updateSettings({ theme: theme as ThemeSetting }))}
-      />
-    </div>
-  );
-
-  const accentField = (
-    <div className={classes.field}>
-      <div className={classes.fieldLabel}>Accent colour · {ACCENTS[accent].label}</div>
-      <div
-        className={classes.swatches}
-        role="radiogroup"
-        aria-label="Accent colour"
-      >
-        {(Object.keys(ACCENTS) as Accent[]).map((key) => (
-          <UnstyledButton
-            key={key}
-            role="radio"
-            aria-checked={accent === key}
-            aria-label={ACCENTS[key].label}
-            title={ACCENTS[key].label}
-            className={classes.swatch}
-            data-selected={accent === key || undefined}
-            style={{ '--swatch': ACCENTS[key].ramp[4] }}
-            onClick={() => track(updateSettings({ accent: key }))}
-          />
-        ))}
-      </div>
-    </div>
-  );
-
-  const lastUsed = profile.settings.lastCurrency ?? 'MYR';
-  const currencyField = (
-    <div className={classes.field}>
-      <Select
-        label="Default for new splits"
-        description={`New splits start with this. "Last used" picks your most recent currency.`}
-        inputWrapperOrder={['label', 'input', 'description']}
-        data={[{ value: LAST_USED, label: `Last used (${lastUsed})` }, ...currencies]}
-        value={profile.settings.defaultCurrency ?? LAST_USED}
-        onChange={(v) =>
-          v && track(updateSettings({ defaultCurrency: v === LAST_USED ? null : v }))
-        }
-        searchable
-        allowDeselect={false}
-        className={isMobile ? undefined : classes.currencySelect}
-        size={isMobile ? 'md' : 'sm'}
-      />
-    </div>
-  );
-
-  const rateSourceField = (
-    <div className={classes.field}>
-      <div className={classes.fieldLabel}>Rate source</div>
-      <SegmentedControl
-        className={isMobile ? undefined : classes.themeControl}
-        fullWidth={isMobile}
-        data={[
-          { value: 'wise', label: 'Wise' },
-          { value: 'ecb', label: 'ECB' },
-        ]}
-        value={profile.settings.rateSource}
-        onChange={(v) => track(updateSettings({ rateSource: v as 'wise' | 'ecb' }))}
-      />
-      <p className={classes.help}>
-        Used when you add an item in another currency. Wise is live; the ECB publishes once a
-        working day. You can still type your own rate.
-      </p>
-    </div>
-  );
-
-  const preferred = profile.paymentMethods.find((m) => m.id === profile.preferredPaymentMethodId);
-  const orderedMethods = preferred
-    ? [preferred, ...profile.paymentMethods.filter((m) => m !== preferred)]
-    : profile.paymentMethods;
-
-  const payments = (
-    <PaymentMethods
-      methods={profile.paymentMethods}
-      preferredId={profile.preferredPaymentMethodId}
-      onChange={savePayments}
-      grouped={Boolean(isMobile)}
-    />
-  );
-
-  if (!isDesktop) {
-    return (
-      <div className={classes.mobilePage}>
-        <div className={classes.topBar}>
-          <UnstyledButton
-            className={classes.back}
-            onClick={() => navigate('')}
-            aria-label="Back to My splits"
-          >
-            <CaretLeft size={20} />
-            <span>Settings</span>
-          </UnstyledButton>
-          {note}
+  const page = (section: Section) => (
+    <div
+      className={classes.content}
+      key={section.id}
+    >
+      <div className={classes.pageHead}>
+        <div className="min-w-0 flex-1">
+          {isDesktop ? (
+            <Title
+              order={3}
+              className={classes.pageTitle}
+            >
+              {section.label}
+            </Title>
+          ) : null}
+          <p className={classes.pageBlurb}>{section.blurb}</p>
         </div>
+        {isDesktop && note}
+      </div>
+      {section.render(track)}
+    </div>
+  );
 
-        <div className={classes.identity}>
-          <div className={classes.avatarRing}>
+  const menuItem = (section: Section, selected: boolean) => (
+    <UnstyledButton
+      key={section.id}
+      className={isDesktop ? classes.menuItem : classes.listRow}
+      data-selected={selected || undefined}
+      aria-current={selected ? 'page' : undefined}
+      onClick={() => open(section.id, !isDesktop)}
+    >
+      <section.icon size={isDesktop ? 17 : 20} />
+      <span className="min-w-0 flex-1 truncate">{section.label}</span>
+      {!isDesktop && <CaretRight size={16} />}
+    </UnstyledButton>
+  );
+
+  const signOutButton = (
+    <UnstyledButton
+      className={`${isDesktop ? classes.menuItem : classes.listRow} ${classes.signOut}`}
+      onClick={() => void signOut()}
+    >
+      <SignOut size={isDesktop ? 17 : 20} />
+      <span>Sign out</span>
+    </UnstyledButton>
+  );
+
+  if (isDesktop) {
+    const current = hashed ?? SECTIONS[0];
+    return (
+      <div className={classes.desktop}>
+        <div className={classes.block}>
+          <nav
+            className={classes.menu}
+            aria-label="Settings"
+          >
+            {GROUPS.map((group) => (
+              <div
+                key={group.label}
+                className={classes.menuGroup}
+              >
+                <div className={classes.menuLabel}>{group.label}</div>
+                {group.sections.map((s) => menuItem(s, s.id === current.id))}
+              </div>
+            ))}
+            <hr className={classes.menuRule} />
+            {signOutButton}
+          </nav>
+          {page(current)}
+        </div>
+      </div>
+    );
+  }
+
+  // Phones: a section's page, or the list of them
+  const back = () => {
+    const state = window.history.state as Record<string, unknown> | null;
+    if (hashed && state?.[FROM_LIST]) window.history.back();
+    else navigate(hashed ? '?settings' : '', { replace: Boolean(hashed) });
+  };
+
+  return (
+    <div className={classes.mobile}>
+      <div className={classes.topBar}>
+        <UnstyledButton
+          className={classes.back}
+          onClick={back}
+          aria-label={hashed ? 'Back to Settings' : 'Back to My splits'}
+        >
+          <CaretLeft size={20} />
+          <span>{hashed ? hashed.label : 'Settings'}</span>
+        </UnstyledButton>
+        {note}
+      </div>
+
+      {hashed ? (
+        page(hashed)
+      ) : (
+        <>
+          <UnstyledButton
+            className={classes.mobileIdentity}
+            onClick={() => open('profile', true)}
+          >
             <UserAvatar
               name={myName}
               email={profile.email}
               avatarVersion={profile.avatarVersion}
               previewSrc={profile.avatarPreview}
-              size={60}
+              size={52}
+              preview={false}
             />
-          </div>
-          <div className={classes.identityName}>{myName}</div>
-          <div className={classes.identityEmail}>{profile.email}</div>
-          {pictureButtons}
-        </div>
-
-        {nameField}
-        {themeField}
-        {accentField}
-        <div className={classes.field}>
-          <div className={classes.fieldLabel}>Currency</div>
-          {currencyField}
-          {rateSourceField}
-        </div>
-        <div className={classes.field}>
-          <div className={classes.fieldLabel}>Getting paid</div>
-          {payments}
-        </div>
-        <div className={classes.field}>
-          <div className={classes.fieldLabel}>App</div>
-          <InstallField />
-        </div>
-
-        <Button
-          variant="default"
-          fullWidth
-          size="md"
-          className={`${classes.signOut} ${classes.signOutButton}`}
-          onClick={signOut}
-        >
-          Sign out
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className={classes.page}>
-      <div className={classes.header}>
-        <Title order={1}>Settings</Title>
-        {note}
-      </div>
-
-      <div className={classes.columns}>
-        <div className={classes.column}>
-          <section className={classes.section}>
-            <h2 className="sf-label">Profile</h2>
-            <div className={classes.pictureRow}>
-              <UserAvatar
-                name={myName}
-                email={profile.email}
-                avatarVersion={profile.avatarVersion}
-                previewSrc={profile.avatarPreview}
-                size={44}
-              />
-              {pictureButtons}
+            <span className="min-w-0 flex-1">
+              <span className={classes.identityName}>{myName}</span>
+              <span className={classes.identityEmail}>{profile.email}</span>
+            </span>
+            <CaretRight size={16} />
+          </UnstyledButton>
+          {GROUPS.map((group) => (
+            <div key={group.label}>
+              <div className={classes.listLabel}>{group.label}</div>
+              <div className={classes.list}>{group.sections.map((s) => menuItem(s, false))}</div>
             </div>
-            <div className={classes.narrow}>{nameField}</div>
-            <div className={classes.narrow}>
-              <TextInput
-                label="Email"
-                value={profile.email}
-                readOnly
-                classNames={{ input: classes.readOnly }}
-                rightSection={<LockSimple size={14} />}
-              />
-            </div>
-          </section>
-
-          <section className={classes.section}>
-            <h2 className="sf-label">Getting paid</h2>
-            <p className={classes.help}>
-              Shown to people who owe you, next to their transfer in Settle up.
-            </p>
-            {payments}
-            {orderedMethods.length > 0 && (
-              <div className={classes.preview}>
-                <div className={classes.previewLabel}>What someone who owes you sees</div>
-                <PayHint
-                  name={myName}
-                  amountCents={10250}
-                  currency={profile.settings.lastCurrency ?? 'MYR'}
-                  methods={orderedMethods}
-                  email={profile.email}
-                  avatarVersion={profile.avatarVersion}
-                />
-              </div>
-            )}
-          </section>
-        </div>
-
-        <div className={classes.column}>
-          <section className={classes.section}>
-            <h2 className="sf-label">Currency</h2>
-            {currencyField}
-            {rateSourceField}
-          </section>
-
-          <section className={classes.section}>
-            <h2 className="sf-label">Appearance</h2>
-            {themeField}
-            {accentField}
-            <div className={classes.appearancePreview}>
-              <div className={classes.previewLabel}>Preview</div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className={classes.chip}>
-                  <UserAvatar
-                    preview={false}
-                    name={myName}
-                    email={profile.email}
-                    avatarVersion={profile.avatarVersion}
-                    previewSrc={profile.avatarPreview}
-                    size={24}
-                  />
-                  {myName} <span className="sf-muted">(you)</span>
-                  <span className="sf-positive sf-tabular">+140.10</span>
-                </span>
-                {/* Just a sample of the accent; it does nothing */}
-                <Button
-                  component="span"
-                  size="compact-sm"
-                  leftSection={<Plus size={14} />}
-                  tabIndex={-1}
-                  aria-hidden
-                >
-                  Add item
-                </Button>
-                <span className={classes.previewBadge}>1</span>
-              </div>
-              <div className={classes.previewBar}>
-                <span>{myName}</span>
-                <span className={classes.previewTrack}>
-                  <span />
-                </span>
-                <span className="sf-positive sf-tabular">+140.10</span>
-              </div>
-            </div>
-          </section>
-
-          <section className={classes.section}>
-            <h2 className="sf-label">App</h2>
-            <InstallField />
-          </section>
-
-          <section className={classes.section}>
-            <h2 className="sf-label">Account</h2>
-            <div>
-              <Button
-                variant="default"
-                size="compact-md"
-                leftSection={<SignOut size={16} />}
-                className={classes.signOutButton}
-                onClick={signOut}
-              >
-                Sign out
-              </Button>
-            </div>
-          </section>
-        </div>
-      </div>
+          ))}
+          <div className={classes.list}>{signOutButton}</div>
+        </>
+      )}
     </div>
   );
 };
