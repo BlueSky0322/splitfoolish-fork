@@ -2,7 +2,7 @@ import { ActionIcon, Button, Loader, SegmentedControl, Title, UnstyledButton } f
 import { notifications } from '@mantine/notifications';
 import { Check, Plus, X } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { MyInvite, SplitSummary, api } from '../api';
+import { MyInvite, SplitSummary, actionableInvites, api } from '../api';
 import { useIsDesktop } from '../hooks/useBreakpoints';
 import { reloadHomeData, updateHomeData, useHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
@@ -65,6 +65,26 @@ const splitMeta = (split: SplitSummary) =>
 // The invite you just picked up from a share link, picked out in the list
 const linkedInviteId = () => new URLSearchParams(window.location.search).get('invite');
 
+/** What a row says, by kind: an invite to you, your request, or someone asking to join yours */
+function describeInvite(invite: MyInvite) {
+  const from = invite.invitedByName ?? invite.invitedBy;
+  const expires = new Date(invite.expiresAt).toLocaleDateString();
+  switch (invite.kind) {
+    case 'request':
+      return {
+        title: `${nameFor(invite.email, invite.name)} wants to join`,
+        meta: `${invite.splitName} · shared by ${from}`,
+      };
+    case 'sent':
+      return {
+        title: invite.splitName,
+        meta: `Waiting for ${nameFor(invite.owner, invite.ownerName)} to approve · expires ${expires}`,
+      };
+    default:
+      return { title: invite.splitName, meta: `From ${from} · expires ${expires}` };
+  }
+}
+
 function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
   const highlight = linkedInviteId();
   const [busy, setBusy] = useState<string | null>(null);
@@ -75,12 +95,22 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
       invites: (data.invites ?? []).filter((i) => i.id !== invite.id),
     }));
     try {
-      if (accept) {
+      if (accept && invite.kind === 'invite') {
         setBusy(invite.id);
         // Joining has to finish before the split can be opened
         const { id } = await api.acceptInvite(invite.id);
         void reloadHomeData();
         navigate(`?s=${id}`);
+        return;
+      }
+      if (accept) {
+        await api.acceptInvite(invite.id);
+        if (invite.kind === 'request') {
+          notifications.show({
+            message: `${nameFor(invite.email, invite.name)} joined ${invite.splitName}`,
+          });
+        }
+        void reloadHomeData();
         return;
       }
       await api.declineInvite(invite.id);
@@ -97,49 +127,63 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
 
   return (
     <div className={`sf-card ${classes.list}`}>
-      {invites.map((invite) => (
-        <div
-          key={invite.id}
-          className={classes.inviteRow}
-          data-highlight={invite.id === highlight || undefined}
-        >
-          <div className="min-w-0 flex-1">
-            <div className={classes.rowTitle}>{invite.splitName}</div>
-            <div className={classes.rowMeta}>
-              From {invite.invitedByName ?? invite.invitedBy} · expires{' '}
-              {new Date(invite.expiresAt).toLocaleDateString()}
+      {invites.map((invite) => {
+        const { title, meta } = describeInvite(invite);
+        const verb = invite.kind === 'request' ? 'Approve' : 'Accept';
+        return (
+          <div
+            key={invite.id}
+            className={classes.inviteRow}
+            data-highlight={invite.id === highlight || undefined}
+          >
+            <div className="min-w-0 flex-1">
+              <div className={classes.rowTitle}>{title}</div>
+              <div className={classes.rowMeta}>{meta}</div>
             </div>
+            {invite.kind === 'sent' ? (
+              <Button
+                variant="default"
+                size={size > 40 ? 'md' : 'sm'}
+                disabled={busy != null}
+                onClick={() => respond(invite, false)}
+              >
+                Withdraw
+              </Button>
+            ) : (
+              <>
+                <ActionIcon
+                  variant="default"
+                  size={size}
+                  radius="md"
+                  aria-label={`Decline ${title}`}
+                  title="Decline"
+                  disabled={busy != null}
+                  onClick={() => respond(invite, false)}
+                >
+                  <X
+                    size={16}
+                    weight="bold"
+                  />
+                </ActionIcon>
+                <ActionIcon
+                  size={size}
+                  radius="md"
+                  aria-label={`${verb} ${title}`}
+                  title={verb}
+                  loading={busy === invite.id}
+                  disabled={busy != null && busy !== invite.id}
+                  onClick={() => respond(invite, true)}
+                >
+                  <Check
+                    size={16}
+                    weight="bold"
+                  />
+                </ActionIcon>
+              </>
+            )}
           </div>
-          <ActionIcon
-            variant="default"
-            size={size}
-            radius="md"
-            aria-label={`Decline ${invite.splitName}`}
-            title="Decline"
-            disabled={busy != null}
-            onClick={() => respond(invite, false)}
-          >
-            <X
-              size={16}
-              weight="bold"
-            />
-          </ActionIcon>
-          <ActionIcon
-            size={size}
-            radius="md"
-            aria-label={`Accept ${invite.splitName}`}
-            title="Accept"
-            loading={busy === invite.id}
-            disabled={busy != null && busy !== invite.id}
-            onClick={() => respond(invite, true)}
-          >
-            <Check
-              size={16}
-              weight="bold"
-            />
-          </ActionIcon>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -154,7 +198,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
     navigate(next === 'all' ? '' : `?tab=${next}`, { replace: true });
 
   const loading = splits == null && error == null;
-  const inviteCount = invites?.length ?? 0;
+  const inviteCount = actionableInvites(invites);
   const footnote = <p className={classes.footnote}>Invites expire after {INVITE_DAYS} days.</p>;
 
   // Desktop has its own Invites page (F3b), reached from the sidebar
@@ -164,7 +208,8 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
         <div>
           <Title order={2}>Invites</Title>
           <p className="sf-muted mt-1">
-            Accept to add the split to My splits. Invites expire after {INVITE_DAYS} days.
+            Accept to add the split to My splits, and approve people asking to join yours. Invites
+            expire after {INVITE_DAYS} days.
           </p>
         </div>
         {loading && <Loader size="sm" />}
