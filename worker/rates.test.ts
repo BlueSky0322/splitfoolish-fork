@@ -94,12 +94,38 @@ describe('getRate', () => {
     expect((await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps)).fetchedAt).toBe(0);
     expect(s.calls.wise).toBe(1);
     // Refresh: anything older than 10 minutes is fetched again
-    expect((await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps, 10 * 60 * 1000)).fetchedAt).toBe(
-      now,
-    );
+    expect(
+      (await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps, { maxAgeMs: 10 * 60 * 1000 }))
+        .fetchedAt,
+    ).toBe(now);
     expect(s.calls.wise).toBe(2);
     now += 4 * 60 * 60 * 1000;
     await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps);
     expect(s.calls.wise).toBe(3);
+  });
+
+  it('asks the ECB first for people who prefer it, and falls back to Wise', async () => {
+    const s = services(wiseRate(4.2), ecbRate(4.1));
+    const deps = { fetch: s.fetch, cache: memoryCache(), now: () => 1 };
+    const ecb = await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps, { prefer: 'ecb' });
+    expect(ecb).toMatchObject({ rate: 4.1, source: 'frankfurter' });
+    expect(s.calls.wise).toBe(0);
+    // Its own cache entry: someone preferring Wise still gets Wise's rate
+    const wise = await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', deps);
+    expect(wise).toMatchObject({ rate: 4.2, source: 'wise' });
+
+    const noEcb = services(wiseRate(4.2), () => new Response('', { status: 404 }));
+    const fallback = await getRate(
+      { WISE_TOKEN: 't' },
+      'USD',
+      'MYR',
+      {
+        fetch: noEcb.fetch,
+        cache: null,
+        now: () => 1,
+      },
+      { prefer: 'ecb' },
+    );
+    expect(fallback.source).toBe('wise');
   });
 });

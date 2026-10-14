@@ -390,3 +390,7 @@
 .signOutButton:global(.mantine-Button-root)[data-variant] {
   color: var(--sf-negative);
 }
+
+.currencySelect {
+  max-width: 360px;
+}

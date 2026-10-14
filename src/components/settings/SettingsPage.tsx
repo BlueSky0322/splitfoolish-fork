@@ -5,10 +5,11 @@ import {
   TextInput,
   Title,
   UnstyledButton,
+  Select,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { CaretLeft, Check, LockSimple, Plus, SignOut } from '@phosphor-icons/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PaymentMethod, ThemeSetting, api } from '../../api';
 import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
@@ -16,6 +17,7 @@ import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { clearCache } from '../../split-cache';
 import { ACCENTS, Accent, isAccent } from '../../theme/accents';
 import { AVATAR, shrinkImage } from '../../utils/image';
+import { listCurrencies } from '../../utils/money';
 import UserAvatar from '../ui/UserAvatar';
 import PayHint from './PayHint';
 import PaymentMethods from './PaymentMethods';
@@ -73,10 +75,14 @@ function useSaveIndicator() {
 }
 
 // Settings (2a). Everything saves as it changes.
+/** The Select value for "use the currency used last" */
+const LAST_USED = 'last';
+
 const SettingsPage = () => {
   const { profile, update, updateSettings, patch } = useProfile();
   const isDesktop = useIsDesktop();
   const isMobile = useIsMobile();
+  const currencies = useMemo(listCurrencies, []);
   const [name, setName] = useState(profile?.displayName ?? '');
   const [avatarBusy, setAvatarBusy] = useState(false);
   const { track, note } = useSaveIndicator();
@@ -229,6 +235,46 @@ const SettingsPage = () => {
     </div>
   );
 
+  const lastUsed = profile.settings.lastCurrency ?? 'MYR';
+  const currencyField = (
+    <div className={classes.field}>
+      <Select
+        label="Default for new splits"
+        description={`New splits start with this. "Last used" picks your most recent currency.`}
+        inputWrapperOrder={['label', 'input', 'description']}
+        data={[{ value: LAST_USED, label: `Last used (${lastUsed})` }, ...currencies]}
+        value={profile.settings.defaultCurrency ?? LAST_USED}
+        onChange={(v) =>
+          v && track(updateSettings({ defaultCurrency: v === LAST_USED ? null : v }))
+        }
+        searchable
+        allowDeselect={false}
+        className={isMobile ? undefined : classes.currencySelect}
+        size={isMobile ? 'md' : 'sm'}
+      />
+    </div>
+  );
+
+  const rateSourceField = (
+    <div className={classes.field}>
+      <div className={classes.fieldLabel}>Rate source</div>
+      <SegmentedControl
+        className={isMobile ? undefined : classes.themeControl}
+        fullWidth={isMobile}
+        data={[
+          { value: 'wise', label: 'Wise' },
+          { value: 'ecb', label: 'ECB' },
+        ]}
+        value={profile.settings.rateSource}
+        onChange={(v) => track(updateSettings({ rateSource: v as 'wise' | 'ecb' }))}
+      />
+      <p className={classes.help}>
+        Used when you add an item in another currency. Wise is live; the ECB publishes once a
+        working day. You can still type your own rate.
+      </p>
+    </div>
+  );
+
   const preferred = profile.paymentMethods.find((m) => m.id === profile.preferredPaymentMethodId);
   const orderedMethods = preferred
     ? [preferred, ...profile.paymentMethods.filter((m) => m !== preferred)]
@@ -276,6 +322,11 @@ const SettingsPage = () => {
         {nameField}
         {themeField}
         {accentField}
+        <div className={classes.field}>
+          <div className={classes.fieldLabel}>Currency</div>
+          {currencyField}
+          {rateSourceField}
+        </div>
         <div className={classes.field}>
           <div className={classes.fieldLabel}>Getting paid</div>
           {payments}
@@ -348,6 +399,12 @@ const SettingsPage = () => {
         </div>
 
         <div className={classes.column}>
+          <section className={classes.section}>
+            <h2 className="sf-label">Currency</h2>
+            {currencyField}
+            {rateSourceField}
+          </section>
+
           <section className={classes.section}>
             <h2 className="sf-label">Appearance</h2>
             {themeField}

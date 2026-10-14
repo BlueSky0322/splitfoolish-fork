@@ -44,7 +44,19 @@ const defaultDeps = (): Deps => ({
   now: Date.now,
 });
 
-const cacheKey = (from: string, to: string) => `https://rates.internal/v1/${from}/${to}`;
+/** Wise first (the default), or the ECB first for people who picked it in Settings */
+export type RatePreference = 'wise' | 'ecb';
+
+export interface RateOptions {
+  /** Use a cached rate younger than this rather than fetching */
+  maxAgeMs?: number;
+  prefer?: RatePreference;
+}
+
+const cacheKey = (from: string, to: string, prefer: RatePreference) =>
+  prefer === 'wise'
+    ? `https://rates.internal/v1/${from}/${to}`
+    : `https://rates.internal/v1/ecb/${from}/${to}`;
 
 async function fromWise(env: RatesEnv, from: string, to: string, deps: Deps) {
   if (!env.WISE_TOKEN) return null;
@@ -77,20 +89,19 @@ export async function getRate(
   from: string,
   to: string,
   deps: Deps = defaultDeps(),
-  /** Use a cached rate younger than this rather than fetching */
-  maxAgeMs = FRESH_MS,
+  { maxAgeMs = FRESH_MS, prefer = 'wise' }: RateOptions = {},
 ): Promise<Rate> {
   if (from === to) return { rate: 1, source: 'frankfurter', fetchedAt: deps.now() };
 
-  const key = cacheKey(from, to);
+  const key = cacheKey(from, to, prefer);
   const cached = deps.cache ? await deps.cache.match(key) : undefined;
   const saved = cached ? await cached.json<Rate>() : null;
   if (saved && deps.now() - saved.fetchedAt < maxAgeMs) return saved;
 
-  const sources: [Rate['source'], typeof fromWise][] = [
-    ['wise', fromWise],
-    ['frankfurter', fromFrankfurter],
-  ];
+  // The ECB doesn't publish every currency, so the other service is always the fallback
+  const wise: [Rate['source'], typeof fromWise] = ['wise', fromWise];
+  const ecb: [Rate['source'], typeof fromWise] = ['frankfurter', fromFrankfurter];
+  const sources = prefer === 'wise' ? [wise, ecb] : [ecb, wise];
   for (const [source, fetchRate] of sources) {
     try {
       const rate = await fetchRate(env, from, to, deps);
