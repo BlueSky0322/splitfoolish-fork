@@ -574,6 +574,29 @@ describe('exchange rates', () => {
     expect((await api.call(me, 'GET', '/api/rates?from=XXX&to=MYR')).status).toBe(503);
   });
 
+  it('uses the rate source each person picked in Settings', async () => {
+    const wiseFan = person('wisefan');
+    const ecbFan = person('ecbfan');
+    // A pair no other test uses, so no cached rate gets in the way
+    api.rates.set('NZD', 'MYR', 2.75);
+    const patch = await api.call(ecbFan, 'PATCH', '/api/me', {
+      settings: { rateSource: 'ecb', defaultCurrency: 'SGD' },
+    });
+    expect(patch.data.settings).toMatchObject({ rateSource: 'ecb', defaultCurrency: 'SGD' });
+    expect((await api.call(ecbFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe(
+      'frankfurter',
+    );
+    expect((await api.call(wiseFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe('wise');
+    expect(
+      (await api.call(ecbFan, 'PATCH', '/api/me', { settings: { rateSource: 'xe' } })).status,
+    ).toBe(400);
+    // Back to "last used"
+    const reset = await api.call(ecbFan, 'PATCH', '/api/me', {
+      settings: { defaultCurrency: null },
+    });
+    expect(reset.data.settings.defaultCurrency).toBeNull();
+  });
+
   it('refuses bad currency codes and amounts', async () => {
     const me = person('me');
     expect((await api.call(me, 'GET', '/api/rates?from=US&to=MYR')).status).toBe(400);

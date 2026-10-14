@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { convertCents } from '../../shared/rates';
 import { AppEnv, json } from '../app';
-import { CURRENCY } from '../profiles';
+import { CURRENCY, getRateSource } from '../profiles';
 import { RatesUnavailable, getRate } from '../rates';
 
 const MAX_AMOUNT = 1_000_000_000;
@@ -24,7 +24,8 @@ rates.get('/rates', async (c) => {
   }
 
   try {
-    const { rate, source, fetchedAt } = await getRate(c.env, from, to);
+    const prefer = await getRateSource(c.env.DB, c.var.email);
+    const { rate, source, fetchedAt } = await getRate(c.env, from, to, undefined, { prefer });
     return json({
       from,
       to,

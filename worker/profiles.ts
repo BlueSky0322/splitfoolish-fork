@@ -31,6 +31,8 @@ const SETTINGS = {
   theme: { column: 'theme', values: ['dark', 'light', 'auto'] },
   accent: { column: 'accent', values: ACCENTS },
   lastCurrency: { column: 'last_currency', values: null },
+  defaultCurrency: { column: 'default_currency', values: null },
+  rateSource: { column: 'rate_source', values: ['wise', 'ecb'] },
   sidebarOpen: { column: 'sidebar_open', values: [true, false] },
   itemsView: { column: 'items_view', values: ['card', 'table'] },
   itemsGroupBy: { column: 'items_group_by', values: ['none', 'day', 'payer', 'category'] },
@@ -46,6 +48,8 @@ const DEFAULT_SETTINGS = {
   theme: 'auto',
   accent: 'blurple',
   lastCurrency: null as string | null,
+  defaultCurrency: null as string | null,
+  rateSource: 'wise',
   sidebarOpen: true,
   itemsView: 'card',
   itemsGroupBy: 'day',
@@ -64,7 +68,9 @@ export async function getProfile(db: D1Database, email: string) {
     db.prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?').bind(email),
     db
       .prepare(
-        `SELECT theme, accent, last_currency AS lastCurrency, sidebar_open AS sidebarOpen,
+        `SELECT theme, accent, last_currency AS lastCurrency,
+           default_currency AS defaultCurrency, rate_source AS rateSource,
+           sidebar_open AS sidebarOpen,
            items_view AS itemsView, items_group_by AS itemsGroupBy,
            items_sort_key AS itemsSortKey, items_sort_dir AS itemsSortDir
          FROM user_settings WHERE email = ?`,
@@ -291,4 +297,13 @@ export function assembleMembers([members, methods]: D1Result<Record<string, unkn
     // Preferred first, so the app can show it and list the rest as "also accepts"
     paymentMethods: byEmail.get(m.email) ?? [],
   }));
+}
+
+/** Where someone's exchange rates come from: Wise unless they picked the ECB */
+export async function getRateSource(db: D1Database, email: string): Promise<'wise' | 'ecb'> {
+  const row = await db
+    .prepare('SELECT rate_source AS rateSource FROM user_settings WHERE email = ?')
+    .bind(email)
+    .first<{ rateSource: 'wise' | 'ecb' }>();
+  return row?.rateSource ?? 'wise';
 }
