@@ -1,5 +1,6 @@
 import { ActionIcon, Button, Tooltip, UnstyledButton } from '@mantine/core';
 import {
+  ArrowsLeftRight,
   ArrowsSplit,
   CaretRight,
   EnvelopeSimple,
@@ -245,6 +246,12 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
             active={route.view === 'home' && route.tab === 'invites'}
             onClick={() => navigate('?tab=invites')}
             badge={actionableInvites(invites)}
+          />
+          <NavItem
+            icon={<ArrowsLeftRight size={18} />}
+            label="Convert"
+            active={route.view === 'convert'}
+            onClick={() => navigate('?convert')}
           />
           <NavItem
             icon={<GearSix size={18} />}

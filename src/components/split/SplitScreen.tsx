@@ -31,7 +31,7 @@ import {
   UsersThree,
   X,
 } from '@phosphor-icons/react';
-import { ReactNode, useContext, useMemo, useState } from 'react';
+import { ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Attachment, ItemInput } from '../../api';
 import { AppContext } from '../../context/AppContext/AppContext';
 import { toApiItem } from '../../context/AppContext/app-reducer';
@@ -89,7 +89,8 @@ const FIRST_DIR: Record<SortKey, SortDir> = {
 };
 
 type Dialog =
-  | { kind: 'add' }
+  /** prefill: an amount and currency from Convert */
+  | { kind: 'add'; prefill?: { amount: string; currency: string } }
   | { kind: 'edit'; item: IItem }
   | { kind: 'people'; personId?: string }
   | { kind: 'settle' }
@@ -200,6 +201,23 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const close = () => setDialog(null);
+
+  // Arriving from Convert's "Add as item": open Add item with its amount and currency
+  const [prefill] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const amount = params.get('amount');
+    const from = params.get('from');
+    return params.has('add') && amount && from && /^[A-Z]{3}$/.test(from)
+      ? { amount, currency: from }
+      : null;
+  });
+  useEffect(() => {
+    if (prefill == null || meta == null) return;
+    navigate(`?s=${splitId}`, { replace: true });
+    if (state.people.length > 0) setDialog({ kind: 'add', prefill });
+    // Once, when the split has loaded
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta == null]);
   const photoCounts = new Map<string, number>();
   for (const a of meta?.attachments ?? []) {
     if (a.itemId) photoCounts.set(a.itemId, (photoCounts.get(a.itemId) ?? 0) + 1);
@@ -345,6 +363,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
 
   const loaded = meta != null;
   const noPeople = loaded && state.people.length === 0;
+
   const peopleNames = state.people.map((p) => p.name).join(', ');
 
   const viewToggle = (
@@ -546,6 +565,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             currency={currency}
             item={dialog.kind === 'edit' ? dialog.item : undefined}
             defaultPayerId={me?.id}
+            initialAmount={dialog.kind === 'add' ? dialog.prefill?.amount : undefined}
+            initialCurrency={dialog.kind === 'add' ? dialog.prefill?.currency : undefined}
             splitId={splitId}
             onSave={saveItem}
             photos={dialog.kind === 'edit' ? photos.photosOf(dialog.item.id) : []}
