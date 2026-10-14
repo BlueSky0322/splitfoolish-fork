@@ -469,3 +469,11 @@
   background: #f3f4f8;
   object-fit: contain;
 }
+
+/* Inside a settings card: no card of its own, rows divided from the card's heading */
+.methodGroup.bare {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  border-top: 1px solid var(--sf-divider);
+}

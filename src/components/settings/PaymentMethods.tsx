@@ -38,6 +38,8 @@ interface PaymentMethodsProps {
   onChange: (methods: PaymentMethod[], preferredId: string | null) => Promise<boolean>;
   /** On phones the list is one grouped card */
   grouped: boolean;
+  /** Already inside a card: the list runs edge to edge without one of its own */
+  bare?: boolean;
 }
 
 /** A QR code picked on this device, ready to upload */
@@ -362,7 +364,13 @@ function MethodForm({
 
 // The ways someone can pay you, one marked preferred. People who owe you see them
 // next to their transfer in Settle up.
-const PaymentMethods = ({ methods, preferredId, onChange, grouped }: PaymentMethodsProps) => {
+const PaymentMethods = ({
+  methods,
+  preferredId,
+  onChange,
+  grouped,
+  bare = false,
+}: PaymentMethodsProps) => {
   // A method's id, or 'new' while adding one
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -402,7 +410,11 @@ const PaymentMethods = ({ methods, preferredId, onChange, grouped }: PaymentMeth
     );
 
   return (
-    <div className={grouped ? classes.methodGroup : 'flex flex-col gap-2'}>
+    <div
+      className={
+        grouped ? `${classes.methodGroup} ${bare ? classes.bare : ''}` : 'flex flex-col gap-2'
+      }
+    >
       <div
         className={grouped ? 'contents' : 'flex flex-col gap-2'}
         role="radiogroup"
