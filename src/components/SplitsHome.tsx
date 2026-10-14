@@ -1,6 +1,6 @@
 import { ActionIcon, Button, Loader, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { Check, Plus, X } from '@phosphor-icons/react';
+import { ArrowsLeftRight, Check, Plus, X } from '@phosphor-icons/react';
 import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { useState } from 'react';
 import { MyInvite, SplitSummary, actionableInvites, api } from '../api';
@@ -332,6 +332,15 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
         ) : (
           <div className={classes.headerActions}>
             <ThemeToggle size={36} />
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size={44}
+              onClick={() => navigate('?convert')}
+              aria-label="Convert currencies"
+            >
+              <ArrowsLeftRight size={20} />
+            </ActionIcon>
             <UnstyledButton
               onClick={() => navigate('?settings')}
               aria-label="Settings"

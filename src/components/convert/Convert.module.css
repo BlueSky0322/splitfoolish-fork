@@ -1,0 +1,156 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 40px 48px;
+}
+
+.page > * {
+  max-width: 560px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-divider);
+}
+
+.fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amount {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.amountInput {
+  height: 48px;
+  font-size: 22px;
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.pair {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.currency {
+  width: 110px;
+}
+
+.currencyInput {
+  height: 48px;
+}
+
+.swap {
+  margin-bottom: 4px;
+}
+
+.result {
+  font-size: 42px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.rateLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.addRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--sf-divider);
+  font-size: 13px;
+}
+
+.chip:hover {
+  background: var(--sf-hover);
+}
+
+/* Phones: a full page with the split picker fixed at the bottom */
+.mobilePage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 20px calc(104px + var(--sf-safe-bottom));
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.mobilePage .card {
+  padding: 16px;
+}
+
+.mobilePage .amountInput {
+  height: 64px;
+  font-size: 32px;
+}
+
+.mobilePage .pair {
+  width: 100%;
+}
+
+.mobilePage .currency {
+  flex: 1;
+  width: auto;
+}
+
+.mobilePage .chip {
+  height: 40px;
+}
+
+.mobileFooter {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px calc(12px + var(--sf-safe-bottom));
+  background: var(--sf-bg);
+  border-top: 1px solid var(--sf-divider);
+  z-index: 10;
+}
