@@ -3,10 +3,9 @@ import { notifications } from '@mantine/notifications';
 import { Check, Copy } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { api, inviteUrl } from '../api';
-import { reloadHomeData } from '../hooks/useHomeData';
-import { navigate } from '../hooks/useRoute';
 import { SplitMeta } from '../hooks/useSplit';
 import { nameFor } from '../profile/ProfileContext';
+import EndSplit from './EndSplit';
 import UserAvatar from './ui/UserAvatar';
 import classes from './SplitMembers.module.css';
 
@@ -56,19 +55,6 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
     });
   };
 
-  // Leaving or deleting ends access, so go home instead of reloading
-  const exit = async (action: () => Promise<unknown>) => {
-    setBusy(true);
-    try {
-      await action();
-      reloadHomeData();
-      navigate('');
-    } catch (err) {
-      showError(err);
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-5">
       {isOwner && meta.inviteToken && (
@@ -78,7 +64,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
               className="flex-1"
               readOnly
               label="Share link"
-              description="Anyone who opens it and signs in can view and edit this split."
+              description="Anyone who opens it and signs in can view and edit this split. It changes when you remove someone, so they can't use it to come back."
               value={inviteUrl(meta.inviteToken)}
               onFocus={(e) => e.currentTarget.select()}
             />
@@ -134,7 +120,8 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
                   onClick={() =>
                     optimistic(
                       (x) => ({ ...x, members: x.members.filter((y) => y.email !== m.email) }),
-                      () => api.removeMember(meta.id, m.email),
+                      // The share link changes too, so fetch the new one
+                      () => api.removeMember(meta.id, m.email).then(onChange),
                     )
                   }
                 >
@@ -175,36 +162,13 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
       </div>
 
       {confirmEnd ? (
-        <div
-          className={classes.confirm}
-          role="alertdialog"
-          aria-label={isOwner ? 'Delete split?' : 'Leave split?'}
-        >
-          <p className="text-sm">
-            {isOwner
-              ? `Delete "${meta.name}" for everyone? Its items and photos go too. This can't be undone.`
-              : `Leave "${meta.name}"? You'll need a new invite to get back in.`}
-          </p>
-          <div className="flex gap-2 justify-end">
-            <Button
-              variant="default"
-              onClick={() => setConfirmEnd(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              loading={busy}
-              onClick={() =>
-                exit(() =>
-                  isOwner ? api.deleteSplit(meta.id) : api.removeMember(meta.id, myEmail),
-                )
-              }
-            >
-              {isOwner ? 'Delete for everyone' : 'Leave split'}
-            </Button>
-          </div>
-        </div>
+        <EndSplit
+          splitId={meta.id}
+          name={meta.name}
+          isOwner={isOwner}
+          myEmail={myEmail}
+          onCancel={() => setConfirmEnd(false)}
+        />
       ) : (
         <Button
           variant="default"

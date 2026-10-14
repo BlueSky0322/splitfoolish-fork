@@ -4,6 +4,8 @@ import {
   assembleContent,
   contentStatements,
   deleteContentStatements,
+  newInviteToken,
+  removeAccessStatements,
 } from './split-content';
 import {
   CURRENCY,
@@ -65,12 +67,6 @@ const json = (body: unknown, status = 200) =>
 const notFound = () => json({ error: 'Not found' }, 404);
 
 const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-
-const newInviteToken = () =>
-  btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24))))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
 
 async function readJson(req: Request): Promise<Record<string, unknown> | Response> {
   const text = await req.text();
@@ -301,10 +297,11 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
   if ((match = pathname.match(CHANGES_PATH))) {
     if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const id = match[1];
-    if ((await getRole(db, id, email)) == null) return notFound();
+    const role = await getRole(db, id, email);
+    if (role == null) return notFound();
     const body = await readJson(req);
     if (body instanceof Response) return body;
-    return applyChanges(db, id, body);
+    return applyChanges(db, id, body, { email, role });
   }
 
   // Photos can be added by any member, and removed by whoever added them or the owner
@@ -443,10 +440,15 @@ async function handleApi(req: Request, env: Env, url: URL, email: string): Promi
       return json({ error: 'Only the owner can remove members' }, 403);
     }
 
-    await db
-      .prepare('DELETE FROM split_members WHERE split_id = ? AND email = ?')
-      .bind(id, target)
-      .run();
+    // Leaving is a choice and the link still works; being removed shuts the door
+    if (target === email) {
+      await db
+        .prepare('DELETE FROM split_members WHERE split_id = ? AND email = ?')
+        .bind(id, target)
+        .run();
+    } else {
+      await db.batch(removeAccessStatements(db, id, target));
+    }
     return json({ ok: true });
   }
 
