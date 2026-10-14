@@ -40,6 +40,7 @@ import {
   newInviteToken,
   removeAccessStatements,
 } from '../split-content';
+import { getRate } from '../rates';
 import { listSplitSummaries } from '../summaries';
 
 const splits = new Hono<AppEnv>();
@@ -196,10 +197,13 @@ splits.delete(SPLIT, member, ownerOnly('Only the owner can delete this split'), 
 splits.post(`${SPLIT}/changes`, member, async (c) => {
   const body = await readJson(c.req.raw);
   if (body instanceof Response) return body;
-  return applyChanges(c.env.DB, c.req.param('id'), body, {
-    email: c.var.email,
-    role: c.var.role,
-  });
+  return applyChanges(
+    c.env.DB,
+    c.req.param('id'),
+    body,
+    { email: c.var.email, role: c.var.role },
+    (from, to) => getRate(c.env, from, to),
+  );
 });
 
 // The split's picture: anyone in it sees it, only the owner changes it

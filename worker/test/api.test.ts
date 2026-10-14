@@ -330,3 +330,101 @@ describe('exchange rates', () => {
     expect((await api.call(me, 'GET', '/api/rates?from=USD&to=MYR&amount=abc')).status).toBe(400);
   });
 });
+
+describe('items in another currency', () => {
+  /** A MYR split with two people, A paying */
+  async function myrSplit() {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [a, b] = [hex(), hex()];
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: a, name: 'A' },
+      { op: 'addPerson', id: b, name: 'B' },
+    );
+    const item = (extra: Record<string, unknown>) => ({
+      id: hex(),
+      name: 'Ramen',
+      cost: 999, // what the app previewed; the server works it out itself
+      payerId: a,
+      participantIds: [a, b],
+      ...extra,
+    });
+    const items = async () => (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items;
+    return { owner, id, a, b, item, items };
+  }
+
+  it('converts at the fetched rate and keeps what was typed', async () => {
+    const { owner, id, item, items } = await myrSplit();
+    api.rates.set('JPY', 'MYR', 0.03);
+    const ramen = item({ original: { currency: 'JPY', amount: 1000 } });
+    expect((await change(owner, id, { op: 'addItem', item: ramen })).status).toBe(200);
+    const [saved] = await items();
+    expect(saved.cost).toBe(30);
+    expect(saved.original).toMatchObject({
+      currency: 'JPY',
+      amount: 1000,
+      rate: 0.03,
+      rateSource: 'wise',
+    });
+  });
+
+  it('keeps the saved rate when an edit leaves the amount alone, and reconverts when it changes', async () => {
+    const { owner, id, item, items } = await myrSplit();
+    api.rates.set('KRW', 'MYR', 0.0034);
+    const bbq = item({ name: 'BBQ', original: { currency: 'KRW', amount: 50000 } });
+    await change(owner, id, { op: 'addItem', item: bbq });
+    expect((await items())[0].cost).toBe(170);
+
+    // Wait out the cached rate isn't needed: an unchanged amount never asks for one
+    api.rates.set('KRW', 'MYR', 0.01);
+    await change(owner, id, { op: 'updateItem', item: { ...bbq, name: 'Korean BBQ' } });
+    expect((await items())[0]).toMatchObject({ name: 'Korean BBQ', cost: 170 });
+  });
+
+  it('uses a rate people type in', async () => {
+    const { owner, id, item, items } = await myrSplit();
+    const card = item({
+      original: { currency: 'THB', amount: 300, rate: 0.13, rateSource: 'manual' },
+    });
+    expect((await change(owner, id, { op: 'addItem', item: card })).status).toBe(200);
+    expect((await items())[0]).toMatchObject({
+      cost: 39,
+      original: { rate: 0.13, rateSource: 'manual' },
+    });
+    const bad = item({ original: { currency: 'THB', amount: 300, rate: 0, rateSource: 'manual' } });
+    expect((await change(owner, id, { op: 'addItem', item: bad })).status).toBe(409);
+  });
+
+  it('splits exact amounts typed in the other currency so they still add up', async () => {
+    const { owner, id, a, b, item, items } = await myrSplit();
+    // A pair no other test uses, so no cached rate gets in the way
+    api.rates.set('HKD', 'MYR', 3.33);
+    const dinner = item({
+      splitMode: 'exact',
+      original: { currency: 'HKD', amount: 10, exact: { [a]: 3.33, [b]: 6.67 } },
+    });
+    expect((await change(owner, id, { op: 'addItem', item: dinner })).status).toBe(200);
+    const [saved] = await items();
+    expect(saved.cost).toBe(33.3);
+    expect(Math.round((saved.exact[a] + saved.exact[b]) * 100)).toBe(3330);
+    expect(saved.original.exact).toEqual({ [a]: 3.33, [b]: 6.67 });
+  });
+
+  it('answers 503 and saves nothing when no rate can be had', async () => {
+    const { owner, id, item, items } = await myrSplit();
+    const lunch = item({ original: { currency: 'ZZZ', amount: 5 } });
+    expect((await change(owner, id, { op: 'addItem', item: lunch })).status).toBe(503);
+    expect(await items()).toEqual([]);
+  });
+
+  it('treats an item in the split currency as a plain one', async () => {
+    const { owner, id, item, items } = await myrSplit();
+    await change(owner, id, {
+      op: 'addItem',
+      item: item({ cost: 12, original: { currency: 'MYR', amount: 12 } }),
+    });
+    expect((await items())[0]).toMatchObject({ cost: 12, original: null });
+  });
+});

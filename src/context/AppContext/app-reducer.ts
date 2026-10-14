@@ -19,6 +19,7 @@ export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
     exact: item.exact,
     category: item.category ?? null,
     createdAt: item.createdAt ?? 0,
+    original: item.original ?? null,
   };
 };
 
@@ -33,6 +34,7 @@ export const toApiItem = (item: IItem): ApiItem => ({
   exact: item.exact,
   category: item.category,
   createdAt: item.createdAt,
+  original: item.original,
 });
 
 // Every action is a change made on this device, applied straight away and saved after
