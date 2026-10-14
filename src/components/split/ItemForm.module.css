@@ -33,6 +33,47 @@
   color: color-mix(in srgb, var(--sf-text) 30%, transparent);
 }
 
+/* The currency it was paid in, where the symbol used to be */
+.currency {
+  flex: 0 0 auto;
+  width: 76px;
+}
+
+.currency :global(.mantine-Select-input) {
+  font-size: 20px;
+  color: var(--sf-text-muted);
+  padding-right: 18px;
+}
+
+/* "≈ RM 30.00 · 1 JPY = 0.03 MYR · Wise" under the amount */
+.conversion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: -6px;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.converted {
+  color: var(--sf-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rateInput {
+  width: 110px;
+}
+
+.rateToggle {
+  font-size: 13px;
+  color: var(--sf-accent);
+}
+
+.rateToggle:hover {
+  text-decoration: underline;
+}
+
 .evaluated {
   font-size: 15px;
   color: var(--sf-text-muted);

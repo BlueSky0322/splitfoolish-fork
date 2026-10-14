@@ -338,12 +338,15 @@ export function useSplit(splitId: string) {
         // The server stamps its own time; this one orders it until the next load
         const item = { id, createdAt: Date.now(), ...input };
         dispatch({ type: 'ADD_ITEM', payload: item });
+        // In another currency the server works out the amounts; show its numbers after
+        if (input.original) reloadAfterSave.current = true;
         return queue({ op: 'addItem', item });
       },
       updateItem: (itemId, input) => {
         const existing = current.current.items.find((i) => i.id === itemId);
         const item = { id: itemId, createdAt: existing?.createdAt ?? Date.now(), ...input };
         dispatch({ type: 'UPDATE_ITEM', payload: item });
+        if (input.original || existing?.original) reloadAfterSave.current = true;
         return queue({ op: 'updateItem', item });
       },
       removeItem: (itemId) => {

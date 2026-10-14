@@ -38,6 +38,16 @@ function PhotoBadge({ count }: { count?: number }) {
 
 const MODE_LABELS = { equal: 'Equal', shares: 'Shares', exact: 'Exact' } as const;
 
+/** What an item in another currency came to as paid, under its converted amount */
+function OriginalAmount({ item }: { item: IItem }) {
+  if (item.original == null) return null;
+  return (
+    <span className={classes.originalAmount}>
+      {formatMoney(Math.round(item.original.amount * 100), item.original.currency)}
+    </span>
+  );
+}
+
 const cents = (amount: number) => Math.round(amount * 100);
 
 const who = (item: IItem, people: IPerson[]) =>
@@ -147,6 +157,7 @@ export function ItemCards({
                   )}
                   <span className={classes.itemAmount}>
                     {formatMoney(cents(item.cost), currency)}
+                    <OriginalAmount item={item} />
                   </span>
                   {!mobile && (
                     <RowActions
@@ -310,7 +321,10 @@ export function ItemTable({
                   <span className={`${classes.num} sf-muted text-[13px]`}>
                     {share == null ? '—' : (share / 100).toFixed(2)}
                   </span>
-                  <span className={classes.num}>{item.cost.toFixed(2)}</span>
+                  <span className={classes.num}>
+                    {item.cost.toFixed(2)}
+                    <OriginalAmount item={item} />
+                  </span>
                 </UnstyledButton>
               );
             }
@@ -337,7 +351,10 @@ export function ItemTable({
                   {who(item, people)}
                 </span>
                 <span className={`${classes.num} sf-muted`}>{shareText}</span>
-                <span className={classes.num}>{formatMoney(cents(item.cost), currency)}</span>
+                <span className={classes.num}>
+                  {formatMoney(cents(item.cost), currency)}
+                  <OriginalAmount item={item} />
+                </span>
                 <RowActions
                   item={item}
                   onEdit={onEdit}

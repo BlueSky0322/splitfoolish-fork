@@ -805,3 +805,12 @@
   color: var(--sf-text-muted);
   vertical-align: middle;
 }
+
+/* An item paid in another currency: the amount as paid, under the converted one */
+.originalAmount {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--sf-text-muted);
+  font-variant-numeric: tabular-nums;
+}
