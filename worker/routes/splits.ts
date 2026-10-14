@@ -50,6 +50,7 @@ import { listSplitSummaries } from '../summaries';
 const splits = new Hono<AppEnv>();
 
 const MAX_ORDERED = 500;
+const MAX_ITEM_NAMES = 500;
 const SPLIT_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 /**
@@ -99,6 +100,22 @@ splits.put('/splits/order', async (c) => {
     ),
   );
   return json({ ok: true });
+});
+
+// Names of items in your splits, most recent first, for suggesting as you type one.
+// Each name once (ignoring case), with the category it was last given.
+splits.get('/item-names', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT name, category, uses FROM (
+       SELECT i.name, i.category, count(*) OVER (PARTITION BY lower(i.name)) AS uses,
+         row_number() OVER (PARTITION BY lower(i.name) ORDER BY i.created_at DESC) AS n,
+         max(i.created_at) OVER (PARTITION BY lower(i.name)) AS last
+       FROM items i JOIN split_members m ON m.split_id = i.split_id AND m.email = ?
+     ) WHERE n = 1 ORDER BY last DESC LIMIT ?`,
+  )
+    .bind(c.var.email, MAX_ITEM_NAMES)
+    .all();
+  return json({ names: results });
 });
 
 splits.post('/splits', async (c) => {
