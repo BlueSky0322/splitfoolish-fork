@@ -127,12 +127,25 @@ function AvatarStack({ people, size, max }: { people: IPerson[]; size: number; m
 function SaveStatus({
   status,
   count,
+  waiting,
   onRetry,
 }: {
   status: SyncStatus;
   count: number;
+  /** Changes kept on this device until they're sent */
+  waiting: number;
   onRetry: () => void;
 }) {
+  if (status === 'offline') {
+    return (
+      <div className={classes.status}>
+        <CloudSlash size={14} />
+        {waiting === 0
+          ? 'Offline'
+          : `Offline · ${waiting} ${waiting === 1 ? 'change' : 'changes'} waiting`}
+      </div>
+    );
+  }
   if (status === 'error') {
     return (
       <div className={classes.status}>
@@ -182,7 +195,8 @@ function oweLine(people: IPerson[], summary: ReturnType<typeof summarise>, me: I
 }
 
 const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | null }) => {
-  const { status, meta, setMeta, refreshMeta, actions, retry, whenSaved } = useSplit(splitId);
+  const { status, waiting, meta, setMeta, refreshMeta, actions, retry, whenSaved } =
+    useSplit(splitId);
   const photos = usePhotos({ splitId, meta, setMeta, whenSaved });
   // People can remove photos they added; the owner can remove any
   const canRemovePhoto = (photo: Attachment) =>
@@ -816,6 +830,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                   <SaveStatus
                     status={status}
                     count={state.items.length}
+                    waiting={waiting}
                     onRetry={retry}
                   />
                 </div>
@@ -989,6 +1004,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             <SaveStatus
               status={status}
               count={state.items.length}
+              waiting={waiting}
               onRetry={retry}
             />
           </div>
