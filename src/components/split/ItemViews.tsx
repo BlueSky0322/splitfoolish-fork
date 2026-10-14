@@ -223,8 +223,13 @@ export function ItemCards({
                     <div className={classes.itemName}>
                       {item.name}
                       <PhotoBadge count={photoCounts.get(item.id)} />
-                      <NotesBadge notes={item.notes} />
                     </div>
+                    {item.notes && (
+                      // One line of the notes, its line breaks run together
+                      <div className={classes.itemNotes}>
+                        {item.notes.replace(/\s*\n+\s*/g, ' · ')}
+                      </div>
+                    )}
                     <div className={classes.itemMeta}>
                       {mobile
                         ? `${item.payer.name} paid${share != null ? ` · yours ${formatMoney(share, currency)}` : ''}`
@@ -434,7 +439,17 @@ export function ItemTable({
                     selection={selection}
                   />
                   <span className={classes.cellEllipsis}>
-                    {item.name}
+                    {/* The name opens the item, like double-clicking the row */}
+                    <UnstyledButton
+                      className={classes.nameLink}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (selection?.active) selection.toggle(item.id, e.shiftKey);
+                        else onEdit(item);
+                      }}
+                    >
+                      {item.name}
+                    </UnstyledButton>
                     <PhotoBadge count={photoCounts.get(item.id)} />
                     <NotesBadge notes={item.notes} />
                   </span>

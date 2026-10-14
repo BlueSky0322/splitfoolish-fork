@@ -96,8 +96,8 @@ export function groupItems(
 
 /** The phone's sort pill cycles through these */
 export const MOBILE_SORTS: { key: SortKey; dir: SortDir; label: string }[] = [
-  { key: 'date', dir: 'asc', label: 'Oldest' },
   { key: 'date', dir: 'desc', label: 'Newest' },
+  { key: 'date', dir: 'asc', label: 'Oldest' },
   { key: 'amount', dir: 'desc', label: 'Largest' },
   { key: 'name', dir: 'asc', label: 'A–Z' },
 ];

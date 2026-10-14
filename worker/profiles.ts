@@ -44,7 +44,8 @@ const SETTINGS = {
 type SettingKey = keyof typeof SETTINGS;
 type SettingChanges = Partial<Record<SettingKey, string | boolean | null>>;
 
-// The same defaults as the user_settings table
+// Settings before anyone changes them. A new settings row is written with all of these
+// (not the table's own column defaults), so they can change here alone.
 const DEFAULT_SETTINGS = {
   theme: 'auto',
   accent: 'blurple',
@@ -55,7 +56,8 @@ const DEFAULT_SETTINGS = {
   itemsView: 'card',
   itemsGroupBy: 'day',
   itemsSortKey: 'date',
-  itemsSortDir: 'asc',
+  // Newest items first
+  itemsSortDir: 'desc',
 };
 
 /** Makes the profile row if there isn't one, so rows that belong to it can be added */
@@ -112,23 +114,26 @@ export async function getProfile(db: D1Database, email: string) {
 export function settingsStatements(db: D1Database, email: string, changes: SettingChanges) {
   const keys = Object.keys(changes) as SettingKey[];
   if (keys.length === 0) return [];
-  // Column names come from SETTINGS, never from the request
-  const columns = keys.map((k) => SETTINGS[k].column);
-  const values = keys.map((k) => {
-    const v = changes[k];
+  // A first row gets every setting: the changes, and the defaults for the rest. An
+  // existing row only has the changed ones updated. Column names come from SETTINGS,
+  // never from the request.
+  const all = Object.keys(SETTINGS) as SettingKey[];
+  const value = (k: SettingKey) => {
+    const v = Object.hasOwn(changes, k) ? changes[k] : DEFAULT_SETTINGS[k];
     return typeof v === 'boolean' ? Number(v) : v ?? null;
-  });
+  };
+  const changed = keys.map((k) => SETTINGS[k].column);
   return [
     ensureProfile(db, email),
     db
       .prepare(
-        `INSERT INTO user_settings (email, ${columns.join(', ')}, updated_at)
-         VALUES (?, ${columns.map(() => '?').join(', ')}, ?)
+        `INSERT INTO user_settings (email, ${all.map((k) => SETTINGS[k].column).join(', ')}, updated_at)
+         VALUES (?, ${all.map(() => '?').join(', ')}, ?)
          ON CONFLICT (email) DO UPDATE SET
-           ${columns.map((c) => `${c} = excluded.${c}`).join(', ')},
+           ${changed.map((c) => `${c} = excluded.${c}`).join(', ')},
            updated_at = excluded.updated_at`,
       )
-      .bind(email, ...values, Date.now()),
+      .bind(email, ...all.map(value), Date.now()),
   ];
 }
 

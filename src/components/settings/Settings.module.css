@@ -357,6 +357,7 @@
 }
 
 .avatarRing {
+  display: flex;
   margin-bottom: 8px;
   border-radius: 999px;
   box-shadow:

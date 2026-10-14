@@ -6,8 +6,8 @@ export function useInstall() {
   const state = useSyncExternalStore(subscribeInstall, installState);
   return {
     ...state,
-    /** Something to offer: the browser's prompt, or the Share menu steps on iOS */
-    available: !state.installed && (state.canPrompt || state.ios),
+    /** Something to offer: the browser's prompt, or the steps on iOS and Android */
+    available: !state.installed && (state.canPrompt || state.ios || state.android),
     prompt: promptInstall,
   };
 }
