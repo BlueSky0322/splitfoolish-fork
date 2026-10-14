@@ -187,6 +187,11 @@
 .railSplits {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  /* The full rail width, with room above and below, so a selected or focused tile's
+     ring isn't clipped by the scrolling list */
+  align-self: stretch;
+  padding: 4px 0;
   gap: 6px;
   overflow-y: auto;
   min-height: 0;
