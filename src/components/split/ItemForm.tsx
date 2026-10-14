@@ -32,6 +32,9 @@ interface ItemFormProps {
   item?: IItem;
   /** Who paid by default for a new item */
   defaultPayerId?: string | null;
+  /** A new item's amount and the currency it was paid in, e.g. from Convert */
+  initialAmount?: string;
+  initialCurrency?: string;
   /** Photos picked for a new item are uploaded once it's added */
   onSave: (input: ItemInput, newPhotos: File[]) => boolean;
   onDelete?: () => void;
@@ -99,6 +102,8 @@ const ItemForm = ({
   currency,
   item,
   defaultPayerId,
+  initialAmount,
+  initialCurrency,
   onSave,
   onDelete,
   onCancel,
@@ -113,9 +118,11 @@ const ItemForm = ({
   // Items in another currency are edited as they were typed, in that currency
   const original = item?.original ?? null;
   const [expression, setExpression] = useState(
-    original ? String(original.amount) : item ? String(item.cost) : '',
+    original ? String(original.amount) : item ? String(item.cost) : initialAmount ?? '',
   );
-  const [entryCurrency, setEntryCurrency] = useState(original?.currency ?? currency);
+  const [entryCurrency, setEntryCurrency] = useState(
+    original?.currency ?? (item ? currency : initialCurrency ?? currency),
+  );
   const foreign = entryCurrency !== currency;
   const [useOwnRate, setUseOwnRate] = useState(original?.rateSource === 'manual');
   const [ownRate, setOwnRate] = useState<number | ''>(

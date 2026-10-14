@@ -4,7 +4,8 @@ export type Route =
   | { view: 'home'; tab: string | null }
   | { view: 'split'; id: string }
   | { view: 'join'; token: string }
-  | { view: 'settings' };
+  | { view: 'settings' }
+  | { view: 'convert' };
 
 function readRoute(): Route {
   const params = new URLSearchParams(window.location.search);
@@ -13,6 +14,7 @@ function readRoute(): Route {
   if (token) return { view: 'join', token };
   if (id) return { view: 'split', id };
   if (params.has('settings')) return { view: 'settings' };
+  if (params.has('convert')) return { view: 'convert' };
   return { view: 'home', tab: params.get('tab') };
 }
 
@@ -26,7 +28,8 @@ export function navigate(search: string, { replace = false } = {}) {
 }
 
 // Pages are picked from the query string: ?s=<id> is a split, ?join=<token> joins one,
-// ?settings is Settings, and ?tab=<name> picks a My Splits tab
+// ?settings is Settings, ?convert the currency converter, and ?tab=<name> picks a My
+// Splits tab
 export function useRoute(): Route {
   const [route, setRoute] = useState(readRoute);
 

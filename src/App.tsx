@@ -1,5 +1,6 @@
 import { Button } from '@mantine/core';
 import { SignIn } from '@phosphor-icons/react';
+import ConvertPage from './components/convert/ConvertPage';
 import JoinSplit from './components/JoinSplit';
 import StateCard from './components/ui/StateCard';
 import { NewSplitProvider } from './components/NewSplitDialog';
@@ -33,6 +34,7 @@ function App() {
         {route.view === 'home' && <SplitsHome tab={route.tab} />}
         {route.view === 'join' && <JoinSplit token={route.token} />}
         {route.view === 'settings' && <SettingsPage />}
+        {route.view === 'convert' && <ConvertPage />}
         {route.view === 'split' && (
           <SplitScreen
             key={route.id}
