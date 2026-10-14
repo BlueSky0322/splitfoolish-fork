@@ -1,11 +1,18 @@
-import { Button, CopyButton, TextInput, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Button, CopyButton, Tooltip, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { Check, Copy } from '@phosphor-icons/react';
-import { useState } from 'react';
+import {
+  ArrowClockwise,
+  Check,
+  Copy,
+  LinkSimple,
+  ShareNetwork,
+  SignOut,
+  Trash,
+} from '@phosphor-icons/react';
 import { api, inviteUrl } from '../api';
+import { useIsMobile } from '../hooks/useBreakpoints';
 import { SplitMeta } from '../hooks/useSplit';
 import { nameFor } from '../profile/ProfileContext';
-import EndSplit from './EndSplit';
 import UserAvatar from './ui/UserAvatar';
 import classes from './SplitMembers.module.css';
 
@@ -16,10 +23,19 @@ interface SplitMembersProps {
   onChange: () => Promise<void>;
   /** Shows a change straight away, before the server confirms it */
   setMeta: (update: (meta: SplitMeta | null) => SplitMeta | null) => void;
+  /** Swaps this for the reset-link confirm (3b) */
+  onReset: () => void;
+  /** Swaps this for the delete or leave confirm (3d) */
+  onEnd: () => void;
 }
+
+const COPIED_MS = 1500;
 
 const shortDate = (time: number) =>
   new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'numeric' });
+
+// The link without its scheme, so more of it fits
+const shortUrl = (url: string) => url.replace(/^https?:\/\//, '');
 
 const showError = (err: unknown) =>
   notifications.show({
@@ -27,24 +43,21 @@ const showError = (err: unknown) =>
     message: err instanceof Error ? err.message : 'Something went wrong',
   });
 
-// Sharing and members (F8): the share link, who has access, and
-// deleting or leaving the split
-const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) => {
-  const [busy, setBusy] = useState(false);
-  const [confirmEnd, setConfirmEnd] = useState(false);
-  const isOwner = meta.role === 'owner';
+/** "Share split" with the split's name under it, kept short so it never crowds the close button */
+export const ShareTitle = ({ name }: { name: string }) => (
+  <span className={classes.titleBlock}>
+    <span>Share split</span>
+    <span className={classes.titleSub}>{name}</span>
+  </span>
+);
 
-  const run = async (action: () => Promise<unknown>) => {
-    setBusy(true);
-    try {
-      await action();
-      await onChange();
-    } catch (err) {
-      showError(err);
-    } finally {
-      setBusy(false);
-    }
-  };
+// Sharing (3a desktop, 3c phone): the share link, who's in the split, who's yet to
+// accept, and deleting or leaving the split
+const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset, onEnd }: SplitMembersProps) => {
+  const isMobile = useIsMobile();
+  const isOwner = meta.role === 'owner';
+  const link = meta.inviteToken ? inviteUrl(meta.inviteToken) : null;
+  const invites = meta.invites ?? [];
 
   // Shown straight away; reloaded from the server if it says no
   const optimistic = (show: (m: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => {
@@ -55,49 +68,110 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
     });
   };
 
+  // The phone's share sheet where there is one; otherwise copy it
+  const shareLink = async (url: string) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: meta.name, url });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      }
+    }
+    await navigator.clipboard.writeText(url);
+    notifications.show({ message: 'Link copied' });
+  };
+
+  const helper = <p className={classes.help}>Anyone with the link can ask to join and edit.</p>;
+
   return (
-    <div className="flex flex-col gap-5">
-      {isOwner && meta.inviteToken && (
+    <div className={classes.panel}>
+      {isOwner && link && !isMobile && (
         <div className="flex flex-col gap-2">
-          <h6 className="sf-label">Share link</h6>
-          <div className="flex gap-2 items-center">
-            <TextInput
-              className="flex-1 min-w-0"
-              readOnly
-              aria-label="Share link"
-              value={inviteUrl(meta.inviteToken)}
-              onFocus={(e) => e.currentTarget.select()}
-            />
-            <CopyButton value={inviteUrl(meta.inviteToken)}>
+          <div className="flex items-center gap-2">
+            <div className={classes.linkBox}>
+              <LinkSimple
+                size={16}
+                className={classes.linkIcon}
+              />
+              <span className={classes.linkText}>{shortUrl(link)}</span>
+              <CopyButton
+                value={link}
+                timeout={COPIED_MS}
+              >
+                {({ copied, copy }) => (
+                  <>
+                    {copied && <span className={classes.copied}>Copied</span>}
+                    <Tooltip label="Copy link">
+                      <ActionIcon
+                        variant="subtle"
+                        size={28}
+                        aria-label={copied ? 'Copied' : 'Copy link'}
+                        onClick={copy}
+                      >
+                        {copied ? <Check size={16} /> : <Copy size={16} />}
+                      </ActionIcon>
+                    </Tooltip>
+                  </>
+                )}
+              </CopyButton>
+            </div>
+            <Tooltip label="Reset link">
+              <ActionIcon
+                variant="subtle"
+                size={36}
+                className={classes.reset}
+                aria-label="Reset link"
+                onClick={onReset}
+              >
+                <ArrowClockwise size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </div>
+          {helper}
+        </div>
+      )}
+
+      {isOwner && link && isMobile && (
+        <div className="flex flex-col gap-2">
+          <Button
+            className={classes.tall}
+            leftSection={<ShareNetwork size={18} />}
+            onClick={() => shareLink(link)}
+          >
+            Share invite link
+          </Button>
+          <div className="flex gap-2">
+            <CopyButton
+              value={link}
+              timeout={COPIED_MS}
+            >
               {({ copied, copy }) => (
                 <Button
                   variant="default"
-                  className={classes.copyButton}
-                  onClick={copy}
+                  className={`${classes.half} flex-1`}
                   leftSection={copied ? <Check size={16} /> : <Copy size={16} />}
+                  onClick={copy}
                 >
-                  {copied ? 'Copied' : 'Copy'}
+                  {copied ? 'Copied' : 'Copy link'}
                 </Button>
               )}
             </CopyButton>
+            <Button
+              variant="default"
+              className={`${classes.half} flex-1`}
+              leftSection={<ArrowClockwise size={16} />}
+              onClick={onReset}
+            >
+              Reset
+            </Button>
           </div>
-          <p className={classes.help}>
-            Anyone who opens it and signs in gets an invite to accept; once they do, they can view
-            and edit this split. It changes when you remove someone, so they can't use it to come
-            back.
-          </p>
-          <UnstyledButton
-            className={`${classes.textAction} self-start`}
-            disabled={busy}
-            onClick={() => run(() => api.resetInvite(meta.id))}
-          >
-            Reset link (the old one stops working)
-          </UnstyledButton>
+          {helper}
         </div>
       )}
 
       <div className="flex flex-col gap-1">
-        <h6 className="sf-label">People with access</h6>
+        <h6 className="sf-label">People · {meta.members.length}</h6>
         <div className={classes.rows}>
           {meta.members.map((m) => (
             <div
@@ -108,21 +182,21 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
                 name={nameFor(m.email, m.displayName)}
                 email={m.email}
                 avatarVersion={m.avatarVersion}
-                size={30}
+                size={isMobile ? 36 : 32}
                 preview
               />
               <div className="min-w-0 flex-1">
-                <div className={classes.email}>
-                  {m.displayName ? `${m.displayName} · ${m.email}` : m.email}
-                  {m.email === myEmail && <span className="sf-muted"> (you)</span>}
+                <div className={classes.name}>
+                  {nameFor(m.email, m.displayName)}
+                  {m.email === myEmail && ' (you)'}
                 </div>
-                <div className={classes.role}>{m.role === 'owner' ? 'Owner' : 'Editor'}</div>
+                <div className={classes.email}>{m.email}</div>
               </div>
+              <span className="sf-tag">{m.role === 'owner' ? 'Owner' : 'Editor'}</span>
               {isOwner && m.role !== 'owner' && (
                 <UnstyledButton
                   className={classes.textAction}
-                  disabled={busy}
-                  aria-label={`Remove ${m.email}`}
+                  aria-label={`Remove ${nameFor(m.email, m.displayName)}`}
                   onClick={() =>
                     optimistic(
                       (x) => ({ ...x, members: x.members.filter((y) => y.email !== m.email) }),
@@ -136,57 +210,57 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
               )}
             </div>
           ))}
-          {meta.invites?.map((i) => (
-            <div
-              key={i.id}
-              className={classes.row}
-            >
-              <UserAvatar
-                name={i.email}
-                size={30}
-              />
-              <div className="min-w-0 flex-1">
-                <div className={classes.email}>{i.email}</div>
-                <div className={classes.role}>
-                  Opened the link, hasn't accepted · expires {shortDate(i.expiresAt)}
-                </div>
-              </div>
-              <UnstyledButton
-                className={classes.textAction}
-                disabled={busy}
-                aria-label={`Withdraw invite for ${i.email}`}
-                onClick={() =>
-                  optimistic(
-                    (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== i.id) }),
-                    () => api.revokeInvite(meta.id, i.id),
-                  )
-                }
-              >
-                Withdraw
-              </UnstyledButton>
-            </div>
-          ))}
         </div>
       </div>
 
-      {confirmEnd ? (
-        <EndSplit
-          splitId={meta.id}
-          name={meta.name}
-          isOwner={isOwner}
-          myEmail={myEmail}
-          onCancel={() => setConfirmEnd(false)}
-        />
-      ) : (
+      {isOwner && invites.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <h6 className="sf-label">Waiting to accept · {invites.length}</h6>
+          <div className={classes.rows}>
+            {invites.map((i) => (
+              <div
+                key={i.id}
+                className={classes.row}
+              >
+                <UserAvatar
+                  name={nameFor(i.email)}
+                  size={isMobile ? 36 : 32}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className={classes.name}>{i.email}</div>
+                  <div className={classes.email}>
+                    Opened the link · expires {shortDate(i.expiresAt)}
+                  </div>
+                </div>
+                <UnstyledButton
+                  className={classes.textAction}
+                  aria-label={`Withdraw invite for ${i.email}`}
+                  onClick={() =>
+                    optimistic(
+                      (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== i.id) }),
+                      () => api.revokeInvite(meta.id, i.id),
+                    )
+                  }
+                >
+                  Withdraw
+                </UnstyledButton>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={classes.footer}>
         <Button
           variant="default"
-          className="sf-danger"
-          disabled={busy}
-          onClick={() => setConfirmEnd(true)}
+          fullWidth
+          className={`sf-danger-outline ${isMobile ? classes.tall : ''}`}
+          leftSection={isOwner ? <Trash size={16} /> : <SignOut size={16} />}
+          onClick={onEnd}
         >
-          {isOwner ? 'Delete split for everyone' : 'Leave split'}
+          {isOwner ? 'Delete split' : 'Leave split'}
         </Button>
-      )}
+      </div>
     </div>
   );
 };

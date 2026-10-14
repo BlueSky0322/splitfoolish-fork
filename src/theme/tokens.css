@@ -102,6 +102,15 @@ body {
   background: color-mix(in srgb, var(--sf-negative) 12%, transparent);
 }
 
+/* Destructive buttons: a red outline and red text, never a fill */
+.sf-danger-outline.mantine-Button-root {
+  border-color: var(--sf-negative);
+  color: var(--sf-negative);
+}
+.sf-danger-outline.mantine-Button-root:where(:not(:disabled, [data-disabled])):hover {
+  background: color-mix(in srgb, var(--sf-negative) 14%, transparent);
+}
+
 /* Text helpers */
 .sf-tabular {
   font-variant-numeric: tabular-nums;

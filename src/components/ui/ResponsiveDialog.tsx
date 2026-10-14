@@ -33,6 +33,7 @@ const ResponsiveDialog = ({
         classNames={{
           content: classes.sheet,
           header: classes.sheetHeader,
+          title: classes.sheetTitle,
           body: classes.sheetBody,
         }}
       >
