@@ -139,6 +139,11 @@ erDiagram
 - **Deleting cleans up.** Deleting a split removes its members, invites, people, items,
   picture, photos and photo bytes. Deleting an item removes its receipts. Removing a person who
   was the settle-up route sets the route back to none.
+- **Removing someone.** When the owner takes an account out of a split, its
+  `split_members` row and any invite go, the person it was in the bill stays as a guest
+  (`people.member_email` cleared), and `splits.invite_token` changes so the old link
+  can't bring them back. Only the owner changes `people`; anyone in the split can
+  change `items`.
 - **Lazy profiles.** A profile row is made the first time someone saves a setting,
   name, picture or payment method; until then the defaults apply. Emails in
   `split_members`, `split_invites` and `people.member_email` don't reference

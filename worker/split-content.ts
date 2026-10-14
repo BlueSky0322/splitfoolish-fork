@@ -150,11 +150,39 @@ const CLIENT_ID = /^[0-9a-f]{16}$/;
 
 class Refused extends Error {}
 
+export interface Actor {
+  email: string;
+  role: 'owner' | 'editor';
+}
+
+const PEOPLE_OPS = new Set<unknown>(['addPerson', 'renamePerson', 'removePerson', 'clearPeople']);
+
+export const newInviteToken = () =>
+  btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+/**
+ * Takes an account out of a split: their membership and any invite go, the person they
+ * were in the bill stays as a guest, and the share link changes so the old one can't
+ * bring them back
+ */
+export const removeAccessStatements = (db: D1Database, splitId: string, email: string) => [
+  db.prepare('DELETE FROM split_members WHERE split_id = ? AND email = ?').bind(splitId, email),
+  db.prepare('DELETE FROM split_invites WHERE split_id = ? AND email = ?').bind(splitId, email),
+  db
+    .prepare('UPDATE people SET member_email = NULL WHERE split_id = ? AND member_email = ?')
+    .bind(splitId, email),
+  db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(newInviteToken(), splitId),
+];
+
 /** The split's people and items as they will be after each change, for checking the next one */
 interface Model {
   people: Map<string, { name: string; memberEmail: string | null }>;
   items: Map<string, { payerId: string; participantIds: string[]; splitMode: SplitMode }>;
   members: Set<string>;
+  owner: string | null;
   nextPersonPosition: number;
   nextItemPosition: number;
 }
@@ -182,9 +210,10 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
                 (SELECT coalesce(max(position), -1) + 1 FROM items WHERE split_id = ?1) AS item`,
         )
         .bind(splitId),
-      db.prepare('SELECT email FROM split_members WHERE split_id = ?').bind(splitId),
+      db.prepare('SELECT email, role FROM split_members WHERE split_id = ?').bind(splitId),
     ],
   );
+  const memberRows = members.results as { email: string; role: string }[];
 
   const model: Model = {
     people: new Map(
@@ -199,7 +228,8 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
         { payerId: i.payerId, participantIds: [] as string[], splitMode: i.splitMode },
       ]),
     ),
-    members: new Set((members.results as { email: string }[]).map((m) => m.email)),
+    members: new Set(memberRows.map((m) => m.email)),
+    owner: memberRows.find((m) => m.role === 'owner')?.email ?? null,
     nextPersonPosition: (positions.results[0] as { person: number }).person,
     nextItemPosition: (positions.results[0] as { item: number }).item,
   };
@@ -311,7 +341,12 @@ function plan(
   splitId: string,
   model: Model,
   change: Change,
+  actor: Actor,
 ): D1PreparedStatement[] {
+  // Who's in the split is the owner's call; anyone can add and edit items
+  if (PEOPLE_OPS.has(change?.op) && actor.role !== 'owner') {
+    throw new Refused('Only the owner can change who is in this split');
+  }
   switch (change?.op) {
     case 'addPerson': {
       if (
@@ -353,6 +388,10 @@ function plan(
       const person = model.people.get(change.id);
       if (person == null) throw new Refused('That person was removed by someone else');
       const memberEmail = readMemberEmail(model, change.memberEmail, change.id);
+      // Others can only say which person they are, or that they aren't
+      if (actor.role !== 'owner' && (memberEmail ?? person.memberEmail) !== actor.email) {
+        throw new Refused('Only the owner can change who is in this split');
+      }
       // Someone else's link has to be removed first, so no one takes over another person
       if (memberEmail != null && person.memberEmail != null && person.memberEmail !== memberEmail) {
         throw new Refused(`${person.name} is already linked to another account`);
@@ -395,10 +434,17 @@ function plan(
         i.participantIds = i.participantIds.filter((p) => p !== change.id);
       }
       model.people.delete(change.id);
-      return [
+      const statements = [
         db.prepare('DELETE FROM item_participants WHERE person_id = ?').bind(change.id),
         db.prepare('DELETE FROM people WHERE id = ?').bind(change.id),
       ];
+      // Taking someone with an account out of the split takes away their access too
+      const email = person.memberEmail;
+      if (email != null && email !== model.owner && model.members.has(email)) {
+        model.members.delete(email);
+        statements.push(...removeAccessStatements(db, splitId, email));
+      }
+      return statements;
     }
 
     case 'setDistributor': {
@@ -414,10 +460,18 @@ function plan(
       ];
     }
 
-    case 'clearPeople':
+    case 'clearPeople': {
       if (model.items.size > 0) throw new Refused('Remove the items first, then clear the people.');
+      const emails = [...model.people.values()]
+        .map((p) => p.memberEmail)
+        .filter((e): e is string => e != null && e !== model.owner && model.members.has(e));
       model.people.clear();
-      return [db.prepare('DELETE FROM people WHERE split_id = ?').bind(splitId)];
+      for (const email of emails) model.members.delete(email);
+      return [
+        db.prepare('DELETE FROM people WHERE split_id = ?').bind(splitId),
+        ...emails.flatMap((email) => removeAccessStatements(db, splitId, email)),
+      ];
+    }
 
     case 'addItem': {
       const item = readItem(model, change.item);
@@ -511,7 +565,12 @@ function plan(
 }
 
 /** Applies a batch of changes all-or-nothing. On refusal, says which change and why. */
-export async function applyChanges(db: D1Database, splitId: string, body: Record<string, unknown>) {
+export async function applyChanges(
+  db: D1Database,
+  splitId: string,
+  body: Record<string, unknown>,
+  actor: Actor,
+) {
   const changes = body.changes;
   if (!Array.isArray(changes) || changes.length === 0 || changes.length > MAX_CHANGES) {
     return json({ error: `Send 1-${MAX_CHANGES} changes` }, 400);
@@ -521,7 +580,7 @@ export async function applyChanges(db: D1Database, splitId: string, body: Record
   const statements: D1PreparedStatement[] = [];
   for (const [index, change] of (changes as Change[]).entries()) {
     try {
-      statements.push(...plan(db, splitId, model, change));
+      statements.push(...plan(db, splitId, model, change, actor));
     } catch (err) {
       if (err instanceof Refused) return json({ error: err.message, index }, 409);
       throw err;

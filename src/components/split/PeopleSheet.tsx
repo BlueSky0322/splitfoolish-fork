@@ -18,6 +18,8 @@ interface PeopleSheetProps {
   myEmail: string | null;
   members: SplitMember[];
   invites: SplitInvite[];
+  /** Only the owner adds, renames and removes people */
+  isOwner: boolean;
   /** Opens on this person's page */
   initialPersonId?: string | null;
   onShowItems: (personId: string) => void;
@@ -52,6 +54,7 @@ function PersonPage({
   currency,
   myEmail,
   meId,
+  isOwner,
   onBack,
   onShowItems,
 }: {
@@ -61,12 +64,14 @@ function PersonPage({
   currency: string;
   myEmail: string | null;
   meId: string | null;
+  isOwner: boolean;
   onBack: () => void;
   onShowItems: (personId: string) => void;
 }) {
   const actions = useSplitActions()!;
   const [name, setName] = useState(person.name);
-  const [confirming, setConfirming] = useState<string | null>(null);
+  // What removing them would do, while waiting for a yes
+  const [confirming, setConfirming] = useState<{ text: string; fromItems: boolean } | null>(null);
   const byId = new Map(state.people.map((p) => [p.id, p]));
   const balance = summary.balances.get(person.id);
   const theirs = summary.transfers.filter((t) => t.fromId === person.id || t.toId === person.id);
@@ -76,18 +81,29 @@ function PersonPage({
   const isMe = myEmail != null && person.memberEmail === myEmail;
   const hasAccount = person.memberEmail != null;
 
+  // Someone else with an account loses access along with their place in the bill
+  const losesAccess = hasAccount && !isMe;
+
   const remove = () => {
     const plain = removeBlocker(state, person.id, false);
-    if (plain == null) {
-      if (actions.removePerson(person.id)) onBack();
-      return;
-    }
     // Can't go even from shared items (they paid, or it would empty an item): explain why
-    if (removeBlocker(state, person.id, true) != null) {
+    if (plain != null && removeBlocker(state, person.id, true) != null) {
       actions.removePerson(person.id, true);
       return;
     }
-    setConfirming(plain);
+    if (plain == null && !losesAccess) {
+      if (actions.removePerson(person.id)) onBack();
+      return;
+    }
+    setConfirming({
+      text: [
+        plain && `${plain} Remove them from those items? Everyone else's shares go up to cover it.`,
+        losesAccess && `They'll lose access to this split, and the share link will change.`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      fromItems: plain != null,
+    });
   };
 
   return (
@@ -156,6 +172,8 @@ function PersonPage({
             ? 'Your name and picture come from your Settings.'
             : 'Their name and picture come from their account.'}
         </p>
+      ) : !isOwner ? (
+        <p className="sf-muted text-sm">A guest, added by the owner.</p>
       ) : (
         <TextInput
           label="Name"
@@ -177,9 +195,7 @@ function PersonPage({
           role="alertdialog"
           aria-label={`Remove ${person.name}?`}
         >
-          <p className="text-sm">
-            {confirming} Remove them from those splits? Everyone else's shares go up to cover it.
-          </p>
+          <p className="text-sm">{confirming.text}</p>
           <div className="flex gap-2 justify-end">
             <Button
               variant="default"
@@ -189,7 +205,7 @@ function PersonPage({
             </Button>
             <Button
               color="red"
-              onClick={() => actions.removePerson(person.id, true) && onBack()}
+              onClick={() => actions.removePerson(person.id, confirming.fromItems) && onBack()}
             >
               Remove {person.name}
             </Button>
@@ -225,13 +241,15 @@ function PersonPage({
               <span className="sf-muted">{itemCount}</span>
             </UnstyledButton>
           )}
-          <UnstyledButton
-            className={`${classes.action} ${classes.danger}`}
-            onClick={remove}
-          >
-            <UserMinus size={18} />
-            <span className="flex-1">Remove from split</span>
-          </UnstyledButton>
+          {isOwner && (
+            <UnstyledButton
+              className={`${classes.action} ${classes.danger}`}
+              onClick={remove}
+            >
+              <UserMinus size={18} />
+              <span className="flex-1">Remove from split</span>
+            </UnstyledButton>
+          )}
         </div>
       )}
     </div>
@@ -247,6 +265,7 @@ const PeopleSheet = ({
   myEmail,
   members,
   invites,
+  isOwner,
   initialPersonId,
   onShowItems,
 }: PeopleSheetProps) => {
@@ -266,6 +285,7 @@ const PeopleSheet = ({
         currency={currency}
         myEmail={myEmail}
         meId={meId}
+        isOwner={isOwner}
         onBack={() => setOpenId(null)}
         onShowItems={onShowItems}
       />
@@ -295,36 +315,41 @@ const PeopleSheet = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <form
-        className="flex gap-2 items-end"
-        onSubmit={(e) => {
-          e.preventDefault();
-          add(newName);
-        }}
-      >
-        <Autocomplete
-          className="flex-1"
-          label="Add someone"
-          placeholder="Name, or pick someone in the split"
-          value={newName}
-          onChange={setNewName}
-          onOptionSubmit={add}
-          data={suggestions.map((s) => s.label)}
-          maxLength={80}
-          // Inside a dialog, so screen readers can reach the options
-          comboboxProps={{ withinPortal: false }}
-        />
-        <Button
-          type="submit"
-          disabled={!newName.trim()}
+      {!isOwner && <p className="sf-muted text-sm">Only the owner can add or remove people.</p>}
+      {isOwner && (
+        <form
+          className="flex gap-2 items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            add(newName);
+          }}
         >
-          Add
-        </Button>
-      </form>
+          <Autocomplete
+            className="flex-1"
+            label="Add someone"
+            placeholder="Name, or pick someone in the split"
+            value={newName}
+            onChange={setNewName}
+            onOptionSubmit={add}
+            data={suggestions.map((s) => s.label)}
+            maxLength={80}
+            // Inside a dialog, so screen readers can reach the options
+            comboboxProps={{ withinPortal: false }}
+          />
+          <Button
+            type="submit"
+            disabled={!newName.trim()}
+          >
+            Add
+          </Button>
+        </form>
+      )}
 
       {ordered.length === 0 ? (
         <div className="sf-muted text-sm text-center py-4">
-          Add everyone who's splitting, including yourself.
+          {isOwner
+            ? "Add everyone who's splitting, including yourself."
+            : 'Nobody has been added yet.'}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
