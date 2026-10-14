@@ -105,7 +105,7 @@ export function MobileSelectionBar({
   );
 }
 
-/** Computers: floats at the bottom of the list while selecting */
+/** Computers: floats at the bottom of the list while picking is on */
 export function DesktopSelectionBar({
   count,
   total,
@@ -121,7 +121,7 @@ export function DesktopSelectionBar({
         role="toolbar"
         aria-label="Selected items"
       >
-        <span className={classes.count}>{count} selected</span>
+        <span className={classes.count}>{count === 0 ? 'Pick items' : `${count} selected`}</span>
         {count < total && (
           <Button
             variant="subtle"
@@ -139,6 +139,7 @@ export function DesktopSelectionBar({
           size="compact-sm"
           leftSection={<CalendarBlank size={16} />}
           onClick={onMove}
+          disabled={count === 0}
         >
           Change date
         </Button>
@@ -148,15 +149,16 @@ export function DesktopSelectionBar({
           leftSection={<Trash size={16} />}
           className="sf-danger"
           onClick={onDelete}
+          disabled={count === 0}
         >
           Delete
         </Button>
-        <Tooltip label="Clear selection (Esc)">
+        <Tooltip label="Done (Esc)">
           <ActionIcon
             variant="subtle"
             color="gray"
             size={28}
-            aria-label="Clear selection"
+            aria-label="Done selecting"
             onClick={onClear}
           >
             <X size={16} />

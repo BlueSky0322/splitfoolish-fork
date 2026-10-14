@@ -900,23 +900,12 @@
 
 /* ---------- Picking several items ---------- */
 
-/* Computers: the tick's place is kept, and the tick shows on hover or while selecting */
+/* The tick in a row while picking; above the row's own click area */
 .checkSlot {
-  /* Above the row's own click area, even while faded out */
   position: relative;
   z-index: 1;
   display: flex;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.itemRow:hover .checkSlot,
-.itemRow:focus-within .checkSlot,
-.tableRow:hover .checkSlot,
-.tableRow:focus-within .checkSlot,
-.checkSlot[data-active] {
-  opacity: 1;
 }
 
 .nameCell {
