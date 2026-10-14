@@ -1,10 +1,13 @@
-import { ActionIcon, UnstyledButton } from '@mantine/core';
+import { ActionIcon, UnstyledButton, UnstyledButtonProps } from '@mantine/core';
+import { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { SplitSummary } from '../../split/derive';
 import { categoryIcon } from '../../split/categories';
 import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
 import { currencySymbol, formatMoney } from '../../utils/money';
+import { RowSelection, useLongPress } from '../../hooks/useItemSelection';
+import { RowCheck } from './ItemSelection';
 import PersonAvatar from './PersonAvatar';
 import classes from './Split.module.css';
 
@@ -21,6 +24,66 @@ interface ItemViewProps {
   onDelete: (item: IItem) => void;
   /** Receipt photos per item id */
   photoCounts: Map<string, number>;
+  /** Picking several items at once; absent where items can't be picked */
+  selection?: RowSelection;
+}
+
+/**
+ * An item's tap target: opens it, or while selecting picks it. A long press with a
+ * finger starts selecting.
+ */
+function ItemButton({
+  id,
+  selection,
+  onOpen,
+  children,
+  ...props
+}: UnstyledButtonProps & {
+  id: string;
+  selection?: RowSelection;
+  onOpen: () => void;
+  children: ReactNode;
+  role?: string;
+}) {
+  const { consumeClick, ...press } = useLongPress(() => selection?.toggle(id));
+  return (
+    <UnstyledButton
+      {...props}
+      {...(selection ? press : {})}
+      onClick={(e) => {
+        if (consumeClick()) return;
+        if (selection?.active) selection.toggle(id, e.shiftKey);
+        else onOpen();
+      }}
+    >
+      {children}
+    </UnstyledButton>
+  );
+}
+
+/** The tick's place in a row: there on hover on a computer, and always while selecting */
+function CheckSlot({
+  item,
+  selection,
+  mobile,
+}: {
+  item: IItem;
+  selection?: RowSelection;
+  mobile: boolean;
+}) {
+  if (selection == null || (mobile && !selection.active)) return null;
+  return (
+    <span
+      className={classes.checkSlot}
+      data-active={selection.active || undefined}
+    >
+      <RowCheck
+        id={item.id}
+        name={item.name}
+        selection={selection}
+      />
+    </span>
+  );
 }
 
 function PhotoBadge({ count }: { count?: number }) {
@@ -119,10 +182,14 @@ export function ItemCards({
   mobile,
   onEdit,
   onDelete,
+  selection,
 }: ItemViewProps) {
   const myShare = useMyShare(summary, me);
   return (
-    <div className={classes.groups}>
+    <div
+      className={classes.groups}
+      data-selecting={selection?.active || undefined}
+    >
       {groups.map((group) => (
         <section
           key={group.key}
@@ -142,7 +209,13 @@ export function ItemCards({
                 <div
                   key={item.id}
                   className={classes.itemRow}
+                  data-selected={selection?.selected.has(item.id) || undefined}
                 >
+                  <CheckSlot
+                    item={item}
+                    selection={selection}
+                    mobile={mobile}
+                  />
                   {Icon && !mobile && (
                     <Icon
                       size={18}
@@ -150,9 +223,11 @@ export function ItemCards({
                     />
                   )}
                   {/* The whole row opens the item; edit and delete sit above it */}
-                  <UnstyledButton
+                  <ItemButton
+                    id={item.id}
+                    selection={selection}
                     className={`${classes.itemText} ${classes.stretched}`}
-                    onClick={() => onEdit(item)}
+                    onOpen={() => onEdit(item)}
                   >
                     <div className={classes.itemName}>
                       {item.name}
@@ -164,7 +239,7 @@ export function ItemCards({
                         ? `${item.payer.name} paid${share != null ? ` · yours ${formatMoney(share, currency)}` : ''}`
                         : `${item.payer.name} paid · ${MODE_LABELS[item.splitMode]} between ${who(item, people)}`}
                     </div>
-                  </UnstyledButton>
+                  </ItemButton>
                   {!mobile && share != null && (
                     <span className={classes.itemShare}>
                       Your share {formatMoney(share, currency)}
@@ -174,7 +249,7 @@ export function ItemCards({
                     {formatMoney(cents(item.cost), currency)}
                     <OriginalAmount item={item} />
                   </span>
-                  {!mobile && (
+                  {!mobile && !selection?.active && (
                     <RowActions
                       item={item}
                       onEdit={onEdit}
@@ -250,6 +325,7 @@ export function ItemTable({
   sortDir,
   onSort,
   totalCents,
+  selection,
 }: ItemTableProps) {
   const myShare = useMyShare(summary, me);
   const sort = { sortKey, sortDir, onSort };
@@ -258,6 +334,7 @@ export function ItemTable({
     <div
       className={classes.table}
       role="table"
+      data-selecting={selection?.active || undefined}
     >
       <div
         className={classes.tableHead}
@@ -313,13 +390,21 @@ export function ItemTable({
             const shareText = share == null ? '—' : formatMoney(share, currency);
             if (mobile) {
               return (
-                <UnstyledButton
+                <ItemButton
                   key={item.id}
+                  id={item.id}
+                  selection={selection}
                   className={classes.tableRow}
                   role="row"
-                  onClick={() => onEdit(item)}
+                  data-selected={selection?.selected.has(item.id) || undefined}
+                  onOpen={() => onEdit(item)}
                 >
                   <span className={classes.payerCell}>
+                    <CheckSlot
+                      item={item}
+                      selection={selection}
+                      mobile
+                    />
                     <PersonAvatar
                       preview={false}
                       person={item.payer}
@@ -341,7 +426,7 @@ export function ItemTable({
                     {item.cost.toFixed(2)}
                     <OriginalAmount item={item} />
                   </span>
-                </UnstyledButton>
+                </ItemButton>
               );
             }
             return (
@@ -349,12 +434,21 @@ export function ItemTable({
                 key={item.id}
                 className={classes.tableRow}
                 role="row"
-                onDoubleClick={() => onEdit(item)}
+                data-selected={selection?.selected.has(item.id) || undefined}
+                onClick={(e) => selection?.active && selection.toggle(item.id, e.shiftKey)}
+                onDoubleClick={() => !selection?.active && onEdit(item)}
               >
-                <span className={classes.cellEllipsis}>
-                  {item.name}
-                  <PhotoBadge count={photoCounts.get(item.id)} />
-                  <NotesBadge notes={item.notes} />
+                <span className={classes.nameCell}>
+                  <CheckSlot
+                    item={item}
+                    selection={selection}
+                    mobile={false}
+                  />
+                  <span className={classes.cellEllipsis}>
+                    {item.name}
+                    <PhotoBadge count={photoCounts.get(item.id)} />
+                    <NotesBadge notes={item.notes} />
+                  </span>
                 </span>
                 <span className={classes.payerCell}>
                   <PersonAvatar
@@ -372,11 +466,13 @@ export function ItemTable({
                   {formatMoney(cents(item.cost), currency)}
                   <OriginalAmount item={item} />
                 </span>
-                <RowActions
-                  item={item}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                />
+                {!selection?.active && (
+                  <RowActions
+                    item={item}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                  />
+                )}
               </div>
             );
           })}

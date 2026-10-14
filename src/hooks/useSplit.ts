@@ -60,6 +60,8 @@ export interface SplitActions {
   addItem: (item: ItemInput, id?: string, createdAt?: number) => boolean;
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
+  /** Moves items to another day, each keeping its time of day (never later than now) */
+  moveItemsToDay: (itemIds: string[], day: Date) => boolean;
   /** Who everyone settles up through, or null for the fewest transfers */
   setDistributor: (personId: string | null) => boolean;
   /** Puts back an item that was just removed (Undo) */
@@ -518,6 +520,23 @@ export function useSplit(splitId: string) {
       removeItem: (itemId) => {
         dispatch({ type: 'REMOVE_ITEM', payload: itemId });
         return queue({ op: 'removeItem', id: itemId });
+      },
+      moveItemsToDay: (itemIds, day) => {
+        const ids = new Set(itemIds);
+        const now = Date.now();
+        let moved = false;
+        for (const item of current.current.items) {
+          if (!ids.has(item.id)) continue;
+          const at = new Date(day);
+          const was = new Date(item.createdAt || now);
+          at.setHours(was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds());
+          const createdAt = Math.min(at.getTime(), now);
+          if (createdAt === item.createdAt) continue;
+          dispatch({ type: 'UPDATE_ITEM', payload: toApiItem({ ...item, createdAt }) });
+          queue({ op: 'setItemDate', id: item.id, createdAt });
+          moved = true;
+        }
+        return moved;
       },
       setDistributor: (personId) => {
         setMeta((m) => (m ? { ...m, distributorId: personId } : m));

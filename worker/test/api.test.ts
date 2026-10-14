@@ -126,6 +126,37 @@ describe('changing a split', () => {
     expect((await change(owner, id, item({ [a]: 10, [b]: 20 }))).status).toBe(200);
   });
 
+  it('moves an item to another day, but not to one still to come', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const a = hex();
+    const itemId = hex();
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: a, name: 'A' },
+      {
+        op: 'addItem',
+        item: { id: itemId, name: 'Dinner', cost: 30, payerId: a, participantIds: [a] },
+      },
+    );
+    const lastWeek = Date.now() - 7 * 864e5;
+    expect(
+      (await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: lastWeek })).status,
+    ).toBe(200);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0].createdAt).toBe(
+      lastWeek,
+    );
+    const nextMonth = Date.now() + 30 * 864e5;
+    expect(
+      (await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: nextMonth })).status,
+    ).toBe(409);
+    // Gone already (someone removed it): nothing to move, and nothing refused
+    expect(
+      (await change(owner, id, { op: 'setItemDate', id: hex(), createdAt: lastWeek })).status,
+    ).toBe(200);
+  });
+
   it('keeps notes on items, line breaks included, and limits their length', async () => {
     const owner = person('owner');
     const { id } = await splitWith(owner);
