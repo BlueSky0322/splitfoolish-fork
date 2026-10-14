@@ -1,9 +1,9 @@
 import { ReactNode, createContext, useCallback, useContext, useState } from 'react';
-import { SplitDetail, SplitSummary, api } from '../api';
+import { SplitDetail, SplitSummary } from '../api';
 import { notifications } from '@mantine/notifications';
 import { newId } from '../hooks/useSplit';
 import { reloadHomeData, updateHomeData } from '../hooks/useHomeData';
-import { trackCreate } from '../pending-creates';
+import { startCreate } from '../pending-creates';
 import { removeCache, writeCache } from '../split-cache';
 import { navigate } from '../hooks/useRoute';
 import { useProfile } from '../profile/ProfileContext';
@@ -64,7 +64,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
 
     replace({ ...profile, settings: { ...profile.settings, lastCurrency: currency } });
     updateHomeData((data) => ({ splits: [summary, ...(data.splits ?? [])] }));
-    trackCreate(id, api.createSplit(id, trimmed, currency))
+    startCreate({ id, name: trimmed, currency, summary })
       .then(() => reloadHomeData())
       .catch((err) => {
         notifications.show({

@@ -6,6 +6,8 @@ import { clear, del, get, set } from 'idb-keyval';
 // person on the same browser never sees the previous person's splits.
 
 const LAST_EMAIL_KEY = 'splitfoolish:lastEmail';
+/** The same email in IndexedDB, where the service worker can read it */
+const SW_USER_KEY = 'sf-user';
 
 let confirmUser: (email: string) => void;
 const confirmedUser = new Promise<string>((resolve) => (confirmUser = resolve));
@@ -60,7 +62,23 @@ export async function setCacheUser(email: string): Promise<void> {
       // ignore
     }
   }
+  try {
+    await set(SW_USER_KEY, email);
+  } catch {
+    // ignore
+  }
   confirmUser(email);
+}
+
+/**
+ * Offline, the server can't say who's signed in: carry on as the last person signed
+ * in on this device, so their saved splits and unsaved changes are there. Returns
+ * their email, or null if nobody has signed in here.
+ */
+export function assumeLastUser(): string | null {
+  const email = lastEmail();
+  if (email) confirmUser(email);
+  return email;
 }
 
 export async function clearCache(): Promise<void> {

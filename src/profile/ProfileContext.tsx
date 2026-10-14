@@ -4,7 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { Profile, ProfilePatch, Settings, ThemeSetting, api } from '../api';
 import { queryClient } from '../query-client';
-import { setCacheUser } from '../split-cache';
+import { isOffline } from '../offline/outbox';
+import { sendKept } from '../pending-creates';
+import { reloadHomeData } from '../hooks/useHomeData';
+import { assumeLastUser, readCache, setCacheUser, writeCache } from '../split-cache';
 import { Accent, isAccent } from '../theme/accents';
 
 // The signed-in user's profile. Theme and accent are also kept in localStorage so
@@ -59,6 +62,7 @@ interface ProfileContextValue {
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
 const ME_KEY = ['me'] as const;
+const ME_CACHE_KEY = 'me';
 
 export const useProfile = () => {
   const value = useContext(ProfileContext);
@@ -77,21 +81,52 @@ export function ProfileProvider({
   children: ReactNode;
   onAccentChange: (accent: Accent) => void;
 }) {
+  const fromDevice = useRef(false);
   // Loaded once: after that, this device's changes are the latest, and a refetch
   // landing mid-change would undo one
   const { data, isError: signedOut } = useQuery({
     queryKey: ME_KEY,
     queryFn: async () => {
-      const me = await api.me();
-      // Cached splits are kept per account; know whose before showing any
-      await setCacheUser(me.email);
-      return me;
+      try {
+        const me = await api.me();
+        // Cached splits are kept per account; know whose before showing any
+        await setCacheUser(me.email);
+        fromDevice.current = false;
+        // Splits made and changes kept on this device before it was last closed
+        void sendKept().then((sent) => (sent > 0 ? reloadHomeData() : undefined));
+        void writeCache(ME_CACHE_KEY, me);
+        return me;
+      } catch (err) {
+        // Offline: carry on as whoever last used this device, from their saved profile.
+        // Online, a failure means signing in again (Cloudflare Access).
+        if (isOffline() && assumeLastUser() != null) {
+          const saved = await readCache<Profile>(ME_CACHE_KEY);
+          if (saved) {
+            fromDevice.current = true;
+            return saved;
+          }
+        }
+        throw err;
+      }
     },
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     retry: false,
+    // Runs offline too, so the saved profile is used rather than waiting for a connection
+    networkMode: 'always',
   });
   const profile = data ?? null;
+
+  // Back online: send what was kept on this device, and fetch the real profile if this
+  // one came from the device
+  useEffect(() => {
+    const refresh = () => {
+      if (fromDevice.current) void queryClient.invalidateQueries({ queryKey: ME_KEY });
+      void sendKept().then(() => reloadHomeData());
+    };
+    window.addEventListener('online', refresh);
+    return () => window.removeEventListener('online', refresh);
+  }, []);
   const { setColorScheme } = useMantineColorScheme();
 
   // Only touch the colour scheme and accent when they change: re-applying them on every
