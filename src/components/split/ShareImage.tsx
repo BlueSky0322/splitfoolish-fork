@@ -227,6 +227,11 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
                     <span className={classes.itemPayer}>{i.payer.name} paid</span>
                     <span className={classes.itemAmount}>
                       {formatMoney(Math.round(i.cost * 100), currency)}
+                      {i.original && (
+                        <span className={classes.itemOriginal}>
+                          {formatMoney(Math.round(i.original.amount * 100), i.original.currency)}
+                        </span>
+                      )}
                     </span>
                   </div>
                 ))}

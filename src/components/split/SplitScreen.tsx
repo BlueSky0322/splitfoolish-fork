@@ -6,6 +6,7 @@ import {
   CaretLeft,
   CaretRight,
   CloudCheck,
+  ArrowsClockwise,
   CloudSlash,
   DotsThreeOutline,
   GearSix,
@@ -425,6 +426,21 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     </div>
   );
 
+  const converting = meta?.converting && (
+    <div
+      className={classes.banner}
+      role="status"
+    >
+      <ArrowsClockwise
+        size={18}
+        className="animate-spin"
+      />
+      <span className="flex-1">
+        Converting amounts to {currency}. Items keep what was originally paid.
+      </span>
+    </div>
+  );
+
   const banner = status === 'error' && (
     <div className={classes.banner}>
       <CloudSlash size={18} />
@@ -776,6 +792,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                 </div>
               )}
 
+              {converting}
+
               {banner}
 
               {!noPeople && state.items.length > 0 && (
@@ -921,6 +939,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               <CaretRight size={16} />
             </UnstyledButton>
           )}
+
+          {converting}
 
           {banner}
 

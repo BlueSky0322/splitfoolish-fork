@@ -8,6 +8,8 @@ import { RatesEnv } from './rates';
 export interface Env extends AuthEnv, RatesEnv {
   DB: D1Database;
   ASSETS: Fetcher;
+  /** How long a currency change may take before opening the split retries it; for tests */
+  RECONVERT_RETRY_MS?: string;
 }
 
 export type Role = 'owner' | 'editor';

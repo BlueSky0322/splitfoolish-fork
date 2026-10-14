@@ -187,6 +187,8 @@ interface Model {
   items: Map<string, ModelItem>;
   /** The split's currency; items in others are converted into it */
   currency: string;
+  /** Its items are being converted into a new currency */
+  converting: boolean;
   members: Set<string>;
   owner: string | null;
   nextPersonPosition: number;
@@ -221,7 +223,9 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
       )
       .bind(splitId),
     db.prepare('SELECT email, role FROM split_members WHERE split_id = ?').bind(splitId),
-    db.prepare('SELECT currency FROM splits WHERE id = ?').bind(splitId),
+    db
+      .prepare('SELECT currency, converting_since AS convertingSince FROM splits WHERE id = ?')
+      .bind(splitId),
   ]);
   const memberRows = members.results as { email: string; role: string }[];
 
@@ -264,6 +268,8 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
       ]),
     ),
     currency: (split.results[0] as { currency: string } | undefined)?.currency ?? 'MYR',
+    converting:
+      (split.results[0] as { convertingSince: number | null } | undefined)?.convertingSince != null,
     members: new Set(memberRows.map((m) => m.email)),
     owner: memberRows.find((m) => m.role === 'owner')?.email ?? null,
     nextPersonPosition: (positions.results[0] as { person: number }).person,
@@ -754,6 +760,15 @@ export async function applyChanges(
   }
 
   const model = await loadModel(db, splitId);
+
+  // Items can't be added or edited while they're being converted into a new currency;
+  // the app keeps the change and sends it again shortly
+  if (
+    model.converting &&
+    (changes as Change[]).some((c) => c?.op === 'addItem' || c?.op === 'updateItem')
+  ) {
+    return json({ error: 'Converting amounts to the new currency. Saving in a moment.' }, 503);
+  }
 
   // Rates for items in other currencies, fetched before anything is checked or saved
   const rates: FetchedRates = new Map();
