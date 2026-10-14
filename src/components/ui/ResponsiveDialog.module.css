@@ -1,6 +1,9 @@
 .sheet {
   height: auto;
-  max-height: calc(100dvh - 40px);
+  /* Above the on-screen keyboard where the page doesn't shrink for it (keyboard-inset.ts) */
+  margin-bottom: var(--sf-keyboard, 0px);
+  max-height: calc(100dvh - 40px - var(--sf-keyboard, 0px));
+  transition: margin-bottom 120ms ease-out;
   border-radius: 22px 22px 0 0;
   padding-bottom: var(--sf-safe-bottom);
 }
