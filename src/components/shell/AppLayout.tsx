@@ -5,6 +5,7 @@ import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { Route } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import OfflineNotice from './OfflineNotice';
+import UpdateNotice from './UpdateNotice';
 import Sidebar from './Sidebar';
 import classes from './AppLayout.module.css';
 
@@ -23,6 +24,7 @@ const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) =
       <main className="min-h-dvh">
         {children}
         <OfflineNotice />
+        <UpdateNotice />
       </main>
     );
   }
@@ -44,6 +46,7 @@ const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) =
       </AppShell.Navbar>
       <AppShell.Main className={`h-dvh overflow-auto ${classes.main}`}>{children}</AppShell.Main>
       <OfflineNotice />
+      <UpdateNotice />
     </AppShell>
   );
 };
