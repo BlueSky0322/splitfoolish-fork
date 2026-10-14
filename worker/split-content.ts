@@ -871,6 +871,8 @@ export async function applyChanges(
   fetchRate: (
     from: string,
     to: string,
+    /** Refreshing rates on purpose: a recent rate, not one from hours ago */
+    recent: boolean,
   ) => Promise<{
     rate: number;
     source: RateSource;
@@ -892,10 +894,13 @@ export async function applyChanges(
 
   // Rates for items in other currencies, fetched before anything is checked or saved
   const rates: FetchedRates = new Map();
+  const recent = (changes as Change[]).some(
+    (c) => c?.op === 'refreshRates' || (c?.op === 'setRate' && c.rate == null),
+  );
   try {
     await Promise.all(
       [...currenciesToFetch(model, changes as Change[])].map(async (from) => {
-        rates.set(from, await fetchRate(from, model.currency));
+        rates.set(from, await fetchRate(from, model.currency, recent));
       }),
     );
   } catch (err) {
