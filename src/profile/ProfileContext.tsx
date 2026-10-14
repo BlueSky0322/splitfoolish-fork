@@ -1,15 +1,9 @@
 import { useMantineColorScheme } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import {
-  ReactNode,
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { Profile, ProfilePatch, Settings, ThemeSetting, api } from '../api';
+import { queryClient } from '../query-client';
 import { setCacheUser } from '../split-cache';
 import { Accent, isAccent } from '../theme/accents';
 
@@ -64,6 +58,8 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
+const ME_KEY = ['me'] as const;
+
 export const useProfile = () => {
   const value = useContext(ProfileContext);
   if (value == null) throw new Error('useProfile needs a ProfileProvider');
@@ -81,8 +77,21 @@ export function ProfileProvider({
   children: ReactNode;
   onAccentChange: (accent: Accent) => void;
 }) {
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [signedOut, setSignedOut] = useState(false);
+  // Loaded once: after that, this device's changes are the latest, and a refetch
+  // landing mid-change would undo one
+  const { data, isError: signedOut } = useQuery({
+    queryKey: ME_KEY,
+    queryFn: async () => {
+      const me = await api.me();
+      // Cached splits are kept per account; know whose before showing any
+      await setCacheUser(me.email);
+      return me;
+    },
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const profile = data ?? null;
   const { setColorScheme } = useMantineColorScheme();
 
   // Only touch the colour scheme and accent when they change: re-applying them on every
@@ -102,29 +111,16 @@ export function ProfileProvider({
   );
 
   const profileRef = useRef(profile);
-  const replace = useCallback(
-    (next: Profile) => {
-      profileRef.current = next;
-      setProfile(next);
-      apply(next);
-    },
-    [apply],
-  );
-
-  // Load once. (Depending on replace would refetch on every change, because the colour
-  // scheme setter it uses is a new function each render, and the stale reply would
-  // undo the change that was just made.)
-  const replaceRef = useRef(replace);
-  replaceRef.current = replace;
-  useEffect(() => {
-    api
-      .me()
-      .then(async (me) => {
-        await setCacheUser(me.email);
-        replaceRef.current(me);
-      })
-      .catch(() => setSignedOut(true));
+  profileRef.current = profile;
+  const replace = useCallback((next: Profile) => {
+    profileRef.current = next;
+    queryClient.setQueryData(ME_KEY, next);
   }, []);
+
+  // Theme and accent follow the profile, however it changed
+  useEffect(() => {
+    if (profile != null) apply(profile);
+  }, [profile, apply]);
 
   // Each change shows straight away. The server's reply only replaces what's on screen
   // if no newer change has been made since, so quick changes never jump back.

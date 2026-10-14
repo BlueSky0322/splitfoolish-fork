@@ -4,6 +4,7 @@ import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import '@mantine/notifications/styles.css';
 import { IconContext } from '@phosphor-icons/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
@@ -12,6 +13,7 @@ import { AppContextProvider } from './context/AppContext/AppContext.tsx';
 import { appReducer } from './context/AppContext/app-reducer.ts';
 import './index.css';
 import { ProfileProvider, readAppearance } from './profile/ProfileContext.tsx';
+import { queryClient } from './query-client.ts';
 import { Accent } from './theme/accents.ts';
 import { buildTheme, cssVariablesResolver } from './theme/theme.ts';
 import './theme/tokens.css';
@@ -29,12 +31,14 @@ function Root() {
       cssVariablesResolver={cssVariablesResolver}
     >
       <IconContext.Provider value={{ size: 20, weight: 'regular' }}>
-        <ProfileProvider onAccentChange={setAccent}>
-          <Notifications />
-          <ModalsProvider>
-            <App />
-          </ModalsProvider>
-        </ProfileProvider>
+        <QueryClientProvider client={queryClient}>
+          <ProfileProvider onAccentChange={setAccent}>
+            <Notifications />
+            <ModalsProvider>
+              <App />
+            </ModalsProvider>
+          </ProfileProvider>
+        </QueryClientProvider>
       </IconContext.Provider>
     </MantineProvider>
   );
