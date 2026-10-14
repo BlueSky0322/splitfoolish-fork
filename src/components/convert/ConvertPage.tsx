@@ -7,12 +7,21 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import { ArrowClockwise, ArrowsLeftRight, CaretLeft, Plus } from '@phosphor-icons/react';
+import {
+  ArrowClockwise,
+  ArrowsDownUp,
+  ArrowsLeftRight,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  MagnifyingGlass,
+  Plus,
+} from '@phosphor-icons/react';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents } from '../../../shared/rates';
-import { api } from '../../api';
+import { SplitSummary, api } from '../../api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeData } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
@@ -20,6 +29,9 @@ import { useProfile } from '../../profile/ProfileContext';
 import { queryClient } from '../../query-client';
 import { formatMoney, listCurrencies } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
+import CurrencySelect from '../ui/CurrencySelect';
+import ResponsiveDialog from '../ui/ResponsiveDialog';
+import SplitAvatar from '../ui/SplitAvatar';
 import classes from './Convert.module.css';
 
 const RECENT_KEY = 'sf-convert-recent';
@@ -57,20 +69,131 @@ const readAmount = (text: string) => {
   return Number.isFinite(n) ? n : null;
 };
 
+/** Picks a currency on a phone: suggestions first, then every currency, searchable */
+function CurrencySheet({
+  opened,
+  title,
+  value,
+  suggested,
+  onPick,
+  onClose,
+}: {
+  opened: boolean;
+  title: string;
+  value: string;
+  suggested: string[];
+  onPick: (code: string) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    if (opened) setQuery('');
+  }, [opened]);
+  const all = listCurrencies();
+  const q = query.trim().toLowerCase();
+  const matches = q === '' ? all : all.filter((c) => c.label.toLowerCase().includes(q));
+  const top =
+    q === '' ? suggested.map((code) => all.find((c) => c.value === code)!).filter(Boolean) : [];
+  const row = (c: { value: string; label: string }) => {
+    const [code, ...rest] = c.label.split(' · ');
+    return (
+      <UnstyledButton
+        key={c.value}
+        className={classes.currencyRow}
+        data-selected={c.value === value || undefined}
+        onClick={() => {
+          onPick(c.value);
+          onClose();
+        }}
+      >
+        <span className={classes.currencyCode}>{code}</span>
+        <span className="sf-muted min-w-0 flex-1 truncate text-sm">{rest.join(' · ')}</span>
+      </UnstyledButton>
+    );
+  };
+  return (
+    <ResponsiveDialog
+      opened={opened}
+      onClose={onClose}
+      title={title}
+    >
+      <div className="flex flex-col gap-3">
+        <TextInput
+          placeholder="Search, e.g. yen or JPY"
+          leftSection={<MagnifyingGlass size={16} />}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search currencies"
+        />
+        <div className={classes.currencyList}>
+          {top.length > 0 && (
+            <>
+              <div className="sf-label">Suggested</div>
+              {top.map(row)}
+              <div className="sf-label mt-2">All currencies</div>
+            </>
+          )}
+          {matches.map(row)}
+          {matches.length === 0 && <p className="sf-muted text-sm">No currency matches that.</p>}
+        </div>
+      </div>
+    </ResponsiveDialog>
+  );
+}
+
+/** Which split to add the amount to, on a phone */
+function SplitSheet({
+  opened,
+  splits,
+  label,
+  onPick,
+  onClose,
+}: {
+  opened: boolean;
+  splits: SplitSummary[];
+  label: string;
+  onPick: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <ResponsiveDialog
+      opened={opened}
+      onClose={onClose}
+      title={label}
+    >
+      {splits.length === 0 ? (
+        <p className="sf-muted text-sm">Make a split first, then add to it from here.</p>
+      ) : (
+        <div className={classes.splitList}>
+          {splits.map((s) => (
+            <UnstyledButton
+              key={s.id}
+              className={classes.splitRow}
+              onClick={() => onPick(s.id)}
+            >
+              <SplitAvatar
+                splitId={s.id}
+                name={s.name}
+                pictureVersion={s.pictureVersion}
+                size={36}
+              />
+              <span className="min-w-0 flex-1 truncate">{s.name}</span>
+              <span className="sf-muted text-xs">{s.currency}</span>
+              <CaretRight size={14} />
+            </UnstyledButton>
+          ))}
+        </div>
+      )}
+    </ResponsiveDialog>
+  );
+}
+
 // Convert (6a desktop, 6b phone): a quick converter at the split's rates, that can
 // drop the amount straight into a split as a new item
 const ConvertPage = () => {
   const isDesktop = useIsDesktop();
   const { profile } = useProfile();
   const { splits } = useHomeData();
-  const currencies = useMemo(() => {
-    const all = listCurrencies();
-    const common = new Set<string>(COMMON_CURRENCIES);
-    return [
-      ...all.filter((c) => common.has(c.value)),
-      ...all.filter((c) => !common.has(c.value)),
-    ].map((c) => ({ value: c.value, label: c.value }));
-  }, []);
 
   const home = profile?.settings.defaultCurrency ?? profile?.settings.lastCurrency ?? 'MYR';
   const [recent, setRecent] = useState(readRecent);
@@ -131,14 +254,21 @@ const ConvertPage = () => {
 
   const splitOptions = (splits ?? []).map((s) => ({ value: s.id, label: s.name }));
   const chosenSplit = splitId ?? splitOptions[0]?.value ?? null;
-  const addAsItem = () => {
-    if (chosenSplit == null || amount == null) return;
+  const addTo = (id: string) => {
+    if (amount == null) return;
     navigate(
-      `?s=${encodeURIComponent(chosenSplit)}&add=1&from=${from}&amount=${encodeURIComponent(
+      `?s=${encodeURIComponent(id)}&add=1&from=${from}&amount=${encodeURIComponent(
         String(amount),
       )}`,
     );
   };
+  const addAsItem = () => {
+    if (chosenSplit != null) addTo(chosenSplit);
+  };
+
+  // Phones: currency and split pickers open as sheets
+  const [picking, setPicking] = useState<'from' | 'to' | 'split' | null>(null);
+  const suggested = [...new Set([home, ...recent.flat(), ...COMMON_CURRENCIES])].slice(0, 6);
 
   const rateLine = (
     <div className={classes.rateLine}>
@@ -184,15 +314,14 @@ const ConvertPage = () => {
         error={amount == null && amountText.trim() !== '' ? 'Enter a number' : undefined}
       />
       <div className={classes.pair}>
-        <Select
+        <CurrencySelect
           label="From"
-          data={currencies}
+          first={suggested}
           value={from}
-          onChange={(v) => v && setFrom(v)}
-          searchable
-          allowDeselect={false}
+          onChange={setFrom}
           className={classes.currency}
           classNames={{ input: classes.currencyInput }}
+          comboboxProps={{ width: 240, position: 'bottom-start' }}
         />
         <Tooltip label="Swap">
           <ActionIcon
@@ -209,15 +338,14 @@ const ConvertPage = () => {
             <ArrowsLeftRight size={18} />
           </ActionIcon>
         </Tooltip>
-        <Select
+        <CurrencySelect
           label="To"
-          data={currencies}
+          first={suggested}
           value={to}
-          onChange={(v) => v && setTo(v)}
-          searchable
-          allowDeselect={false}
+          onChange={setTo}
           className={classes.currency}
           classNames={{ input: classes.currencyInput }}
+          comboboxProps={{ width: 240, position: 'bottom-start' }}
         />
       </div>
     </div>
@@ -275,6 +403,17 @@ const ConvertPage = () => {
   );
 
   if (!isDesktop) {
+    const pill = (side: 'from' | 'to', code: string) => (
+      <UnstyledButton
+        className={classes.pill}
+        onClick={() => setPicking(side)}
+        aria-label={`${side === 'from' ? 'From' : 'To'} ${code}, change`}
+      >
+        {code}
+        <CaretDown size={12} />
+      </UnstyledButton>
+    );
+    const canAdd = amount != null && amount > 0;
     return (
       <div className={classes.mobilePage}>
         <UnstyledButton
@@ -285,12 +424,88 @@ const ConvertPage = () => {
           <CaretLeft size={20} />
           <span>Convert</span>
         </UnstyledButton>
-        <div className={classes.card}>
-          {fields}
-          {resultBlock}
+
+        {/* Two rows, like a calculator: what you have on top, what it comes to below */}
+        <div className={classes.converter}>
+          <label className={classes.side}>
+            <span className={classes.sideLabel}>From</span>
+            <span className={classes.sideRow}>
+              {pill('from', from)}
+              <input
+                className={classes.bigInput}
+                inputMode="decimal"
+                placeholder="0"
+                value={amountText}
+                onChange={(e) => setAmountText(e.target.value)}
+                aria-label="Amount"
+                aria-invalid={amount == null && amountText.trim() !== ''}
+              />
+            </span>
+          </label>
+          <div className={classes.swapLine}>
+            <ActionIcon
+              variant="default"
+              radius="xl"
+              size={40}
+              className={classes.swapRound}
+              aria-label="Swap currencies"
+              onClick={() => {
+                setFrom(to);
+                setTo(from);
+              }}
+            >
+              <ArrowsDownUp size={18} />
+            </ActionIcon>
+          </div>
+          <div className={classes.side}>
+            <span className={classes.sideLabel}>To</span>
+            <span className={classes.sideRow}>
+              {pill('to', to)}
+              <output
+                className={classes.bigResult}
+                data-empty={result == null || undefined}
+                aria-live="polite"
+              >
+                {result == null ? '0' : formatMoney(result, to)}
+              </output>
+            </span>
+          </div>
         </div>
+        {rateLine}
         {recents}
-        <div className={classes.mobileFooter}>{addToSplit}</div>
+
+        <div className={classes.mobileFooter}>
+          <Button
+            fullWidth
+            size="lg"
+            leftSection={<Plus size={18} />}
+            disabled={!canAdd}
+            onClick={() => setPicking('split')}
+          >
+            {canAdd
+              ? `Add ${formatMoney(Math.round(amount * 100), from)} to a split`
+              : 'Add to a split'}
+          </Button>
+        </div>
+
+        <CurrencySheet
+          opened={picking === 'from' || picking === 'to'}
+          title={picking === 'to' ? 'Convert to' : 'Convert from'}
+          value={picking === 'to' ? to : from}
+          suggested={suggested}
+          onPick={(code) => (picking === 'to' ? setTo(code) : setFrom(code))}
+          onClose={() => setPicking(null)}
+        />
+        <SplitSheet
+          opened={picking === 'split'}
+          splits={splits ?? []}
+          label={canAdd ? `Add ${formatMoney(Math.round(amount * 100), from)} to` : 'Add to'}
+          onPick={(id) => {
+            setPicking(null);
+            addTo(id);
+          }}
+          onClose={() => setPicking(null)}
+        />
       </div>
     );
   }

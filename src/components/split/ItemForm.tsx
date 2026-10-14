@@ -13,7 +13,7 @@ import {
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { COMMON_CURRENCIES, convertCents, convertParts, isValidRate } from '../../../shared/rates';
+import { convertCents, convertParts, isValidRate } from '../../../shared/rates';
 import { SplitMode, itemShares } from '../../../shared/settle';
 import { MAX_NOTES_LENGTH } from '../../../shared/types';
 import { Attachment, ItemInput, api } from '../../api';
@@ -25,6 +25,7 @@ import { loadMath } from '../../utils/math';
 import { useProfile } from '../../profile/ProfileContext';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
+import CurrencySelect from '../ui/CurrencySelect';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../utils/rates';
@@ -63,11 +64,6 @@ const MODES: { value: SplitMode; label: string }[] = [
 const MAX_SHARES = 999;
 const toCents = (amount: number) => Math.round(amount * 100);
 const RATE_FRESH_MS = 5 * 60 * 1000;
-
-/** The split's currency first, then the common ones (and the item's, if it's another) */
-const currencyOptions = (splitCurrency: string, current: string) => [
-  ...new Set([splitCurrency, current, ...COMMON_CURRENCIES]),
-];
 
 /** The cost as typed: a number or a sum like "30*3"; null while it doesn't work out */
 function useEvaluated(expression: string) {
@@ -309,16 +305,14 @@ const ItemForm = ({
       className={classes.form}
     >
       <div className={classes.amount}>
-        <Select
+        <CurrencySelect
           aria-label="Currency"
           className={classes.currency}
-          data={currencyOptions(currency, entryCurrency)}
+          first={[currency]}
           value={entryCurrency}
-          onChange={(v) => v && setEntryCurrency(v)}
-          allowDeselect={false}
-          searchable
+          onChange={setEntryCurrency}
           variant="unstyled"
-          comboboxProps={{ withinPortal: false, width: 120 }}
+          comboboxProps={{ withinPortal: false, width: 240, position: 'bottom-start' }}
         />
         <input
           className={classes.amountInput}
@@ -565,7 +559,11 @@ const ItemForm = ({
       />
 
       <div className={classes.field}>
-        <div className={classes.label}>Receipts</div>
+        <div className={classes.label}>
+          Images
+          {photos.length + newPhotos.length + uploading.length > 0 &&
+            ` · ${photos.length + newPhotos.length + uploading.length}`}
+        </div>
         <PhotoStrip
           splitId={splitId}
           photos={photos}
