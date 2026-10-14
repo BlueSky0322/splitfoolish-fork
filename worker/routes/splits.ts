@@ -31,6 +31,7 @@ import {
 import {
   CURRENCY,
   assembleMembers,
+  getRateSource,
   memberProfileStatements,
   settingsStatements,
 } from '../profiles';
@@ -42,7 +43,7 @@ import {
   newInviteToken,
   removeAccessStatements,
 } from '../split-content';
-import { REFRESH_MAX_AGE_MS, getRate } from '../rates';
+import { REFRESH_MAX_AGE_MS, RatePreference, getRate } from '../rates';
 import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
 import { listSplitSummaries } from '../summaries';
 
@@ -51,16 +52,24 @@ const splits = new Hono<AppEnv>();
 const MAX_ORDERED = 500;
 const SPLIT_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
-/** Converts the split's items after the response is sent; failures are retried later */
+/**
+ * Converts the split's items after the response is sent, at rates from the source the
+ * person who set it off prefers; failures are retried later
+ */
 const startReconvert = (
   env: Env,
   ctx: { waitUntil: (p: Promise<unknown>) => void },
   splitId: string,
+  email: string,
 ) =>
   ctx.waitUntil(
-    reconvertSplit(env.DB, splitId, (from, to) => getRate(env, from, to)).catch((err) =>
-      console.error(err),
-    ),
+    getRateSource(env.DB, email)
+      .then((prefer) =>
+        reconvertSplit(env.DB, splitId, (from, to) =>
+          getRate(env, from, to, undefined, { prefer }),
+        ),
+      )
+      .catch((err) => console.error(err)),
   );
 
 splits.get('/splits', async (c) =>
@@ -186,7 +195,7 @@ splits.get(SPLIT, async (c) => {
   const converting = split.convertingSince != null;
   const retryAfter = Number(c.env.RECONVERT_RETRY_MS ?? RETRY_AFTER_MS);
   if (converting && Date.now() - split.convertingSince! >= retryAfter) {
-    startReconvert(c.env, c.executionCtx, id);
+    startReconvert(c.env, c.executionCtx, id, c.var.email);
   }
 
   return json({
@@ -260,7 +269,7 @@ splits.patch(SPLIT, member, ownerOnly('Only the owner can change split settings'
       db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), id),
     ]);
   }
-  if (converting) startReconvert(c.env, c.executionCtx, id);
+  if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email);
   return json({ ok: true, converting });
 });
 
@@ -286,13 +295,18 @@ splits.delete(SPLIT, member, ownerOnly('Only the owner can delete this split'), 
 splits.post(`${SPLIT}/changes`, member, async (c) => {
   const body = await readJson(c.req.raw);
   if (body instanceof Response) return body;
+  // Looked up only if the changes need a rate
+  let prefer: Promise<RatePreference> | null = null;
   return applyChanges(
     c.env.DB,
     c.req.param('id'),
     body,
     { email: c.var.email, role: c.var.role },
-    (from, to, recent) =>
-      getRate(c.env, from, to, undefined, recent ? REFRESH_MAX_AGE_MS : undefined),
+    async (from, to, recent) =>
+      getRate(c.env, from, to, undefined, {
+        prefer: await (prefer ??= getRateSource(c.env.DB, c.var.email)),
+        maxAgeMs: recent ? REFRESH_MAX_AGE_MS : undefined,
+      }),
   );
 });
 

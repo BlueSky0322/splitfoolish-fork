@@ -18,6 +18,7 @@ import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { CATEGORIES } from '../../split/categories';
 import { currencySymbol, formatMoney } from '../../utils/money';
 import { loadMath } from '../../utils/math';
+import { useProfile } from '../../profile/ProfileContext';
 import PhotoStrip from '../photos/PhotoStrip';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
@@ -150,8 +151,10 @@ const ItemForm = ({
 
   // The rate for the preview. The server converts again when saving, except that an
   // edit leaving the amount alone keeps the rate the item was saved with.
+  const preferredSource = useProfile().profile?.settings.rateSource ?? 'wise';
   const fetchedRate = useQuery({
-    queryKey: ['rate', entryCurrency, currency],
+    // The server picks the source from Settings; a change there is a different rate
+    queryKey: ['rate', entryCurrency, currency, preferredSource],
     queryFn: () => api.getRate(entryCurrency, currency),
     enabled: foreign && !useOwnRate,
     staleTime: RATE_FRESH_MS,

@@ -29,8 +29,12 @@ export interface PaymentMethod {
 export interface Settings {
   theme: ThemeSetting;
   accent: string;
-  /** The default currency for new splits */
+  /** The currency the last new split used */
   lastCurrency: string | null;
+  /** A fixed currency for new splits; null to use the last one */
+  defaultCurrency: string | null;
+  /** Where exchange rates come from first */
+  rateSource: 'wise' | 'ecb';
   sidebarOpen: boolean;
   itemsView: 'card' | 'table';
   itemsGroupBy: 'none' | 'day' | 'payer' | 'category';

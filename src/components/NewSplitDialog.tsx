@@ -93,7 +93,11 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
 
   return (
     <SplitForm
-      initial={{ name: '', currency: profile?.settings.lastCurrency ?? DEFAULT_CURRENCY }}
+      initial={{
+        name: '',
+        currency:
+          profile?.settings.defaultCurrency ?? profile?.settings.lastCurrency ?? DEFAULT_CURRENCY,
+      }}
       submitLabel="Create split"
       currencyHelp="Defaults to your last-used currency. You can change it later in split settings."
       onSubmit={submit}
