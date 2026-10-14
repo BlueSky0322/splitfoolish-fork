@@ -119,26 +119,6 @@
   opacity: 0.45;
 }
 
-/* Delete or leave, below a fading rule */
-.footer {
-  position: relative;
-  padding-top: 14px;
-}
-
-.footer::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(
-    to right,
-    transparent,
-    var(--sf-divider) 48px,
-    var(--sf-divider) calc(100% - 48px),
-    transparent
-  );
-}
-
 /* 3d: delete or leave confirm */
 .endTitle {
   display: flex;
