@@ -199,8 +199,11 @@
   color: var(--sf-accent);
 }
 
-.railAvatar {
+.railTheme {
   margin-top: auto;
+}
+
+.railAvatar {
   border-radius: 999px;
 }
 

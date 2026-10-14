@@ -15,6 +15,7 @@ import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { useOpenNewSplit } from '../NewSplitDialog';
 import BalanceTag from '../ui/BalanceTag';
 import SplitAvatar from '../ui/SplitAvatar';
+import ThemeToggle from '../ui/ThemeToggle';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
 
@@ -141,6 +142,9 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
             </Tooltip>
           ))}
         </div>
+        <div className={classes.railTheme}>
+          <ThemeToggle size={36} />
+        </div>
         {account}
       </nav>
     );
@@ -157,6 +161,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
           className={classes.brandIcon}
         />
         <span className="flex-1">Splitfoolish</span>
+        <ThemeToggle />
         <Tooltip label="Collapse sidebar  [">
           <ActionIcon
             variant="subtle"
