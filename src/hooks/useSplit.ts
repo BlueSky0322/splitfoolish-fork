@@ -15,13 +15,32 @@ import { convertCents, convertParts } from '../../shared/rates';
 import { AppReducerState, IItem } from '../interfaces/app-reducer';
 import { readCache, removeCache, writeCache } from '../split-cache';
 import { whenCreated } from '../pending-creates';
+import {
+  Queued,
+  isNetworkError,
+  isOffline,
+  readOutbox,
+  requestBackgroundSync,
+  withOutbox,
+  writeOutbox,
+} from '../offline/outbox';
 import { queryClient } from '../query-client';
 import { ITEM_NAMES_KEY } from '../split/itemNames';
 import { reloadHomeData } from './useHomeData';
 import { useSplitLive } from './useSplitLive';
 
-/** 'refreshing' means a cached copy is showing while the latest loads */
-export type SyncStatus = 'loading' | 'refreshing' | 'saving' | 'saved' | 'error' | 'notfound';
+/**
+ * 'refreshing' means a cached copy is showing while the latest loads; 'offline' that
+ * there's no connection, with any changes kept on the device until there is
+ */
+export type SyncStatus =
+  | 'loading'
+  | 'refreshing'
+  | 'saving'
+  | 'saved'
+  | 'error'
+  | 'offline'
+  | 'notfound';
 
 export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
 
@@ -59,7 +78,9 @@ export const useSplitActions = () => useContext(SplitActionsContext);
 
 /** Changes are sent together once there's been a pause this long */
 const SAVE_DELAY_MS = 500;
+/** Retries after network trouble wait this long, doubling each time up to the max */
 const RETRY_DELAY_MS = 3000;
+const MAX_RETRY_DELAY_MS = 60_000;
 const CONVERT_POLL_MS = 3000;
 
 export const newId = () =>
@@ -126,6 +147,8 @@ export function removeBlocker(
 // Loads a split, applies changes on screen straight away, and saves them in batches.
 // The server checks each batch against the split's current contents; if it refuses
 // one (say, someone else removed a person you just used), the split is reloaded.
+// Unsaved changes are also kept on the device (the outbox), so they survive going
+// offline or the app closing; the service worker sends them if the app isn't open.
 export function useSplit(splitId: string) {
   const { state, dispatch } = useContext(AppContext);
   const [status, setStatus] = useState<SyncStatus>('loading');
@@ -138,9 +161,14 @@ export function useSplit(splitId: string) {
   const current = useRef<AppReducerState>(state);
   current.current = state;
 
-  const pending = useRef<Change[]>([]);
+  const pending = useRef<Queued[]>([]);
+  // Changes written to the outbox; one that's gone from there was sent by the service worker
+  const stored = useRef(new Set<string>());
+  // How many changes are waiting, for showing while offline
+  const [waiting, setWaiting] = useState(0);
   const inFlight = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
+  const failures = useRef(0);
   // Counts batches sent, so a load that raced with a save can tell its data is stale
   const batchesSent = useRef(0);
   // A load that arrived while changes were unsaved is redone once they're saved
@@ -155,6 +183,8 @@ export function useSplit(splitId: string) {
   );
 
   const load = useCallback(async () => {
+    // Fails straight away offline (the cached copy stays), rather than waiting
+    if (isOffline()) throw new TypeError('Offline');
     // A split made a moment ago may still be on its way to the server
     await whenCreated(splitId);
     for (;;) {
@@ -171,20 +201,54 @@ export function useSplit(splitId: string) {
     }
   }, [splitId, show]);
 
+  /**
+   * Brings the outbox in step with what's waiting here. Call holding the outbox lock.
+   * Returns true if the service worker sent some while this page was asleep.
+   */
+  const syncOutbox = useCallback(async () => {
+    const there = new Set((await readOutbox(splitId)).map((q) => q.cid));
+    const before = pending.current.length;
+    pending.current = pending.current.filter((q) => !stored.current.has(q.cid) || there.has(q.cid));
+    const sentElsewhere = pending.current.length < before;
+    const now = pending.current;
+    await writeOutbox(splitId, now);
+    stored.current = new Set(now.map((q) => q.cid));
+    setWaiting(pending.current.length);
+    return sentElsewhere;
+  }, [splitId]);
+
   const save = useCallback(async (): Promise<void> => {
     clearTimeout(timer.current);
     if (inFlight.current || pending.current.length === 0) return;
+    if (isOffline()) {
+      // Sent when the connection is back, by this page or the service worker
+      setStatus('offline');
+      requestBackgroundSync();
+      return;
+    }
 
-    const batch = pending.current;
-    pending.current = [];
     inFlight.current = true;
     batchesSent.current += 1;
     setStatus('saving');
 
+    let batch: Queued[] = [];
     try {
       await whenCreated(splitId);
-      await api.applyChanges(splitId, batch);
+      // Held while sending, so the service worker can't send the same changes
+      await withOutbox(splitId, async () => {
+        if (await syncOutbox()) reloadAfterSave.current = true;
+        batch = pending.current;
+        pending.current = [];
+        if (batch.length > 0) {
+          await api.applyChanges(
+            splitId,
+            batch.map((q) => q.change),
+          );
+        }
+        await syncOutbox();
+      });
       inFlight.current = false;
+      failures.current = 0;
       if (pending.current.length > 0) return save();
       setStatus('saved');
       // Totals and balances in the sidebar and My splits follow the change
@@ -200,6 +264,7 @@ export function useSplit(splitId: string) {
       // Removed from the split (or it was deleted) while it was open
       if (err instanceof ApiError && err.status === 404) {
         pending.current = [];
+        void withOutbox(splitId, syncOutbox);
         void removeCache(cacheKey);
         void reloadHomeData();
         setStatus('notfound');
@@ -211,28 +276,45 @@ export function useSplit(splitId: string) {
         // Refused: everything queued after it was built on top of it, so start over
         notifications.show({ color: 'red', message: err.message });
         pending.current = [];
+        await withOutbox(splitId, syncOutbox);
         reloadAfterSave.current = false;
         await load().catch(() => undefined);
         setStatus('saved');
         return;
       }
-      // Network trouble: keep the changes and try again
+      // Network trouble: keep the changes (they're still in the outbox) and try again,
+      // less often the longer it lasts
       console.error(err);
       pending.current = [...batch, ...pending.current];
-      setStatus('error');
-      timer.current = setTimeout(() => void save(), RETRY_DELAY_MS);
+      setWaiting(pending.current.length);
+      requestBackgroundSync();
+      if (isOffline()) {
+        setStatus('offline');
+        return;
+      }
+      setStatus(isNetworkError(err) ? 'offline' : 'error');
+      const delay = Math.min(MAX_RETRY_DELAY_MS, RETRY_DELAY_MS * 2 ** failures.current++);
+      timer.current = setTimeout(() => void save(), delay);
     }
-  }, [splitId, load, cacheKey]);
+  }, [splitId, load, cacheKey, syncOutbox]);
 
   const queue = useCallback(
     (change: Change) => {
-      pending.current.push(change);
+      pending.current.push({ cid: newId(), change });
+      setWaiting(pending.current.length);
+      // Kept on the device straight away, in case the app closes before it's sent
+      void withOutbox(splitId, syncOutbox);
+      if (isOffline()) {
+        setStatus('offline');
+        requestBackgroundSync();
+        return true;
+      }
       setStatus('saving');
       clearTimeout(timer.current);
       timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
       return true;
     },
-    [save],
+    [save, splitId, syncOutbox],
   );
 
   useEffect(() => {
@@ -250,7 +332,22 @@ export function useSplit(splitId: string) {
       setStatus('refreshing');
     });
 
-    load()
+    // Changes left unsent last time (say, made offline) are picked up before loading,
+    // so the load waits for them to be saved rather than hiding them
+    withOutbox(splitId, async () => {
+      const left = await readOutbox(splitId);
+      pending.current = [
+        ...left,
+        ...pending.current.filter((q) => !left.some((l) => l.cid === q.cid)),
+      ];
+      for (const q of left) stored.current.add(q.cid);
+      setWaiting(pending.current.length);
+    })
+      .catch(() => undefined)
+      .then(() => {
+        if (pending.current.length > 0) void save();
+        return load();
+      })
       .then(() => {
         answered = true;
         if (!cancelled && pending.current.length === 0 && !inFlight.current) setStatus('saved');
@@ -262,13 +359,42 @@ export function useSplit(splitId: string) {
         if (gone) void removeCache(cacheKey);
         if (cancelled) return;
         console.error(err);
-        setStatus(gone ? 'notfound' : 'error');
+        setStatus(gone ? 'notfound' : isNetworkError(err) ? 'offline' : 'error');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [load, show, cacheKey, dispatch]);
+  }, [load, show, save, splitId, cacheKey, dispatch]);
+
+  // Back online, or back to the app: send what's waiting and catch up straight away
+  // rather than at the next retry
+  useEffect(() => {
+    const resume = () => {
+      if (document.visibilityState !== 'visible' || isOffline()) return;
+      failures.current = 0;
+      if (pending.current.length > 0) {
+        void save();
+      } else if (status === 'offline' || status === 'error') {
+        load()
+          .then(() => setStatus('saved'))
+          .catch((err) => console.error(err));
+      }
+    };
+    const offline = () => {
+      // A retry would only fail; the 'online' event picks things up instead
+      clearTimeout(timer.current);
+      setStatus('offline');
+    };
+    window.addEventListener('online', resume);
+    window.addEventListener('offline', offline);
+    document.addEventListener('visibilitychange', resume);
+    return () => {
+      window.removeEventListener('online', resume);
+      window.removeEventListener('offline', offline);
+      document.removeEventListener('visibilitychange', resume);
+    };
+  }, [save, load, status]);
 
   // Save right away when leaving the split or hiding the page, rather than waiting
   useEffect(() => {
@@ -285,9 +411,11 @@ export function useSplit(splitId: string) {
     };
   }, [save]);
 
-  // Keep the cached copy in step with what's on screen once it's confirmed by the server
+  // Keep the cached copy in step with what's on screen, unsaved changes included: they're
+  // in the outbox too, so reopening shows them while they're sent
   useEffect(() => {
-    if (status !== 'saved' || meta == null) return;
+    if (status === 'loading' || status === 'refreshing' || status === 'notfound') return;
+    if (meta == null) return;
     void writeCache<SplitDetail>(cacheKey, {
       ...meta,
       people: state.people,
@@ -463,5 +591,5 @@ export function useSplit(splitId: string) {
   }, [load]);
   useSplitLive(splitId, status !== 'notfound', onRemoteChange);
 
-  return { status, meta, setMeta, refreshMeta, actions, retry, whenSaved };
+  return { status, waiting, meta, setMeta, refreshMeta, actions, retry, whenSaved };
 }

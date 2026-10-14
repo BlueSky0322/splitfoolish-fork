@@ -2,6 +2,8 @@ import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { MyInvite, SplitSummary, api } from '../api';
+import { isNetworkError } from '../offline/outbox';
+import { pendingCreates } from '../pending-creates';
 import { queryClient } from '../query-client';
 import { readCache, writeCache } from '../split-cache';
 
@@ -19,10 +21,25 @@ type Loaded = { splits: SplitSummary[]; invites: MyInvite[] };
 const HOME_KEY = ['home'] as const;
 const CACHE_KEY = 'home-v2';
 
+/** Adds splits made on this device that the server doesn't have yet (say, offline) */
+const withCreating = async (listed: SplitSummary[]) => {
+  const creating = (await pendingCreates()).map((c) => c.summary);
+  return [...creating.filter((c) => !listed.some((s) => s.id === c.id)), ...listed];
+};
+
 const fetchHome = async (): Promise<Loaded> => {
-  const [{ splits }, { invites }] = await Promise.all([api.listSplits(), api.myInvites()]);
-  void writeCache(CACHE_KEY, { splits, invites });
-  return { splits, invites };
+  let listed: SplitSummary[], invites: MyInvite[];
+  try {
+    [{ splits: listed }, { invites }] = await Promise.all([api.listSplits(), api.myInvites()]);
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    // Offline: what was saved on this device, fetched again once back online
+    const saved = await readCache<Loaded>(CACHE_KEY);
+    return { splits: await withCreating(saved?.splits ?? []), invites: saved?.invites ?? [] };
+  }
+  // Saved as the server has it; splits still being created are added when read
+  void writeCache(CACHE_KEY, { splits: listed, invites });
+  return { splits: await withCreating(listed), invites };
 };
 
 let cacheRead = false;
@@ -31,10 +48,12 @@ let cacheRead = false;
 function readSavedCopy() {
   if (cacheRead) return;
   cacheRead = true;
-  void readCache<Loaded>(CACHE_KEY).then((cached) => {
-    if (cached == null || queryClient.getQueryState(HOME_KEY)?.dataUpdatedAt) return;
+  void readCache<Loaded>(CACHE_KEY).then(async (cached) => {
+    if (cached == null) return;
+    const splits = await withCreating(cached.splits);
+    if (queryClient.getQueryState(HOME_KEY)?.dataUpdatedAt) return;
     // Marked as old, so it's shown but still fetched
-    queryClient.setQueryData(HOME_KEY, cached, { updatedAt: 0 });
+    queryClient.setQueryData(HOME_KEY, { ...cached, splits }, { updatedAt: 0 });
   });
 }
 
