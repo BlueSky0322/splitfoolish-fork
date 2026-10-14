@@ -59,12 +59,12 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
     <div className="flex flex-col gap-5">
       {isOwner && meta.inviteToken && (
         <div className="flex flex-col gap-2">
-          <div className="flex gap-2 items-end">
+          <h6 className="sf-label">Share link</h6>
+          <div className="flex gap-2 items-center">
             <TextInput
-              className="flex-1"
+              className="flex-1 min-w-0"
               readOnly
-              label="Share link"
-              description="Anyone who opens it and signs in can view and edit this split. It changes when you remove someone, so they can't use it to come back."
+              aria-label="Share link"
               value={inviteUrl(meta.inviteToken)}
               onFocus={(e) => e.currentTarget.select()}
             />
@@ -72,6 +72,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
               {({ copied, copy }) => (
                 <Button
                   variant="default"
+                  className={classes.copyButton}
                   onClick={copy}
                   leftSection={copied ? <Check size={16} /> : <Copy size={16} />}
                 >
@@ -80,6 +81,10 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
               )}
             </CopyButton>
           </div>
+          <p className={classes.help}>
+            Anyone who opens it and signs in can view and edit this split. It changes when you
+            remove someone, so they can't use it to come back.
+          </p>
           <UnstyledButton
             className={`${classes.textAction} self-start`}
             disabled={busy}
@@ -172,6 +177,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta }: SplitMembersProps) =
       ) : (
         <Button
           variant="default"
+          className="sf-danger"
           disabled={busy}
           onClick={() => setConfirmEnd(true)}
         >
