@@ -33,6 +33,8 @@ export interface LocalWorker {
   ) => Promise<{ status: number; data: T }>;
   /** The stand-in for Wise and Frankfurter that the Worker gets its rates from */
   rates: FakeRates;
+  /** Where it's listening, e.g. http://127.0.0.1:1234 */
+  base: string;
   stop: () => void;
 }
 
@@ -164,6 +166,7 @@ export async function startLocalWorker(): Promise<LocalWorker> {
   return {
     stop,
     rates,
+    base,
     call: async (who, method, path, body, headers = {}) => {
       const res = await fetch(base + path, {
         method,

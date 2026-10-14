@@ -16,6 +16,7 @@ import { AppReducerState, IItem } from '../interfaces/app-reducer';
 import { readCache, removeCache, writeCache } from '../split-cache';
 import { whenCreated } from '../pending-creates';
 import { reloadHomeData } from './useHomeData';
+import { useSplitLive } from './useSplitLive';
 
 /** 'refreshing' means a cached copy is showing while the latest loads */
 export type SyncStatus = 'loading' | 'refreshing' | 'saving' | 'saved' | 'error' | 'notfound';
@@ -446,6 +447,15 @@ export function useSplit(splitId: string) {
       void reloadHomeData();
     };
   }, [converting, load]);
+
+  // Someone else saved a change: fetch the split again. load() waits until this tab's
+  // own unsaved changes are saved, so they're never overwritten.
+  const onRemoteChange = useCallback(() => {
+    load().catch((err) => console.error(err));
+    // Totals in the sidebar and My splits follow
+    void reloadHomeData();
+  }, [load]);
+  useSplitLive(splitId, status !== 'notfound', onRemoteChange);
 
   return { status, meta, setMeta, refreshMeta, actions, retry, whenSaved };
 }

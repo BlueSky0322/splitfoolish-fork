@@ -17,6 +17,7 @@ import {
   ownerOnly,
   readJson,
   readName,
+  splitRoom,
 } from '../app';
 import {
   deleteAttachment,
@@ -178,6 +179,16 @@ splits.get(SPLIT, async (c) => {
     attachments: attachmentRows.results,
     ...assembleContent(content),
   });
+});
+
+// Live updates: a WebSocket that hears when anyone saves a change to the split. Opened
+// from this site only, as the sign-in cookie rides along with it.
+splits.get(`${SPLIT}/ws`, member, (c) => {
+  const origin = c.req.header('Origin');
+  if (origin != null && origin !== new URL(c.req.url).origin) {
+    return json({ error: 'Not allowed from another site' }, 403);
+  }
+  return splitRoom(c.env, c.req.param('id')).fetch(c.req.raw);
 });
 
 // Split settings: rename, change currency

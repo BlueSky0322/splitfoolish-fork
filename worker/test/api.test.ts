@@ -289,6 +289,72 @@ describe("sharing through a member's link", () => {
   });
 });
 
+describe('live updates', () => {
+  // Without a sign-in header, local requests are DEV_USER_EMAIL; WebSockets can't send one
+  const devUser = 'nobody@example.com';
+
+  /** Opens the split's live channel as the dev user, collecting what it hears */
+  function listen(id: string) {
+    const ws = new WebSocket(`${api.base.replace(/^http/, 'ws')}/api/splits/${id}/ws`);
+    const heard: { type: string; by: string | null }[] = [];
+    ws.onmessage = (e) => heard.push(JSON.parse(String(e.data)));
+    const opened = new Promise<void>((done, fail) => {
+      ws.onopen = () => done();
+      ws.onerror = () => fail(new Error('Could not connect'));
+    });
+    return { ws, heard, opened };
+  }
+  const until = async (check: () => boolean) => {
+    for (let i = 0; i < 50 && !check(); i++) await new Promise((r) => setTimeout(r, 100));
+  };
+
+  it('tells everyone with the split open about each saved change, and which tab made it', async () => {
+    const member = person('member');
+    const { id } = await splitWith(devUser, member);
+    const payer = hex();
+    await change(devUser, id, { op: 'addPerson', id: payer, name: 'Zed' });
+    const live = listen(id);
+    await live.opened;
+
+    const item = { id: hex(), name: 'Tea', cost: 4, payerId: payer, participantIds: [payer] };
+    await api.call(
+      member,
+      'POST',
+      `/api/splits/${id}/changes`,
+      { changes: [{ op: 'addItem', item }] },
+      { 'X-Client-Id': 'tab-1' },
+    );
+    await api.call(member, 'PATCH', `/api/splits/${id}`, { name: 'Refused' });
+    await api.call(devUser, 'PATCH', `/api/splits/${id}`, { name: 'Renamed' });
+    await until(() => live.heard.length >= 2);
+    // The refused rename (members can't) says nothing
+    expect(live.heard).toEqual([
+      { type: 'changed', by: 'tab-1' },
+      { type: 'changed', by: null },
+    ]);
+    live.ws.close();
+  });
+
+  it('hears about people joining, and is only open to members', async () => {
+    const { id, token } = await splitWith(devUser);
+    const live = listen(id);
+    await live.opened;
+    const amy = person('amy');
+    const { inviteId } = (await api.call(amy, 'POST', `/api/join/${token}`)).data;
+    await api.call(amy, 'POST', `/api/invites/${inviteId}/accept`);
+    await until(() => live.heard.length >= 2);
+    expect(live.heard).toHaveLength(2);
+    live.ws.close();
+
+    const outsider = await api.call(person('outsider'), 'GET', `/api/splits/${id}/ws`);
+    expect(outsider.status).toBe(404);
+    const crossSite = await api.call(devUser, 'GET', `/api/splits/${id}/ws`, undefined, {
+      Origin: 'https://evil.example',
+    });
+    expect(crossSite.status).toBe(403);
+  });
+});
+
 describe('safeguards', () => {
   it('refuses changes started by another site', async () => {
     const owner = person('owner');

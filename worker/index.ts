@@ -2,12 +2,17 @@
 // API request passes the cross-site check and sign-in before reaching a route.
 
 import { Hono } from 'hono';
-import { AppEnv, Env, json, notFound } from './app';
+import { AppEnv, Env, clientId, json, notFound, notifySplit } from './app';
 import { getUserEmail } from './auth';
 import invites from './routes/invites';
 import me from './routes/me';
 import rates from './routes/rates';
 import splits from './routes/splits';
+
+export { SplitRoom } from './room';
+
+/** A split's id in an API path, for the routes under /api/splits/:id */
+const SPLIT_PATH = /^\/api\/splits\/([A-Za-z0-9_-]{8,64})(?:\/|$)/;
 
 /**
  * True for a change (not a read) started by another site. The sign-in cookie rides
@@ -41,6 +46,15 @@ api.use('*', async (c, next) => {
   const { success } = await c.env.API_LIMITER.limit({ key: c.var.email });
   if (!success) return json({ error: 'Too many changes, slow down a moment.' }, 429);
   await next();
+});
+
+// Any change saved under a split tells the apps that have it open. Invites aren't under
+// /splits, so their routes do this themselves.
+api.use('*', async (c, next) => {
+  await next();
+  if (c.req.method === 'GET' || c.req.method === 'HEAD' || c.res.status >= 400) return;
+  const id = new URL(c.req.url).pathname.match(SPLIT_PATH)?.[1];
+  if (id) notifySplit(c.env, c.executionCtx, id, clientId(c.req.raw));
 });
 
 api.route('/', me);
