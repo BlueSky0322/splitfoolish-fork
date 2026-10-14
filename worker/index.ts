@@ -6,6 +6,7 @@ import { AppEnv, Env, json, notFound } from './app';
 import { getUserEmail } from './auth';
 import invites from './routes/invites';
 import me from './routes/me';
+import rates from './routes/rates';
 import splits from './routes/splits';
 
 /**
@@ -37,6 +38,7 @@ api.use('*', async (c, next) => {
 api.route('/', me);
 api.route('/', splits);
 api.route('/', invites);
+api.route('/', rates);
 
 api.notFound(() => notFound());
 
