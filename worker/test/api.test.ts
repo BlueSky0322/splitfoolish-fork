@@ -384,6 +384,56 @@ describe('ordering my splits', () => {
   });
 });
 
+describe('item names and dates', () => {
+  it('remembers item names across your splits, newest first, once each', async () => {
+    const owner = person('owner');
+    const outsider = person('outsider');
+    const a = (await splitWith(owner)).id;
+    const b = (await splitWith(owner)).id;
+    const p = hex();
+    const q = hex();
+    await change(owner, a, { op: 'addPerson', id: p, name: 'P' });
+    await change(owner, b, { op: 'addPerson', id: q, name: 'Q' });
+    const add = (split: string, payer: string, name: string, category: string | null) =>
+      change(owner, split, {
+        op: 'addItem',
+        item: { id: hex(), name, cost: 1, payerId: payer, participantIds: [payer], category },
+      });
+    await add(a, p, 'abc', 'Food');
+    await add(b, q, 'Taxi', 'Transport');
+    await add(b, q, 'ABC', null);
+
+    const { names } = (await api.call(owner, 'GET', '/api/item-names')).data;
+    expect(names.map((n: { name: string }) => n.name)).toEqual(['ABC', 'Taxi']);
+    expect(names[0]).toMatchObject({ uses: 2 });
+    // Only names from your own splits
+    expect((await api.call(outsider, 'GET', '/api/item-names')).data.names).toEqual([]);
+  });
+
+  it('keeps a past date a new item brings, but never a future one', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const p = hex();
+    await change(owner, id, { op: 'addPerson', id: p, name: 'P' });
+    const lastWeek = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const item = (createdAt: number) => ({
+      id: hex(),
+      name: 'Dup',
+      cost: 1,
+      payerId: p,
+      participantIds: [p],
+      createdAt,
+    });
+    await change(owner, id, { op: 'addItem', item: item(lastWeek) });
+    await change(owner, id, { op: 'addItem', item: item(Date.now() + 1e9) });
+    const items = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items as {
+      createdAt: number;
+    }[];
+    expect(items[0].createdAt).toBe(lastWeek);
+    expect(items[1].createdAt).toBeLessThanOrEqual(Date.now());
+  });
+});
+
 describe('safeguards', () => {
   it('refuses changes started by another site', async () => {
     const owner = person('owner');

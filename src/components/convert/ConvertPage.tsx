@@ -10,7 +10,7 @@ import {
 import { ArrowClockwise, ArrowsLeftRight, CaretLeft, Plus } from '@phosphor-icons/react';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents } from '../../../shared/rates';
 import { api } from '../../api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
@@ -83,23 +83,27 @@ const ConvertPage = () => {
   const rateKey = ['rate', from, to, profile?.settings.rateSource ?? 'wise'];
   const rate = useQuery({
     queryKey: rateKey,
-    queryFn: async () => {
-      const r = await api.getRate(from, to);
-      // A pair that converted is worth offering again
-      setRecent((list) => {
-        const next = [
-          [from, to] as Pair,
-          ...list.filter(([f, t]) => !(f === from && t === to)),
-        ].slice(0, MAX_RECENT);
-        saveRecent(next);
-        return next;
-      });
-      return r;
-    },
+    queryFn: () => api.getRate(from, to),
     enabled: from !== to,
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
+
+  // A pair that converted is worth offering again, whether its rate was fetched just
+  // now or was already on hand
+  const converted = rate.data != null;
+  useEffect(() => {
+    if (!converted || from === to) return;
+    setRecent((list) => {
+      if (list[0]?.[0] === from && list[0]?.[1] === to) return list;
+      const next = [
+        [from, to] as Pair,
+        ...list.filter(([f, t]) => !(f === from && t === to)),
+      ].slice(0, MAX_RECENT);
+      saveRecent(next);
+      return next;
+    });
+  }, [converted, from, to]);
 
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {

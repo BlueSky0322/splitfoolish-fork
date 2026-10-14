@@ -474,6 +474,21 @@ function rateStatements(
   return statements;
 }
 
+/** Earliest date an item may say it was added on: before this app existed */
+const EARLIEST_ITEM = Date.UTC(2000, 0, 1);
+
+/**
+ * When a new item was added: the time it brings with it (a duplicate keeping its
+ * original date, or one put back with Undo) if that's a sensible past time, else now
+ */
+function readCreatedAt(raw: unknown) {
+  const now = Date.now();
+  const at = (raw as { createdAt?: unknown } | null)?.createdAt;
+  return typeof at === 'number' && Number.isInteger(at) && at >= EARLIEST_ITEM && at <= now
+    ? at
+    : now;
+}
+
 function readItem(model: Model, raw: unknown, rates: FetchedRates) {
   const item = (raw ?? {}) as Record<string, unknown>;
   if (typeof item.id !== 'string' || !CLIENT_ID.test(item.id)) throw new Refused('Invalid item');
@@ -775,7 +790,7 @@ function plan(
             model.nextItemPosition++,
             item.splitMode,
             item.category,
-            Date.now(),
+            readCreatedAt(change.item),
             ...conversionValues(item.converted),
           ),
         ...insertParticipants(db, item.id, item.participants),

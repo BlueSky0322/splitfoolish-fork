@@ -15,6 +15,8 @@ import { convertCents, convertParts } from '../../shared/rates';
 import { AppReducerState, IItem } from '../interfaces/app-reducer';
 import { readCache, removeCache, writeCache } from '../split-cache';
 import { whenCreated } from '../pending-creates';
+import { queryClient } from '../query-client';
+import { ITEM_NAMES_KEY } from '../split/itemNames';
 import { reloadHomeData } from './useHomeData';
 import { useSplitLive } from './useSplitLive';
 
@@ -32,8 +34,11 @@ export interface SplitActions {
   /** fromItems also takes them off items they share; see removeBlocker for what's allowed */
   removePerson: (personId: string, fromItems?: boolean) => boolean;
   clearPeople: () => boolean;
-  /** id lets the caller refer to the new item straight away, say to attach photos */
-  addItem: (item: ItemInput, id?: string) => boolean;
+  /**
+   * id lets the caller refer to the new item straight away, say to attach photos.
+   * createdAt dates it in the past (a duplicate keeping its date); now when absent.
+   */
+  addItem: (item: ItemInput, id?: string, createdAt?: number) => boolean;
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
   /** Who everyone settles up through, or null for the fewest transfers */
@@ -184,6 +189,8 @@ export function useSplit(splitId: string) {
       setStatus('saved');
       // Totals and balances in the sidebar and My splits follow the change
       void reloadHomeData();
+      // A new item name is suggested next time
+      void queryClient.invalidateQueries({ queryKey: ITEM_NAMES_KEY });
       if (reloadAfterSave.current) {
         reloadAfterSave.current = false;
         await load();
@@ -366,9 +373,8 @@ export function useSplit(splitId: string) {
         dispatch({ type: 'CLEAR_PEOPLE', payload: null });
         return queue({ op: 'clearPeople' });
       },
-      addItem: (input, id = newId()) => {
-        // The server stamps its own time; this one orders it until the next load
-        const item = { id, createdAt: Date.now(), ...input };
+      addItem: (input, id = newId(), createdAt = Date.now()) => {
+        const item = { id, createdAt, ...input };
         dispatch({ type: 'ADD_ITEM', payload: item });
         // In another currency the server works out the amounts; show its numbers after
         if (input.original) reloadAfterSave.current = true;

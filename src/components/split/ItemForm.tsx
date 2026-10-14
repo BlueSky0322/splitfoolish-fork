@@ -1,14 +1,15 @@
 import {
   ActionIcon,
+  Autocomplete,
   Button,
   Checkbox,
+  Menu,
   NumberInput,
   SegmentedControl,
   Select,
-  TextInput,
   UnstyledButton,
 } from '@mantine/core';
-import { Check, Minus, Plus } from '@phosphor-icons/react';
+import { CaretDown, Check, Copy, Minus, Plus } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, convertParts, isValidRate } from '../../../shared/rates';
@@ -16,6 +17,7 @@ import { SplitMode, itemShares } from '../../../shared/settle';
 import { Attachment, ItemInput, api } from '../../api';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { CATEGORIES } from '../../split/categories';
+import { ITEM_NAMES_KEY, suggestNames } from '../../split/itemNames';
 import { currencySymbol, formatMoney } from '../../utils/money';
 import { loadMath } from '../../utils/math';
 import { useProfile } from '../../profile/ProfileContext';
@@ -38,6 +40,8 @@ interface ItemFormProps {
   /** Photos picked for a new item are uploaded once it's added */
   onSave: (input: ItemInput, newPhotos: File[]) => boolean;
   onDelete?: () => void;
+  /** Adds a copy of the item being edited, keeping its date or as of today */
+  onDuplicate?: (keepDate: boolean) => void;
   onCancel: () => void;
   /** The item's receipt photos (editing only) */
   photos: Attachment[];
@@ -106,6 +110,7 @@ const ItemForm = ({
   initialCurrency,
   onSave,
   onDelete,
+  onDuplicate,
   onCancel,
   photos,
   uploading,
@@ -145,6 +150,13 @@ const ItemForm = ({
     ),
   );
   const [category, setCategory] = useState<string | null>(item?.category ?? null);
+  // Names used before, in any of your splits, suggested as you type
+  const pastNames = useQuery({
+    queryKey: ITEM_NAMES_KEY,
+    queryFn: async () => (await api.itemNames()).names,
+    staleTime: 5 * 60 * 1000,
+  });
+  const suggestions = suggestNames(pastNames.data ?? [], name);
   const [tried, setTried] = useState(false);
 
   useEffect(() => {
@@ -375,14 +387,24 @@ const ItemForm = ({
         </div>
       )}
 
-      <TextInput
+      <Autocomplete
         aria-label="What it was for"
         placeholder="What was it for?"
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={setName}
+        data={[...new Set(suggestions.map((s) => s.name))]}
+        // Already ranked by suggestNames
+        filter={({ options }) => options}
+        onOptionSubmit={(picked) => {
+          // A name used before brings its category, unless one is already chosen
+          const past = suggestions.find((s) => s.name === picked);
+          const known = CATEGORIES.some((c) => c.key === past?.category);
+          if (past?.category && known && category == null) setCategory(past.category);
+        }}
         maxLength={80}
         size="md"
         error={tried && problems.name}
+        comboboxProps={{ withinPortal: false }}
       />
 
       <Select
@@ -533,6 +555,27 @@ const ItemForm = ({
       </div>
 
       <div className={classes.actions}>
+        {onDuplicate && (
+          <Menu
+            position="top-start"
+            withinPortal={false}
+          >
+            <Menu.Target>
+              <Button
+                variant="subtle"
+                color="gray"
+                leftSection={<Copy size={16} />}
+                rightSection={<CaretDown size={12} />}
+              >
+                Duplicate
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item onClick={() => onDuplicate(true)}>Keep its date</Menu.Item>
+              <Menu.Item onClick={() => onDuplicate(false)}>Today</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        )}
         {onDelete && (
           <Button
             variant="subtle"
