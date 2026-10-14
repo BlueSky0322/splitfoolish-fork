@@ -128,6 +128,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
       aria-label="Settings"
     >
       <UserAvatar
+        preview={false}
         name={name}
         email={profile?.email}
         avatarVersion={profile?.avatarVersion}

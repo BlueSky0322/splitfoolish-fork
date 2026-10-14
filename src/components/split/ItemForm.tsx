@@ -7,13 +7,15 @@ import {
   NumberInput,
   SegmentedControl,
   Select,
+  Textarea,
   UnstyledButton,
 } from '@mantine/core';
-import { CaretDown, Check, Copy, Minus, Plus } from '@phosphor-icons/react';
+import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, convertParts, isValidRate } from '../../../shared/rates';
 import { SplitMode, itemShares } from '../../../shared/settle';
+import { MAX_NOTES_LENGTH } from '../../../shared/types';
 import { Attachment, ItemInput, api } from '../../api';
 import { IItem, IPerson } from '../../interfaces/app-reducer';
 import { CATEGORIES } from '../../split/categories';
@@ -21,6 +23,7 @@ import { ITEM_NAMES_KEY, suggestNames } from '../../split/itemNames';
 import { currencySymbol, formatMoney } from '../../utils/money';
 import { loadMath } from '../../utils/math';
 import { useProfile } from '../../profile/ProfileContext';
+import { useIsDesktop } from '../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
@@ -120,6 +123,7 @@ const ItemForm = ({
 }: ItemFormProps) => {
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const isDesktop = useIsDesktop();
   // Items in another currency are edited as they were typed, in that currency
   const original = item?.original ?? null;
   const [expression, setExpression] = useState(
@@ -150,6 +154,7 @@ const ItemForm = ({
     ),
   );
   const [category, setCategory] = useState<string | null>(item?.category ?? null);
+  const [notes, setNotes] = useState(item?.notes ?? '');
   // Names used before, in any of your splits, suggested as you type
   const pastNames = useQuery({
     queryKey: ITEM_NAMES_KEY,
@@ -282,6 +287,7 @@ const ItemForm = ({
               : typedExact
             : undefined,
         category,
+        notes: notes.trim() === '' ? null : notes.trim(),
         original: foreign
           ? {
               currency: entryCurrency,
@@ -435,6 +441,7 @@ const ItemForm = ({
               onClick={() => setPayerId(p.id)}
             >
               <PersonAvatar
+                preview={false}
                 person={p}
                 size={22}
               />
@@ -540,6 +547,23 @@ const ItemForm = ({
         )}
       </div>
 
+      <Textarea
+        label="Notes"
+        placeholder="What was ordered, who still owes, anything else"
+        value={notes}
+        onChange={(e) => setNotes(e.currentTarget.value)}
+        autosize
+        minRows={2}
+        maxRows={10}
+        maxLength={MAX_NOTES_LENGTH}
+        description={
+          notes.length > MAX_NOTES_LENGTH - 200
+            ? `${MAX_NOTES_LENGTH - notes.length} characters left`
+            : undefined
+        }
+        inputWrapperOrder={['label', 'input', 'description']}
+      />
+
       <div className={classes.field}>
         <div className={classes.label}>Receipts</div>
         <PhotoStrip
@@ -554,56 +578,95 @@ const ItemForm = ({
         />
       </div>
 
-      <div className={classes.actions}>
-        {onDuplicate && (
-          <Menu
-            position="top-start"
-            withinPortal={false}
-          >
-            <Menu.Target>
-              <Button
-                variant="subtle"
-                color="gray"
-                leftSection={<Copy size={16} />}
-                rightSection={<CaretDown size={12} />}
-              >
-                Duplicate
-              </Button>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item onClick={() => onDuplicate(true)}>Keep its date</Menu.Item>
-              <Menu.Item onClick={() => onDuplicate(false)}>Today</Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-        )}
-        {onDelete && (
+      {confirmDelete ? (
+        // Photos can't come back with Undo, so it's asked first when there are some
+        <div className={classes.actions}>
+          <span className={classes.confirm}>
+            Delete with {photos.length} {photos.length === 1 ? 'photo' : 'photos'}?
+          </span>
           <Button
-            variant="subtle"
-            color="red"
-            // Photos can't come back with Undo, so ask first when there are some
-            onClick={() =>
-              photos.length > 0 && !confirmDelete ? setConfirmDelete(true) : onDelete()
-            }
-            className="sf-danger mr-auto"
+            variant="default"
+            onClick={() => setConfirmDelete(false)}
           >
-            {confirmDelete
-              ? `Delete with ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}?`
-              : 'Delete item'}
+            Keep
           </Button>
-        )}
-        <Button
-          variant="default"
-          onClick={onCancel}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="submit"
-          disabled={tried && !valid}
-        >
-          {item ? 'Save' : 'Add item'}
-        </Button>
-      </div>
+          <Button
+            variant="default"
+            className="sf-danger-outline"
+            onClick={onDelete}
+          >
+            Delete
+          </Button>
+        </div>
+      ) : (
+        <div className={classes.actions}>
+          {(onDuplicate || onDelete) && (
+            <Menu
+              position="top-start"
+              withinPortal={false}
+            >
+              <Menu.Target>
+                <ActionIcon
+                  variant="default"
+                  size={36}
+                  aria-label="More actions"
+                >
+                  <DotsThree
+                    size={20}
+                    weight="bold"
+                  />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                {onDuplicate && (
+                  <>
+                    <Menu.Label>Duplicate</Menu.Label>
+                    <Menu.Item
+                      leftSection={<Copy size={16} />}
+                      onClick={() => onDuplicate(true)}
+                    >
+                      Keep its date
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<CalendarBlank size={16} />}
+                      onClick={() => onDuplicate(false)}
+                    >
+                      Dated today
+                    </Menu.Item>
+                  </>
+                )}
+                {onDuplicate && onDelete && <Menu.Divider />}
+                {onDelete && (
+                  <Menu.Item
+                    color="red"
+                    leftSection={<Trash size={16} />}
+                    onClick={() => (photos.length > 0 ? setConfirmDelete(true) : onDelete())}
+                  >
+                    Delete item
+                  </Menu.Item>
+                )}
+              </Menu.Dropdown>
+            </Menu>
+          )}
+          <span className="flex-1" />
+          {/* On a phone the sheet's X closes it, so Save gets the room */}
+          {isDesktop && (
+            <Button
+              variant="default"
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
+          )}
+          <Button
+            type="submit"
+            disabled={tried && !valid}
+            className={isDesktop ? undefined : 'flex-1'}
+          >
+            {item ? 'Save' : 'Add item'}
+          </Button>
+        </div>
+      )}
     </form>
   );
 };

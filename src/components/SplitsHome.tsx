@@ -346,6 +346,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
               aria-label="Settings"
             >
               <UserAvatar
+                preview={false}
                 name={profile ? nameFor(profile.email, profile.displayName) : ''}
                 email={profile?.email}
                 avatarVersion={profile?.avatarVersion}

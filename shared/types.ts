@@ -14,6 +14,9 @@ export interface Person {
   memberEmail: string | null;
 }
 
+/** The longest notes an item can have */
+export const MAX_NOTES_LENGTH = 2000;
+
 export interface Item {
   id: string;
   name: string;
@@ -27,6 +30,8 @@ export interface Item {
   /** Amount per participant in currency units, when split by exact amounts */
   exact?: Record<string, number>;
   category: string | null;
+  /** Free text, up to MAX_NOTES_LENGTH characters; absent or null when there are none */
+  notes?: string | null;
   createdAt: number;
   /** Set when the item was entered in a currency other than the split's */
   original?: ItemOriginal | null;

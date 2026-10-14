@@ -1,7 +1,8 @@
 import { ActionIcon, Loader, UnstyledButton } from '@mantine/core';
 import { Camera, X } from '@phosphor-icons/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Attachment, photoUrl } from '../../api';
+import PhotoViewer, { ViewerPhoto } from './PhotoViewer';
 import classes from './Photos.module.css';
 
 interface PhotoStripProps {
@@ -21,28 +22,39 @@ interface PhotoStripProps {
   layout?: 'strip' | 'gallery';
 }
 
+/** Addresses for photos still on this device, freed once they're gone */
+function useFileUrls(files: File[]) {
+  const urls = useMemo(() => new Map(files.map((f) => [f, URL.createObjectURL(f)])), [files]);
+  useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
+  return urls;
+}
+
 function PendingThumb({
   file,
+  url,
+  onOpen,
   onRemove,
   busy,
 }: {
   file: File;
+  url: string | undefined;
+  onOpen: () => void;
   onRemove?: () => void;
   busy?: boolean;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    const u = URL.createObjectURL(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [file]);
   return (
     <div className={classes.thumb}>
       {url && (
-        <img
-          src={url}
-          alt={file.name}
-        />
+        <UnstyledButton
+          className={classes.open}
+          onClick={onOpen}
+          aria-label={`Open ${file.name}`}
+        >
+          <img
+            src={url}
+            alt=""
+          />
+        </UnstyledButton>
       )}
       {busy && (
         <div className={classes.busy}>
@@ -68,7 +80,7 @@ function PendingThumb({
   );
 }
 
-// A row of photo thumbnails with an "Add photo" tile; tapping a photo opens it full size
+// A row of photo thumbnails with an "Add photo" tile; tapping a photo opens the viewer
 const PhotoStrip = ({
   splitId,
   photos,
@@ -82,6 +94,27 @@ const PhotoStrip = ({
   layout = 'strip',
 }: PhotoStripProps) => {
   const input = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState<number | null>(null);
+  const local = useMemo(() => [...pending, ...uploading], [pending, uploading]);
+  const urls = useFileUrls(local);
+
+  // Everything shown, in order, for moving between them in the viewer
+  const viewer: ViewerPhoto[] = [
+    ...photos.map((photo) => ({
+      key: photo.id,
+      src: photoUrl(splitId, photo.id),
+      onRemove: canRemove(photo) ? () => onRemove(photo) : undefined,
+    })),
+    ...pending.map((file, ix) => ({
+      key: `pending-${ix}-${file.name}`,
+      src: urls.get(file) ?? '',
+      onRemove: onRemovePending ? () => onRemovePending(file) : undefined,
+    })),
+    ...uploading.map((file, ix) => ({
+      key: `uploading-${ix}-${file.name}`,
+      src: urls.get(file) ?? '',
+    })),
+  ];
 
   return (
     <div className={layout === 'gallery' ? classes.gallery : classes.strip}>
@@ -90,10 +123,9 @@ const PhotoStrip = ({
           key={photo.id}
           className={classes.thumb}
         >
-          <a
-            href={photoUrl(splitId, photo.id)}
-            target="_blank"
-            rel="noreferrer"
+          <UnstyledButton
+            className={classes.open}
+            onClick={() => setOpen(ix)}
             aria-label={`Open photo ${ix + 1}`}
           >
             <img
@@ -101,7 +133,7 @@ const PhotoStrip = ({
               alt=""
               loading="lazy"
             />
-          </a>
+          </UnstyledButton>
           {canRemove(photo) && (
             <ActionIcon
               className={classes.remove}
@@ -120,6 +152,8 @@ const PhotoStrip = ({
         <PendingThumb
           key={`${file.name}-${ix}`}
           file={file}
+          url={urls.get(file)}
+          onOpen={() => setOpen(photos.length + ix)}
           onRemove={onRemovePending ? () => onRemovePending(file) : undefined}
         />
       ))}
@@ -127,6 +161,8 @@ const PhotoStrip = ({
         <PendingThumb
           key={`uploading-${file.name}-${ix}`}
           file={file}
+          url={urls.get(file)}
+          onOpen={() => setOpen(photos.length + pending.length + ix)}
           busy
         />
       ))}
@@ -148,6 +184,11 @@ const PhotoStrip = ({
           e.target.value = '';
           if (files.length > 0) onAdd(files);
         }}
+      />
+      <PhotoViewer
+        photos={viewer}
+        index={open}
+        onIndexChange={setOpen}
       />
     </div>
   );
