@@ -80,7 +80,8 @@ function PendingThumb({
   );
 }
 
-// A row of photo thumbnails with an "Add photo" tile; tapping a photo opens the viewer
+// A row of photo thumbnails after an "Add photo" tile (or a grid ending in one, for a
+// split's photos); tapping a photo opens the viewer
 const PhotoStrip = ({
   splitId,
   photos,
@@ -116,8 +117,20 @@ const PhotoStrip = ({
     })),
   ];
 
+  const addTile = (
+    <UnstyledButton
+      className={`${classes.thumb} ${classes.add}`}
+      onClick={() => input.current?.click()}
+    >
+      <Camera size={20} />
+      <span>{label}</span>
+    </UnstyledButton>
+  );
+
   return (
+    // A strip is one row that scrolls sideways, with Add first so it's always in reach
     <div className={layout === 'gallery' ? classes.gallery : classes.strip}>
+      {layout === 'strip' && addTile}
       {photos.map((photo, ix) => (
         <div
           key={photo.id}
@@ -166,13 +179,7 @@ const PhotoStrip = ({
           busy
         />
       ))}
-      <UnstyledButton
-        className={`${classes.thumb} ${classes.add}`}
-        onClick={() => input.current?.click()}
-      >
-        <Camera size={20} />
-        <span>{label}</span>
-      </UnstyledButton>
+      {layout === 'gallery' && addTile}
       <input
         ref={input}
         type="file"
