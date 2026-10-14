@@ -385,6 +385,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
             <SortableSplits
               ids={shown.map((s) => s.id)}
               strategy={rectSortingStrategy}
+              layout="grid"
             >
               <div className={classes.grid}>
                 {shown.map((s) => (

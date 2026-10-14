@@ -2,13 +2,21 @@
 // (private preferences that follow the account between devices). A profile row is
 // made the first time someone saves anything; until then everything has its default.
 
+import {
+  BANK_TRANSFER,
+  MAX_ACCOUNT_NAME,
+  MAX_BANK,
+  MAX_METHOD_DETAIL,
+  MAX_METHOD_TYPE,
+  type PaymentMethod,
+  needsDetail,
+} from '../shared/payments';
+
 export const ACCENTS = ['blurple', 'blue', 'teal', 'green', 'amber', 'rose'] as const;
 export const CURRENCY = /^[A-Z]{3}$/;
 
 const MAX_DISPLAY_NAME = 32;
 const MAX_METHODS = 10;
-const MAX_METHOD_TYPE = 32;
-const MAX_METHOD_DETAIL = 120;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -16,11 +24,7 @@ const json = (body: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-export interface PaymentMethod {
-  id: string;
-  type: string;
-  detail: string;
-}
+export type { PaymentMethod };
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {
@@ -75,7 +79,8 @@ export async function getProfile(db: D1Database, email: string) {
     db.prepare('SELECT version FROM avatars WHERE email = ?').bind(email),
     db
       .prepare(
-        `SELECT id, type, detail, is_preferred AS isPreferred FROM payment_methods
+        `SELECT id, type, detail, bank, account_name AS accountName,
+           is_preferred AS isPreferred FROM payment_methods
          WHERE email = ? ORDER BY position`,
       )
       .bind(email),
@@ -86,7 +91,13 @@ export async function getProfile(db: D1Database, email: string) {
     email,
     displayName: (profile.results[0]?.displayName as string | null | undefined) ?? null,
     avatarVersion: (avatar.results[0]?.version as number | undefined) ?? null,
-    paymentMethods: all.map(({ id, type, detail }) => ({ id, type, detail })),
+    paymentMethods: all.map(({ id, type, detail, bank, accountName }) => ({
+      id,
+      type,
+      detail,
+      bank,
+      accountName,
+    })),
     preferredPaymentMethodId: all.find((m) => m.isPreferred)?.id ?? null,
     settings: saved
       ? { ...saved, sidebarOpen: Boolean(saved.sidebarOpen) }
@@ -179,15 +190,28 @@ export async function putPaymentMethods(
   const clean: PaymentMethod[] = [];
   for (const m of methods as Record<string, unknown>[]) {
     const id = typeof m?.id === 'string' && /^[0-9a-f]{16}$/.test(m.id) ? m.id : null;
-    const type = typeof m?.type === 'string' ? m.type.trim() : '';
-    const detail = typeof m?.detail === 'string' ? m.detail.trim() : '';
+    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+    const type = text(m?.type);
+    const detail = text(m?.detail);
     if (id == null || clean.some((c) => c.id === id)) {
       return json({ error: 'Invalid payment method' }, 400);
     }
-    if (!type || type.length > MAX_METHOD_TYPE || !detail || detail.length > MAX_METHOD_DETAIL) {
+    if (
+      !type ||
+      type.length > MAX_METHOD_TYPE ||
+      (!detail && needsDetail(type)) ||
+      detail.length > MAX_METHOD_DETAIL
+    ) {
       return json({ error: 'Each payment method needs a type and details' }, 400);
     }
-    clean.push({ id, type, detail });
+    // Only bank transfers name a bank and an account holder
+    const isBank = type === BANK_TRANSFER;
+    const bank = isBank ? text(m?.bank) : '';
+    const accountName = isBank ? text(m?.accountName) : '';
+    if (bank.length > MAX_BANK || accountName.length > MAX_ACCOUNT_NAME) {
+      return json({ error: 'The bank or account name is too long' }, 400);
+    }
+    clean.push({ id, type, detail, bank: bank || null, accountName: accountName || null });
   }
 
   const preferred =
@@ -202,10 +226,20 @@ export async function putPaymentMethods(
       ...clean.map((m, position) =>
         db
           .prepare(
-            `INSERT INTO payment_methods (id, email, type, detail, position, is_preferred)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO payment_methods
+               (id, email, type, detail, bank, account_name, position, is_preferred)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           )
-          .bind(m.id, email, m.type, m.detail, position, m.id === preferred ? 1 : 0),
+          .bind(
+            m.id,
+            email,
+            m.type,
+            m.detail,
+            m.bank ?? null,
+            m.accountName ?? null,
+            position,
+            m.id === preferred ? 1 : 0,
+          ),
       ),
     ]);
   } catch (err) {
@@ -232,7 +266,8 @@ export const memberProfileStatements = (db: D1Database, splitId: string) => [
     .bind(splitId),
   db
     .prepare(
-      `SELECT pm.email, pm.id, pm.type, pm.detail FROM payment_methods pm
+      `SELECT pm.email, pm.id, pm.type, pm.detail, pm.bank, pm.account_name AS accountName
+       FROM payment_methods pm
        JOIN split_members m ON m.email = pm.email AND m.split_id = ?
        ORDER BY pm.is_preferred DESC, pm.position`,
     )
@@ -244,7 +279,7 @@ export function assembleMembers([members, methods]: D1Result<Record<string, unkn
   for (const m of methods.results as unknown as (PaymentMethod & { email: string })[]) {
     byEmail.set(m.email, [
       ...(byEmail.get(m.email) ?? []),
-      { id: m.id, type: m.type, detail: m.detail },
+      { id: m.id, type: m.type, detail: m.detail, bank: m.bank, accountName: m.accountName },
     ]);
   }
   return (
