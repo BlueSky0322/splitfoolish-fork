@@ -41,3 +41,21 @@
 .modalBody {
   padding: 4px 24px 24px;
 }
+
+.sheetTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* A form's own buttons, by the title */
+.headerSlot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.headerSlot:empty {
+  display: none;
+}
