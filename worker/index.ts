@@ -2,7 +2,7 @@
 // API request passes the cross-site check and sign-in before reaching a route.
 
 import { Hono } from 'hono';
-import { AppEnv, Env, clientId, notifySplit } from './app';
+import { AppEnv, Env, clientId, notifySplit, isCrossSite } from './app';
 import { fail, notFound } from './http';
 import { getUserEmail } from './auth';
 import invites from './routes/invites';
@@ -18,16 +18,10 @@ const SPLIT_PATH = /^\/api\/splits\/([A-Za-z0-9_-]{8,64})(?:\/|$)/;
 /**
  * True for a change (not a read) started by another site. The sign-in cookie rides
  * along with such requests, so without this a page elsewhere could, say, open a share
- * link or post changes on someone's behalf. Browsers say where a request came from in
- * Sec-Fetch-Site; older ones only in Origin.
+ * link or post changes on someone's behalf.
  */
-export function isCrossSiteWrite(req: Request, url: URL): boolean {
-  if (req.method === 'GET' || req.method === 'HEAD') return false;
-  const site = req.headers.get('Sec-Fetch-Site');
-  if (site != null) return site !== 'same-origin' && site !== 'none';
-  const origin = req.headers.get('Origin');
-  return origin != null && origin !== url.origin;
-}
+export const isCrossSiteWrite = (req: Request, url: URL) =>
+  req.method !== 'GET' && req.method !== 'HEAD' && isCrossSite(req, url);
 
 const api = new Hono<AppEnv>().basePath('/api');
 

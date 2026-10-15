@@ -1,12 +1,18 @@
 // What every route shares: the Worker's bindings, who's asking, and the checks that
 // decide whether they may see or change a split.
+//
+// Routes (routes/*.ts) say who may do what. The work lives in the feature modules
+// (photos, profiles, split-content, summaries), which export two kinds of function:
+// handlers, taking the database, the ids and person involved, then the request or its
+// body, and answering with a Response; and statement builders, returning statements for
+// a route to run in one batch with others. A route that is one short query keeps it.
 
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
 import { AuthEnv } from './auth';
 import { fail, notFound } from './http';
 import { RatesEnv } from './rates';
-import type { RoomMessage, SplitRoom } from './room';
+import { MEMBER_HEADER, type RoomMessage, type SplitRoom } from './room';
 
 export interface Env extends AuthEnv, RatesEnv {
   DB: D1Database;
@@ -20,6 +26,12 @@ export interface Env extends AuthEnv, RatesEnv {
 }
 
 export type { Role };
+
+/** Who is making a change, and their role in the split */
+export interface Actor {
+  email: string;
+  role: Role;
+}
 
 export type AppEnv = {
   Bindings: Env;
@@ -55,6 +67,40 @@ export const notifySplit = (
       .catch((err: unknown) => console.error(err)),
   );
 };
+
+/** Opens a member's live-update socket in the split's room, tagged as theirs */
+export const joinRoom = (env: Env, splitId: string, req: Request, email: string) => {
+  const headers = new Headers(req.headers);
+  headers.set(MEMBER_HEADER, email);
+  return splitRoom(env, splitId).fetch(new Request(req, { headers }));
+};
+
+/** Closes the live-update sockets of people taken out of a split, after the response */
+export const evictFromRoom = (
+  env: Env,
+  ctx: { waitUntil: (p: Promise<unknown>) => void },
+  splitId: string,
+  emails: string[],
+) => {
+  if (emails.length === 0) return;
+  const room = splitRoom(env, splitId);
+  ctx.waitUntil(
+    Promise.all(emails.map((email) => room.evict(email))).catch((err: unknown) =>
+      console.error(err),
+    ),
+  );
+};
+
+/**
+ * Whether a request came from a page on another site. Browsers say where a request
+ * came from in Sec-Fetch-Site; older ones only in Origin.
+ */
+export function isCrossSite(req: Request, url: URL): boolean {
+  const site = req.headers.get('Sec-Fetch-Site');
+  if (site != null) return site !== 'same-origin' && site !== 'none';
+  const origin = req.headers.get('Origin');
+  return origin != null && origin !== url.origin;
+}
 
 /** The tab that sent a request, as the app identifies itself */
 export const clientId = (req: Request) => req.headers.get('X-Client-Id')?.slice(0, 64) ?? null;
@@ -92,14 +138,14 @@ export async function getRole(
  * For routes under a split: only its members get past, as `role`. Others get the same
  * 404 as a missing split, so ids can't be probed.
  */
-export const member = createMiddleware<AppEnv>(async (c, next) => {
+export const membersOnly = createMiddleware<AppEnv>(async (c, next) => {
   const role = await getRole(c.env.DB, c.req.param('id')!, c.var.email);
   if (role == null) return notFound();
   c.set('role', role);
   await next();
 });
 
-/** After `member`: only the split's owner gets past */
+/** After `membersOnly`: only the split's owner gets past */
 export const ownerOnly = (error: string) =>
   createMiddleware<AppEnv>(async (c, next) => {
     if (c.var.role !== 'owner') return fail(error, 403);

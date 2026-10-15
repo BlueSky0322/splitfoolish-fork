@@ -71,33 +71,45 @@ async function verifyAccessJwt(
   if (parts.length !== 3) return null;
   const [rawHeader, rawPayload, rawSignature] = parts;
 
-  try {
-    const header = decodeJson<JwtHeader>(rawHeader);
-    // Always verified as RS256 with the team's key, whatever alg the token claims
-    if (typeof header.kid !== 'string') return null;
+  // A token that can't be read is simply not valid; failing to fetch the team's keys is
+  // an outage, which reaches the error handler instead of looking like being signed out
+  const header = readable(() => decodeJson<JwtHeader>(rawHeader));
+  // Always verified as RS256 with the team's key, whatever alg the token claims
+  if (typeof header?.kid !== 'string') return null;
 
-    const team = teamDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const key = await getSigningKey(`https://${team}/cdn-cgi/access/certs`, header.kid);
-    if (key == null) return null;
+  const team = teamDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const key = await getSigningKey(`https://${team}/cdn-cgi/access/certs`, header.kid);
+  if (key == null) return null;
 
-    const valid = await crypto.subtle.verify(
+  const signature = readable(() => decodeBase64Url(rawSignature));
+  if (signature == null) return null;
+  const valid = await crypto.subtle
+    .verify(
       'RSASSA-PKCS1-v1_5',
       key,
-      decodeBase64Url(rawSignature),
+      signature,
       new TextEncoder().encode(`${rawHeader}.${rawPayload}`),
-    );
-    if (!valid) return null;
+    )
+    .catch(() => false);
+  if (!valid) return null;
 
-    const payload = decodeJson<JwtPayload>(rawPayload);
-    const audiences: unknown[] = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    const nowSeconds = Date.now() / 1000;
-    if (payload.iss !== `https://${team}`) return null;
-    if (!audiences.includes(aud)) return null;
-    if (typeof payload.exp !== 'number' || payload.exp <= nowSeconds) return null;
-    if (typeof payload.nbf === 'number' && payload.nbf > nowSeconds) return null;
-    if (typeof payload.email !== 'string' || payload.email === '') return null;
+  const payload = readable(() => decodeJson<JwtPayload>(rawPayload));
+  if (payload == null) return null;
+  const audiences: unknown[] = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+  const nowSeconds = Date.now() / 1000;
+  if (payload.iss !== `https://${team}`) return null;
+  if (!audiences.includes(aud)) return null;
+  if (typeof payload.exp !== 'number' || payload.exp <= nowSeconds) return null;
+  if (typeof payload.nbf === 'number' && payload.nbf > nowSeconds) return null;
+  if (typeof payload.email !== 'string' || payload.email === '') return null;
 
-    return payload.email.toLowerCase();
+  return payload.email.toLowerCase();
+}
+
+/** What `decode` returns, or null when the token part isn't valid base64url or JSON */
+function readable<T>(decode: () => T): T | null {
+  try {
+    return decode();
   } catch {
     return null;
   }

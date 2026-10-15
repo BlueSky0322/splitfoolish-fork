@@ -411,6 +411,18 @@ describe('live updates', () => {
     });
     expect(crossSite.status).toBe(403);
   });
+
+  it('closes the channel of someone taken out of the split', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner, devUser);
+    const live = listen(id);
+    await live.opened;
+
+    await api.call(owner, 'DELETE', `/api/splits/${id}/members/${devUser}`);
+    // The room has sent its close: the channel is closing or closed
+    await until(() => live.ws.readyState >= WebSocket.CLOSING);
+    expect(live.ws.readyState).toBeGreaterThanOrEqual(WebSocket.CLOSING);
+  });
 });
 
 describe('ordering my splits', () => {

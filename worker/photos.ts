@@ -11,8 +11,9 @@ const MAX_QR_BYTES = 512_000;
 const MAX_PHOTOS_PER_SPLIT = 300;
 
 import type { Attachment, AvatarResult, PaymentQrResult, SplitPictureResult } from '../shared/api';
-import { json, newId, fail, ok } from './http';
+import { json, newId, fail, ok, isConstraintError } from './http';
 import { ensureProfile } from './profiles';
+import type { Actor } from './app';
 
 /** The image type from the file's first bytes, so a mislabelled upload can't pass as an image */
 function detectImageType(bytes: Uint8Array): string | null {
@@ -63,10 +64,10 @@ export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
     .bind(splitId);
 
 export async function uploadAttachment(
-  req: Request,
   db: D1Database,
   splitId: string,
   email: string,
+  req: Request,
 ) {
   const itemId = new URL(req.url).searchParams.get('itemId');
   const [count, item] = await db.batch<{ n?: number; id?: string }>([
@@ -113,7 +114,7 @@ export async function uploadAttachment(
     ]);
   } catch (err) {
     // The item was removed between the check above and now
-    if (String(err).includes('CONSTRAINT')) {
+    if (isConstraintError(err)) {
       return fail('That item no longer exists', 404);
     }
     throw err;
@@ -133,19 +134,13 @@ export async function getAttachment(db: D1Database, splitId: string, id: string)
   return imageResponse(row.data, row.contentType);
 }
 
-export async function deleteAttachment(
-  db: D1Database,
-  splitId: string,
-  id: string,
-  email: string,
-  isOwner: boolean,
-) {
+export async function deleteAttachment(db: D1Database, splitId: string, id: string, actor: Actor) {
   const row = await db
     .prepare('SELECT uploaded_by AS uploadedBy FROM attachments WHERE id = ? AND split_id = ?')
     .bind(id, splitId)
     .first<{ uploadedBy: string }>();
   if (row == null) return ok();
-  if (row.uploadedBy !== email && !isOwner) {
+  if (row.uploadedBy !== actor.email && actor.role !== 'owner') {
     return fail('Only the person who added a photo, or the owner, can remove it', 403);
   }
   await db.batch([
@@ -155,7 +150,7 @@ export async function deleteAttachment(
   return ok();
 }
 
-export async function putAvatar(req: Request, db: D1Database, email: string) {
+export async function putAvatar(db: D1Database, email: string, req: Request) {
   const image = await readImage(req, MAX_AVATAR_BYTES);
   if (image instanceof Response) return image;
 
@@ -190,7 +185,7 @@ async function sharesSplit(db: D1Database, viewer: string, email: string) {
  * is saved (so a new method's id may not exist yet); an id that's someone else's is
  * refused.
  */
-export async function putPaymentQr(req: Request, db: D1Database, email: string, id: string) {
+export async function putPaymentQr(db: D1Database, email: string, id: string, req: Request) {
   if (!/^[0-9a-f]{16}$/.test(id)) return fail('Invalid payment method', 400);
   const owner = await db
     .prepare(
@@ -250,7 +245,7 @@ export async function getAvatar(db: D1Database, viewer: string, email: string) {
 }
 
 /** A split's picture; set and removed by its owner, seen by its members */
-export async function putSplitPicture(req: Request, db: D1Database, splitId: string) {
+export async function putSplitPicture(db: D1Database, splitId: string, req: Request) {
   const image = await readImage(req, MAX_AVATAR_BYTES);
   if (image instanceof Response) return image;
   const version = Date.now();

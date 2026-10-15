@@ -24,12 +24,12 @@ me.put('/me/payment-methods', async (c) => {
   return putPaymentMethods(c.env.DB, c.var.email, body);
 });
 
-me.put('/me/avatar', (c) => putAvatar(c.req.raw, c.env.DB, c.var.email));
+me.put('/me/avatar', (c) => putAvatar(c.env.DB, c.var.email, c.req.raw));
 me.delete('/me/avatar', (c) => deleteAvatar(c.env.DB, c.var.email));
 
 // A QR code is uploaded first, then saved with its method in the list above
 me.put('/me/payment-qr/:id', (c) =>
-  putPaymentQr(c.req.raw, c.env.DB, c.var.email, c.req.param('id')),
+  putPaymentQr(c.env.DB, c.var.email, c.req.param('id'), c.req.raw),
 );
 me.get('/payment-qr/:id', (c) => getPaymentQr(c.env.DB, c.var.email, c.req.param('id')));
 

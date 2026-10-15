@@ -1,5 +1,5 @@
 // Splits: listing and creating them, and everything under one split. Routes under a
-// split go through `member` (and `ownerOnly` where only the owner may act), except
+// split go through `membersOnly` (and `ownerOnly` where only the owner may act), except
 // opening one, which checks membership in the same database round trip as the rest.
 
 import { Hono } from 'hono';
@@ -13,8 +13,29 @@ import type {
   InviteTokenResult,
   UpdateSplitResult,
 } from '../../shared/api';
-import { AppEnv, Env, ID, Role, SPLIT, member, ownerOnly, readJson, splitRoom } from '../app';
-import { MAX_NAME_LENGTH, json, newId, notFound, readName, fail, ok } from '../http';
+import {
+  AppEnv,
+  Env,
+  ID,
+  Role,
+  SPLIT,
+  evictFromRoom,
+  isCrossSite,
+  joinRoom,
+  membersOnly,
+  ownerOnly,
+  readJson,
+} from '../app';
+import {
+  MAX_NAME_LENGTH,
+  json,
+  newId,
+  notFound,
+  readName,
+  fail,
+  ok,
+  isConstraintError,
+} from '../http';
 import {
   deleteAttachment,
   deleteSplitPicture,
@@ -38,6 +59,7 @@ import {
   deleteContentStatements,
   newInviteToken,
   removeAccessStatements,
+  touchSplit,
 } from '../split-content';
 import { REFRESH_MAX_AGE_MS, RatePreference, getRate } from '../rates';
 import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
@@ -146,7 +168,7 @@ splits.post('/splits', async (c) => {
       () => true,
       (err) => {
         // That id is already taken
-        if (String(err).includes('CONSTRAINT')) return false;
+        if (isConstraintError(err)) return false;
         throw err;
       },
     );
@@ -159,34 +181,39 @@ splits.get(SPLIT, async (c) => {
   const id = c.req.param('id');
   // One round trip, membership check included: the database can be far from the user,
   // so every query costs
-  const [roleRows, splitRows, memberRows, methodRows, inviteRows, attachmentRows, ...content] =
-    await db.batch<Record<string, unknown>>([
-      db
-        .prepare(
-          'SELECT role, share_token AS shareToken FROM split_members WHERE split_id = ? AND email = ?',
-        )
-        .bind(id, c.var.email),
-      db
-        .prepare(
-          `SELECT s.name, s.currency, s.invite_token AS inviteToken,
+  // Statements whose result count other modules decide go last, sliced by their length
+  const memberStatements = memberProfileStatements(db, id);
+  const [roleRows, splitRows, inviteRows, attachmentRows, ...rest] = await db.batch<
+    Record<string, unknown>
+  >([
+    db
+      .prepare(
+        'SELECT role, share_token AS shareToken FROM split_members WHERE split_id = ? AND email = ?',
+      )
+      .bind(id, c.var.email),
+    db
+      .prepare(
+        `SELECT s.name, s.currency, s.invite_token AS inviteToken,
              s.distributor_person_id AS distributorId, p.version AS pictureVersion,
              s.converting_since AS convertingSince
            FROM splits s LEFT JOIN split_pictures p ON p.split_id = s.id WHERE s.id = ?`,
-        )
-        .bind(id),
-      ...memberProfileStatements(db, id),
-      db
-        .prepare(
-          `SELECT i.id, i.email, i.invited_by AS invitedBy, p.display_name AS invitedByName,
+      )
+      .bind(id),
+    db
+      .prepare(
+        `SELECT i.id, i.email, i.invited_by AS invitedBy, p.display_name AS invitedByName,
              i.needs_approval = 1 AS needsApproval, i.created_at AS createdAt,
              i.expires_at AS expiresAt
            FROM split_invites i LEFT JOIN profiles p ON p.email = i.invited_by
            WHERE i.split_id = ? AND i.expires_at > ? ORDER BY i.created_at`,
-        )
-        .bind(id, Date.now()),
-      listAttachmentsStatement(db, id),
-      ...contentStatements(db, id),
-    ]);
+      )
+      .bind(id, Date.now()),
+    listAttachmentsStatement(db, id),
+    ...memberStatements,
+    ...contentStatements(db, id),
+  ]);
+  const memberResults = rest.slice(0, memberStatements.length);
+  const content = rest.slice(memberStatements.length);
   const { role, shareToken } =
     (roleRows.results[0] as { role: Role; shareToken: string | null } | undefined) ?? {};
   const split = splitRows.results[0] as
@@ -217,7 +244,7 @@ splits.get(SPLIT, async (c) => {
     pictureVersion: split.pictureVersion,
     converting,
     role,
-    members: assembleMembers([memberRows, methodRows]),
+    members: assembleMembers(memberResults),
     invites:
       role === 'owner'
         ? (
@@ -235,69 +262,64 @@ splits.get(SPLIT, async (c) => {
 
 // Live updates: a WebSocket that hears when anyone saves a change to the split. Opened
 // from this site only, as the sign-in cookie rides along with it.
-splits.get(`${SPLIT}/ws`, member, (c) => {
-  const origin = c.req.header('Origin');
-  if (origin != null && origin !== new URL(c.req.url).origin) {
+splits.get(`${SPLIT}/ws`, membersOnly, (c) => {
+  if (isCrossSite(c.req.raw, new URL(c.req.url))) {
     return fail('Not allowed from another site', 403);
   }
-  return splitRoom(c.env, c.req.param('id')).fetch(c.req.raw);
+  return joinRoom(c.env, c.req.param('id'), c.req.raw, c.var.email);
 });
 
 // Split settings: rename, change currency
-splits.patch(SPLIT, member, ownerOnly('Only the owner can change split settings'), async (c) => {
-  const db = c.env.DB;
-  const id = c.req.param('id');
-  const body = await readJson(c.req.raw);
-  if (body instanceof Response) return body;
-  const statements: D1PreparedStatement[] = [];
-  if ('name' in body) {
-    const name = readName(body.name);
-    if (name == null) return fail(`Name must be 1-${MAX_NAME_LENGTH} characters`, 400);
-    statements.push(db.prepare('UPDATE splits SET name = ? WHERE id = ?').bind(name, id));
-  }
-  let converting = false;
-  if ('currency' in body) {
-    if (typeof body.currency !== 'string' || !CURRENCY.test(body.currency)) {
-      return fail('Invalid currency', 400);
+splits.patch(
+  SPLIT,
+  membersOnly,
+  ownerOnly('Only the owner can change split settings'),
+  async (c) => {
+    const db = c.env.DB;
+    const id = c.req.param('id');
+    const body = await readJson(c.req.raw);
+    if (body instanceof Response) return body;
+    const statements: D1PreparedStatement[] = [];
+    if ('name' in body) {
+      const name = readName(body.name);
+      if (name == null) return fail(`Name must be 1-${MAX_NAME_LENGTH} characters`, 400);
+      statements.push(db.prepare('UPDATE splits SET name = ? WHERE id = ?').bind(name, id));
     }
-    // Items are converted afterwards, in the background. Until that's done, plain items
-    // are still in the currency the split had before this conversion started.
-    const changed = await db
-      .prepare('SELECT 1 FROM splits WHERE id = ? AND currency != ?')
-      .bind(id, body.currency)
-      .first();
-    if (changed) {
-      converting = true;
-      statements.push(
-        db
-          .prepare(
-            `UPDATE splits SET converting_from = coalesce(converting_from, currency),
+    let converting = false;
+    if ('currency' in body) {
+      if (typeof body.currency !== 'string' || !CURRENCY.test(body.currency)) {
+        return fail('Invalid currency', 400);
+      }
+      // Items are converted afterwards, in the background. Until that's done, plain items
+      // are still in the currency the split had before this conversion started.
+      const changed = await db
+        .prepare('SELECT 1 FROM splits WHERE id = ? AND currency != ?')
+        .bind(id, body.currency)
+        .first();
+      if (changed) {
+        converting = true;
+        statements.push(
+          db
+            .prepare(
+              `UPDATE splits SET converting_from = coalesce(converting_from, currency),
                converting_since = ?, currency = ? WHERE id = ?`,
-          )
-          .bind(Date.now(), body.currency, id),
-      );
+            )
+            .bind(Date.now(), body.currency, id),
+        );
+      }
     }
-  }
-  if (statements.length > 0) {
-    await db.batch([
-      ...statements,
-      db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), id),
-    ]);
-  }
-  if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email);
-  return json<UpdateSplitResult>({ ok: true, converting });
-});
+    if (statements.length > 0) {
+      await db.batch([...statements, touchSplit(db, id)]);
+    }
+    if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email);
+    return json<UpdateSplitResult>({ ok: true, converting });
+  },
+);
 
-splits.delete(SPLIT, member, ownerOnly('Only the owner can delete this split'), async (c) => {
+splits.delete(SPLIT, membersOnly, ownerOnly('Only the owner can delete this split'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   await db.batch([
-    db
-      .prepare(
-        'DELETE FROM attachment_data WHERE id IN (SELECT id FROM attachments WHERE split_id = ?)',
-      )
-      .bind(id),
-    db.prepare('DELETE FROM attachments WHERE split_id = ?').bind(id),
     ...deleteContentStatements(db, id),
     db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
     db.prepare('DELETE FROM split_members WHERE split_id = ?').bind(id),
@@ -307,7 +329,7 @@ splits.delete(SPLIT, member, ownerOnly('Only the owner can delete this split'), 
 });
 
 // The bill (people and items); applyChanges decides what each role may change
-splits.post(`${SPLIT}/changes`, member, async (c) => {
+splits.post(`${SPLIT}/changes`, membersOnly, async (c) => {
   const body = await readJson(c.req.raw);
   if (body instanceof Response) return body;
   // Looked up only if the changes need a rate
@@ -322,39 +344,43 @@ splits.post(`${SPLIT}/changes`, member, async (c) => {
         prefer: await (prefer ??= getRateSource(c.env.DB, c.var.email)),
         maxAgeMs: recent ? REFRESH_MAX_AGE_MS : undefined,
       }),
+    (emails) => evictFromRoom(c.env, c.executionCtx, c.req.param('id'), emails),
   );
 });
 
 // The split's picture: anyone in it sees it, only the owner changes it
-splits.get(`${SPLIT}/picture`, member, (c) => getSplitPicture(c.env.DB, c.req.param('id')));
-splits.put(`${SPLIT}/picture`, member, ownerOnly('Only the owner can change the picture'), (c) =>
-  putSplitPicture(c.req.raw, c.env.DB, c.req.param('id')),
+splits.get(`${SPLIT}/picture`, membersOnly, (c) => getSplitPicture(c.env.DB, c.req.param('id')));
+splits.put(
+  `${SPLIT}/picture`,
+  membersOnly,
+  ownerOnly('Only the owner can change the picture'),
+  (c) => putSplitPicture(c.env.DB, c.req.param('id'), c.req.raw),
 );
-splits.delete(`${SPLIT}/picture`, member, ownerOnly('Only the owner can change the picture'), (c) =>
-  deleteSplitPicture(c.env.DB, c.req.param('id')),
+splits.delete(
+  `${SPLIT}/picture`,
+  membersOnly,
+  ownerOnly('Only the owner can change the picture'),
+  (c) => deleteSplitPicture(c.env.DB, c.req.param('id')),
 );
 
-// Photos can be added by any member, and removed by whoever added them or the owner
-splits.post(`${SPLIT}/attachments`, member, (c) =>
-  uploadAttachment(c.req.raw, c.env.DB, c.req.param('id'), c.var.email),
+// Photos can be added by any membersOnly, and removed by whoever added them or the owner
+splits.post(`${SPLIT}/attachments`, membersOnly, (c) =>
+  uploadAttachment(c.env.DB, c.req.param('id'), c.var.email, c.req.raw),
 );
-splits.get(`${SPLIT}/attachments/:attachmentId${ID}`, member, (c) =>
+splits.get(`${SPLIT}/attachments/:attachmentId${ID}`, membersOnly, (c) =>
   getAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId')),
 );
-splits.delete(`${SPLIT}/attachments/:attachmentId${ID}`, member, (c) =>
-  deleteAttachment(
-    c.env.DB,
-    c.req.param('id'),
-    c.req.param('attachmentId'),
-    c.var.email,
-    c.var.role === 'owner',
-  ),
+splits.delete(`${SPLIT}/attachments/:attachmentId${ID}`, membersOnly, (c) =>
+  deleteAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId'), {
+    email: c.var.email,
+    role: c.var.role,
+  }),
 );
 
 // New share links, the owner's and every member's; invites picked up from the old ones go
 splits.post(
   `${SPLIT}/invite`,
-  member,
+  membersOnly,
   ownerOnly('Only the owner can reset the invite link'),
   async (c) => {
     const db = c.env.DB;
@@ -376,20 +402,19 @@ splits.post(
 
 splits.delete(
   `${SPLIT}/invites/:inviteId${ID}`,
-  member,
+  membersOnly,
   ownerOnly('Only the owner can revoke invites'),
   async (c) => {
-    const { meta } = await c.env.DB.prepare(
-      'DELETE FROM split_invites WHERE id = ? AND split_id = ?',
-    )
+    await c.env.DB.prepare('DELETE FROM split_invites WHERE id = ? AND split_id = ?')
       .bind(c.req.param('inviteId'), c.req.param('id'))
       .run();
-    return meta.changes > 0 ? ok() : notFound();
+    // Already gone is fine, as for every other delete: the result is the same
+    return ok();
   },
 );
 
 // Owners remove anyone but themselves; others can only remove themselves (leave)
-splits.delete(`${SPLIT}/members/:email`, member, async (c) => {
+splits.delete(`${SPLIT}/members/:email`, membersOnly, async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const email = c.var.email;
@@ -414,6 +439,7 @@ splits.delete(`${SPLIT}/members/:email`, member, async (c) => {
   } else {
     await db.batch(removeAccessStatements(db, id, target));
   }
+  evictFromRoom(c.env, c.executionCtx, id, [target]);
   return ok();
 });
 

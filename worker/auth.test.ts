@@ -113,8 +113,16 @@ describe('getUserEmail with Cloudflare Access configured', () => {
       },
     ],
     ['a malformed token', () => Promise.resolve('not-a-jwt')],
+    ['a token whose parts are not base64url JSON', () => Promise.resolve('a!b.c!d.e!f')],
   ])('rejects %s', async (_name, makeToken) => {
     expect(await getUserEmail(requestWith(await makeToken()), env)).toBeNull();
+  });
+
+  test("fails loudly, rather than signing out, when the team's keys can't be fetched", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('down', { status: 503 }));
+    await expect(
+      getUserEmail(requestWith(await sign(validClaims(), otherKey, 'rotated-key')), env),
+    ).rejects.toThrow('Access certs fetch failed');
   });
 
   test('rejects a request with no token', async () => {

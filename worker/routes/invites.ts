@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import type { AcceptResult, JoinResult, MyInvite } from '../../shared/api';
 import { AppEnv, ID, INVITE_TTL_MS, clientId, getRole, notifySplit } from '../app';
 import { json, newId, fail, ok } from '../http';
-import { newInviteToken } from '../split-content';
+import { newInviteToken, touchSplit } from '../split-content';
 
 const invites = new Hono<AppEnv>();
 
@@ -58,9 +58,7 @@ async function addEditor(db: D1Database, splitId: string, email: string) {
           .bind(newId(), splitId, unique, email),
       );
     }
-    statements.push(
-      db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), splitId),
-    );
+    statements.push(touchSplit(db, splitId));
   }
   await db.batch(statements);
 }

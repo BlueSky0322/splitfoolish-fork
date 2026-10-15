@@ -5,6 +5,9 @@
 
 import { DurableObject } from 'cloudflare:workers';
 
+/** Set by the Worker when it hands a member's socket to the room: whose it is */
+export const MEMBER_HEADER = 'X-Split-Member';
+
 /** What the room sends: a split changed, and which tab changed it (it ignores its own) */
 export interface RoomMessage {
   type: 'changed';
@@ -23,8 +26,21 @@ export class SplitRoom extends DurableObject<unknown> {
       return new Response('Expected a WebSocket', { status: 426 });
     }
     const [client, server] = Object.values(new WebSocketPair());
-    this.ctx.acceptWebSocket(server);
+    // Tagged with the member's email, so their sockets can be found if they leave
+    const member = req.headers.get(MEMBER_HEADER);
+    this.ctx.acceptWebSocket(server, member ? [member] : []);
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** Closes the sockets of someone who is no longer in the split */
+  evict(email: string): void {
+    for (const ws of this.ctx.getWebSockets(email)) {
+      try {
+        ws.close(4403, 'No longer in this split');
+      } catch {
+        // Already closing
+      }
+    }
   }
 
   broadcast(message: string): void {

@@ -29,7 +29,7 @@ import {
   THEMES,
 } from '../shared/api';
 import type { Role } from '../shared/types';
-import { json, fail } from './http';
+import { json, fail, isConstraintError } from './http';
 
 export const CURRENCY = /^[A-Z]{3}$/;
 
@@ -271,7 +271,7 @@ export async function putPaymentMethods(
     ]);
   } catch (err) {
     // An id already used by someone else's method
-    if (String(err).includes('CONSTRAINT')) return fail('Invalid payment method', 400);
+    if (isConstraintError(err)) return fail('Invalid payment method', 400);
     throw err;
   }
   return json<Profile>(await getProfile(db, email));

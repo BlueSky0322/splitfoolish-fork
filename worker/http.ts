@@ -22,6 +22,9 @@ export const fail = (error: string, status: number, extra?: Omit<ApiErrorBody, '
 
 export const notFound = () => fail('Not found', 404);
 
+/** Whether a D1 error is a constraint failing (a missing parent row, a duplicate key) */
+export const isConstraintError = (err: unknown) => String(err).includes('CONSTRAINT');
+
 /** A new id for a row: 16 hex characters */
 export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 
