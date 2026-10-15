@@ -101,11 +101,11 @@ export const api = {
     }),
   removeAvatar: () => request<Ok>('DELETE', '/api/me/avatar'),
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
-  /** id is made by the app, so the new split can open before this finishes */
   /** Names of items in your splits, most recent first, with the category last given */
   itemNames: () => request<{ names: ItemNameUse[] }>('GET', '/api/item-names'),
   /** Your own order for your splits: every id, first to last */
   reorderSplits: (ids: string[]) => request<Ok>('PUT', '/api/splits/order', { ids }),
+  /** id is made by the app, so the new split can open before this finishes */
   createSplit: (id: string, name: string, currency: string) =>
     request<{ id: string }>('POST', '/api/splits', { id, name, currency }),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),

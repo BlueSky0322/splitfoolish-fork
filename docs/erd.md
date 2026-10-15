@@ -21,6 +21,7 @@ erDiagram
     profiles ||--o| user_settings : "prefers"
     profiles ||--o| avatars : "pictured by"
     profiles ||--o{ payment_methods : "paid back by"
+    profiles ||--o{ payment_qr_codes : "QR codes to scan"
 
     splits {
         text id PK
@@ -65,6 +66,7 @@ erDiagram
         text payer_id FK
         text split_mode "equal, shares or exact"
         text category
+        text notes "free text, up to 2000 characters"
         int position
         int created_at
         text original_currency "null: entered in the split's currency"
@@ -109,7 +111,9 @@ erDiagram
         text email PK, FK
         text theme "dark, light or auto"
         text accent
-        text last_currency "default for new splits"
+        text last_currency "the currency the last new split used"
+        text default_currency "null: use last_currency"
+        text rate_source "wise or ecb (Frankfurter)"
         int sidebar_open
         text items_view "card or table"
         text items_group_by "none, day, payer or category"
@@ -133,6 +137,13 @@ erDiagram
         int position
         int is_preferred "at most one per account"
     }
+    payment_qr_codes {
+        text method_id PK "a payment_methods id; may come first"
+        text email FK
+        text content_type
+        int version "changes with each image"
+        blob data
+    }
 ```
 
 ## Why it's shaped this way
@@ -145,8 +156,10 @@ erDiagram
   `payment_methods`. `user_settings` holds private preferences (theme, accent, the
   default currency, how items are shown), which follow you between devices.
 - **Large values live apart.** Picture and photo bytes sit in `avatars`,
-  `split_pictures` and `attachment_data`, so reading names or listing splits and
-  photos never loads images.
+  `split_pictures`, `attachment_data` and `payment_qr_codes`, so reading names or
+  listing splits, photos and payment methods never loads images. A QR code is uploaded
+  before its payment method is saved, so it isn't tied to the method's row; codes whose
+  method is gone are dropped the next time methods are saved.
 - **Other currencies.** An item entered in another currency keeps what was typed
   (`original_currency`, `original_cents`) and the rate it was converted at, while
   `cost_cents` holds the amount in the split's currency, worked out once by the server
