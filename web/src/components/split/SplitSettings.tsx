@@ -1,11 +1,11 @@
 import { Button } from '@mantine/core';
 import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
-import { removeSplitPicture, uploadSplitPicture } from '../../split/pictures';
+import { uploadSplitPicture } from '../../split/pictures';
+import type { MetaChanges } from '../../split/state';
 import type { SplitFormValues } from './SplitForm';
 import SplitForm from './SplitForm';
 import { reloadMySplits } from '../../my-splits/my-splits';
-import { showError } from '../../utils/notify';
 
 interface SplitSettingsProps {
   splitId: string;
@@ -15,12 +15,9 @@ interface SplitSettingsProps {
   canEdit: boolean;
   /** Opens the delete (owner) or leave (member) confirm */
   onEnd: () => void;
-  onSaved: (changes: {
-    name?: string;
-    currency?: string;
-    pictureVersion?: number | null;
-    converting?: boolean;
-  }) => void;
+  changeMeta: MetaChanges['changeMeta'];
+  /** A new picture, once uploaded */
+  onPictureSaved: (pictureVersion: number) => void;
   onClose: () => void;
 }
 
@@ -33,40 +30,43 @@ const SplitSettings = ({
   pictureVersion,
   canEdit,
   onEnd,
-  onSaved,
+  changeMeta,
+  onPictureSaved,
   onClose,
 }: SplitSettingsProps) => {
-  // Everything shows straight away; changes are put back if the server refuses them
+  // Everything shows straight away; the server's copy is shown again if it refuses them
   const save = (values: SplitFormValues) => {
     onClose();
     if (values.name !== name || values.currency !== currency) {
-      // A new currency converts every item, in the background
-      onSaved({
-        name: values.name,
-        currency: values.currency,
-        ...(values.currency !== currency && { converting: true }),
-      });
-      api
-        .updateSplit(splitId, { name: values.name, currency: values.currency })
-        .then(({ converting }) => {
+      changeMeta(
+        // A new currency converts every item, in the background
+        (m) => ({
+          ...m,
+          name: values.name,
+          currency: values.currency,
+          converting: m.converting || values.currency !== currency,
+        }),
+        async () => {
+          const { converting } = await api.updateSplit(splitId, {
+            name: values.name,
+            currency: values.currency,
+          });
+          void reloadMySplits();
           // The server knows whether there was anything to convert
-          onSaved({ converting });
-          return reloadMySplits();
-        })
-        .catch((err) => {
-          onSaved({ name, currency });
-          showError(err, 'Could not save the split settings');
-        });
+          return (m) => ({ ...m, converting });
+        },
+        'Could not save the split settings',
+      );
     }
     if (values.picture instanceof File) {
       void uploadSplitPicture(splitId, values.picture).then(
-        (version) => version != null && onSaved({ pictureVersion: version }),
+        (version) => version != null && onPictureSaved(version),
       );
     } else if (values.picture === 'remove') {
-      onSaved({ pictureVersion: null });
-      void removeSplitPicture(splitId).then(
-        // Put back after a failure (explained already)
-        (removed) => removed === undefined && onSaved({ pictureVersion }),
+      changeMeta(
+        (m) => ({ ...m, pictureVersion: null }),
+        async () => void (await api.deleteSplitPicture(splitId)),
+        'Could not remove the picture',
       );
     }
   };

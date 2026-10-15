@@ -90,8 +90,8 @@ export interface FakeServer {
   rates: Map<string, number>;
   /** Every batch of changes the app sent, by split */
   sent: { splitId: string; changes: Change[] }[];
-  /** The next save of the profile, or of a split's changes, answers with this status */
-  failNext: Partial<Record<'profile' | 'changes' | 'join', number>>;
+  /** The next save of the profile, a split's changes or its settings answers with this status */
+  failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join', number>>;
 }
 
 export const person = (id: string, name: string, memberEmail: string | null = null) => ({
@@ -183,6 +183,7 @@ function serve(server: FakeServer) {
     const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : null;
     const path = url.pathname;
     const splitMatch = path.match(/^\/api\/splits\/([^/]+)(\/changes)?$/);
+    const inviteMatch = path.match(/^\/api\/splits\/([^/]+)\/invites\/([^/]+)$/);
 
     if (server.health === 'unreachable') return Promise.reject(new TypeError('Failed to fetch'));
     if (server.health === 'signedOut') return json({ error: 'Signed out' }, 401);
@@ -253,6 +254,19 @@ function serve(server: FakeServer) {
         return json({ ok: true });
       }
       if (method === 'GET') return json(structuredClone(split));
+      if (method === 'PATCH') {
+        const failure = failing('settings');
+        if (failure) return failure;
+        const { name, currency } = body as { name: string; currency: string };
+        Object.assign(split, { name, currency });
+        return json({ converting: false });
+      }
+    }
+    if (inviteMatch && method === 'DELETE') {
+      const split = server.splits.get(inviteMatch[1]);
+      if (split == null) return json({ error: 'Not found' }, 404);
+      split.invites = split.invites?.filter((i) => i.id !== inviteMatch[2]);
+      return json({ ok: true });
     }
     return json({ error: `No stand-in for ${method} ${path}` }, 404);
   };

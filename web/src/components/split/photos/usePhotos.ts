@@ -9,7 +9,7 @@ import { showError } from '../../../utils/notify';
 interface UsePhotosOptions {
   splitId: string;
   meta: SplitMeta | null;
-  metaChanges: Pick<MetaChanges, 'addAttachment' | 'removeAttachment'>;
+  metaChanges: Pick<MetaChanges, 'addAttachment' | 'changeMeta'>;
   /** Resolves once queued changes are saved, so a new item exists before its photos */
   whenSaved: () => Promise<void>;
 }
@@ -17,7 +17,7 @@ interface UsePhotosOptions {
 // Receipt photos on items and photos of the whole split: shrinking, uploading and
 // removing them, keeping the split's list of photos in step
 export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOptions) {
-  const { addAttachment, removeAttachment } = metaChanges;
+  const { addAttachment, changeMeta } = metaChanges;
   // Photos on their way up, per item id ('' for the split itself), shown meanwhile
   const [uploading, setUploading] = useState<Record<string, File[]>>({});
 
@@ -55,17 +55,13 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
   );
 
   const remove = useCallback(
-    async (photo: Attachment) => {
-      // Hide it straight away; put it back if the server says no
-      removeAttachment(photo.id);
-      try {
-        await api.deleteAttachment(splitId, photo.id);
-      } catch (err) {
-        addAttachment(photo);
-        showError(err, 'Could not remove that photo');
-      }
-    },
-    [splitId, addAttachment, removeAttachment],
+    (photo: Attachment) =>
+      changeMeta(
+        (m) => ({ ...m, attachments: m.attachments.filter((a) => a.id !== photo.id) }),
+        async () => void (await api.deleteAttachment(splitId, photo.id)),
+        'Could not remove that photo',
+      ),
+    [splitId, changeMeta],
   );
 
   const photosOf = (itemId: string | null) =>

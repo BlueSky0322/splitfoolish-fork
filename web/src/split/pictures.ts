@@ -48,11 +48,3 @@ export async function uploadSplitPicture(splitId: string, file: File) {
     }
   }
 }
-
-export function removeSplitPicture(splitId: string) {
-  patchListedSplit(splitId, { pictureVersion: null });
-  return sendMySplitsChange(
-    () => api.deleteSplitPicture(splitId).then(() => null),
-    'Could not remove the picture',
-  );
-}

@@ -18,7 +18,7 @@ interface SplitMembersProps {
   /** Reloads members and invites after a change */
   onChange: () => Promise<void>;
   /** Shows a change straight away, before the server confirms it */
-  changeSharing: MetaChanges['changeSharing'];
+  changeMeta: MetaChanges['changeMeta'];
   /** Swaps this for the reset-link confirm */
   onReset: () => void;
 }
@@ -41,7 +41,7 @@ export const ShareTitle = ({ name }: { name: string }) => (
 
 // Sharing: the share link, who's in the split, who's yet to
 // accept, and deleting or leaving the split
-const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: SplitMembersProps) => {
+const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMembersProps) => {
   const isMobile = useIsMobile();
   const isOwner = meta.role === 'owner';
   const link = meta.shareToken ? inviteUrl(meta.shareToken) : null;
@@ -72,7 +72,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: Split
   );
 
   const answerRequest = (invite: SplitInvite, approve: boolean) =>
-    changeSharing(
+    changeMeta(
       (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== invite.id) }),
       async () => {
         await (approve ? api.acceptInvite(invite.id) : api.declineInvite(invite.id));
@@ -201,10 +201,13 @@ const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: Split
                     className={classes.textAction}
                     aria-label={`Remove ${nameFor(m.email, m.displayName)}`}
                     onClick={() =>
-                      changeSharing(
+                      changeMeta(
                         (x) => ({ ...x, members: x.members.filter((y) => y.email !== m.email) }),
                         // The share link changes too, so fetch the new one
-                        () => api.removeMember(meta.id, m.email).then(onChange),
+                        async () => {
+                          await api.removeMember(meta.id, m.email);
+                          await onChange();
+                        },
                       )
                     }
                   >
@@ -278,9 +281,9 @@ const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: Split
                   className={classes.textAction}
                   aria-label={`Withdraw invite for ${i.email}`}
                   onClick={() =>
-                    changeSharing(
+                    changeMeta(
                       (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== i.id) }),
-                      () => api.revokeInvite(meta.id, i.id),
+                      async () => void (await api.revokeInvite(meta.id, i.id)),
                     )
                   }
                 >

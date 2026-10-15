@@ -166,7 +166,6 @@ export type SyncStatus =
 /** The ways the split page changes what it shows about the split besides its bill */
 export interface MetaChanges {
   addAttachment: (photo: Attachment) => void;
-  removeAttachment: (id: string) => void;
   /** Photos of an item that was deleted (the server removed them with it) */
   forgetItemAttachments: (itemId: string) => void;
   /** Shows saved split settings straight away, here and in My splits */
@@ -177,6 +176,14 @@ export interface MetaChanges {
   removeMember: (email: string) => void;
   /** Who everyone settles up through, or null for the fewest transfers */
   setDistributor: (personId: string | null) => void;
-  /** Shows a sharing change straight away; fetches it again if the server says no */
-  changeSharing: (show: (meta: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => void;
+  /**
+   * Shows a change to the split's settings, sharing or photos straight away, here and in
+   * My splits, and sends it. `request` may answer with what the server changed besides.
+   * If it fails, that's explained and both are fetched again, showing what the server has.
+   */
+  changeMeta: (
+    show: (meta: SplitMeta) => SplitMeta,
+    request: () => Promise<((meta: SplitMeta) => SplitMeta) | void>,
+    failure?: string,
+  ) => void;
 }

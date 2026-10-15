@@ -189,8 +189,6 @@ export function useSplit(splitId: string) {
     () => ({
       addAttachment: (photo) =>
         setMeta((m) => (m ? { ...m, attachments: [...m.attachments, photo] } : m)),
-      removeAttachment: (id) =>
-        setMeta((m) => (m ? { ...m, attachments: m.attachments.filter((a) => a.id !== id) } : m)),
       forgetItemAttachments: (itemId) =>
         setMeta((m) =>
           m ? { ...m, attachments: m.attachments.filter((a) => a.itemId !== itemId) } : m,
@@ -202,12 +200,20 @@ export function useSplit(splitId: string) {
       removeMember: (email) =>
         setMeta((m) => (m ? { ...m, members: m.members.filter((x) => x.email !== email) } : m)),
       setDistributor: (personId) => setMeta((m) => (m ? { ...m, distributorId: personId } : m)),
-      changeSharing: (show, request) => {
+      changeMeta: (show, request, failure = "Couldn't save that change") => {
+        const before = metaRef.current;
+        if (before == null) return;
+        const { name, currency, pictureVersion } = show(before);
         setMeta((m) => (m ? show(m) : m));
-        request().catch((err: unknown) => {
-          showError(err, 'Something went wrong');
-          void refreshMeta();
-        });
+        patchListedSplit(splitId, { name, currency, pictureVersion });
+        request().then(
+          (answer) => answer && setMeta((m) => (m ? answer(m) : m)),
+          (err: unknown) => {
+            showError(err, failure);
+            void refreshMeta();
+            void reloadMySplits();
+          },
+        );
       },
     }),
     [refreshMeta, splitId],

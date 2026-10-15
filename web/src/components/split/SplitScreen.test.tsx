@@ -203,4 +203,65 @@ describe('the split page', () => {
     renderApp(fakeServer(), '/?s=missing');
     expect(await screen.findByText(/doesn't exist, or you don't have access/)).toBeTruthy();
   });
+
+  test('renames the split from its settings, here and in My splits', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+
+    await renameTo(user, 'Bali trip');
+    expect(await screen.findByRole('heading', { name: 'Bali trip' })).toBeTruthy();
+    await waitFor(() => expect(server.splits.get('trip')!.name).toBe('Bali trip'));
+    expect((await screen.findAllByText('Bali trip')).length).toBeGreaterThan(1);
+  });
+
+  test('a refused rename shows the name the server has, and says why', async () => {
+    const server = fakeServer(trip());
+    server.failNext.settings = 409;
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+
+    await renameTo(user, 'Bali trip');
+    expect(await screen.findByText('Refused')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Trip' })).toBeTruthy();
+    expect(server.splits.get('trip')!.name).toBe('Trip');
+  });
+
+  test('withdraws an invite from the sharing dialog', async () => {
+    const split = trip();
+    split.invites = [
+      {
+        id: 'inv',
+        email: 'dev@example.com',
+        invitedBy: split.members[0].email,
+        invitedByName: 'Ryan',
+        needsApproval: false,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 86_400_000,
+      },
+    ];
+    const server = fakeServer(split);
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+
+    await user.click(screen.getByRole('button', { name: 'Share' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Withdraw invite for dev@example.com' }),
+    );
+    await waitFor(() => expect(screen.queryByText('dev@example.com')).toBeNull());
+    expect(server.splits.get('trip')!.invites).toEqual([]);
+  });
 });
+
+async function renameTo(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getAllByRole('button', { name: 'More' })[0]);
+  await user.click(await screen.findByRole('menuitem', { name: 'Split settings' }));
+  const form = await screen.findByRole('dialog');
+  const field = within(form).getByRole('textbox', { name: 'Name' });
+  await user.clear(field);
+  await user.type(field, name);
+  await user.click(within(form).getByRole('button', { name: 'Save' }));
+}

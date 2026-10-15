@@ -176,7 +176,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             meta={meta}
             myEmail={myEmail}
             onChange={refreshMeta}
-            changeSharing={metaChanges.changeSharing}
+            changeMeta={metaChanges.changeMeta}
             onReset={() => setDialog({ kind: 'reset' })}
           />
         )}
@@ -299,7 +299,8 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             pictureVersion={pictureVersion}
             canEdit={canEditSplitSettings(meta.role)}
             onEnd={() => setDialog({ kind: 'end' })}
-            onSaved={metaChanges.patchSettings}
+            changeMeta={metaChanges.changeMeta}
+            onPictureSaved={(version) => metaChanges.patchSettings({ pictureVersion: version })}
             onClose={close}
           />
         )}
