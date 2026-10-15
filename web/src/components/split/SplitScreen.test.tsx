@@ -214,6 +214,26 @@ describe('the split page', () => {
     expect(within(menu).getByText('Split settings')).toBeTruthy();
   });
 
+  test('on a phone, an item duplicates from its own sheet', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Taxi'));
+    const detail = await screen.findByRole('dialog');
+    await user.click(within(detail).getByRole('button', { name: 'Duplicate item' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Keep its date' }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.filter((i) => i.name === 'Taxi')).toHaveLength(2),
+    );
+    // The form has no menu of its own on a phone
+    await user.click((await screen.findAllByText('Taxi'))[0]);
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Edit item' }),
+    );
+    expect(await screen.findByText('Edit item')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
+  });
+
   test('on a phone, an item opens as it stands, with Edit a tap away', async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
