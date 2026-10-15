@@ -109,4 +109,22 @@ describe('My splits', () => {
     await waitFor(() => expect(server.invites).toEqual([]));
     expect(await screen.findByText(/No invites right now/)).toBeTruthy();
   });
+
+  test('on a computer, sorts splits by name, and back to your own order', async () => {
+    const server = fakeServer(splitDetail('b', []));
+    server.splits.set('a', { ...splitDetail('a'), name: 'Alps' });
+    server.splits.set('z', { ...splitDetail('z'), name: 'Zurich' });
+    renderApp(server);
+    const user = userEvent.setup();
+    await screen.findByText('Zurich', {}, { timeout: 3000 });
+    const order = () => screen.getAllByText(/^(Trip|Alps|Zurich)$/).map((el) => el.textContent);
+    expect(order()).toEqual(['Trip', 'Alps', 'Zurich']);
+
+    await user.click(screen.getByRole('button', { name: 'Sort: Your order' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Name' }));
+    expect(order()).toEqual(['Alps', 'Trip', 'Zurich']);
+    await user.click(screen.getByRole('button', { name: 'Sort: Name' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Your order' }));
+    expect(order()).toEqual(['Trip', 'Alps', 'Zurich']);
+  });
 });

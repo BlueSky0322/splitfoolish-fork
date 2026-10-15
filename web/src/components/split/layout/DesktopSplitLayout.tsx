@@ -6,9 +6,11 @@ import {
   DotsThreeOutline,
   Plus,
   ShareNetwork,
+  SortAscending,
+  SortDescending,
   StackSimple,
 } from '@phosphor-icons/react';
-import { GROUP_LABELS } from '../../../split/grouping';
+import { GROUP_LABELS, type SortDir, type SortKey } from '../../../split/grouping';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { currencySymbol } from '../../../utils/money';
 import ErrorBoundary from '../../ui/ErrorBoundary';
@@ -29,6 +31,21 @@ import classes from '../Split.module.css';
 import { canChangePeople } from '@shared/rules';
 
 /** The split page on a computer: the items, with the balances alongside */
+const SORT_LABELS: Record<SortKey, string> = {
+  date: 'Date',
+  amount: 'Amount',
+  name: 'Item',
+  payer: 'Paid by',
+};
+
+/** Each way round, as it reads for that sort: "Newest first", "A to Z" */
+const DIRECTION_LABELS: Record<SortKey, Record<SortDir, string>> = {
+  date: { desc: 'Newest first', asc: 'Oldest first' },
+  amount: { desc: 'Largest first', asc: 'Smallest first' },
+  name: { asc: 'A to Z', desc: 'Z to A' },
+  payer: { asc: 'A to Z', desc: 'Z to A' },
+};
+
 const DesktopSplitLayout = ({
   parts,
   selection,
@@ -38,7 +55,7 @@ const DesktopSplitLayout = ({
 }) => {
   const { splitId, myEmail, meta, currency, pictureVersion, openDialog } = useSplitPage();
   const { state } = useSplitState();
-  const { prefs, setPref } = useItemViewPrefs();
+  const { prefs, setPref, sortBy } = useItemViewPrefs();
   const loaded = meta != null;
   const hasPeople = state.people.length > 0;
   const otherCurrencies = otherCurrencyCount(state.items);
@@ -154,6 +171,54 @@ const DesktopSplitLayout = ({
                       color={g === prefs.groupBy ? 'accent' : undefined}
                     >
                       {GROUP_LABELS[g]}
+                    </Menu.Item>
+                  ))}
+                </Menu.Dropdown>
+              </Menu>
+              <Menu
+                position="bottom-start"
+                withinPortal
+              >
+                <Menu.Target>
+                  <Button
+                    variant="subtle"
+                    color="gray"
+                    leftSection={
+                      prefs.sortDir === 'asc' ? (
+                        <SortAscending size={16} />
+                      ) : (
+                        <SortDescending size={16} />
+                      )
+                    }
+                    rightSection={<CaretDown size={12} />}
+                    aria-label={`Sort: ${SORT_LABELS[prefs.sortKey]}, ${DIRECTION_LABELS[prefs.sortKey][prefs.sortDir]}`}
+                  >
+                    {SORT_LABELS[prefs.sortKey]}
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>Sort by</Menu.Label>
+                  {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                    <Menu.Item
+                      key={key}
+                      // The one already chosen keeps its direction; another starts its usual way
+                      onClick={() => key !== prefs.sortKey && sortBy(key)}
+                      color={key === prefs.sortKey ? 'accent' : undefined}
+                    >
+                      {SORT_LABELS[key]}
+                    </Menu.Item>
+                  ))}
+                  <Menu.Divider />
+                  {(['desc', 'asc'] as SortDir[]).map((dir) => (
+                    <Menu.Item
+                      key={dir}
+                      leftSection={
+                        dir === 'asc' ? <SortAscending size={14} /> : <SortDescending size={14} />
+                      }
+                      onClick={() => setPref({ sortDir: dir })}
+                      color={dir === prefs.sortDir ? 'accent' : undefined}
+                    >
+                      {DIRECTION_LABELS[prefs.sortKey][dir]}
                     </Menu.Item>
                   ))}
                 </Menu.Dropdown>

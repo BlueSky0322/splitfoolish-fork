@@ -203,6 +203,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
           <ItemDetail
             item={shown}
             onEdit={() => setDialog({ kind: 'edit', item: shown })}
+            onDuplicate={(keepDate) => duplicateItem(shown, keepDate)}
             onDelete={() => {
               close();
               deleteItems([shown]);

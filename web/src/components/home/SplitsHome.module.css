@@ -188,3 +188,16 @@
   background: color-mix(in srgb, var(--sf-accent) 10%, transparent);
   box-shadow: inset 3px 0 0 var(--sf-accent);
 }
+
+.filterRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 63.99em) {
+  .filterRow .filter {
+    flex: 1;
+  }
+}
