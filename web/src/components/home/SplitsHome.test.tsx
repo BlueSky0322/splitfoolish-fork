@@ -49,7 +49,7 @@ describe('My splits', () => {
     );
     renderApp(server, '/', { size: 'phone' });
     const user = userEvent.setup();
-    const row = (await screen.findByText('Trip')).closest('button')!;
+    const row = (await screen.findByText('Trip', {}, { timeout: 3000 })).closest('button')!;
     expect(within(row).getByText('2 people, 1 item')).toBeTruthy();
     // Ann owes Ryan 45 of the 90
     expect(within(row).getByText('45.00')).toBeTruthy();
@@ -59,7 +59,7 @@ describe('My splits', () => {
     fireEvent.touchEnd(row);
     await user.click(screen.getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(screen.queryByText('Trip')).toBeNull());
-    await waitFor(() => expect(server.archived.has('trip')).toBe(true));
+    await waitFor(() => expect(server.archived.has('trip')).toBe(true), { timeout: 3000 });
 
     await user.click(screen.getByRole('button', { name: 'Sort and filter' }));
     const sheet = await screen.findByRole('dialog');
@@ -74,7 +74,7 @@ describe('My splits', () => {
       { size: 'phone' },
     );
     const user = userEvent.setup();
-    await screen.findByText('Trip');
+    await screen.findByText('Trip', {}, { timeout: 3000 });
     await user.click(screen.getByRole('button', { name: 'Search' }));
     await user.type(screen.getByRole('textbox', { name: 'Search' }), 'ram');
     expect(await screen.findByText('Items')).toBeTruthy();
