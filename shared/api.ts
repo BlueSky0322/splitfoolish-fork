@@ -80,7 +80,12 @@ export interface SplitSummary {
   role: Role;
   memberCount: number;
   peopleCount: number;
+  itemCount: number;
   totalCents: number;
+  /** Something was spent and everyone's square */
+  settled: boolean;
+  /** Archived by this account: out of its Active list, still theirs */
+  archived: boolean;
   /** Null when no one in the split is linked to this account */
   myBalanceCents: number | null;
   /** Null when the split has no picture */
@@ -273,6 +278,12 @@ export interface SplitOrderBody {
   ids: string[];
 }
 
+/** PUT /archived: archives a split for you, or brings it back */
+export interface ArchiveBody {
+  id: string;
+  archived: boolean;
+}
+
 /** PATCH /splits/:id */
 export interface SplitPatch {
   name?: string;
@@ -295,6 +306,24 @@ export interface PaymentMethodsBody {
 /** GET /splits */
 export interface SplitList {
   splits: SplitSummary[];
+}
+
+/** An item found by GET /search, with the split it's in */
+export interface FoundItem {
+  id: string;
+  name: string;
+  costCents: number;
+  category: string | null;
+  createdAt: number;
+  splitId: string;
+  splitName: string;
+  /** The split's */
+  currency: string;
+}
+
+/** GET /search?q= */
+export interface SearchResult {
+  items: FoundItem[];
 }
 
 /** GET /item-names */

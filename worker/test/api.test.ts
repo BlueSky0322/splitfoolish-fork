@@ -633,6 +633,86 @@ describe('ordering my splits', () => {
   });
 });
 
+describe('archiving and search', () => {
+  const listed = async (who: string, id: string) =>
+    ((await api.call(who, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
+      (s) => s.id === id,
+    );
+
+  it('archives a split for one person only', async () => {
+    const owner = person('owner');
+    const member = person('member');
+    const { id } = await splitWith(owner, member);
+    expect(await listed(owner, id)).toMatchObject({
+      archived: false,
+      settled: false,
+      itemCount: 0,
+    });
+
+    expect((await api.call(owner, 'PUT', '/api/archived', { id, archived: true })).status).toBe(
+      200,
+    );
+    expect(await listed(owner, id)).toMatchObject({ archived: true });
+    expect(await listed(member, id)).toMatchObject({ archived: false });
+    await api.call(owner, 'PUT', '/api/archived', { id, archived: false });
+    expect(await listed(owner, id)).toMatchObject({ archived: false });
+
+    // Only splits you're in, and only a yes or no
+    const outsider = person('outsider');
+    expect((await api.call(outsider, 'PUT', '/api/archived', { id, archived: true })).status).toBe(
+      404,
+    );
+    expect((await api.call(owner, 'PUT', '/api/archived', { id, archived: 'yes' })).status).toBe(
+      400,
+    );
+  });
+
+  it('says a split is settled once spending is square', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const me = hex();
+    await change(owner, id, { op: 'addPerson', id: me, name: 'Me' });
+    await change(owner, id, {
+      op: 'addItem',
+      item: { id: hex(), name: 'Solo lunch', cost: 12, payerId: me, participantIds: [me] },
+    });
+    expect(await listed(owner, id)).toMatchObject({ settled: true, itemCount: 1 });
+  });
+
+  it('finds items by name in your own splits only', async () => {
+    const owner = person('owner');
+    const outsider = person('outsider');
+    const { id } = await splitWith(owner);
+    const p = hex();
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: p, name: 'Ann' },
+      {
+        op: 'addItem',
+        item: { id: hex(), name: 'Ichiran Ramen', cost: 30, payerId: p, participantIds: [p] },
+      },
+      {
+        op: 'addItem',
+        item: { id: hex(), name: '100% juice', cost: 5, payerId: p, participantIds: [p] },
+      },
+    );
+    const search = async (who: string, q: string) =>
+      (await api.call(who, 'GET', `/api/search?q=${encodeURIComponent(q)}`)).data.items as {
+        name: string;
+        splitName: string;
+      }[];
+    expect(await search(owner, 'ramen')).toMatchObject([
+      { name: 'Ichiran Ramen', splitName: 'Trip', costCents: 3000, currency: 'MYR' },
+    ]);
+    // % is looked for as typed, not as a wildcard
+    expect((await search(owner, '0%')).map((i) => i.name)).toEqual(['100% juice']);
+    expect(await search(owner, '%a')).toEqual([]);
+    expect(await search(outsider, 'ramen')).toEqual([]);
+    expect((await api.call(owner, 'GET', '/api/search?q=r')).status).toBe(400);
+  });
+});
+
 describe('item names and dates', () => {
   it('remembers item names across your splits, newest first, once each', async () => {
     const owner = person('owner');
