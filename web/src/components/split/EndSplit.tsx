@@ -3,8 +3,7 @@ import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import classes from './Split.module.css';
-import { reloadHomeData, updateHomeData } from '../../home/home-data';
-import { showError } from '../../utils/notify';
+import { removeListedSplit, sendHomeChange } from '../../home/home-data';
 
 interface EndSplitProps {
   splitId: string;
@@ -26,14 +25,12 @@ export const EndSplitTitle = ({ isOwner }: { isOwner: boolean }) => (
 // split goes from their list straight away and the server catches up.
 const EndSplit = ({ splitId, name, isOwner, myEmail, onCancel }: EndSplitProps) => {
   const end = () => {
-    updateHomeData((data) => ({ splits: data.splits?.filter((s) => s.id !== splitId) }));
+    removeListedSplit(splitId);
     navigate('');
-    (isOwner ? api.deleteSplit(splitId) : api.removeMember(splitId, myEmail))
-      .then(() => reloadHomeData())
-      .catch((err) => {
-        showError(err, `Could not ${isOwner ? 'delete' : 'leave'} the split`);
-        void reloadHomeData();
-      });
+    void sendHomeChange(
+      () => (isOwner ? api.deleteSplit(splitId) : api.removeMember(splitId, myEmail)),
+      `Could not ${isOwner ? 'delete' : 'leave'} the split`,
+    );
   };
 
   return (

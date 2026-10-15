@@ -4,7 +4,7 @@ import type { Item as ApiItem, Change } from '../../../shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
 import { atRate, removalBlocker } from './rules';
-import { toApiItem, type SplitMeta } from './state';
+import { type SplitMeta } from './state';
 import type { MetaChanges, SplitAction, SplitState } from './state';
 
 // What can be done to an open split: each checks the change, shows it straight away
@@ -164,7 +164,7 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
       at.setHours(was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds());
       const createdAt = Math.min(at.getTime(), now);
       if (createdAt === item.createdAt) continue;
-      d.dispatch({ type: 'UPDATE_ITEM', payload: toApiItem({ ...item, createdAt }) });
+      d.dispatch({ type: 'PATCH_ITEM', payload: { id: item.id, createdAt } });
       d.queue({ op: 'setItemDate', id: item.id, createdAt });
       moved = true;
     }
@@ -199,7 +199,7 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
     } else {
       for (const item of d.current().items) {
         if (item.original?.currency !== currency) continue;
-        d.dispatch({ type: 'UPDATE_ITEM', payload: toApiItem(atRate(item, rate)) });
+        d.dispatch({ type: 'PATCH_ITEM', payload: atRate(item, rate) });
       }
     }
     d.queue({ op: 'setRate', currency, rate });

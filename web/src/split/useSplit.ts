@@ -16,7 +16,7 @@ import { isNetworkError, isOffline } from '../offline/outbox';
 import { useSaveQueue } from './useSaveQueue';
 import { useSplitLive } from './useSplitLive';
 import type { SplitDetail } from '../../../shared/api';
-import { reloadHomeData, updateHomeData } from '../home/home-data';
+import { patchListedSplit, reloadHomeData } from '../home/home-data';
 import { showError } from '../utils/notify';
 import type { SplitActions } from './actions';
 import { makeSplitActions } from './actions';
@@ -192,9 +192,7 @@ export function useSplit(splitId: string) {
         ),
       patchSettings: (changes) => {
         setMeta((m) => (m ? { ...m, ...changes } : m));
-        updateHomeData((data) => ({
-          splits: data.splits?.map((x) => (x.id === splitId ? { ...x, ...changes } : x)),
-        }));
+        patchListedSplit(splitId, changes);
       },
       removeMember: (email) =>
         setMeta((m) => (m ? { ...m, members: m.members.filter((x) => x.email !== email) } : m)),

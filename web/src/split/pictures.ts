@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { api } from '../api';
 import { whenCreated } from '../offline/pending-creates';
 import { shrinkAvatar } from '../utils/image';
-import { reloadHomeData, updateHomeData } from '../home/home-data';
+import { patchListedSplit, reloadHomeData } from '../home/home-data';
 
 // Split pictures being uploaded, shown from this device in the meantime
 
@@ -32,9 +32,7 @@ export async function uploadSplitPicture(
   try {
     await whenCreated(splitId);
     const { pictureVersion } = await api.setSplitPicture(splitId, picture);
-    updateHomeData((data) => ({
-      splits: data.splits?.map((s) => (s.id === splitId ? { ...s, pictureVersion } : s)),
-    }));
+    patchListedSplit(splitId, { pictureVersion });
     onSaved?.(pictureVersion);
   } finally {
     // Keep the local copy a moment longer, so the uploaded one has time to load
@@ -47,9 +45,7 @@ export async function uploadSplitPicture(
 }
 
 export async function removeSplitPicture(splitId: string) {
-  updateHomeData((data) => ({
-    splits: data.splits?.map((s) => (s.id === splitId ? { ...s, pictureVersion: null } : s)),
-  }));
+  patchListedSplit(splitId, { pictureVersion: null });
   try {
     await api.deleteSplitPicture(splitId);
   } catch (err) {

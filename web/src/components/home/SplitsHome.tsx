@@ -19,8 +19,7 @@ import UserAvatar from '../ui/UserAvatar';
 import classes from './SplitsHome.module.css';
 import { InstallCard } from '../ui/InstallApp';
 import type { MyInvite, SplitSummary } from '../../../../shared/api';
-import { reloadHomeData, updateHomeData, moveSplit } from '../../home/home-data';
-import { showError } from '../../utils/notify';
+import { moveSplit, removeListedInvite, sendHomeChange } from '../../home/home-data';
 import { plural } from '../../utils/text';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
@@ -99,34 +98,25 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
 
   // The invite leaves the list straight away; the server catches up in the background
   const respond = async (invite: MyInvite, accept: boolean) => {
-    updateHomeData((data) => ({
-      invites: (data.invites ?? []).filter((i) => i.id !== invite.id),
-    }));
-    try {
-      if (accept && invite.kind === 'invite') {
-        setBusy(invite.id);
-        // Joining has to finish before the split can be opened
-        const { id } = await api.acceptInvite(invite.id);
-        void reloadHomeData();
-        navigate(`?s=${id}`);
-        return;
-      }
-      if (accept) {
-        await api.acceptInvite(invite.id);
-        if (invite.kind === 'request') {
-          notifications.show({
-            message: `${nameFor(invite.email, invite.name)} joined ${invite.splitName}`,
-          });
-        }
-        void reloadHomeData();
-        return;
-      }
-      await api.declineInvite(invite.id);
-    } catch (err) {
-      showError(err, 'Could not answer the invite');
-      void reloadHomeData();
-    } finally {
-      setBusy(null);
+    removeListedInvite(invite.id);
+    if (!accept) {
+      void sendHomeChange(() => api.declineInvite(invite.id), 'Could not answer the invite');
+      return;
+    }
+    // Joining has to finish before the split can be opened
+    if (invite.kind === 'invite') setBusy(invite.id);
+    const joined = await sendHomeChange(
+      () => api.acceptInvite(invite.id),
+      'Could not answer the invite',
+    );
+    setBusy(null);
+    if (joined == null) return;
+    if (invite.kind === 'invite') {
+      navigate(`?s=${joined.id}`);
+    } else if (invite.kind === 'request') {
+      notifications.show({
+        message: `${nameFor(invite.email, invite.name)} joined ${invite.splitName}`,
+      });
     }
   };
 

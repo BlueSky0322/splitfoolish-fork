@@ -73,6 +73,43 @@ export function updateHomeData(change: (data: HomeData) => Partial<HomeData>) {
   });
 }
 
+/** Adds a split to the top of My splits straight away */
+export const addListedSplit = (split: SplitSummary) =>
+  updateHomeData(({ splits }) => ({ splits: [split, ...(splits ?? [])] }));
+
+/** Changes one split in My splits straight away */
+export const patchListedSplit = (id: string, changes: Partial<SplitSummary>) =>
+  updateHomeData(({ splits }) => ({
+    splits: splits?.map((s) => (s.id === id ? { ...s, ...changes } : s)),
+  }));
+
+/** Takes a split out of My splits straight away */
+export const removeListedSplit = (id: string) =>
+  updateHomeData(({ splits }) => ({ splits: splits?.filter((s) => s.id !== id) }));
+
+/** Takes an invite out of the list straight away */
+export const removeListedInvite = (id: string) =>
+  updateHomeData(({ invites }) => ({ invites: invites?.filter((i) => i.id !== id) }));
+
+/**
+ * Sends a change already shown in My splits. Either way the list is then fetched again,
+ * so it shows what the server has: the change confirmed, or put back after a failure
+ * (which is explained). Resolves with the server's answer, or undefined after a failure.
+ */
+export async function sendHomeChange<T>(
+  request: () => Promise<T>,
+  failure: string,
+): Promise<T | undefined> {
+  try {
+    return await request();
+  } catch (err) {
+    showError(err, failure);
+    return undefined;
+  } finally {
+    void reloadHomeData();
+  }
+}
+
 /** Moves a split to where another one is, in your own order, and saves the new order */
 export function moveSplit(id: string, toId: string) {
   let ids: string[] | null = null;

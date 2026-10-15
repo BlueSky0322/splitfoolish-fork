@@ -28,6 +28,8 @@ export type SplitAction =
   | { type: 'CLEAR_PEOPLE'; payload: null }
   | { type: 'ADD_ITEM'; payload: ApiItem }
   | { type: 'UPDATE_ITEM'; payload: ApiItem }
+  /** Changes some of an item shown here (its date, its amounts at a new rate) */
+  | { type: 'PATCH_ITEM'; payload: Pick<SplitItem, 'id'> & Partial<SplitItem> }
   | { type: 'REMOVE_ITEM'; payload: string }
   | { type: 'CLEAR_ITEMS'; payload: null }
   | { type: 'LOAD_STATE'; payload: { people: Person[]; items: ApiItem[] } };
@@ -118,6 +120,12 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
       draft.items = draft.items.flatMap((i) =>
         i.id !== action.payload.id ? [i] : updated ? [updated] : [],
       );
+      break;
+    }
+
+    case 'PATCH_ITEM': {
+      const item = draft.items.find((i) => i.id === action.payload.id);
+      if (item) Object.assign(item, action.payload);
       break;
     }
 

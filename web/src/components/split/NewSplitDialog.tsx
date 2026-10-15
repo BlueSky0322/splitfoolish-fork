@@ -9,7 +9,7 @@ import type { SplitFormValues } from './SplitForm';
 import SplitForm from './SplitForm';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import type { SplitDetail, SplitSummary } from '../../../../shared/api';
-import { reloadHomeData, updateHomeData } from '../../home/home-data';
+import { addListedSplit, reloadHomeData, removeListedSplit } from '../../home/home-data';
 import { showError } from '../../utils/notify';
 import { newId } from '../../utils/id';
 import { homeCurrency } from '../../utils/money';
@@ -65,12 +65,12 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
     };
 
     replace({ ...profile, settings: { ...profile.settings, lastCurrency: currency } });
-    updateHomeData((data) => ({ splits: [summary, ...(data.splits ?? [])] }));
+    addListedSplit(summary);
     startCreate({ id, name: trimmed, currency, summary })
       .then(() => reloadHomeData())
       .catch((err) => {
         showError(err, 'Could not create the split');
-        updateHomeData((data) => ({ splits: (data.splits ?? []).filter((x) => x.id !== id) }));
+        removeListedSplit(id);
         void removeCacheEntry(splitCacheKey(id));
         if (new URLSearchParams(window.location.search).get('s') === id) navigate('');
       });
