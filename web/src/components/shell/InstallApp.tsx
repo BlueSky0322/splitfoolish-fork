@@ -1,7 +1,8 @@
 import { Button, CloseButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { DotsThreeVertical, DownloadSimple, Export, PlusSquare } from '@phosphor-icons/react';
-import { ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { useInstall } from '../../pwa/useInstall';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import classes from './InstallApp.module.css';

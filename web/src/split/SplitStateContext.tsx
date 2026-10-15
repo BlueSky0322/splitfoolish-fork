@@ -1,6 +1,8 @@
-import { ReactNode, createContext, useContext } from 'react';
+import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 import { useImmerReducer } from 'use-immer';
-import { SplitAction, SplitState, splitReducer } from './state';
+import type { SplitAction, SplitState } from './state';
+import { splitReducer } from './state';
 
 interface SplitStateContextValue {
   state: SplitState;

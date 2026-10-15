@@ -1,4 +1,5 @@
-import { PointerEvent, MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent, MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Picking several items at once (see ItemSelection.tsx)
 

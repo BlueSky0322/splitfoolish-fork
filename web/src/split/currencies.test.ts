@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SplitItem } from './state';
+import type { SplitItem } from './state';
 import { usedCurrencies } from './currencies';
 
 const person = { id: 'a', name: 'A', memberEmail: null };
@@ -11,6 +11,7 @@ const item = (original: SplitItem['original']): SplitItem => ({
   participants: [person],
   splitMode: 'equal',
   category: null,
+  notes: null,
   createdAt: 0,
   original,
 });

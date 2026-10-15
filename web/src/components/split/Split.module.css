@@ -1012,3 +1012,27 @@
   -webkit-touch-callout: none;
   user-select: none;
 }
+
+/* Leaving or deleting a split */
+.endTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.endIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  color: var(--sf-negative);
+  background: color-mix(in srgb, var(--sf-negative) 16%, transparent);
+}
+
+.endName {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}

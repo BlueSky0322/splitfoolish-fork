@@ -2,7 +2,8 @@
 // that go through the API the way the app does. Access is switched off and requests say
 // who they are with the X-Dev-User header (see auth.ts).
 
-import { ChildProcess, execFileSync, spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';

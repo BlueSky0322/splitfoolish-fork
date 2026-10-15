@@ -1,7 +1,8 @@
 import { produce } from 'immer';
 import { describe, expect, test } from 'vitest';
 import type { Item, Person } from '../../../shared/types';
-import { SplitAction, SplitState, splitReducer, toApiItem } from './state';
+import type { SplitAction, SplitState } from './state';
+import { splitReducer, toApiItem } from './state';
 
 const ann: Person = { id: 'a', name: 'Ann', memberEmail: null };
 const ben: Person = { id: 'b', name: 'Ben', memberEmail: null };
@@ -14,6 +15,8 @@ const apiItem = (over: Partial<Item> = {}): Item => ({
   participantIds: ['a', 'b'],
   splitMode: 'equal',
   category: null,
+  notes: null,
+  original: null,
   createdAt: 1,
   ...over,
 });

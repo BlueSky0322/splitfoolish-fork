@@ -11,5 +11,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["*.config.ts", "*.config.js", "web/*.config.js"]
+  "include": ["*.config.ts", "web/*.config.ts"]
 }

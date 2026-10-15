@@ -1,4 +1,5 @@
-import { CSSVariablesResolver, createTheme } from '@mantine/core';
+import type { CSSVariablesResolver } from '@mantine/core';
+import { createTheme } from '@mantine/core';
 import { ACCENTS } from './accents';
 import type { Accent } from '../../../shared/api';
 

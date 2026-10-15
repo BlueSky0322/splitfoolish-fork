@@ -180,7 +180,7 @@ function SplitSheet({
   );
 }
 
-// Convert (6a desktop, 6b phone): a quick converter at the split's rates, that can
+// Convert: a quick converter at the split's rates, that can
 // drop the amount straight into a split as a new item
 const ConvertPage = () => {
   const isDesktop = useIsDesktop();
@@ -225,7 +225,7 @@ const ConvertPage = () => {
     }
   };
 
-  const result =
+  const convertedCents =
     amount == null
       ? null
       : from === to
@@ -333,7 +333,7 @@ const ConvertPage = () => {
     </div>
   );
 
-  const addToSplit = (
+  const addToSplitRow = (
     <div className={classes.addRow}>
       <Select
         label="Add to a split"
@@ -357,7 +357,7 @@ const ConvertPage = () => {
     </div>
   );
 
-  const recents = recent.length > 0 && (
+  const recentChips = recent.length > 0 && (
     <div className={classes.recent}>
       <h2 className="sf-label">Recent</h2>
       <div className={classes.chips}>
@@ -377,9 +377,11 @@ const ConvertPage = () => {
     </div>
   );
 
-  const resultBlock = (
+  const resultPanel = (
     <div>
-      <div className={classes.result}>{result == null ? '—' : formatMoney(result, to)}</div>
+      <div className={classes.result}>
+        {convertedCents == null ? '—' : formatMoney(convertedCents, to)}
+      </div>
       {rateLine}
     </div>
   );
@@ -445,16 +447,16 @@ const ConvertPage = () => {
               {pill('to', to)}
               <output
                 className={classes.bigResult}
-                data-empty={result == null || undefined}
+                data-empty={convertedCents == null || undefined}
                 aria-live="polite"
               >
-                {result == null ? '0' : formatMoney(result, to)}
+                {convertedCents == null ? '0' : formatMoney(convertedCents, to)}
               </output>
             </span>
           </div>
         </div>
         {rateLine}
-        {recents}
+        {recentChips}
 
         <div className={classes.mobileFooter}>
           <Button
@@ -495,11 +497,11 @@ const ConvertPage = () => {
       <Title order={1}>Convert</Title>
       <div className={classes.card}>
         {fields}
-        {resultBlock}
+        {resultPanel}
         <hr className="sf-rule" />
-        {addToSplit}
+        {addToSplitRow}
       </div>
-      {recents}
+      {recentChips}
     </div>
   );
 };

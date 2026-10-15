@@ -15,9 +15,9 @@
 
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
-import { AuthEnv } from './auth';
+import type { AuthEnv } from './auth';
 import { fail, notFound } from './http';
-import { RatesEnv } from './rates';
+import type { RatesEnv } from './rates';
 import type { SplitRoom } from './room';
 
 export interface Env extends AuthEnv, RatesEnv {

@@ -1,4 +1,5 @@
-import { ComboboxItem, OptionsFilter, Select, SelectProps } from '@mantine/core';
+import type { ComboboxItem, OptionsFilter, SelectProps } from '@mantine/core';
+import { Select } from '@mantine/core';
 import { CaretDown } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
 import { COMMON_CURRENCIES } from '../../../../shared/rates';

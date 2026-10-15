@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import classes from './SettingsLayout.module.css';
 
 /** One card on a settings page: a title, a line saying what it's for, then its fields */

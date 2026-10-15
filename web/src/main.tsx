@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import ErrorBoundary from './components/ui/ErrorBoundary.tsx';
-import { Root } from './Root.tsx';
+import ErrorBoundary from './components/ui/ErrorBoundary';
+import { Root } from './Root';
 import { trackKeyboardInset } from './pwa/keyboard-inset';
 import { trackInstall } from './pwa/install';
 import { restoreLastPage } from './hooks/useRoute';

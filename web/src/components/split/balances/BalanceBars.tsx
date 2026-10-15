@@ -1,4 +1,4 @@
-import { Balance } from '../../../../../shared/settle';
+import type { Balance } from '../../../../../shared/settle';
 import type { Person } from '../../../../../shared/types';
 import { formatSigned } from '../../../utils/money';
 import classes from '../Split.module.css';

@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { ApiError, NetworkError } from '../api';
 import { SW_USER_KEY } from './cache';
+import type { Queued } from './outbox';
 import {
   CREATE_PREFIX,
   LOCK_PREFIX,
   OUTBOX_PREFIX,
-  Queued,
   SYNC_TAG,
   classifySaveFailure,
   isRetryable,

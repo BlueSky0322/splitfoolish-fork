@@ -2,7 +2,8 @@ import { produce } from 'immer';
 import { describe, expect, test, vi } from 'vitest';
 import type { Change, Item, Person } from '../../../shared/types';
 import { makeSplitActions } from './actions';
-import { SplitAction, SplitMeta, SplitState, splitReducer } from './state';
+import type { SplitAction, SplitMeta, SplitState } from './state';
+import { splitReducer } from './state';
 
 vi.mock('../utils/notify', () => ({ showRefusal: vi.fn() }));
 const { showRefusal } = await import('../utils/notify');
@@ -22,6 +23,8 @@ const item = (over: Partial<Item> = {}): Item => ({
   participantIds: ['r', 'b'],
   splitMode: 'equal',
   category: null,
+  notes: null,
+  original: null,
   createdAt: new Date(2026, 9, 10, 19, 30).getTime(),
   ...over,
 });
@@ -71,6 +74,14 @@ describe('split actions', () => {
     expect(showRefusal).toHaveBeenCalledWith("Ann's name comes from their account");
     expect(actions.renamePerson('b', 'Benny')).toBe(true);
     expect(queued).toEqual([{ op: 'renamePerson', id: 'b', name: 'Benny' }]);
+  });
+
+  test('an item removed meanwhile is neither edited nor removed again', () => {
+    const { actions, queued } = setup();
+    expect(actions.removeItem('gone')).toBe(false);
+    expect(actions.updateItem('gone', { ...item(), name: 'Lunch' })).toBe(false);
+    expect(showRefusal).toHaveBeenCalledWith('That item has been removed');
+    expect(queued).toEqual([]);
   });
 
   test('removing someone with an account also takes away their access', () => {

@@ -10,8 +10,7 @@ import { quietly } from '../utils/quietly';
 /** The page that was open last, reopened on a fresh start (see hooks/useRoute) */
 export const LAST_PAGE_KEY = 'splitfoolish:lastPage';
 const LAST_EMAIL_KEY = 'splitfoolish:lastEmail';
-/** The signed-in email in IndexedDB, where the service worker reads it (public/sw.js) */
-/** Also read by public/sw.js (outbox.test.ts checks they match) */
+/** The signed-in email in IndexedDB, also read by public/sw.js (outbox.test.ts checks they match) */
 export const SW_USER_KEY = 'sf-user';
 /** Pictures the service worker keeps (IMAGE_CACHE in public/sw.js) */
 const IMAGE_CACHE = 'splitfoolish-images-v1';
@@ -34,7 +33,7 @@ const lastEmail = () => quietly(() => localStorage.getItem(LAST_EMAIL_KEY)) ?? n
 let user: string | null = null;
 let waiting: ((email: string) => void)[] = [];
 
-const cacheUser = (): Promise<string> =>
+const whenCacheUserKnown = (): Promise<string> =>
   user != null ? Promise.resolve(user) : new Promise((resolve) => waiting.push(resolve));
 
 function confirmCacheUser(email: string) {
@@ -44,17 +43,17 @@ function confirmCacheUser(email: string) {
 }
 
 export async function readCache<T>(key: string): Promise<T | undefined> {
-  const email = await cacheUser();
+  const email = await whenCacheUserKnown();
   const entry = await quietlyAsync(() => get<Entry<T>>(key));
   return entry?.email === email ? entry.value : undefined;
 }
 
 export async function writeCache<T>(key: string, value: T): Promise<void> {
-  const email = await cacheUser();
+  const email = await whenCacheUserKnown();
   await quietlyAsync(() => set(key, { email, value } satisfies Entry<T>));
 }
 
-export const removeCache = (key: string) => quietlyAsync(() => del(key));
+export const removeCacheEntry = (key: string) => quietlyAsync(() => del(key));
 
 /**
  * Where a split's last-seen copy (a SplitDetail) is kept. Versioned, so a copy saved in

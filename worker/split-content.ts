@@ -3,8 +3,10 @@
 // current contents and applied all-or-nothing, touching only the rows involved, so
 // people editing the same split don't overwrite each other.
 
-import { RateSource, convertCents, convertParts, isValidRate, toCents } from '../shared/rates';
-import { MAX_SHARES, SplitMode, isSplitMode } from '../shared/settle';
+import type { RateSource } from '../shared/rates';
+import { convertCents, convertParts, isValidRate, toCents } from '../shared/rates';
+import type { SplitMode } from '../shared/settle';
+import { MAX_SHARES, isSplitMode } from '../shared/settle';
 import type { Change, Item, ItemOriginal, Person } from '../shared/types';
 import { MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../shared/types';
 import {

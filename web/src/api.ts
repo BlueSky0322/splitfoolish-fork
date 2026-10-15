@@ -107,7 +107,7 @@ const splitPath = (id: string) => `/api/splits/${encodeURIComponent(id)}`;
 
 // The server calls photos "attachments" (its table and paths); the app calls them photos
 export const api = {
-  me: () => request<Profile>('GET', '/api/me'),
+  getMe: () => request<Profile>('GET', '/api/me'),
   updateMe: (patch: ProfilePatch) => request<Profile>('PATCH', '/api/me', patch),
   /** Replaces all payment methods and which one is preferred */
   setPaymentMethods: (methods: PaymentMethod[], preferredId: string | null) =>
@@ -117,12 +117,12 @@ export const api = {
     } satisfies PaymentMethodsBody),
   /** Uploads a QR code method's image; done before saving the method itself */
   setPaymentQr: (methodId: string, image: Blob) =>
-    upload<PaymentQrResult>('PUT', `/api/me/payment-qr/${methodId}`, image),
+    upload<PaymentQrResult>('PUT', `/api/me/payment-qr/${encodeURIComponent(methodId)}`, image),
   setAvatar: (photo: Blob) => upload<AvatarResult>('PUT', '/api/me/avatar', photo),
   deleteAvatar: () => request<Ok>('DELETE', '/api/me/avatar'),
   listSplits: () => request<SplitList>('GET', '/api/splits'),
   /** Names of items in your splits, most recent first, with the category last given */
-  itemNames: () => request<ItemNames>('GET', '/api/item-names'),
+  listItemNames: () => request<ItemNames>('GET', '/api/item-names'),
   /** Your own order for your splits: every id, first to last */
   reorderSplits: (ids: string[]) =>
     request<Ok>('PUT', '/api/splits/order', { ids } satisfies SplitOrderBody),
@@ -155,7 +155,7 @@ export const api = {
     request<Ok>('DELETE', `${splitPath(id)}/members/${encodeURIComponent(email)}`),
   revokeInvite: (id: string, inviteId: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/invites/${encodeURIComponent(inviteId)}`),
-  myInvites: () => request<InviteList>('GET', '/api/invites'),
+  listInvites: () => request<InviteList>('GET', '/api/invites'),
   acceptInvite: (inviteId: string) =>
     request<AcceptResult>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
   declineInvite: (inviteId: string) =>
@@ -169,7 +169,7 @@ export const api = {
       }`,
     ),
   /** The other currencies in your splits, with today's rate into `to` (Settings) */
-  usedCurrencyRates: (to: string) =>
+  listUsedCurrencyRates: (to: string) =>
     request<UsedCurrencyRates>('GET', `/api/me/rates?to=${encodeURIComponent(to)}`),
   /** Opening a share link: you're in the split already, have an invite, or asked to join */
   joinSplit: (token: string) =>
@@ -183,7 +183,7 @@ export const splitPictureUrl = (splitId: string, version: number) =>
   `${splitPath(splitId)}/picture?v=${version}`;
 
 export const paymentQrUrl = (methodId: string, version: number) =>
-  `/api/payment-qr/${methodId}?v=${version}`;
+  `/api/payment-qr/${encodeURIComponent(methodId)}?v=${version}`;
 
 export const avatarUrl = (email: string, version: number) =>
   `/api/avatars/${encodeURIComponent(email)}?v=${version}`;

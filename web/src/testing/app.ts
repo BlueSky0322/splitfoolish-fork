@@ -100,6 +100,8 @@ export const person = (id: string, name: string, memberEmail: string | null = nu
 export const item = (over: Partial<Item> & Pick<Item, 'id' | 'name' | 'cost'>): Item => ({
   payerId: 'me',
   participantIds: ['me', 'ann'],
+  notes: null,
+  original: null,
   splitMode: 'equal',
   category: null,
   createdAt: Date.UTC(2026, 9, 10, 12),

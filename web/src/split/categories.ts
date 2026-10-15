@@ -1,9 +1,9 @@
+import type { Icon } from '@phosphor-icons/react';
 import {
   Bed,
   Car,
   DotsThreeCircle,
   ForkKnife,
-  Icon,
   Receipt,
   ShoppingBag,
   ShoppingCart,

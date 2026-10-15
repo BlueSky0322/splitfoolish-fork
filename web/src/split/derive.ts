@@ -1,12 +1,6 @@
-import {
-  Balance,
-  SettleItem,
-  Transfer,
-  balances,
-  itemShares,
-  transfers,
-} from '../../../shared/settle';
-import { SplitItem } from './state';
+import type { Balance, SettleItem, Transfer } from '../../../shared/settle';
+import { balances, itemShares, transfers } from '../../../shared/settle';
+import type { SplitItem } from './state';
 import type { Person } from '../../../shared/types';
 import { toCents } from '../../../shared/rates';
 

@@ -1,9 +1,10 @@
+import { isShareCancelled } from '../../utils/share';
 import { Button, Loader, useComputedColorScheme } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { SplitItem } from '../../split/state';
+import type { SplitItem } from '../../split/state';
 import type { Person } from '../../../../shared/types';
-import { SplitTotals } from '../../split/derive';
+import type { SplitTotals } from '../../split/derive';
 import { useProfile } from '../../profile/ProfileContext';
 import { ACCENTS } from '../../theme/accents';
 import type { Accent } from '../../../../shared/api';
@@ -128,7 +129,7 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
         await navigator.share({ files: [file], title: name });
         return;
       } catch (err) {
-        if ((err as Error).name === 'AbortError') return;
+        if (isShareCancelled(err)) return;
       }
     }
     download();

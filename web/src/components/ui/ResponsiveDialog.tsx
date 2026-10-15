@@ -1,5 +1,6 @@
 import { Drawer, Modal } from '@mantine/core';
-import { ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { DialogHeaderSlot } from './dialog-header';
 import { useIsMobile } from '../../hooks/useBreakpoints';
 import classes from './ResponsiveDialog.module.css';
@@ -9,7 +10,6 @@ interface ResponsiveDialogProps {
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
-  /** Width of the desktop dialog */
   width?: number;
 }
 

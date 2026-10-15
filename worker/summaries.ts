@@ -2,7 +2,8 @@
 // Everything is read in one round trip and balanced with the same maths as the app.
 
 import type { SplitSummary } from '../shared/api';
-import { SettleItem, SplitMode, balances } from '../shared/settle';
+import type { SettleItem, SplitMode } from '../shared/settle';
+import { balances } from '../shared/settle';
 import type { Role } from '../shared/types';
 
 export async function listSplitSummaries(db: D1Database, email: string): Promise<SplitSummary[]> {

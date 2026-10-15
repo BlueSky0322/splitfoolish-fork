@@ -1,9 +1,9 @@
 import { ActionIcon, Button, CopyButton, Tooltip, UnstyledButton } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { copyText, isShareCancelled } from '../../../utils/share';
 import { ArrowClockwise, Check, Copy, LinkSimple, ShareNetwork } from '@phosphor-icons/react';
 import { api, inviteUrl } from '../../../api';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
-import { MetaChanges } from '../../../split/useSplit';
+import type { MetaChanges } from '../../../split/state';
 import type { SplitMeta } from '../../../split/state';
 import { nameFor } from '../../../profile/ProfileContext';
 import UserAvatar from '../../ui/UserAvatar';
@@ -18,7 +18,7 @@ interface SplitMembersProps {
   onChange: () => Promise<void>;
   /** Shows a change straight away, before the server confirms it */
   changeSharing: MetaChanges['changeSharing'];
-  /** Swaps this for the reset-link confirm (3b) */
+  /** Swaps this for the reset-link confirm */
   onReset: () => void;
 }
 
@@ -38,7 +38,7 @@ export const ShareTitle = ({ name }: { name: string }) => (
   </span>
 );
 
-// Sharing (3a desktop, 3c phone): the share link, who's in the split, who's yet to
+// Sharing: the share link, who's in the split, who's yet to
 // accept, and deleting or leaving the split
 const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: SplitMembersProps) => {
   const isMobile = useIsMobile();
@@ -56,11 +56,10 @@ const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: Split
         await navigator.share({ title: meta.name, url });
         return;
       } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (isShareCancelled(err)) return;
       }
     }
-    await navigator.clipboard.writeText(url);
-    notifications.show({ message: 'Link copied' });
+    await copyText(url, 'Link copied');
   };
 
   const helper = (

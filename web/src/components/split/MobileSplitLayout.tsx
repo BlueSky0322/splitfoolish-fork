@@ -31,7 +31,7 @@ const MAX_AVATARS = 4;
 function oweLine(people: Person[], totals: SplitTotals, me: Person | null) {
   if (!totals.hasItems) return 'No items yet';
   if (me == null) return 'Tap to edit or pick yourself';
-  const owe = totals.transfers.filter((t) => t.toId === me.id).map((t) => t.fromId);
+  const oweYou = totals.transfers.filter((t) => t.toId === me.id).map((t) => t.fromId);
   const youOwe = totals.transfers.filter((t) => t.fromId === me.id).map((t) => t.toId);
   const names = (ids: string[]) => {
     const list = ids.map((id) => people.find((p) => p.id === id)?.name ?? '');
@@ -39,7 +39,7 @@ function oweLine(people: Person[], totals: SplitTotals, me: Person | null) {
       ? list.join(' and ')
       : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`;
   };
-  if (owe.length > 0) return `${names(owe)} ${owe.length === 1 ? 'owes' : 'owe'} you`;
+  if (oweYou.length > 0) return `${names(oweYou)} ${oweYou.length === 1 ? 'owes' : 'owe'} you`;
   if (youOwe.length > 0) return `You owe ${names(youOwe)}`;
   return 'Everyone is settled';
 }

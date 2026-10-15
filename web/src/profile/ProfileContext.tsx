@@ -1,7 +1,9 @@
 import { useMantineColorScheme } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { ApiError, Profile, api } from '../api';
+import type { ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import type { Profile } from '../api';
+import { ApiError, api } from '../api';
 import { queryClient } from '../query-client';
 import { isNetworkError } from '../offline/outbox';
 import { syncAfterSignIn } from '../offline/sync';
@@ -73,7 +75,8 @@ interface ProfileContextValue {
 const ProfileContext = createContext<ProfileContextValue | null>(null);
 
 const ME_KEY = ['me'] as const;
-const ME_CACHE_KEY = 'me';
+/** Versioned like the other saved copies: one in an older shape is never read */
+const ME_CACHE_KEY = 'me-v2';
 
 export const useProfile = () => {
   const value = useContext(ProfileContext);
@@ -99,7 +102,7 @@ export function ProfileProvider({
     queryKey: ME_KEY,
     queryFn: async () => {
       try {
-        const me = await api.me();
+        const me = await api.getMe();
         // Cached splits are kept per account; know whose before showing any
         await setCacheUser(me.email);
         fromDevice.current = false;

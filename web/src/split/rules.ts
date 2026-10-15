@@ -7,9 +7,13 @@ import type { SplitItem, SplitState } from './state';
 // some of them through the same code (shared/rules.ts); rules.test.ts holds both to the
 // same cases.
 
-/** An item paid in another currency, converted again at a typed rate, as the server does it */
+/**
+ * An item paid in another currency, converted again at a typed rate, as the server does
+ * it. One paid in the split's own currency has nothing to convert, and stays as it is.
+ */
 export function atRate(item: SplitItem, rate: number): SplitItem {
-  const original = item.original!;
+  const { original } = item;
+  if (original == null) return item;
   const costCents = convertCents(toCents(original.amount), rate);
   const exact =
     item.splitMode === 'exact' && original.exact

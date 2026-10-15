@@ -1,5 +1,5 @@
 import { Button, CopyButton, UnstyledButton } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { copyText } from '../../utils/share';
 import {
   Bank,
   CaretRight,
@@ -42,7 +42,7 @@ const methodIcon = (m: PaymentMethod) =>
     <Wallet size={18} />
   );
 
-// Pay someone by their QR code (7d): the code on a light card in both themes, so it
+// Pay someone by their QR code: the code on a light card in both themes, so it
 // scans from another phone, then their other ways to be paid
 const QrViewer = ({
   opened,
@@ -135,9 +135,7 @@ const QrViewer = ({
                     if (isQr(m) && m.qrVersion != null) {
                       setShownId(m.id);
                     } else if (m.detail) {
-                      void navigator.clipboard
-                        ?.writeText(m.detail)
-                        .then(() => notifications.show({ message: `Copied ${m.detail}` }));
+                      void copyText(m.detail, `Copied ${m.detail}`);
                     }
                   }}
                 >

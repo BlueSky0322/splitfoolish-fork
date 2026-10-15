@@ -25,6 +25,8 @@ import { plural } from '../../utils/text';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
 type Filter = (typeof FILTERS)[number];
+const isFilter = (value: unknown): value is Filter =>
+  (FILTERS as readonly unknown[]).includes(value);
 
 const EMPTY_MESSAGES: Record<Exclude<Filter, 'invites'>, string> = {
   all: 'No splits yet. Start one with New split.',
@@ -253,7 +255,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
   const { profile } = useProfile();
   const openNewSplit = useOpenNewSplit();
   const isDesktop = useIsDesktop();
-  const filter: Filter = FILTERS.includes(tab as Filter) ? (tab as Filter) : 'all';
+  const filter = isFilter(tab) ? tab : 'all';
   const setFilter = (next: string) =>
     navigate(next === 'all' ? '' : `?tab=${next}`, { replace: true });
 
@@ -261,7 +263,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
   const inviteCount = actionableInvites(invites);
   const footnote = <p className={classes.footnote}>Invites expire after {INVITE_DAYS} days.</p>;
 
-  // Desktop has its own Invites page (F3b), reached from the sidebar
+  // Desktop has its own Invites page, reached from the sidebar
   if (isDesktop && filter === 'invites') {
     return (
       <div className={classes.page}>

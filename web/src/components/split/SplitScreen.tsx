@@ -13,7 +13,8 @@ import {
   UsersThree,
   X,
 } from '@phosphor-icons/react';
-import { ReactNode, useCallback, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { Attachment } from '../../../../shared/api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeDataSnapshot } from '../../home/useHomeData';
@@ -36,9 +37,11 @@ import { AvatarVersionsContext } from './people/PersonAvatar';
 import SplitDialogs from './SplitDialogs';
 import { type Dialog, type SplitPage, SplitPageContext } from './SplitPageContext';
 import { type SelectionUi, type SplitPageParts, otherCurrencyCount } from './SplitPageParts';
-import { Prefill, useConvertPrefill } from './useConvertPrefill';
+import type { Prefill } from './useConvertPrefill';
+import { useConvertPrefill } from './useConvertPrefill';
 import { useDeleteItems } from './items/useDeleteItems';
-import { ViewPrefs, useItemViewPrefs } from './items/useItemViewPrefs';
+import type { ViewPrefs } from './items/useItemViewPrefs';
+import { useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
 
 // The split page: loads the split, works out what's shown from it, and builds the parts
@@ -113,9 +116,12 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const selection = useItemSelection(groups.flatMap((g) => g.items.map((i) => i.id)));
   const [moving, setMoving] = useState(false);
 
-  const deleteItems = useDeleteItems(actions, photos, (c) =>
-    setDialog({ kind: 'confirmDelete', ...c }),
-  );
+  const deleteItems = useDeleteItems({
+    actions,
+    photosOf: photos.photosOf,
+    forgetItemAttachments: metaChanges.forgetItemAttachments,
+    confirm: (c) => setDialog({ kind: 'confirmDelete', ...c }),
+  });
   /** Deletes the picked items: with Undo, or after asking when photos would go too */
   const deleteSelected = () =>
     deleteItems(

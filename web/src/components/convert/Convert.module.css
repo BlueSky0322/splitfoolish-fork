@@ -155,7 +155,7 @@
   z-index: 10;
 }
 
-/* Phones (6b): what you have above what it comes to, with a round swap between */
+/* Phones: what you have above what it comes to, with a round swap between */
 .converter {
   display: flex;
   flex-direction: column;

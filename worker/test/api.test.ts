@@ -2,7 +2,8 @@
 // and change what, the rules for changing a split, and the share-link invite flows.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { LocalWorker, startLocalWorker } from './local-worker';
+import type { LocalWorker } from './local-worker';
+import { startLocalWorker } from './local-worker';
 
 let api: LocalWorker;
 let n = 0;

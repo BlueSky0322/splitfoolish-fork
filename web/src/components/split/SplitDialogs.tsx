@@ -10,10 +10,11 @@ import SplitSettings from './SplitSettings';
 import PhotoStrip from '../photos/PhotoStrip';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import { Button } from '@mantine/core';
-import { ReactNode } from 'react';
-import { ItemInput } from '../../api';
+import type { ReactNode } from 'react';
+import type { ItemInput } from '../../api';
 import type { SplitTotals } from '../../split/derive';
-import { SplitItem, toApiItem } from '../../split/state';
+import type { SplitItem } from '../../split/state';
+import { toApiItem } from '../../split/state';
 import { useSplitState } from '../../split/SplitStateContext';
 import { useSplitActions } from '../../split/useSplit';
 import { newId } from '../../utils/id';
@@ -49,7 +50,6 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
     status,
     totals,
     currency,
-    me,
     pictureVersion,
     photos,
     canRemovePhoto,
@@ -58,6 +58,8 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
   const { state } = useSplitState();
   const actions = useSplitActions();
   const close = () => setDialog(null);
+  // The item being edited, when the item form is open for one
+  const editing = dialog?.kind === 'edit' ? dialog.item : null;
 
   const saveItem = (input: ItemInput, newPhotos: File[]) => {
     if (dialog?.kind === 'edit') {
@@ -77,7 +79,6 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
   // A copy of a saved item (not edits still in the form), as of its date or today.
   // Receipts stay with the original.
   const duplicateItem = (item: SplitItem, keepDate: boolean) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, createdAt, ...input } = toApiItem(item);
     close();
     if (actions.addItem(input, newId(), keepDate ? createdAt : undefined)) {
@@ -93,38 +94,29 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
         title={dialog?.kind === 'edit' ? 'Edit item' : 'Add item'}
         width={520}
       >
-        {(dialog?.kind === 'add' || dialog?.kind === 'edit') && (
+        {editing ? (
           <ItemForm
-            key={dialog.kind === 'edit' ? dialog.item.id : 'new'}
-            people={state.people}
-            currency={currency}
-            item={dialog.kind === 'edit' ? dialog.item : undefined}
-            defaultPayerId={me?.id}
-            initialAmount={dialog.kind === 'add' ? dialog.prefill?.amount : undefined}
-            initialCurrency={dialog.kind === 'add' ? dialog.prefill?.currency : undefined}
-            splitId={splitId}
+            key={editing.id}
+            item={editing}
             onSave={saveItem}
-            photos={dialog.kind === 'edit' ? photos.photosOf(dialog.item.id) : []}
-            uploading={dialog.kind === 'edit' ? photos.uploading[dialog.item.id] ?? [] : []}
-            canRemovePhoto={canRemovePhoto}
-            onAddPhotos={(files) => dialog.kind === 'edit' && photos.upload(files, dialog.item.id)}
-            onRemovePhoto={photos.remove}
-            onDelete={
-              dialog.kind === 'edit'
-                ? () => {
-                    close();
-                    // The form has asked already when photos would go too
-                    deleteItems([dialog.item], { confirmed: true });
-                  }
-                : undefined
-            }
-            onDuplicate={
-              dialog.kind === 'edit'
-                ? (keepDate) => duplicateItem(dialog.item, keepDate)
-                : undefined
-            }
+            onDelete={() => {
+              close();
+              // The form has asked already when photos would go too
+              deleteItems([editing], { confirmed: true });
+            }}
+            onDuplicate={(keepDate) => duplicateItem(editing, keepDate)}
             onCancel={close}
           />
+        ) : (
+          dialog?.kind === 'add' && (
+            <ItemForm
+              key="new"
+              initialAmount={dialog.prefill?.amount}
+              initialCurrency={dialog.prefill?.currency}
+              onSave={saveItem}
+              onCancel={close}
+            />
+          )
         )}
       </ResponsiveDialog>
       <ResponsiveDialog

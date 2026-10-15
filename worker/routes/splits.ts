@@ -18,9 +18,8 @@ import type {
   UpdateSplitResult,
 } from '../../shared/api';
 import { MAX_NAME_LENGTH } from '../../shared/types';
+import type { AppEnv, Env } from '../app';
 import {
-  AppEnv,
-  Env,
   ID,
   SPLIT,
   VALID_ID,

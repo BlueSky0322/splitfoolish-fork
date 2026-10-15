@@ -8,48 +8,19 @@ import {
   useState,
 } from 'react';
 import { ApiError, NetworkError, api } from '../api';
-import { SplitState, toApiItem, type SplitMeta } from './state';
-import { readCache, removeCache, splitCacheKey, writeCache } from '../offline/cache';
+import type { SplitState } from './state';
+import { toApiItem, type MetaChanges, type SplitMeta, type SyncStatus } from './state';
+import { readCache, removeCacheEntry, splitCacheKey, writeCache } from '../offline/cache';
 import { whenCreated } from '../offline/pending-creates';
 import { isNetworkError, isOffline } from '../offline/outbox';
 import { useSaveQueue } from './useSaveQueue';
 import { useSplitLive } from './useSplitLive';
-import type { SplitDetail, Attachment } from '../../../shared/api';
+import type { SplitDetail } from '../../../shared/api';
 import { reloadHomeData, updateHomeData } from '../home/home-data';
 import { showError } from '../utils/notify';
-import { SplitActions, makeSplitActions } from './actions';
+import type { SplitActions } from './actions';
+import { makeSplitActions } from './actions';
 import { useSplitState } from './SplitStateContext';
-
-/**
- * 'refreshing' means a cached copy is showing while the latest loads; 'offline' that
- * there's no connection, with any changes kept on the device until there is
- */
-export type SyncStatus =
-  | 'loading'
-  | 'refreshing'
-  | 'saving'
-  | 'saved'
-  | 'error'
-  | 'offline'
-  | 'notfound';
-
-/** The ways the split page changes what it shows about the split besides its bill */
-export interface MetaChanges {
-  addAttachment: (photo: Attachment) => void;
-  removeAttachment: (id: string) => void;
-  /** Photos of an item that was deleted (the server removed them with it) */
-  forgetItemAttachments: (itemId: string) => void;
-  /** Shows saved split settings straight away, here and in My splits */
-  patchSettings: (
-    changes: Partial<Pick<SplitMeta, 'name' | 'currency' | 'pictureVersion' | 'converting'>>,
-  ) => void;
-  /** Someone who lost access when their person was removed */
-  removeMember: (email: string) => void;
-  /** Who everyone settles up through, or null for the fewest transfers */
-  setDistributor: (personId: string | null) => void;
-  /** Shows a sharing change straight away; fetches it again if the server says no */
-  changeSharing: (show: (meta: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => void;
-}
 
 /** Provided by the split page */
 export const SplitActionsContext = createContext<SplitActions | null>(null);
@@ -85,7 +56,7 @@ export function useSplit(splitId: string) {
 
   /** Deleted, or no longer shared with this person: the device's copy goes too */
   const markGone = useCallback(() => {
-    void removeCache(cacheKey);
+    void removeCacheEntry(cacheKey);
     void reloadHomeData();
     setStatus('notfound');
   }, [cacheKey]);
@@ -203,7 +174,6 @@ export function useSplit(splitId: string) {
 
   // Refresh members and invites after sharing changes, without touching people/items
   const refreshMeta = useCallback(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { people, items, ...rest } = await api.getSplit(splitId);
     setMeta(rest);
   }, [splitId]);

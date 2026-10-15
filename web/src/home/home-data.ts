@@ -29,7 +29,7 @@ const withCreating = async (listed: SplitSummary[]) => {
 export const fetchHome = async (): Promise<Loaded> => {
   let listed: SplitSummary[], invites: MyInvite[];
   try {
-    [{ splits: listed }, { invites }] = await Promise.all([api.listSplits(), api.myInvites()]);
+    [{ splits: listed }, { invites }] = await Promise.all([api.listSplits(), api.listInvites()]);
   } catch (err) {
     if (!isNetworkError(err)) throw err;
     // Offline: what was saved on this device, fetched again once back online
@@ -41,15 +41,12 @@ export const fetchHome = async (): Promise<Loaded> => {
   return { splits: await withCreating(listed), invites };
 };
 
-let savedCopyShown = false;
-
 /**
- * Shows the copy saved on this device, unless a fresh one has already arrived. Once per
- * page: after that, what's on screen is newer.
+ * Shows the copy saved on this device, unless something is showing already: a fresh copy,
+ * or this one shown before
  */
 export function showSavedCopy() {
-  if (savedCopyShown) return;
-  savedCopyShown = true;
+  if (queryClient.getQueryData(HOME_KEY) !== undefined) return;
   void readCache<Loaded>(CACHE_KEY).then(async (cached) => {
     if (cached == null) return;
     const splits = await withCreating(cached.splits);

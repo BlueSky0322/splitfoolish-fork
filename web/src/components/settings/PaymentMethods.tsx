@@ -51,7 +51,7 @@ interface PickedQr {
   cropped: boolean;
 }
 
-/** The picture of a QR code method (7a, 7b): empty with ways to add one, or the code */
+/** The picture of a QR code method: empty with ways to add one, or the code */
 function QrField({
   existing,
   picked,

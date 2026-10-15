@@ -32,7 +32,7 @@ const RATE_SOURCES = [
   },
 ] as const;
 
-// Currency (9c): what new splits use, where rates come from, and today's rates for the
+// Currency: what new splits use, where rates come from, and today's rates for the
 // currencies in your splits
 const CurrencySection = ({ track }: { track: Track }) => {
   const { profile, updateSettings } = useProfile();
@@ -48,7 +48,7 @@ const CurrencySection = ({ track }: { track: Track }) => {
 
   const rates = useQuery({
     queryKey: ['used-currency-rates', home, source],
-    queryFn: () => api.usedCurrencyRates(home),
+    queryFn: () => api.listUsedCurrencyRates(home),
     enabled: profile != null,
     staleTime: 5 * 60 * 1000,
   });

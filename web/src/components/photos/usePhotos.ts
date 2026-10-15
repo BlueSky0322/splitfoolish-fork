@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { api } from '../../api';
-import { MetaChanges } from '../../split/useSplit';
+import type { MetaChanges } from '../../split/state';
 import type { SplitMeta } from '../../split/state';
 import { shrinkImage } from '../../utils/image';
 import type { Attachment } from '../../../../shared/api';
@@ -9,7 +9,7 @@ import { showError } from '../../utils/notify';
 interface UsePhotosOptions {
   splitId: string;
   meta: SplitMeta | null;
-  metaChanges: Pick<MetaChanges, 'addAttachment' | 'removeAttachment' | 'forgetItemAttachments'>;
+  metaChanges: Pick<MetaChanges, 'addAttachment' | 'removeAttachment'>;
   /** Resolves once queued changes are saved, so a new item exists before its photos */
   whenSaved: () => Promise<void>;
 }
@@ -17,7 +17,7 @@ interface UsePhotosOptions {
 // Receipt photos on items and photos of the whole split: shrinking, uploading and
 // removing them, keeping the split's list of photos in step
 export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOptions) {
-  const { addAttachment, removeAttachment, forgetItemAttachments } = metaChanges;
+  const { addAttachment, removeAttachment } = metaChanges;
   // Photos on their way up, per item id ('' for the split itself), shown meanwhile
   const [uploading, setUploading] = useState<Record<string, File[]>>({});
 
@@ -71,5 +71,5 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
   const photosOf = (itemId: string | null) =>
     meta?.attachments.filter((a) => a.itemId === itemId) ?? [];
 
-  return { upload, remove, photosOf, forgetItem: forgetItemAttachments, uploading };
+  return { upload, remove, photosOf, uploading };
 }

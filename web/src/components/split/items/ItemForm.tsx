@@ -15,11 +15,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useContext, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { convertCents, isValidRate, toCents } from '../../../../../shared/rates';
-import { SplitMode, itemShares, MAX_SHARES } from '../../../../../shared/settle';
+import type { SplitMode } from '../../../../../shared/settle';
+import { itemShares, MAX_SHARES } from '../../../../../shared/settle';
 import { MAX_NOTES_LENGTH, MAX_NAME_LENGTH } from '../../../../../shared/types';
-import { ItemInput, api } from '../../../api';
-import { SplitItem } from '../../../split/state';
-import type { Person } from '../../../../../shared/types';
+import type { ItemInput } from '../../../api';
+import { api } from '../../../api';
+import type { SplitItem } from '../../../split/state';
+import { useSplitState } from '../../../split/SplitStateContext';
+import { useSplitPage } from '../SplitPageContext';
 import { CATEGORIES } from '../../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../../split/item-names';
 import { currencySymbol, formatMoney } from '../../../utils/money';
@@ -31,19 +34,13 @@ import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar from '../people/PersonAvatar';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../../utils/rates';
-import { type Attachment } from '../../../../../shared/api';
 import { plural } from '../../../utils/text';
 import { useRate } from '../../../hooks/useRate';
 import { buildItemInput, chooseRate, exactCents } from '../../../split/item-input';
 
 interface ItemFormProps {
-  splitId: string;
-  people: Person[];
-  currency: string;
   /** Editing this item; adding a new one when absent */
   item?: SplitItem;
-  /** Who paid by default for a new item */
-  defaultPayerId?: string | null;
   /** A new item's amount and the currency it was paid in, e.g. from Convert */
   initialAmount?: string;
   initialCurrency?: string;
@@ -53,12 +50,6 @@ interface ItemFormProps {
   /** Adds a copy of the item being edited, keeping its date or as of today */
   onDuplicate?: (keepDate: boolean) => void;
   onCancel: () => void;
-  /** The item's receipt photos (editing only) */
-  photos: Attachment[];
-  uploading: File[];
-  canRemovePhoto: (photo: Attachment) => boolean;
-  onAddPhotos: (files: File[]) => void;
-  onRemovePhoto: (photo: Attachment) => void;
 }
 
 const MODES: { value: SplitMode; label: string }[] = [
@@ -67,25 +58,21 @@ const MODES: { value: SplitMode; label: string }[] = [
   { value: 'exact', label: 'Exact' },
 ];
 
-// Add item (F5) and Edit item (F6): amount first, who paid, then how it's split
+// Add item and Edit item: amount first, who paid, then how it's split
 const ItemForm = ({
-  splitId,
-  people,
-  currency,
   item,
-  defaultPayerId,
   initialAmount,
   initialCurrency,
   onSave,
   onDelete,
   onDuplicate,
   onCancel,
-  photos,
-  uploading,
-  canRemovePhoto,
-  onAddPhotos,
-  onRemovePhoto,
 }: ItemFormProps) => {
+  const { splitId, currency, me, photos: splitPhotos, canRemovePhoto } = useSplitPage();
+  const { people } = useSplitState().state;
+  // Receipt photos are added to a saved item straight away; a new item's wait until it's added
+  const photos = item ? splitPhotos.photosOf(item.id) : [];
+  const uploading = item ? splitPhotos.uploading[item.id] ?? [] : [];
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isDesktop = useIsDesktop();
@@ -107,7 +94,7 @@ const ItemForm = ({
   );
   const [name, setName] = useState(item?.name ?? '');
   const [payerId, setPayerId] = useState<string | null>(
-    item?.payer.id ?? defaultPayerId ?? people[0]?.id ?? null,
+    item?.payer.id ?? me?.id ?? people[0]?.id ?? null,
   );
   const [mode, setMode] = useState<SplitMode>(item?.splitMode ?? 'equal');
   const [included, setIncluded] = useState<Set<string>>(
@@ -126,7 +113,7 @@ const ItemForm = ({
   // Names used before, in any of your splits, suggested as you type
   const pastNames = useQuery({
     queryKey: ITEM_NAMES_KEY,
-    queryFn: async () => (await api.itemNames()).names,
+    queryFn: async () => (await api.listItemNames()).names,
     staleTime: 5 * 60 * 1000,
   });
   const suggestions = suggestNames(pastNames.data ?? [], name);
@@ -536,8 +523,10 @@ const ItemForm = ({
           pending={newPhotos}
           uploading={uploading}
           canRemove={canRemovePhoto}
-          onAdd={(files) => (item ? onAddPhotos(files) : setNewPhotos((p) => [...p, ...files]))}
-          onRemove={onRemovePhoto}
+          onAdd={(files) =>
+            item ? splitPhotos.upload(files, item.id) : setNewPhotos((p) => [...p, ...files])
+          }
+          onRemove={splitPhotos.remove}
           onRemovePending={(file) => setNewPhotos((p) => p.filter((f) => f !== file))}
         />
       </div>

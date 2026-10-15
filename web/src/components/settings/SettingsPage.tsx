@@ -1,16 +1,17 @@
 import { Title, UnstyledButton } from '@mantine/core';
+import type { Icon } from '@phosphor-icons/react';
 import {
   CaretLeft,
   CaretRight,
   CurrencyCircleDollar,
   DownloadSimple,
   HandCoins,
-  Icon,
   Palette,
   SignOut,
   UserCircle,
 } from '@phosphor-icons/react';
-import { ReactNode, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
@@ -22,7 +23,8 @@ import CurrencySection from './CurrencySection';
 import PaymentsSection from './PaymentsSection';
 import ProfileSection from './ProfileSection';
 import SettingsCard from './SettingsCard';
-import { Track, useSaveIndicator } from './useSaveIndicator';
+import type { Track } from './useSaveIndicator';
+import { useSaveIndicator } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
 
 async function signOut() {
@@ -125,7 +127,7 @@ const open = (id: SectionId, fromList: boolean) => {
   if (fromList) window.history.replaceState({ [FROM_LIST]: true }, '');
 };
 
-// Settings (9a–9d): a menu of sections, each its own page. Computers show the menu beside
+// Settings: a menu of sections, each its own page. Computers show the menu beside
 // the open page; phones show the menu as the Settings home, opening each page full
 // screen. Everything saves as it changes.
 const SettingsPage = () => {

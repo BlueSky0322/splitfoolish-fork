@@ -11,7 +11,7 @@ import classes from './SettingsLayout.module.css';
 import { MAX_DISPLAY_NAME } from '../../../../shared/api';
 import { showError } from '../../utils/notify';
 
-// Profile (9a): your picture, the name people see, and the email you sign in with
+// Profile: your picture, the name people see, and the email you sign in with
 const ProfileSection = ({ track }: { track: Track }) => {
   const { profile, update, patch } = useProfile();
   // What's typed, until it's saved; the saved name otherwise

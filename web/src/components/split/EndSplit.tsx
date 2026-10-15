@@ -2,7 +2,7 @@ import { Button } from '@mantine/core';
 import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
-import classes from './people/SplitMembers.module.css';
+import classes from './Split.module.css';
 import { reloadHomeData, updateHomeData } from '../../home/home-data';
 import { showError } from '../../utils/notify';
 
@@ -14,7 +14,7 @@ interface EndSplitProps {
   onCancel: () => void;
 }
 
-/** 3d's title: a red-tinted icon beside "Delete this split?" (or "Leave this split?") */
+/** The title: a red-tinted icon beside "Delete this split?" (or "Leave this split?") */
 export const EndSplitTitle = ({ isOwner }: { isOwner: boolean }) => (
   <span className={classes.endTitle}>
     <span className={classes.endIcon}>{isOwner ? <Trash size={18} /> : <SignOut size={18} />}</span>

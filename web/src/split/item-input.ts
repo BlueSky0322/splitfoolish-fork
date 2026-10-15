@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS, RATE_PROVIDERS } from '../../../shared/api';
-import { RateSource, convertParts, isValidRate, toCents } from '../../../shared/rates';
+import type { RateSource } from '../../../shared/rates';
+import { convertParts, isValidRate, toCents } from '../../../shared/rates';
 import type { SplitMode } from '../../../shared/settle';
 import type { ItemOriginal } from '../../../shared/types';
 import type { ItemInput } from '../api';
@@ -19,7 +20,7 @@ export interface RateInputs {
   useOwnRate: boolean;
   ownRate: number | '';
   /** What the item was saved with, when editing one */
-  original: ItemOriginal | null | undefined;
+  original: ItemOriginal | null;
   /** Today's rate, once fetched */
   fetched: { rate: number; source: RateSource } | undefined;
 }

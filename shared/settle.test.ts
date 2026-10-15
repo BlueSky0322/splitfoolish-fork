@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { SettleItem, balances, itemShares, transfers } from './settle';
+import type { SettleItem } from './settle';
+import { balances, itemShares, transfers } from './settle';
 
 const equal = (costCents: number, payerId: string, ids: string[]): SettleItem => ({
   costCents,

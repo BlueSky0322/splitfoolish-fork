@@ -396,7 +396,7 @@
   max-width: 360px;
 }
 
-/* A QR code method's picture (7a, 7b) */
+/* A QR code method's picture */
 .qrEmpty {
   display: flex;
   flex-direction: column;
@@ -459,7 +459,7 @@
   background: rgb(255 255 255 / 0.6);
 }
 
-/* In the list, in place of a type icon (7c) */
+/* In the list, in place of a type icon */
 .qrThumb {
   width: 36px;
   height: 36px;

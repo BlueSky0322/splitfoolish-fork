@@ -1,6 +1,6 @@
 import { Button, UnstyledButton } from '@mantine/core';
 import { CheckCircle, Plus } from '@phosphor-icons/react';
-import { CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import { useProfile } from '../../profile/ProfileContext';
 import { showError } from '../../utils/notify';
 import { ACCENTS } from '../../theme/accents';
@@ -16,7 +16,7 @@ const THEMES: { value: ThemeSetting; label: string }[] = [
   { value: 'auto', label: 'Match device' },
 ];
 
-// Appearance (9d): theme as small previews, and the accent colour with a sample of it
+// Appearance: theme as small previews, and the accent colour with a sample of it
 const AppearanceSection = ({ track }: { track: Track }) => {
   const { profile, updateSettings } = useProfile();
   // Saving shows beside the title; a failure is undone and explained

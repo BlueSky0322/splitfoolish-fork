@@ -1,5 +1,5 @@
 import { ArrowRight } from '@phosphor-icons/react';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { Person } from '../../../../../shared/types';
 import { formatMoney } from '../../../utils/money';
 import PersonAvatar from '../people/PersonAvatar';

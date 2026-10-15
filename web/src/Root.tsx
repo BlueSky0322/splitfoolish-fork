@@ -8,17 +8,17 @@ import '@mantine/notifications/styles.css';
 import { IconContext } from '@phosphor-icons/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import App from './App.tsx';
+import App from './App';
 import './index.css';
-import { ProfileProvider, readAppearance } from './profile/ProfileContext.tsx';
-import { queryClient } from './query-client.ts';
+import { ProfileProvider, readAppearance } from './profile/ProfileContext';
+import { queryClient } from './query-client';
 import type { Accent } from '../../shared/api';
-import { buildTheme, cssVariablesResolver } from './theme/theme.ts';
+import { buildTheme, cssVariablesResolver } from './theme/theme';
 import './theme/tokens.css';
 
-const initialAppearance = readAppearance();
-
 export function Root() {
+  // What this device saved, so the app paints in the right colours before the profile loads
+  const [initialAppearance] = useState(readAppearance);
   const [accent, setAccent] = useState<Accent>(initialAppearance.accent);
   const theme = useMemo(() => buildTheme(accent), [accent]);
 

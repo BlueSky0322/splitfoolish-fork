@@ -1,6 +1,6 @@
+import type { DragEndEvent } from '@dnd-kit/core';
 import {
   DndContext,
-  DragEndEvent,
   MouseSensor,
   TouchSensor,
   closestCenter,
@@ -8,8 +8,9 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import { SortableContext, SortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { ReactNode } from 'react';
+import type { SortingStrategy } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import type { ReactNode } from 'react';
 import { markDragged } from './useSortableSplit';
 
 // Dragging splits into your own order, in the sidebar and on My splits. A mouse drags

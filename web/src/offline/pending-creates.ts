@@ -1,6 +1,6 @@
 import { ApiError, api } from '../api';
+import type { PendingCreate } from './outbox';
 import {
-  PendingCreate,
   isOffline,
   isRetryable,
   readOutbox,

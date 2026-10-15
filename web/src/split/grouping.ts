@@ -1,5 +1,5 @@
 import type { Settings } from '../../../shared/api';
-import { SplitItem } from './state';
+import type { SplitItem } from './state';
 import { categoryLabel } from './categories';
 import { toCents } from '../../../shared/rates';
 

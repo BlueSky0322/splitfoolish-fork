@@ -3,8 +3,8 @@ import { api } from '../api';
 import type { Change } from '../../../shared/types';
 import { reloadHomeData } from '../home/home-data';
 import { whenCreated } from '../offline/pending-creates';
+import type { Queued } from '../offline/outbox';
 import {
-  Queued,
   classifySaveFailure,
   isNetworkError,
   isOffline,
@@ -18,7 +18,7 @@ import { queryClient } from '../query-client';
 import { newId } from '../utils/id';
 import { showError } from '../utils/notify';
 import { ITEM_NAMES_KEY } from './item-names';
-import type { SyncStatus } from './useSplit';
+import type { SyncStatus } from './state';
 
 /** Changes are sent together once there's been a pause this long */
 const SAVE_DELAY_MS = 500;
@@ -81,8 +81,9 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
   }, [splitId]);
 
   /**
-   * A batch that didn't reach the server, or that the server refused. True when it's
-   * kept to send again later.
+   * A batch that didn't reach the server, or that the server refused. True when a timed
+   * retry should be scheduled (kept, and online); offline, it's kept for the 'online'
+   * event or background sync instead, and this is false.
    */
   const failed = useCallback(
     async (err: unknown, batch: Queued[]): Promise<boolean> => {

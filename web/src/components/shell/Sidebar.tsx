@@ -9,10 +9,11 @@ import {
   SidebarSimple,
   Stack,
 } from '@phosphor-icons/react';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { actionableInvites } from '../../api';
 import { useHomeData } from '../../home/useHomeData';
-import { Route, navigate } from '../../hooks/useRoute';
+import type { Route } from '../../hooks/useRoute';
+import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { useOpenNewSplit } from '../NewSplitDialog';
 import BalanceTag from '../ui/BalanceTag';

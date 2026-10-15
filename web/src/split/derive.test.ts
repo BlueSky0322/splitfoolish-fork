@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { SplitItem } from './state';
+import type { SplitItem } from './state';
 import type { Person } from '../../../shared/types';
 import { findMe, computeTotals } from './derive';
 
@@ -7,7 +7,7 @@ const ann: Person = { id: 'a', name: 'Ann', memberEmail: 'ann@example.com' };
 const ben: Person = { id: 'b', name: 'Ben', memberEmail: null };
 const cat: Person = { id: 'c', name: 'Cat', memberEmail: null };
 
-const base = { category: null, createdAt: 1 };
+const base = { category: null, notes: null, original: null, createdAt: 1 };
 
 describe('summarising a split', () => {
   test('mixes equal, shares and exact items in cents', () => {

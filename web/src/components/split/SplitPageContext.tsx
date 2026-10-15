@@ -3,7 +3,7 @@ import type { Attachment } from '../../../../shared/api';
 import type { Person } from '../../../../shared/types';
 import type { SplitTotals } from '../../split/derive';
 import type { SplitItem, SplitMeta } from '../../split/state';
-import type { MetaChanges, SyncStatus } from '../../split/useSplit';
+import type { MetaChanges, SyncStatus } from '../../split/state';
 import type { usePhotos } from '../photos/usePhotos';
 import type { Prefill } from './useConvertPrefill';
 import type { DeleteConfirmation } from './items/useDeleteItems';
@@ -32,7 +32,6 @@ export type Dialog =
 
 export interface SplitPage {
   splitId: string;
-  /** The signed-in account */
   myEmail: string | null;
   /** Everything about the split besides its bill; null until it has loaded */
   meta: SplitMeta | null;

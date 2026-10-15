@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { atRate, removalBlocker } from './rules';
-import { SplitItem, SplitState } from './state';
+import type { SplitItem, SplitState } from './state';
 import type { Person } from '../../../shared/types';
 
 // The same cases as the server's tests of these rules (worker/test/api.test.ts), so the
@@ -18,6 +18,8 @@ const item = (over: Partial<SplitItem>): SplitItem => ({
   participants: [ann, ben],
   splitMode: 'equal',
   category: null,
+  notes: null,
+  original: null,
   createdAt: 1,
   ...over,
 });

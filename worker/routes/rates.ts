@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import type { RateQuote, UsedCurrencyRate, UsedCurrencyRates } from '../../shared/api';
 import { convertCents, toCents } from '../../shared/rates';
-import { AppEnv } from '../app';
+import type { AppEnv } from '../app';
 import { CURRENCY, json, fail } from '../http';
 import { getRatePreference } from '../profiles';
 import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate } from '../rates';

@@ -1,12 +1,18 @@
 import { Button } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { SplitActions } from '../../../split/actions';
-import { SplitItem, toApiItem } from '../../../split/state';
+import type { SplitItem } from '../../../split/state';
+import { toApiItem } from '../../../split/state';
 import { plural } from '../../../utils/text';
 
-interface Photos {
-  photosOf: (itemId: string | null) => unknown[];
-  forgetItem: (itemId: string) => void;
+interface DeleteDeps {
+  actions: SplitActions;
+  /** An item's photos */
+  photosOf: (itemId: string) => unknown[];
+  /** The server deletes an item's photos with it; this drops them here too */
+  forgetItemAttachments: (itemId: string) => void;
+  /** Asks first, when photos would go too */
+  confirm: (confirmation: DeleteConfirmation) => void;
 }
 
 /** Asking before items go with their photos */
@@ -22,20 +28,16 @@ export interface DeleteConfirmation {
  * go with their item and can't be brought back, so then it asks first (unless that was
  * asked already, as the item form does).
  */
-export function useDeleteItems(
-  actions: SplitActions,
-  photos: Photos,
-  confirm: (confirmation: DeleteConfirmation) => void,
-) {
+export function useDeleteItems({ actions, photosOf, forgetItemAttachments, confirm }: DeleteDeps) {
   return (items: SplitItem[], { confirmed = false, onDeleted = () => {} } = {}) => {
     if (items.length === 0) return;
-    const photoCount = items.reduce((n, i) => n + photos.photosOf(i.id).length, 0);
+    const photoCount = items.reduce((n, i) => n + photosOf(i.id).length, 0);
     const label = items.length === 1 ? items[0].name : plural(items.length, 'item');
 
     const remove = () => {
       const removed = items.filter((item) => actions.removeItem(item.id));
       if (removed.length === 0) return;
-      for (const item of removed) photos.forgetItem(item.id);
+      for (const item of removed) forgetItemAttachments(item.id);
       onDeleted();
       if (photoCount > 0) {
         notifications.show({ message: `Deleted ${label} and ${plural(photoCount, 'photo')}` });

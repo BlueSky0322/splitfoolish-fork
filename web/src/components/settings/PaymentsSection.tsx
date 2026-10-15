@@ -8,7 +8,7 @@ import type { PaymentMethod } from '../../../../shared/payments';
 import { showError } from '../../utils/notify';
 import { homeCurrency } from '../../utils/money';
 
-// Getting paid (9b): how people who owe you can pay, and how that looks to them
+// Getting paid: how people who owe you can pay, and how that looks to them
 const PaymentsSection = ({ track }: { track: Track }) => {
   const { profile, patch } = useProfile();
   if (profile == null) return null;

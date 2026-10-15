@@ -114,7 +114,7 @@ function PayLine({
   const [showQr, setShowQr] = useState(false);
   const [preferred] = methods;
   if (preferred == null) return <span className={classes.payMethod}>No payment details yet</span>;
-  // Their preferred way is a QR code: show it, with the amount, to scan (7c, 7d)
+  // Their preferred way is a QR code: show it, with the amount, to scan
   if (isQr(preferred) && preferred.qrVersion != null) {
     return (
       <>
@@ -189,7 +189,7 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
   const mine = me ? totals.balances.get(me.id) : null;
   const count = totals.transfers.length;
   const isSheet = variant === 'sheet';
-  // The sheet keeps balances and routing on a second view (4f)
+  // The sheet keeps balances and routing on a second view
   const [view, setView] = useState<'transfers' | 'balances'>('transfers');
 
   const bars = people.length > 0 && totals.hasItems && (

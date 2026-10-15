@@ -1,7 +1,8 @@
 // The other currencies a split's items were paid in
 
 import type { RateSource } from '../../../shared/rates';
-import { SplitItem } from './state';
+import type { ItemOriginal } from '../../../shared/types';
+import type { SplitItem } from './state';
 
 export interface UsedCurrency {
   code: string;
@@ -15,18 +16,18 @@ export interface UsedCurrency {
 
 /** The other currencies items were paid in, with the rate each is converted at now */
 export function usedCurrencies(items: SplitItem[]): UsedCurrency[] {
-  const byCode = new Map<string, SplitItem[]>();
-  for (const item of items) {
-    const code = item.original?.currency;
-    if (code) byCode.set(code, [...(byCode.get(code) ?? []), item]);
+  const byCode = new Map<string, ItemOriginal[]>();
+  for (const { original } of items) {
+    if (original)
+      byCode.set(original.currency, [...(byCode.get(original.currency) ?? []), original]);
   }
   return [...byCode]
     .map(([code, list]) => {
-      const manual = list.every((i) => i.original?.rateSource === 'manual');
+      const manual = list.every((o) => o.rateSource === 'manual');
       // The newest live rate, or the newest typed one when there's no live one
-      const shown = list
-        .filter((i) => manual || i.original?.rateSource !== 'manual')
-        .sort((a, b) => (b.original?.rateAt ?? 0) - (a.original?.rateAt ?? 0))[0].original!;
+      const [shown] = list
+        .filter((o) => manual || o.rateSource !== 'manual')
+        .sort((a, b) => (b.rateAt ?? 0) - (a.rateAt ?? 0));
       return {
         code,
         count: list.length,

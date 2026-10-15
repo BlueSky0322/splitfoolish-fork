@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { RateInputs, buildItemInput, chooseRate } from './item-input';
+import type { RateInputs } from './item-input';
+import { buildItemInput, chooseRate } from './item-input';
 
 const inputs = (over: Partial<RateInputs> = {}): RateInputs => ({
   foreign: true,

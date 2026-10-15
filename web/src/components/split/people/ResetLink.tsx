@@ -10,7 +10,7 @@ interface ResetLinkProps {
   onCancel: () => void;
 }
 
-// 3b: confirm before the share link changes
+// Confirm before the share link changes
 const ResetLink = ({ splitId, onDone, onCancel }: ResetLinkProps) => {
   const [busy, setBusy] = useState(false);
 

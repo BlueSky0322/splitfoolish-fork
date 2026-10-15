@@ -4,8 +4,8 @@ import type { Item as ApiItem, Change } from '../../../shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
 import { atRate, removalBlocker } from './rules';
-import { SplitAction, SplitState, toApiItem, type SplitMeta } from './state';
-import type { MetaChanges } from './useSplit';
+import { toApiItem, type SplitMeta } from './state';
+import type { MetaChanges, SplitAction, SplitState } from './state';
 
 // What can be done to an open split: each checks the change, shows it straight away
 // and queues it to be saved (see useSplit, which does the saving)
@@ -139,13 +139,16 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
   },
   updateItem: (itemId, input) => {
     const existing = d.current().items.find((i) => i.id === itemId);
-    const item = { id: itemId, createdAt: existing?.createdAt ?? Date.now(), ...input };
+    // Removed meanwhile, say by someone else
+    if (existing == null) return refuse('That item has been removed');
+    const item = { id: itemId, createdAt: existing.createdAt, ...input };
     d.dispatch({ type: 'UPDATE_ITEM', payload: item });
-    if (input.original || existing?.original) d.reloadAfterSave();
+    if (input.original || existing.original) d.reloadAfterSave();
     d.queue({ op: 'updateItem', item });
     return true;
   },
   removeItem: (itemId) => {
+    if (!d.current().items.some((i) => i.id === itemId)) return false;
     d.dispatch({ type: 'REMOVE_ITEM', payload: itemId });
     d.queue({ op: 'removeItem', id: itemId });
     return true;

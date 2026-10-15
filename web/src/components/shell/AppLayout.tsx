@@ -1,8 +1,8 @@
 import { AppShell } from '@mantine/core';
 import { useHotkeys } from '@mantine/hooks';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { Route } from '../../hooks/useRoute';
+import type { Route } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import OfflineNotice from './OfflineNotice';
 import UpdateNotice from './UpdateNotice';

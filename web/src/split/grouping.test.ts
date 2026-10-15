@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { SplitItem } from './state';
+import type { SplitItem } from './state';
 import type { Person } from '../../../shared/types';
 import { groupItems, sortItems } from './grouping';
 
@@ -23,6 +23,8 @@ const item = (
   participants: [ann, ben],
   splitMode: 'equal',
   category,
+  notes: null,
+  original: null,
   createdAt,
 });
 

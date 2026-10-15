@@ -2,9 +2,9 @@
 // and saved after (see useSplit). Items hold the person objects they refer to; the API
 // refers to people by id.
 
-import { ImmerReducer } from 'use-immer';
+import type { ImmerReducer } from 'use-immer';
 import type { Item as ApiItem, Person } from '../../../shared/types';
-import type { SplitDetail } from '../../../shared/api';
+import type { Attachment, SplitDetail } from '../../../shared/api';
 
 /** Everything about the open split besides its bill: name, members, photos and so on */
 export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
@@ -52,9 +52,9 @@ export const toClientItem = (item: ApiItem, people: Person[]): SplitItem | null 
     shares: item.shares,
     exact: item.exact,
     category: item.category,
-    notes: item.notes ?? null,
+    notes: item.notes,
     createdAt: item.createdAt,
-    original: item.original ?? null,
+    original: item.original,
   };
 };
 
@@ -71,7 +71,7 @@ export const toApiItem = (item: SplitItem): ApiItem => ({
   shares: item.shares,
   exact: item.exact,
   category: item.category,
-  notes: item.notes ?? null,
+  notes: item.notes,
   createdAt: item.createdAt,
   original: item.original,
 });
@@ -141,3 +141,34 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
       throw new Error(`Unsupported action type '${(action as { type: string }).type}'`);
   }
 };
+
+/**
+ * 'refreshing' means a cached copy is showing while the latest loads; 'offline' that
+ * there's no connection, with any changes kept on the device until there is
+ */
+export type SyncStatus =
+  | 'loading'
+  | 'refreshing'
+  | 'saving'
+  | 'saved'
+  | 'error'
+  | 'offline'
+  | 'notfound';
+
+/** The ways the split page changes what it shows about the split besides its bill */
+export interface MetaChanges {
+  addAttachment: (photo: Attachment) => void;
+  removeAttachment: (id: string) => void;
+  /** Photos of an item that was deleted (the server removed them with it) */
+  forgetItemAttachments: (itemId: string) => void;
+  /** Shows saved split settings straight away, here and in My splits */
+  patchSettings: (
+    changes: Partial<Pick<SplitMeta, 'name' | 'currency' | 'pictureVersion' | 'converting'>>,
+  ) => void;
+  /** Someone who lost access when their person was removed */
+  removeMember: (email: string) => void;
+  /** Who everyone settles up through, or null for the fewest transfers */
+  setDistributor: (personId: string | null) => void;
+  /** Shows a sharing change straight away; fetches it again if the server says no */
+  changeSharing: (show: (meta: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => void;
+}

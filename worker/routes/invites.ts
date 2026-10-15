@@ -4,7 +4,8 @@
 
 import { Hono } from 'hono';
 import type { InviteList, JoinResult } from '../../shared/api';
-import { AppEnv, ID, getRole } from '../app';
+import type { AppEnv } from '../app';
+import { ID, getRole } from '../app';
 import { json, fail } from '../http';
 import { answerInvite, findShareLink, listInvites, openInvite } from '../sharing';
 
