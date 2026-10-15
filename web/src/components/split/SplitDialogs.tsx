@@ -1,0 +1,338 @@
+import { BalanceHero } from './BalancePanel';
+import CurrenciesSheet from './CurrenciesSheet';
+import EndSplit, { EndSplitTitle } from './EndSplit';
+import ItemForm from './ItemForm';
+import PeopleSheet from './PeopleSheet';
+import ResetLink from './ResetLink';
+import ShareImage from './ShareImage';
+import SplitMembers, { ShareTitle } from './SplitMembers';
+import SplitSettings from './SplitSettings';
+import PhotoStrip from '../photos/PhotoStrip';
+import { usePhotos } from '../photos/usePhotos';
+import ResponsiveDialog from '../ui/ResponsiveDialog';
+import { ReactNode } from 'react';
+import type { Attachment } from '../../../../shared/api';
+import { ItemInput } from '../../api';
+import { updateHomeData } from '../../home-data';
+import { SplitTotals } from '../../split/derive';
+import { SplitItem, Person, toApiItem } from '../../split/state';
+import { useSplitState } from '../../split/SplitStateContext';
+import { MetaChanges, SplitMeta, useSplitActions } from '../../split/useSplit';
+import { newId } from '../../utils/id';
+import { notifications } from '@mantine/notifications';
+import type { Prefill } from './useConvertPrefill';
+import type { useDeleteItems } from './useDeleteItems';
+
+// Everything the split page opens over itself: one dialog at a time, each a sheet on
+// phones
+
+export type Dialog =
+  /** prefill: an amount and currency from Convert */
+  | { kind: 'add'; prefill?: Prefill }
+  | { kind: 'edit'; item: SplitItem }
+  | { kind: 'people'; personId?: string }
+  | { kind: 'settle' }
+  | { kind: 'share' }
+  | { kind: 'members' }
+  | { kind: 'reset' }
+  /** Opened from Split settings, where Cancel goes back to */
+  | { kind: 'end' }
+  | { kind: 'settings' }
+  | { kind: 'photos' }
+  | { kind: 'currencies' };
+
+/** Under Settle up's title: how many transfers settle everyone */
+const settleNote = (summary: SplitTotals) => {
+  const n = summary.transfers.length;
+  if (n > 0) return `${n} ${n === 1 ? 'transfer clears' : 'transfers clear'} every balance`;
+  return summary.hasItems ? 'Everyone is settled up' : 'No items yet';
+};
+
+interface SplitDialogsProps {
+  dialog: Dialog | null;
+  setDialog: (dialog: Dialog | null) => void;
+  splitId: string;
+  myEmail: string | null;
+  meta: SplitMeta | null;
+  metaChanges: MetaChanges;
+  refreshMeta: () => Promise<void>;
+  summary: SplitTotals;
+  currency: string;
+  me: Person | null;
+  photos: ReturnType<typeof usePhotos>;
+  canRemovePhoto: (photo: Attachment) => boolean;
+  /** Changes are being saved */
+  saving: boolean;
+  pictureVersion: number | null;
+  /** The balances and transfers, shown in Settle up */
+  panel: ReactNode;
+  deleteItems: ReturnType<typeof useDeleteItems>;
+  /** Shows only this person's items */
+  onShowItems: (personId: string) => void;
+  onLinkMe: () => void;
+}
+
+const SplitDialogs = ({
+  dialog,
+  setDialog,
+  splitId,
+  myEmail,
+  meta,
+  metaChanges,
+  refreshMeta,
+  summary,
+  currency,
+  me,
+  photos,
+  canRemovePhoto,
+  saving,
+  pictureVersion,
+  panel,
+  deleteItems,
+  onShowItems,
+  onLinkMe,
+}: SplitDialogsProps) => {
+  const { state } = useSplitState();
+  const actions = useSplitActions()!;
+  const close = () => setDialog(null);
+
+  const saveItem = (input: ItemInput, newPhotos: File[]) => {
+    if (dialog?.kind === 'edit') {
+      const ok = actions.updateItem(dialog.item.id, input);
+      if (ok) close();
+      return ok;
+    }
+    const id = newId();
+    const ok = actions.addItem(input, id);
+    if (ok) {
+      close();
+      if (newPhotos.length > 0) void photos.upload(newPhotos, id);
+    }
+    return ok;
+  };
+
+  // A copy of a saved item (not edits still in the form), as of its date or today.
+  // Receipts stay with the original.
+  const duplicateItem = (item: SplitItem, keepDate: boolean) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, createdAt, ...input } = toApiItem(item);
+    close();
+    if (actions.addItem(input, newId(), keepDate ? createdAt : undefined)) {
+      notifications.show({ message: `Duplicated ${item.name}` });
+    }
+  };
+
+  return (
+    <>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'add' || dialog?.kind === 'edit'}
+        onClose={close}
+        title={dialog?.kind === 'edit' ? 'Edit item' : 'Add item'}
+        width={520}
+      >
+        {(dialog?.kind === 'add' || dialog?.kind === 'edit') && (
+          <ItemForm
+            key={dialog.kind === 'edit' ? dialog.item.id : 'new'}
+            people={state.people}
+            currency={currency}
+            item={dialog.kind === 'edit' ? dialog.item : undefined}
+            defaultPayerId={me?.id}
+            initialAmount={dialog.kind === 'add' ? dialog.prefill?.amount : undefined}
+            initialCurrency={dialog.kind === 'add' ? dialog.prefill?.currency : undefined}
+            splitId={splitId}
+            onSave={saveItem}
+            photos={dialog.kind === 'edit' ? photos.photosOf(dialog.item.id) : []}
+            uploading={dialog.kind === 'edit' ? photos.uploading[dialog.item.id] ?? [] : []}
+            canRemovePhoto={canRemovePhoto}
+            onAddPhotos={(files) => dialog.kind === 'edit' && photos.upload(files, dialog.item.id)}
+            onRemovePhoto={photos.remove}
+            onDelete={
+              dialog.kind === 'edit'
+                ? () => {
+                    close();
+                    // The form has asked already when photos would go too
+                    deleteItems([dialog.item], { confirmed: true });
+                  }
+                : undefined
+            }
+            onDuplicate={
+              dialog.kind === 'edit'
+                ? (keepDate) => duplicateItem(dialog.item, keepDate)
+                : undefined
+            }
+            onCancel={close}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'people'}
+        onClose={close}
+        title="People"
+        width={520}
+      >
+        {dialog?.kind === 'people' && (
+          <PeopleSheet
+            summary={summary}
+            currency={currency}
+            myEmail={myEmail}
+            members={meta?.members ?? []}
+            invites={meta?.invites ?? []}
+            isOwner={meta?.role === 'owner'}
+            initialPersonId={dialog.personId}
+            onShowItems={(personId) => {
+              onShowItems(personId);
+              close();
+            }}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'settle'}
+        onClose={close}
+        title={
+          <BalanceHero
+            summary={summary}
+            currency={currency}
+            me={me}
+            onLinkMe={onLinkMe}
+            size={36}
+            prefix="Settle up"
+          />
+        }
+      >
+        <div className="sf-muted text-sm mb-4">{settleNote(summary)}</div>
+        {panel}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'share'}
+        onClose={close}
+        title="Share as image"
+        width={520}
+      >
+        {dialog?.kind === 'share' && meta && (
+          <ShareImage
+            name={meta.name}
+            currency={currency}
+            people={state.people}
+            items={state.items}
+            summary={summary}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'members'}
+        onClose={close}
+        title={<ShareTitle name={meta?.name ?? ''} />}
+        width={460}
+      >
+        {dialog?.kind === 'members' && myEmail && meta && (
+          <SplitMembers
+            meta={meta}
+            myEmail={myEmail}
+            onChange={refreshMeta}
+            changeSharing={metaChanges.changeSharing}
+            onReset={() => setDialog({ kind: 'reset' })}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'reset'}
+        onClose={() => setDialog({ kind: 'members' })}
+        title="Reset share link?"
+        width={400}
+      >
+        {dialog?.kind === 'reset' && (
+          <ResetLink
+            splitId={splitId}
+            onDone={() => {
+              refreshMeta().catch((err) => console.error(err));
+              setDialog({ kind: 'members' });
+            }}
+            onCancel={() => setDialog({ kind: 'members' })}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'end'}
+        onClose={close}
+        title={<EndSplitTitle isOwner={meta?.role === 'owner'} />}
+        width={420}
+      >
+        {dialog?.kind === 'end' && myEmail && meta && (
+          <EndSplit
+            splitId={splitId}
+            name={meta.name}
+            isOwner={meta.role === 'owner'}
+            myEmail={myEmail}
+            onCancel={() => setDialog({ kind: 'settings' })}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'photos'}
+        onClose={close}
+        title="Photos"
+        width={560}
+      >
+        {dialog?.kind === 'photos' && (
+          <div className="flex flex-col gap-3">
+            <p className="sf-muted text-sm">
+              Photos of the trip or anything else for everyone in the split. Receipts for an item
+              are added on the item.
+            </p>
+            <PhotoStrip
+              splitId={splitId}
+              photos={photos.photosOf(null)}
+              uploading={photos.uploading[''] ?? []}
+              canRemove={canRemovePhoto}
+              onAdd={(files) => photos.upload(files, null)}
+              onRemove={photos.remove}
+              layout="gallery"
+            />
+          </div>
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'currencies'}
+        onClose={close}
+        title="Currencies"
+        width={460}
+      >
+        {dialog?.kind === 'currencies' && (
+          <CurrenciesSheet
+            currency={currency}
+            items={state.items}
+            saving={saving}
+            onRefresh={actions.refreshRates}
+            onSetRate={actions.setRate}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'settings'}
+        onClose={close}
+        title="Split settings"
+      >
+        {dialog?.kind === 'settings' && meta && (
+          <SplitSettings
+            splitId={splitId}
+            name={meta.name}
+            currency={meta.currency}
+            pictureVersion={pictureVersion}
+            canEdit={meta.role === 'owner'}
+            onEnd={() => setDialog({ kind: 'end' })}
+            onSaved={(changes) => {
+              metaChanges.patchSettings(changes);
+              updateHomeData((data) => ({
+                splits: data.splits?.map((x) => (x.id === splitId ? { ...x, ...changes } : x)),
+              }));
+            }}
+            onClose={close}
+          />
+        )}
+      </ResponsiveDialog>
+    </>
+  );
+};
+
+export default SplitDialogs;

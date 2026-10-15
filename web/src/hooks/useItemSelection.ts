@@ -113,3 +113,49 @@ export function useLongPress(onLongPress: () => void) {
     },
   };
 }
+
+/**
+ * Keys and buttons while picking items. Phones: the back button stops picking rather
+ * than leaving the split. Computers: Esc lets go of the selection, and Delete removes
+ * it (with Undo).
+ */
+export function useSelectionKeys(
+  selecting: boolean,
+  isDesktop: boolean,
+  clear: () => void,
+  remove: () => void,
+) {
+  // The latest handlers, so the listeners below needn't be set up again on every render
+  const handlers = useRef({ clear, remove });
+  useEffect(() => {
+    handlers.current = { clear, remove };
+  });
+
+  useEffect(() => {
+    if (isDesktop || !selecting) return;
+    window.history.pushState({ sfSelecting: true }, '');
+    const onBack = () => handlers.current.clear();
+    window.addEventListener('popstate', onBack);
+    return () => {
+      window.removeEventListener('popstate', onBack);
+      if ((window.history.state as { sfSelecting?: boolean } | null)?.sfSelecting) {
+        window.history.back();
+      }
+    };
+  }, [isDesktop, selecting]);
+
+  useEffect(() => {
+    if (!isDesktop || !selecting) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable="true"], [role="dialog"]')) return;
+      if (e.key === 'Escape') handlers.current.clear();
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handlers.current.remove();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDesktop, selecting]);
+}

@@ -7,7 +7,6 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
   CaretDown,
@@ -33,89 +32,34 @@ import {
   UsersThree,
   X,
 } from '@phosphor-icons/react';
-import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { ItemInput } from '../../api';
-import { toApiItem } from '../../split/state';
+import { ReactNode, useCallback, useMemo, useState } from 'react';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeDataSnapshot } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { SplitActionsContext, SyncStatus, useSplit } from '../../split/useSplit';
-import { SplitItem, Person } from '../../split/state';
+import { Person } from '../../split/state';
 import { SplitTotals, computeTotals, findMe } from '../../split/derive';
-import {
-  GROUP_LABELS,
-  GroupBy,
-  MOBILE_SORTS,
-  SortDir,
-  SortKey,
-  groupItems,
-} from '../../split/grouping';
-import { useProfile } from '../../profile/ProfileContext';
+import { GROUP_LABELS, groupItems } from '../../split/grouping';
 import { currencySymbol } from '../../utils/money';
 import ErrorBoundary from '../ui/ErrorBoundary';
-import CurrenciesSheet from './CurrenciesSheet';
-import PhotoStrip from '../photos/PhotoStrip';
 import { usePhotos } from '../photos/usePhotos';
-import EndSplit, { EndSplitTitle } from './EndSplit';
-import ResetLink from './ResetLink';
-import SplitMembers, { ShareTitle } from './SplitMembers';
 import Fab from '../ui/Fab';
-import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from './SplitAvatar';
 import StateCard from '../ui/StateCard';
 import PersonAvatar, { AvatarVersionsContext } from './PersonAvatar';
 import BalancePanel, { BalanceHero, BalanceLine } from './BalancePanel';
-import ItemForm from './ItemForm';
 import { ItemCards, ItemTable } from './ItemViews';
 import { DesktopSelectionBar, MobileSelectionBar, MoveDateDialog } from './ItemSelection';
-import { useItemSelection } from '../../hooks/useItemSelection';
-import PeopleSheet from './PeopleSheet';
-import ShareImage from './ShareImage';
-import SplitSettings from './SplitSettings';
-import { DEFAULT_SETTINGS, type Attachment } from '../../../../shared/api';
+import { useItemSelection, useSelectionKeys } from '../../hooks/useItemSelection';
+import { type Attachment } from '../../../../shared/api';
 import classes from './Split.module.css';
-import { updateHomeData } from '../../home-data';
-import { newId } from '../../utils/id';
 import { useSplitState } from '../../split/SplitStateContext';
 import { plural } from '../../utils/text';
-
-interface ViewPrefs {
-  view: 'card' | 'table';
-  groupBy: GroupBy;
-  sortKey: SortKey;
-  sortDir: SortDir;
-}
-
-const DEFAULT_PREFS: ViewPrefs = {
-  view: DEFAULT_SETTINGS.itemsView,
-  groupBy: DEFAULT_SETTINGS.itemsGroupBy,
-  sortKey: DEFAULT_SETTINGS.itemsSortKey,
-  sortDir: DEFAULT_SETTINGS.itemsSortDir,
-};
-const GROUP_ORDER: GroupBy[] = ['none', 'day', 'payer', 'category'];
-// Item and payer read best A to Z; amounts largest first
-const FIRST_DIR: Record<SortKey, SortDir> = {
-  name: 'asc',
-  payer: 'asc',
-  amount: 'desc',
-  // Newest first
-  date: 'desc',
-};
-
-type Dialog =
-  /** prefill: an amount and currency from Convert */
-  | { kind: 'add'; prefill?: { amount: string; currency: string } }
-  | { kind: 'edit'; item: SplitItem }
-  | { kind: 'people'; personId?: string }
-  | { kind: 'settle' }
-  | { kind: 'share' }
-  | { kind: 'members' }
-  | { kind: 'reset' }
-  /** Opened from Split settings, where Cancel goes back to */
-  | { kind: 'end' }
-  | { kind: 'settings' }
-  | { kind: 'photos' }
-  | { kind: 'currencies' };
+import { GROUP_ORDER, ViewPrefs, useItemViewPrefs } from './useItemViewPrefs';
+import { Prefill, useConvertPrefill } from './useConvertPrefill';
+import { useDeleteItems } from './useDeleteItems';
+import { useHeroHidden } from './useHeroHidden';
+import SplitDialogs, { type Dialog } from './SplitDialogs';
 
 const MAX_AVATARS = 4;
 
@@ -216,35 +160,12 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     photo.uploadedBy === myEmail || meta?.role === 'owner';
   const { state } = useSplitState();
   const isDesktop = useIsDesktop();
-  // How items are shown, saved with the account
-  const { profile, updateSettings } = useProfile();
-  const settings = profile?.settings;
-  const prefs: ViewPrefs = {
-    view: settings?.itemsView ?? DEFAULT_PREFS.view,
-    groupBy: settings?.itemsGroupBy ?? DEFAULT_PREFS.groupBy,
-    sortKey: settings?.itemsSortKey ?? DEFAULT_PREFS.sortKey,
-    sortDir: settings?.itemsSortDir ?? DEFAULT_PREFS.sortDir,
-  };
+  const { prefs, setPref, sortBy, shownSort, cycleMobileSort, cycleGroup } = useItemViewPrefs();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
-  const close = () => setDialog(null);
 
-  // Arriving from Convert's "Add as item": open Add item with its amount and currency
-  const [prefill] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const amount = params.get('amount');
-    const from = params.get('from');
-    return params.has('add') && amount && from && /^[A-Z]{3}$/.test(from)
-      ? { amount, currency: from }
-      : null;
-  });
-  useEffect(() => {
-    if (prefill == null || meta == null) return;
-    navigate(`?s=${splitId}`, { replace: true });
-    if (state.people.length > 0) setDialog({ kind: 'add', prefill });
-    // Once, when the split has loaded
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta == null]);
+  const openAdd = useCallback((prefill?: Prefill) => setDialog({ kind: 'add', prefill }), []);
+  useConvertPrefill(splitId, meta != null, state.people.length > 0, openAdd);
   const photoCounts = new Map<string, number>();
   for (const a of meta?.attachments ?? []) {
     if (a.itemId) photoCounts.set(a.itemId, (photoCounts.get(a.itemId) ?? 0) + 1);
@@ -286,66 +207,16 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const selecting = selection.active;
   const [moving, setMoving] = useState(false);
 
-  // Phones: the back button stops selecting rather than leaving the split
-  useEffect(() => {
-    if (isDesktop || !selecting) return;
-    window.history.pushState({ sfSelecting: true }, '');
-    const onBack = () => selection.clear();
-    window.addEventListener('popstate', onBack);
-    return () => {
-      window.removeEventListener('popstate', onBack);
-      if ((window.history.state as { sfSelecting?: boolean } | null)?.sfSelecting) {
-        window.history.back();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDesktop, selecting]);
+  const deleteItems = useDeleteItems(actions, photos);
+  /** Deletes the picked items: with Undo, or after asking when photos would go too */
+  const deleteSelected = () =>
+    deleteItems(
+      state.items.filter((i) => selection.selected.has(i.id)),
+      { onDeleted: selection.clear },
+    );
+  useSelectionKeys(selecting, isDesktop === true, selection.clear, deleteSelected);
 
-  // Computers: Esc lets go of the selection; Delete removes it (with Undo)
-  const keysRef = useRef({ clear: selection.clear, remove: () => {} });
-  keysRef.current.clear = selection.clear;
-  useEffect(() => {
-    if (!isDesktop || !selecting) return;
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('input, textarea, [contenteditable="true"], [role="dialog"]')) return;
-      if (e.key === 'Escape') keysRef.current.clear();
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        keysRef.current.remove();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isDesktop, selecting]);
-
-  // Phones: whether the balance and its buttons have scrolled out of sight
-  const heroRef = useRef<HTMLDivElement>(null);
-  const [heroHidden, setHeroHidden] = useState(false);
-  const hasMeta = meta != null;
-  const barRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = heroRef.current;
-    if (isDesktop || el == null) return;
-    // Checked on every scroll (once a frame): the buttons count as gone once their bottom
-    // edge has passed under the bar, however slowly the page moved there
-    let frame = 0;
-    const check = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const barBottom = barRef.current?.getBoundingClientRect().bottom ?? 0;
-        setHeroHidden(el.getBoundingClientRect().bottom <= barBottom);
-      });
-    };
-    check();
-    window.addEventListener('scroll', check, { passive: true });
-    window.addEventListener('resize', check);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('scroll', check);
-      window.removeEventListener('resize', check);
-    };
-  }, [isDesktop, hasMeta]);
+  const { heroRef, barRef, heroHidden } = useHeroHidden(!isDesktop && meta != null);
 
   if (status === 'notfound') {
     return (
@@ -357,85 +228,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       />
     );
   }
-
-  const setPref = (patch: Partial<ViewPrefs>) =>
-    updateSettings({
-      ...(patch.view && { itemsView: patch.view }),
-      ...(patch.groupBy && { itemsGroupBy: patch.groupBy }),
-      ...(patch.sortKey && { itemsSortKey: patch.sortKey }),
-      ...(patch.sortDir && { itemsSortDir: patch.sortDir }),
-    });
-  const sortBy = (key: SortKey) =>
-    setPref(
-      prefs.sortKey === key
-        ? { sortDir: prefs.sortDir === 'asc' ? 'desc' : 'asc' }
-        : { sortKey: key, sortDir: FIRST_DIR[key] },
-    );
-  const mobileSort = MOBILE_SORTS.findIndex(
-    (s) => s.key === prefs.sortKey && s.dir === prefs.sortDir,
-  );
-  const cycleMobileSort = () => {
-    const next = MOBILE_SORTS[(mobileSort + 1) % MOBILE_SORTS.length];
-    void setPref({ sortKey: next.key, sortDir: next.dir });
-  };
-  const cycleGroup = () =>
-    setPref({
-      groupBy: GROUP_ORDER[(GROUP_ORDER.indexOf(prefs.groupBy) + 1) % GROUP_ORDER.length],
-    });
-
-  /** Deletes the picked items: with Undo, or after asking when photos would go too */
-  const deleteSelected = () => {
-    const items = state.items.filter((i) => selection.selected.has(i.id));
-    if (items.length === 0) return;
-    const photoCount = items.reduce((n, i) => n + photos.photosOf(i.id).length, 0);
-    const label = items.length === 1 ? items[0].name : plural(items.length, 'item');
-    const remove = () => {
-      const saved = items.map(toApiItem);
-      for (const item of items) {
-        actions.removeItem(item.id);
-        photos.forgetItem(item.id);
-      }
-      selection.clear();
-      if (photoCount > 0) {
-        notifications.show({ message: `Deleted ${label} and their photos` });
-        return;
-      }
-      const id = notifications.show({
-        message: (
-          <div className="flex items-center justify-between gap-3">
-            <span>Deleted {label}</span>
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              onClick={() => {
-                for (const item of saved) actions.restoreItem(item);
-                notifications.hide(id);
-              }}
-            >
-              Undo
-            </Button>
-          </div>
-        ),
-        autoClose: 6000,
-      });
-    };
-    if (photoCount === 0) {
-      remove();
-      return;
-    }
-    modals.openConfirmModal({
-      title: `Delete ${label}?`,
-      children: (
-        <p className="text-sm">
-          {photoCount === 1 ? 'A photo' : `${photoCount} photos`} will be deleted too. This can't be
-          undone.
-        </p>
-      ),
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
-      onConfirm: remove,
-    });
-  };
 
   const moveSelected = (day: Date) => {
     const count = selection.count;
@@ -450,8 +242,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       })}`,
     });
   };
-
-  keysRef.current.remove = deleteSelected;
 
   const selectionProps = {
     count: selection.count,
@@ -471,90 +261,11 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     />
   );
 
-  const deleteItem = (item: SplitItem, confirmed = false) => {
-    const count = photos.photosOf(item.id).length;
-    if (count > 0) {
-      // Photos are deleted with the item and can't be undone, so ask first
-      const remove = () => {
-        if (!actions.removeItem(item.id)) return;
-        photos.forgetItem(item.id);
-        notifications.show({ message: `Deleted ${item.name} and its photos` });
-      };
-      if (confirmed) {
-        remove();
-        return;
-      }
-      modals.openConfirmModal({
-        title: `Delete ${item.name}?`,
-        children: (
-          <p className="text-sm">
-            Its {count === 1 ? 'photo' : `${count} photos`} will be deleted too. This can't be
-            undone.
-          </p>
-        ),
-        labels: { confirm: 'Delete', cancel: 'Cancel' },
-        confirmProps: { color: 'red' },
-        onConfirm: remove,
-      });
-      return;
-    }
-    const saved = toApiItem(item);
-    if (!actions.removeItem(item.id)) return;
-    const id = notifications.show({
-      message: (
-        <div className="flex items-center justify-between gap-3">
-          <span>Deleted {item.name}</span>
-          <Button
-            variant="subtle"
-            size="compact-sm"
-            onClick={() => {
-              actions.restoreItem(saved);
-              notifications.hide(id);
-            }}
-          >
-            Undo
-          </Button>
-        </div>
-      ),
-      autoClose: 6000,
-    });
-  };
-
-  const saveItem = (input: ItemInput, newPhotos: File[]) => {
-    if (dialog?.kind === 'edit') {
-      const ok = actions.updateItem(dialog.item.id, input);
-      if (ok) close();
-      return ok;
-    }
-    const id = newId();
-    const ok = actions.addItem(input, id);
-    if (ok) {
-      close();
-      if (newPhotos.length > 0) void photos.upload(newPhotos, id);
-    }
-    return ok;
-  };
-
   const openPeople = (personId?: string) => setDialog({ kind: 'people', personId });
   const linkMe = () => openPeople();
-  const showItemsOf = (personId: string) => {
-    setPersonFilter(personId);
-    close();
-  };
 
   const loaded = meta != null;
   const noPeople = loaded && state.people.length === 0;
-
-  // A copy of a saved item (not edits still in the form), as of its date or today.
-  // Receipts stay with the original.
-  const duplicateItem = (item: SplitItem, keepDate: boolean) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { id, createdAt, ...input } = toApiItem(item);
-    close();
-    if (actions.addItem(input, newId(), keepDate ? createdAt : undefined)) {
-      notifications.show({ message: `Duplicated ${item.name}` });
-    }
-  };
 
   const peopleNames = state.people.map((p) => p.name).join(', ');
 
@@ -705,7 +416,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       currency={currency}
       mobile={!isDesktop}
       onEdit={(item) => setDialog({ kind: 'edit', item })}
-      onDelete={deleteItem}
+      onDelete={(item) => deleteItems([item])}
       photoCounts={photoCounts}
       selection={selection.row}
       sortKey={prefs.sortKey}
@@ -723,7 +434,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       currency={currency}
       mobile={!isDesktop}
       onEdit={(item) => setDialog({ kind: 'edit', item })}
-      onDelete={deleteItem}
+      onDelete={(item) => deleteItems([item])}
       photoCounts={photoCounts}
       selection={selection.row}
     />
@@ -745,219 +456,26 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   );
 
   const dialogs = (
-    <>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'add' || dialog?.kind === 'edit'}
-        onClose={close}
-        title={dialog?.kind === 'edit' ? 'Edit item' : 'Add item'}
-        width={520}
-      >
-        {(dialog?.kind === 'add' || dialog?.kind === 'edit') && (
-          <ItemForm
-            key={dialog.kind === 'edit' ? dialog.item.id : 'new'}
-            people={state.people}
-            currency={currency}
-            item={dialog.kind === 'edit' ? dialog.item : undefined}
-            defaultPayerId={me?.id}
-            initialAmount={dialog.kind === 'add' ? dialog.prefill?.amount : undefined}
-            initialCurrency={dialog.kind === 'add' ? dialog.prefill?.currency : undefined}
-            splitId={splitId}
-            onSave={saveItem}
-            photos={dialog.kind === 'edit' ? photos.photosOf(dialog.item.id) : []}
-            uploading={dialog.kind === 'edit' ? photos.uploading[dialog.item.id] ?? [] : []}
-            canRemovePhoto={canRemovePhoto}
-            onAddPhotos={(files) => dialog.kind === 'edit' && photos.upload(files, dialog.item.id)}
-            onRemovePhoto={photos.remove}
-            onDelete={
-              dialog.kind === 'edit'
-                ? () => {
-                    close();
-                    deleteItem(dialog.item, true);
-                  }
-                : undefined
-            }
-            onDuplicate={
-              dialog.kind === 'edit'
-                ? (keepDate) => duplicateItem(dialog.item, keepDate)
-                : undefined
-            }
-            onCancel={close}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'people'}
-        onClose={close}
-        title="People"
-        width={520}
-      >
-        {dialog?.kind === 'people' && (
-          <PeopleSheet
-            summary={summary}
-            currency={currency}
-            myEmail={myEmail}
-            members={meta?.members ?? []}
-            invites={meta?.invites ?? []}
-            isOwner={meta?.role === 'owner'}
-            initialPersonId={dialog.personId}
-            onShowItems={showItemsOf}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'settle'}
-        onClose={close}
-        title={
-          <BalanceHero
-            summary={summary}
-            currency={currency}
-            me={me}
-            onLinkMe={linkMe}
-            size={36}
-            prefix="Settle up"
-          />
-        }
-      >
-        <div className="sf-muted text-sm mb-4">
-          {summary.transfers.length === 0
-            ? summary.hasItems
-              ? 'Everyone is settled up'
-              : 'No items yet'
-            : `${summary.transfers.length} ${
-                summary.transfers.length === 1 ? 'transfer clears' : 'transfers clear'
-              } every balance`}
-        </div>
-        {panel}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'share'}
-        onClose={close}
-        title="Share as image"
-        width={520}
-      >
-        {dialog?.kind === 'share' && meta && (
-          <ShareImage
-            name={meta.name}
-            currency={currency}
-            people={state.people}
-            items={state.items}
-            summary={summary}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'members'}
-        onClose={close}
-        title={<ShareTitle name={meta?.name ?? ''} />}
-        width={460}
-      >
-        {dialog?.kind === 'members' && myEmail && meta && (
-          <SplitMembers
-            meta={meta}
-            myEmail={myEmail}
-            onChange={refreshMeta}
-            changeSharing={metaChanges.changeSharing}
-            onReset={() => setDialog({ kind: 'reset' })}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'reset'}
-        onClose={() => setDialog({ kind: 'members' })}
-        title="Reset share link?"
-        width={400}
-      >
-        {dialog?.kind === 'reset' && (
-          <ResetLink
-            splitId={splitId}
-            onDone={() => {
-              refreshMeta().catch((err) => console.error(err));
-              setDialog({ kind: 'members' });
-            }}
-            onCancel={() => setDialog({ kind: 'members' })}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'end'}
-        onClose={close}
-        title={<EndSplitTitle isOwner={meta?.role === 'owner'} />}
-        width={420}
-      >
-        {dialog?.kind === 'end' && myEmail && meta && (
-          <EndSplit
-            splitId={splitId}
-            name={meta.name}
-            isOwner={meta.role === 'owner'}
-            myEmail={myEmail}
-            onCancel={() => setDialog({ kind: 'settings' })}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'photos'}
-        onClose={close}
-        title="Photos"
-        width={560}
-      >
-        {dialog?.kind === 'photos' && (
-          <div className="flex flex-col gap-3">
-            <p className="sf-muted text-sm">
-              Photos of the trip or anything else for everyone in the split. Receipts for an item
-              are added on the item.
-            </p>
-            <PhotoStrip
-              splitId={splitId}
-              photos={photos.photosOf(null)}
-              uploading={photos.uploading[''] ?? []}
-              canRemove={canRemovePhoto}
-              onAdd={(files) => photos.upload(files, null)}
-              onRemove={photos.remove}
-              layout="gallery"
-            />
-          </div>
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'currencies'}
-        onClose={close}
-        title="Currencies"
-        width={460}
-      >
-        {dialog?.kind === 'currencies' && (
-          <CurrenciesSheet
-            currency={currency}
-            items={state.items}
-            saving={status === 'saving'}
-            onRefresh={actions.refreshRates}
-            onSetRate={actions.setRate}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'settings'}
-        onClose={close}
-        title="Split settings"
-      >
-        {dialog?.kind === 'settings' && meta && (
-          <SplitSettings
-            splitId={splitId}
-            name={meta.name}
-            currency={meta.currency}
-            pictureVersion={pictureVersion}
-            canEdit={meta.role === 'owner'}
-            onEnd={() => setDialog({ kind: 'end' })}
-            onSaved={(changes) => {
-              metaChanges.patchSettings(changes);
-              updateHomeData((data) => ({
-                splits: data.splits?.map((x) => (x.id === splitId ? { ...x, ...changes } : x)),
-              }));
-            }}
-            onClose={close}
-          />
-        )}
-      </ResponsiveDialog>
-    </>
+    <SplitDialogs
+      dialog={dialog}
+      setDialog={setDialog}
+      splitId={splitId}
+      myEmail={myEmail}
+      meta={meta}
+      metaChanges={metaChanges}
+      refreshMeta={refreshMeta}
+      summary={summary}
+      currency={currency}
+      me={me}
+      photos={photos}
+      canRemovePhoto={canRemovePhoto}
+      saving={status === 'saving'}
+      pictureVersion={pictureVersion}
+      panel={panel}
+      deleteItems={deleteItems}
+      onShowItems={setPersonFilter}
+      onLinkMe={linkMe}
+    />
   );
 
   if (isDesktop) {
@@ -1082,17 +600,15 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                   </Menu>
                   {filterChip}
                   <span className={classes.toolbarSpacer} />
-                  {state.items.length > 0 && (
-                    <Button
-                      variant={selecting ? 'light' : 'default'}
-                      size="xs"
-                      leftSection={<CheckSquare size={14} />}
-                      onClick={selecting ? selection.clear : selection.start}
-                      aria-pressed={selecting}
-                    >
-                      {selecting ? 'Done' : 'Select'}
-                    </Button>
-                  )}
+                  <Button
+                    variant={selecting ? 'light' : 'default'}
+                    size="xs"
+                    leftSection={<CheckSquare size={14} />}
+                    onClick={selecting ? selection.clear : selection.start}
+                    aria-pressed={selecting}
+                  >
+                    {selecting ? 'Done' : 'Select'}
+                  </Button>
                   {viewToggle}
                 </div>
               )}
@@ -1110,8 +626,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       </SplitActionsContext.Provider>
     );
   }
-
-  const shownSort = MOBILE_SORTS[mobileSort] ?? MOBILE_SORTS[0];
 
   return (
     <SplitActionsContext.Provider value={actions}>
