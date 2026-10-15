@@ -2,40 +2,25 @@
 // API request passes the cross-site check and sign-in before reaching a route.
 
 import { Hono } from 'hono';
-import { AppEnv, Env, clientId, json, notFound, notifySplit } from './app';
+import type { AppEnv, Env } from './app';
+import { clientId, fail, isCrossSiteWrite, notFound } from './http';
 import { getUserEmail } from './auth';
 import invites from './routes/invites';
 import me from './routes/me';
 import rates from './routes/rates';
 import splits from './routes/splits';
+import { notifySplit } from './room';
 
 export { SplitRoom } from './room';
-
-/** A split's id in an API path, for the routes under /api/splits/:id */
-const SPLIT_PATH = /^\/api\/splits\/([A-Za-z0-9_-]{8,64})(?:\/|$)/;
-
-/**
- * True for a change (not a read) started by another site. The sign-in cookie rides
- * along with such requests, so without this a page elsewhere could, say, open a share
- * link or post changes on someone's behalf. Browsers say where a request came from in
- * Sec-Fetch-Site; older ones only in Origin.
- */
-export function isCrossSiteWrite(req: Request, url: URL): boolean {
-  if (req.method === 'GET' || req.method === 'HEAD') return false;
-  const site = req.headers.get('Sec-Fetch-Site');
-  if (site != null) return site !== 'same-origin' && site !== 'none';
-  const origin = req.headers.get('Origin');
-  return origin != null && origin !== url.origin;
-}
 
 const api = new Hono<AppEnv>().basePath('/api');
 
 api.use('*', async (c, next) => {
   if (isCrossSiteWrite(c.req.raw, new URL(c.req.url))) {
-    return json({ error: 'Not allowed from another site' }, 403);
+    return fail('Not allowed from another site', 403);
   }
   const email = await getUserEmail(c.req.raw, c.env);
-  if (email == null) return json({ error: 'Not signed in' }, 401);
+  if (email == null) return fail('Not signed in', 401);
   c.set('email', email);
   await next();
 });
@@ -44,17 +29,18 @@ api.use('*', async (c, next) => {
 api.use('*', async (c, next) => {
   if (c.req.method === 'GET' || c.req.method === 'HEAD') return next();
   const { success } = await c.env.API_LIMITER.limit({ key: c.var.email });
-  if (!success) return json({ error: 'Too many changes, slow down a moment.' }, 429);
+  if (!success) return fail('Too many changes, slow down a moment.', 429);
   await next();
 });
 
-// Any change saved under a split tells the apps that have it open. Invites aren't under
-// /splits, so their routes do this themselves.
+// A route that saves a change to a split says which (changedSplit), and the apps that
+// have it open are told once it has succeeded
 api.use('*', async (c, next) => {
   await next();
-  if (c.req.method === 'GET' || c.req.method === 'HEAD' || c.res.status >= 400) return;
-  const id = new URL(c.req.url).pathname.match(SPLIT_PATH)?.[1];
-  if (id) notifySplit(c.env, c.executionCtx, id, clientId(c.req.raw));
+  const splitId = c.var.changedSplit;
+  if (splitId != null && c.res.status < 400) {
+    notifySplit(c.env, c.executionCtx, splitId, clientId(c.req.raw));
+  }
 });
 
 api.route('/', me);
@@ -68,7 +54,7 @@ api.notFound(() => notFound());
 // Cloudflare's error page
 api.onError((err) => {
   console.error(err);
-  return json({ error: 'Something went wrong. Try again in a moment.' }, 500);
+  return fail('Something went wrong. Try again in a moment.', 500);
 });
 
 export default {

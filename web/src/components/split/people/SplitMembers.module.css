@@ -1,0 +1,120 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* Title with the split's name under it */
+.titleBlock {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.titleSub {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sf-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The link, with copy inside it */
+.linkBox {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--sf-border);
+  background: var(--sf-input-bg, transparent);
+}
+
+.linkIcon {
+  flex-shrink: 0;
+  opacity: 0.55;
+}
+
+.linkText {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.copied {
+  font-size: 12px;
+  color: var(--sf-accent);
+}
+
+.reset {
+  color: var(--sf-text-muted);
+}
+
+.reset:hover {
+  color: var(--sf-text);
+}
+
+.help {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--sf-text-muted);
+}
+
+.tall:global(.mantine-Button-root) {
+  height: 48px;
+}
+
+.half:global(.mantine-Button-root) {
+  height: 44px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 4px 0;
+}
+
+.name {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.textAction {
+  color: var(--sf-accent);
+  font-size: 13px;
+}
+
+.textAction:hover {
+  text-decoration: underline;
+}
+
+.textAction:disabled {
+  opacity: 0.45;
+}

@@ -1,0 +1,337 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 40px 48px;
+}
+
+.page > * {
+  max-width: 560px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-divider);
+}
+
+.fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.amount {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.amountInput {
+  height: 48px;
+  font-size: 22px;
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.pair {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.currency {
+  width: 110px;
+}
+
+.currencyInput {
+  height: 48px;
+}
+
+.swap {
+  margin-bottom: 4px;
+}
+
+.result {
+  font-size: 42px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.rateLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.addRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--sf-divider);
+  font-size: 13px;
+}
+
+.chip:hover {
+  background: var(--sf-hover);
+}
+
+/* Phones: a full page with the split picker fixed at the bottom */
+.mobilePage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 20px calc(104px + var(--sf-safe-bottom));
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.mobilePage .card {
+  padding: 16px;
+}
+
+.mobilePage .amountInput {
+  height: 64px;
+  font-size: 32px;
+}
+
+.mobilePage .pair {
+  width: 100%;
+}
+
+.mobilePage .currency {
+  flex: 1;
+  width: auto;
+}
+
+.mobilePage .chip {
+  height: 40px;
+}
+
+.mobileFooter {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px calc(12px + var(--sf-safe-bottom));
+  background: var(--sf-bg);
+  border-top: 1px solid var(--sf-divider);
+  z-index: 10;
+}
+
+/* Phones: what you have above what it comes to, with a round swap between */
+.converter {
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-divider);
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+  cursor: text;
+}
+
+.sideLabel {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+}
+
+.sideRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 12px 0 14px;
+  border-radius: 999px;
+  background: var(--sf-tint);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.bigInput,
+.bigResult {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bigInput {
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--sf-text);
+  caret-color: var(--sf-accent);
+}
+
+.bigInput::placeholder,
+.bigResult[data-empty] {
+  color: var(--sf-text-muted);
+  opacity: 0.6;
+}
+
+.bigInput[aria-invalid='true'] {
+  color: var(--sf-negative);
+}
+
+/* The rule between the rows stops either side of the swap button. The negative margin
+   takes the button's height back, so the rows sit as close as the rule alone would. */
+.swapLine {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -20px 16px;
+}
+
+.swapLine::before,
+.swapLine::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--sf-divider);
+}
+
+/* Stays put when pressed: Mantine nudges buttons down a pixel, which moved it out from
+   under the finger before the tap finished */
+.swapRound:global(.mantine-ActionIcon-root),
+.swapRound:global(.mantine-ActionIcon-root):active {
+  flex-shrink: 0;
+  transform: none;
+  background: var(--sf-surface);
+}
+
+.swapRound:global(.mantine-ActionIcon-root):active {
+  background: var(--sf-hover);
+}
+
+.mobilePage .rateLine {
+  margin-top: -4px;
+  padding: 0 4px;
+}
+
+/* Recent pairs scroll sideways rather than wrapping */
+.mobilePage .chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 0 -20px;
+  padding: 0 20px;
+  scrollbar-width: none;
+}
+
+.mobilePage .chip {
+  flex-shrink: 0;
+}
+
+.currencyList {
+  display: flex;
+  flex-direction: column;
+  max-height: min(60dvh, 480px);
+  overflow-y: auto;
+}
+
+.currencyRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px;
+  border-radius: 8px;
+}
+
+.currencyRow[data-selected] {
+  color: var(--sf-accent);
+}
+
+.currencyCode {
+  width: 44px;
+  font-weight: 500;
+}
+
+.splitList {
+  display: flex;
+  flex-direction: column;
+}
+
+.splitRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 4px;
+}
+
+.splitRow + .splitRow {
+  border-top: 1px solid var(--sf-divider);
+}
+
+/* The row lights up while typing, rather than a box round the number */
+.bigInput:focus,
+.bigInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.side:focus-within {
+  border-radius: 18px 18px 0 0;
+  background: color-mix(in srgb, var(--sf-accent) 6%, transparent);
+}

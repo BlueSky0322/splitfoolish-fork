@@ -2,7 +2,8 @@
 // that go through the API the way the app does. Access is switched off and requests say
 // who they are with the X-Dev-User header (see auth.ts).
 
-import { ChildProcess, execFileSync, spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
@@ -43,6 +44,8 @@ export interface FakeRates {
   set: (from: string, to: string, rate: number) => void;
   /** Makes one service answer 500 */
   down: (service: 'wise' | 'frankfurter', isDown: boolean) => void;
+  /** Forgets every rate and brings both services back, so tests don't lean on each other */
+  reset: () => void;
 }
 
 /** A tiny HTTP server answering like Wise's /v1/rates and Frankfurter's /v1/latest */
@@ -76,6 +79,11 @@ async function startFakeRates(): Promise<FakeRates & { base: string; close: () =
     set: (from, to, rate) => table.set(`${from}${to}`, rate),
     down: (service, value) => {
       isDown[service] = value;
+    },
+    reset: () => {
+      table.clear();
+      isDown.wise = false;
+      isDown.frankfurter = false;
     },
     close: () => server.close(),
   };

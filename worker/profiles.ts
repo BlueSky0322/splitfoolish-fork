@@ -2,77 +2,71 @@
 // (private preferences that follow the account between devices). A profile row is
 // made the first time someone saves anything; until then everything has its default.
 
+import type { PaymentMethodsBody, ProfilePatch } from '../shared/api';
 import {
   BANK_TRANSFER,
   MAX_ACCOUNT_NAME,
   MAX_BANK,
+  MAX_METHODS,
   MAX_METHOD_DETAIL,
   MAX_METHOD_TYPE,
   type PaymentMethod,
   QR_CODE,
   needsDetail,
 } from '../shared/payments';
-
-export const ACCENTS = ['blurple', 'blue', 'teal', 'green', 'amber', 'rose'] as const;
-export const CURRENCY = /^[A-Z]{3}$/;
-
-const MAX_DISPLAY_NAME = 32;
-const MAX_METHODS = 10;
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-export type { PaymentMethod };
+import {
+  ACCENTS,
+  DEFAULT_SETTINGS,
+  ITEMS_GROUPS,
+  MAX_DISPLAY_NAME,
+  ITEMS_SORT_KEYS,
+  ITEMS_VIEWS,
+  type Profile,
+  RATE_PREFERENCES,
+  type RatePreference,
+  SORT_DIRS,
+  type Settings,
+  type SplitMember,
+  THEMES,
+} from '../shared/api';
+import { isCurrency } from '../shared/rates';
+import type { Role } from '../shared/types';
+import { type Unchecked, json, fail, isConstraintError } from './http';
+import { isRowId } from '../shared/api';
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {
-  theme: { column: 'theme', values: ['dark', 'light', 'auto'] },
+  theme: { column: 'theme', values: THEMES },
   accent: { column: 'accent', values: ACCENTS },
   lastCurrency: { column: 'last_currency', values: null },
   defaultCurrency: { column: 'default_currency', values: null },
-  rateSource: { column: 'rate_source', values: ['wise', 'ecb'] },
+  ratePreference: { column: 'rate_preference', values: RATE_PREFERENCES },
   sidebarOpen: { column: 'sidebar_open', values: [true, false] },
-  itemsView: { column: 'items_view', values: ['card', 'table'] },
-  itemsGroupBy: { column: 'items_group_by', values: ['none', 'day', 'payer', 'category'] },
-  itemsSortKey: { column: 'items_sort_key', values: ['date', 'name', 'payer', 'amount'] },
-  itemsSortDir: { column: 'items_sort_dir', values: ['asc', 'desc'] },
-} as const;
+  itemsView: { column: 'items_view', values: ITEMS_VIEWS },
+  itemsGroupBy: { column: 'items_group_by', values: ITEMS_GROUPS },
+  itemsSortKey: { column: 'items_sort_key', values: ITEMS_SORT_KEYS },
+  itemsSortDir: { column: 'items_sort_dir', values: SORT_DIRS },
+} as const satisfies Record<keyof Settings, unknown>;
 
 type SettingKey = keyof typeof SETTINGS;
 type SettingChanges = Partial<Record<SettingKey, string | boolean | null>>;
 
-// Settings before anyone changes them. A new settings row is written with all of these
-// (not the table's own column defaults), so they can change here alone.
-const DEFAULT_SETTINGS = {
-  theme: 'auto',
-  accent: 'blurple',
-  lastCurrency: null as string | null,
-  defaultCurrency: null as string | null,
-  rateSource: 'wise',
-  sidebarOpen: true,
-  itemsView: 'card',
-  itemsGroupBy: 'day',
-  itemsSortKey: 'date',
-  // Newest items first
-  itemsSortDir: 'desc',
-};
+// A new settings row is written with every one of DEFAULT_SETTINGS (not the table's
+// own column defaults), so the defaults can change in shared/api.ts alone.
 
 /** Makes the profile row if there isn't one, so rows that belong to it can be added */
-export const ensureProfile = (db: D1Database, email: string) =>
+export const ensureProfileStatement = (db: D1Database, email: string) =>
   db
     .prepare('INSERT OR IGNORE INTO profiles (email, created_at, updated_at) VALUES (?1, ?2, ?2)')
     .bind(email, Date.now());
 
-export async function getProfile(db: D1Database, email: string) {
-  const [profile, settings, avatar, methods] = await db.batch<Record<string, unknown>>([
+export async function getProfile(db: D1Database, email: string): Promise<Profile> {
+  const [profile, settings, avatar, methods] = await db.batch([
     db.prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?').bind(email),
     db
       .prepare(
         `SELECT theme, accent, last_currency AS lastCurrency,
-           default_currency AS defaultCurrency, rate_source AS rateSource,
+           default_currency AS defaultCurrency, rate_preference AS ratePreference,
            sidebar_open AS sidebarOpen,
            items_view AS itemsView, items_group_by AS itemsGroupBy,
            items_sort_key AS itemsSortKey, items_sort_dir AS itemsSortDir
@@ -89,12 +83,15 @@ export async function getProfile(db: D1Database, email: string) {
       )
       .bind(email),
   ]);
-  const saved = settings.results[0] as unknown as typeof DEFAULT_SETTINGS | undefined;
-  const all = methods.results as unknown as (PaymentMethod & { isPreferred: number })[];
+  const saved = settings.results[0] as
+    | (Omit<Settings, 'sidebarOpen'> & { sidebarOpen: number })
+    | undefined;
+  const all = methods.results as (PaymentMethod & { isPreferred: number })[];
   return {
     email,
-    displayName: (profile.results[0]?.displayName as string | null | undefined) ?? null,
-    avatarVersion: (avatar.results[0]?.version as number | undefined) ?? null,
+    displayName:
+      (profile.results[0] as { displayName: string | null } | undefined)?.displayName ?? null,
+    avatarVersion: (avatar.results[0] as { version: number } | undefined)?.version ?? null,
     paymentMethods: all.map(({ id, type, detail, bank, accountName, qrVersion }) => ({
       id,
       type,
@@ -124,7 +121,7 @@ export function settingsStatements(db: D1Database, email: string, changes: Setti
   };
   const changed = keys.map((k) => SETTINGS[k].column);
   return [
-    ensureProfile(db, email),
+    ensureProfileStatement(db, email),
     db
       .prepare(
         `INSERT INTO user_settings (email, ${all.map((k) => SETTINGS[k].column).join(', ')}, updated_at)
@@ -137,19 +134,21 @@ export function settingsStatements(db: D1Database, email: string, changes: Setti
   ];
 }
 
-/** Checks the settings in a request; returns the changes, or why they're refused */
-function readSettings(raw: unknown): SettingChanges | string {
-  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return 'Invalid settings';
+/** Checks the settings in a request; returns the changes, or the refusal */
+function readSettings(raw: unknown): SettingChanges | Response {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return fail('Invalid settings', 400);
+  }
   const changes: SettingChanges = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (!Object.hasOwn(SETTINGS, key)) return `Unknown setting ${key}`;
+    if (!Object.hasOwn(SETTINGS, key)) return fail(`Unknown setting ${key}`, 400);
     const spec = SETTINGS[key as SettingKey];
     if (spec.values == null) {
-      if (value !== null && (typeof value !== 'string' || !CURRENCY.test(value))) {
-        return 'Invalid currency';
+      if (value !== null && !isCurrency(value)) {
+        return fail('Invalid currency', 400);
       }
     } else if (!(spec.values as readonly unknown[]).includes(value)) {
-      return `Invalid ${key}`;
+      return fail(`Invalid ${key}`, 400);
     }
     changes[key as SettingKey] = value as string | boolean | null;
   }
@@ -157,18 +156,18 @@ function readSettings(raw: unknown): SettingChanges | string {
 }
 
 /** PATCH /api/me: { displayName?, settings? } */
-export async function patchProfile(db: D1Database, email: string, body: Record<string, unknown>) {
+export async function patchProfile(db: D1Database, email: string, body: Unchecked<ProfilePatch>) {
   const statements: D1PreparedStatement[] = [];
 
   if ('displayName' in body) {
     const raw = body.displayName;
-    if (raw != null && typeof raw !== 'string') return json({ error: 'Invalid name' }, 400);
+    if (raw != null && typeof raw !== 'string') return fail('Invalid name', 400);
     const name = typeof raw === 'string' ? raw.trim() : '';
     if (name.length > MAX_DISPLAY_NAME) {
-      return json({ error: `Display name can be up to ${MAX_DISPLAY_NAME} characters` }, 400);
+      return fail(`Display name can be up to ${MAX_DISPLAY_NAME} characters`, 400);
     }
     statements.push(
-      ensureProfile(db, email),
+      ensureProfileStatement(db, email),
       db
         .prepare('UPDATE profiles SET display_name = ?, updated_at = ? WHERE email = ?')
         .bind(name || null, Date.now(), email),
@@ -177,49 +176,58 @@ export async function patchProfile(db: D1Database, email: string, body: Record<s
 
   if ('settings' in body) {
     const changes = readSettings(body.settings);
-    if (typeof changes === 'string') return json({ error: changes }, 400);
+    if (changes instanceof Response) return changes;
     statements.push(...settingsStatements(db, email, changes));
   }
 
   if (statements.length > 0) await db.batch(statements);
-  return json(await getProfile(db, email));
+  return json<Profile>(await getProfile(db, email));
+}
+
+type SavedMethod = PaymentMethod & { bank: string | null; accountName: string | null };
+
+const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+/** One payment method as sent, checked and trimmed; or why it's refused */
+function readPaymentMethod(raw: unknown): SavedMethod | string {
+  const m = (raw != null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (!isRowId(m.id)) return 'Invalid payment method';
+  const type = text(m.type);
+  const detail = text(m.detail);
+  if (
+    !type ||
+    type.length > MAX_METHOD_TYPE ||
+    (!detail && needsDetail(type)) ||
+    detail.length > MAX_METHOD_DETAIL
+  ) {
+    return 'Each payment method needs a type and details';
+  }
+  // Only bank transfers name a bank and an account holder
+  const isBank = type === BANK_TRANSFER;
+  const bank = isBank ? text(m.bank) : '';
+  const accountName = isBank ? text(m.accountName) : '';
+  if (bank.length > MAX_BANK || accountName.length > MAX_ACCOUNT_NAME) {
+    return 'The bank or account name is too long';
+  }
+  return { id: m.id, type, detail, bank: bank || null, accountName: accountName || null };
 }
 
 /** Replaces the whole list of payment methods, and which one is preferred */
 export async function putPaymentMethods(
   db: D1Database,
   email: string,
-  body: Record<string, unknown>,
+  body: Unchecked<PaymentMethodsBody>,
 ) {
   const methods = body.methods;
   if (!Array.isArray(methods) || methods.length > MAX_METHODS) {
-    return json({ error: `You can save up to ${MAX_METHODS} payment methods` }, 400);
+    return fail(`You can save up to ${MAX_METHODS} payment methods`, 400);
   }
-  const clean: PaymentMethod[] = [];
-  for (const m of methods as Record<string, unknown>[]) {
-    const id = typeof m?.id === 'string' && /^[0-9a-f]{16}$/.test(m.id) ? m.id : null;
-    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
-    const type = text(m?.type);
-    const detail = text(m?.detail);
-    if (id == null || clean.some((c) => c.id === id)) {
-      return json({ error: 'Invalid payment method' }, 400);
-    }
-    if (
-      !type ||
-      type.length > MAX_METHOD_TYPE ||
-      (!detail && needsDetail(type)) ||
-      detail.length > MAX_METHOD_DETAIL
-    ) {
-      return json({ error: 'Each payment method needs a type and details' }, 400);
-    }
-    // Only bank transfers name a bank and an account holder
-    const isBank = type === BANK_TRANSFER;
-    const bank = isBank ? text(m?.bank) : '';
-    const accountName = isBank ? text(m?.accountName) : '';
-    if (bank.length > MAX_BANK || accountName.length > MAX_ACCOUNT_NAME) {
-      return json({ error: 'The bank or account name is too long' }, 400);
-    }
-    clean.push({ id, type, detail, bank: bank || null, accountName: accountName || null });
+  const clean: SavedMethod[] = [];
+  for (const raw of methods as unknown[]) {
+    const method = readPaymentMethod(raw);
+    if (typeof method === 'string') return fail(method, 400);
+    if (clean.some((c) => c.id === method.id)) return fail('Invalid payment method', 400);
+    clean.push(method);
   }
 
   // A QR code method needs its image, uploaded first
@@ -233,7 +241,7 @@ export async function putPaymentMethods(
       .bind(email, ...qrIds)
       .first<{ n: number }>();
     if ((found?.n ?? 0) !== qrIds.length) {
-      return json({ error: 'Add the QR code image first' }, 400);
+      return fail('Add the QR code image first', 400);
     }
   }
 
@@ -244,7 +252,7 @@ export async function putPaymentMethods(
 
   try {
     await db.batch([
-      ensureProfile(db, email),
+      ensureProfileStatement(db, email),
       db.prepare('DELETE FROM payment_methods WHERE email = ?').bind(email),
       ...clean.map((m, position) =>
         db
@@ -258,8 +266,8 @@ export async function putPaymentMethods(
             email,
             m.type,
             m.detail,
-            m.bank ?? null,
-            m.accountName ?? null,
+            m.bank,
+            m.accountName,
             position,
             m.id === preferred ? 1 : 0,
           ),
@@ -274,10 +282,10 @@ export async function putPaymentMethods(
     ]);
   } catch (err) {
     // An id already used by someone else's method
-    if (String(err).includes('CONSTRAINT')) return json({ error: 'Invalid payment method' }, 400);
+    if (isConstraintError(err)) return fail('Invalid payment method', 400);
     throw err;
   }
-  return json(await getProfile(db, email));
+  return json<Profile>(await getProfile(db, email));
 }
 
 /**
@@ -306,9 +314,9 @@ export const memberProfileStatements = (db: D1Database, splitId: string) => [
     .bind(splitId),
 ];
 
-export function assembleMembers([members, methods]: D1Result<Record<string, unknown>>[]) {
+export function assembleMembers([members, methods]: D1Result[]): SplitMember[] {
   const byEmail = new Map<string, PaymentMethod[]>();
-  for (const m of methods.results as unknown as (PaymentMethod & { email: string })[]) {
+  for (const m of methods.results as (PaymentMethod & { email: string })[]) {
     byEmail.set(m.email, [
       ...(byEmail.get(m.email) ?? []),
       {
@@ -322,9 +330,9 @@ export function assembleMembers([members, methods]: D1Result<Record<string, unkn
     ]);
   }
   return (
-    members.results as unknown as {
+    members.results as {
       email: string;
-      role: string;
+      role: Role;
       displayName: string | null;
       avatarVersion: number | null;
     }[]
@@ -339,10 +347,25 @@ export function assembleMembers([members, methods]: D1Result<Record<string, unkn
 }
 
 /** Where someone's exchange rates come from: Wise unless they picked the ECB */
-export async function getRateSource(db: D1Database, email: string): Promise<'wise' | 'ecb'> {
+export async function getRatePreference(db: D1Database, email: string): Promise<RatePreference> {
   const row = await db
-    .prepare('SELECT rate_source AS rateSource FROM user_settings WHERE email = ?')
+    .prepare('SELECT rate_preference AS ratePreference FROM user_settings WHERE email = ?')
     .bind(email)
-    .first<{ rateSource: 'wise' | 'ecb' }>();
-  return row?.rateSource ?? 'wise';
+    .first<{ ratePreference: RatePreference }>();
+  return row?.ratePreference ?? DEFAULT_SETTINGS.ratePreference;
+}
+
+/**
+ * Whose a payment method id is: the account that saved the method, or that uploaded a
+ * QR code for it before saving it. Null when it's no one's yet.
+ */
+export async function paymentMethodOwner(db: D1Database, id: string) {
+  const row = await db
+    .prepare(
+      `SELECT email FROM payment_methods WHERE id = ?1
+       UNION SELECT email FROM payment_qr_codes WHERE method_id = ?1`,
+    )
+    .bind(id)
+    .first<{ email: string }>();
+  return row?.email ?? null;
 }

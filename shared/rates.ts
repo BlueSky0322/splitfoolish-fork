@@ -5,6 +5,12 @@
 /** Where a rate came from: a live mid-market rate, the daily ECB rate, or typed in */
 export type RateSource = 'wise' | 'frankfurter' | 'manual';
 
+/** A currency code, like MYR */
+const CURRENCY_PATTERN = /^[A-Z]{3}$/;
+
+export const isCurrency = (v: unknown): v is string =>
+  typeof v === 'string' && CURRENCY_PATTERN.test(v);
+
 /** Offered first in currency pickers: the currencies people here travel and spend in */
 export const COMMON_CURRENCIES = [
   'MYR',
@@ -25,6 +31,9 @@ export const COMMON_CURRENCIES = [
   'EUR',
 ] as const;
 
+/** An amount in the currency's main unit (12.34), in whole cents (1234) */
+export const toCents = (amount: number) => Math.round(amount * 100);
+
 /** `cents` in one currency, at `rate` units of the other per unit, in the other's cents */
 export const convertCents = (cents: number, rate: number) => Math.round(cents * rate);
 
@@ -34,6 +43,26 @@ export const MAX_RATE = 1e6;
 
 export const isValidRate = (rate: unknown): rate is number =>
   typeof rate === 'number' && Number.isFinite(rate) && rate >= MIN_RATE && rate <= MAX_RATE;
+
+/**
+ * Where a saved rate came from. One saved without a source (from before sources were
+ * kept) counts as typed, so it's never swapped for a fetched one unasked.
+ */
+export const savedRateSource = (source: RateSource | null | undefined): RateSource =>
+  source ?? 'manual';
+
+/**
+ * Whether an edit keeps an item's saved conversion instead of converting again: the
+ * same currency and amount, and the same kind of rate. A fetched rate is kept while no
+ * rate is typed; a typed one only when the same rate is typed again.
+ */
+export function keepsSavedConversion(
+  saved: { currency: string; cents: number; rate: number; source?: RateSource | null },
+  entered: { currency: string; cents: number; manualRate: number | null },
+): boolean {
+  if (saved.currency !== entered.currency || saved.cents !== entered.cents) return false;
+  return entered.manualRate == null ? saved.source !== 'manual' : entered.manualRate === saved.rate;
+}
 
 /**
  * Converts amounts that add up to a total, keeping them adding up to `targetCents`:

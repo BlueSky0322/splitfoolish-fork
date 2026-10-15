@@ -1,30 +1,65 @@
-# React + TypeScript + Vite
+# Splitfoolish
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Split shared expenses with friends: add what each person paid for, in any currency, and
+see who owes whom. It installs as an app on phones and computers and keeps working
+offline.
 
-Currently, two official plugins are available:
+## Layout
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+| Folder        | What it is                                                                   |
+| ------------- | ---------------------------------------------------------------------------- |
+| `web/`        | The browser app: React, Mantine and Tailwind, built with Vite into `dist/`   |
+| `worker/`     | The API: a Hono app on Cloudflare Workers that also serves `dist/`           |
+| `shared/`     | Code both use: settling up, payment methods, rates and the API's data shapes |
+| `migrations/` | D1 (SQLite) schema changes, applied in order on deploy                       |
+| `docs/`       | The data model (`erd.md`)                                                    |
 
-## Expanding the ESLint configuration
+`web/` and `worker/` never import each other; anything both need lives in `shared/`,
+which the app imports as `@shared/...`.
+Each has its own `tsconfig.json`, so the app gets browser types, the Worker gets Worker
+types and `shared/` gets neither. Files are named for what they do on their side:
+`shared/rates.ts` holds the arithmetic, `worker/exchange-rates.ts` fetches rates and
+`web/src/utils/rate-labels.ts` says how they read.
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+Inside `web/src`, what the app knows is kept apart from how it looks:
 
-- Configure the top-level `parserOptions` property like this:
+| Folder                     | What it holds                                                                |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `split/`, `my-splits/`, …  | Shared state (the open bill, My splits, the profile): loading, saving, rules |
+| `components/<screen>/`     | What a screen draws, reading from the folders above                          |
+| `components/common/`       | What more than one screen draws that knows the app (a split's picture)       |
+| `components/ui/`           | Plain building blocks that know nothing of splits (dialogs, a state card)    |
+| `offline/`, `utils/`, etc. | What every feature leans on: the device cache, money, dates                  |
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
+A screen may call the API itself for a one-off action that changes no shared state
+(saving a payment method, say); anything the rest of the app shows goes through the
+folder that owns it. So `split/` is the bill and `components/split/` is the split page:
+its parts sit in subfolders (`items/`, `people/`, `dialogs/`, `layout/`, …) and read the
+page's context from the folder above them.
+
+## Running it
+
+```sh
+yarn install
+cp .dev.vars.example .dev.vars
+yarn db:migrate:local
+yarn dev:worker      # builds the app, then serves app and API on http://localhost:8787
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+There is no Cloudflare Access locally, so every request is the `DEV_USER_EMAIL` in
+`.dev.vars` (or whoever the `X-Dev-User` header names).
+
+`yarn dev` runs the app alone with hot reload, without the API.
+
+## Checks
+
+```sh
+yarn typecheck   # app, Worker, Worker tests, shared code and configs
+yarn lint
+yarn vitest run  # unit tests, plus API tests against a local Worker
+```
+
+## Deploying
+
+Every push to `main` builds, checks and tests, applies new migrations to the production
+database, then deploys the Worker (`.github/workflows/deploy.yml`).

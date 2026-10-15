@@ -1,24 +1,25 @@
 // Photos: receipts on items, photos of a whole split, and profile pictures. They are
 // stored in D1 next to the rest of the data, so they are private by default (served
 // only through the Worker, with the same membership checks) and are deleted together
-// with their item or split. Photos are shrunk in the browser before upload.
+// with their item or split. Photos are shrunk in the browser before upload, to the
+// sizes in shared/api.ts. Who may see someone's pictures is decided in sharing.ts.
 
-// D1 allows up to 2 MB per value; browser-shrunk photos are usually a few hundred KB
-const MAX_PHOTO_BYTES = 1_500_000;
-const MAX_AVATAR_BYTES = 256_000;
-/** A QR code is shrunk to about 1000px, sharp enough to scan from another phone */
-const MAX_QR_BYTES = 512_000;
+import {
+  type Attachment,
+  type AvatarResult,
+  MAX_AVATAR_BYTES,
+  MAX_PHOTO_BYTES,
+  MAX_QR_BYTES,
+  type PaymentQrResult,
+  type SplitPictureResult,
+} from '../shared/api';
+import { canRemovePhoto } from '../shared/rules';
+import { json, newId, fail, notFound, ok, isConstraintError } from './http';
+import { ensureProfileStatement, paymentMethodOwner } from './profiles';
+import { sharesSplit } from './sharing';
+import type { Actor } from '../shared/rules';
+
 const MAX_PHOTOS_PER_SPLIT = 300;
-
-import { ensureProfile } from './profiles';
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 
 /** The image type from the file's first bytes, so a mislabelled upload can't pass as an image */
 function detectImageType(bytes: Uint8Array): string | null {
@@ -33,13 +34,13 @@ function detectImageType(bytes: Uint8Array): string | null {
 
 async function readImage(req: Request, maxBytes: number) {
   const declared = Number(req.headers.get('Content-Length') ?? 0);
-  if (declared > maxBytes) return json({ error: 'That photo is too large' }, 413);
+  if (declared > maxBytes) return fail('That photo is too large', 413);
   const bytes = new Uint8Array(await req.arrayBuffer());
-  if (bytes.length > maxBytes) return json({ error: 'That photo is too large' }, 413);
-  if (bytes.length === 0) return json({ error: 'No photo was sent' }, 400);
+  if (bytes.length > maxBytes) return fail('That photo is too large', 413);
+  if (bytes.length === 0) return fail('No photo was sent', 400);
   const contentType = detectImageType(bytes);
   if (contentType == null) {
-    return json({ error: 'Only JPEG, PNG and WebP photos are supported' }, 415);
+    return fail('Only JPEG, PNG and WebP photos are supported', 415);
   }
   return { bytes, contentType };
 }
@@ -68,11 +69,13 @@ export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
     )
     .bind(splitId);
 
+export const assembleAttachments = (result: D1Result) => result.results as Attachment[];
+
 export async function uploadAttachment(
-  req: Request,
   db: D1Database,
   splitId: string,
   email: string,
+  req: Request,
 ) {
   const itemId = new URL(req.url).searchParams.get('itemId');
   const [count, item] = await db.batch<{ n?: number; id?: string }>([
@@ -80,16 +83,16 @@ export async function uploadAttachment(
     db.prepare('SELECT id FROM items WHERE id = ? AND split_id = ?').bind(itemId ?? '', splitId),
   ]);
   if ((count.results[0]?.n ?? 0) >= MAX_PHOTOS_PER_SPLIT) {
-    return json({ error: `A split can have up to ${MAX_PHOTOS_PER_SPLIT} photos` }, 409);
+    return fail(`A split can have up to ${MAX_PHOTOS_PER_SPLIT} photos`, 409);
   }
   if (itemId != null && item.results.length === 0) {
-    return json({ error: 'That item no longer exists' }, 404);
+    return fail('That item no longer exists', 404);
   }
 
   const image = await readImage(req, MAX_PHOTO_BYTES);
   if (image instanceof Response) return image;
 
-  const attachment = {
+  const attachment: Attachment = {
     id: newId(),
     itemId,
     size: image.bytes.length,
@@ -119,15 +122,15 @@ export async function uploadAttachment(
     ]);
   } catch (err) {
     // The item was removed between the check above and now
-    if (String(err).includes('CONSTRAINT')) {
-      return json({ error: 'That item no longer exists' }, 404);
+    if (isConstraintError(err)) {
+      return fail('That item no longer exists', 404);
     }
     throw err;
   }
-  return json(attachment, 201);
+  return json<Attachment>(attachment, 201);
 }
 
-export async function getAttachment(db: D1Database, splitId: string, id: string) {
+export async function serveAttachment(db: D1Database, splitId: string, id: string) {
   const row = await db
     .prepare(
       `SELECT a.content_type AS contentType, d.data FROM attachments a
@@ -135,39 +138,33 @@ export async function getAttachment(db: D1Database, splitId: string, id: string)
     )
     .bind(id, splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return json({ error: 'Not found' }, 404);
+  if (row == null) return notFound();
   return imageResponse(row.data, row.contentType);
 }
 
-export async function deleteAttachment(
-  db: D1Database,
-  splitId: string,
-  id: string,
-  email: string,
-  isOwner: boolean,
-) {
+export async function deleteAttachment(db: D1Database, splitId: string, id: string, actor: Actor) {
   const row = await db
     .prepare('SELECT uploaded_by AS uploadedBy FROM attachments WHERE id = ? AND split_id = ?')
     .bind(id, splitId)
     .first<{ uploadedBy: string }>();
-  if (row == null) return json({ ok: true });
-  if (row.uploadedBy !== email && !isOwner) {
-    return json({ error: 'Only the person who added a photo, or the owner, can remove it' }, 403);
+  if (row == null) return ok();
+  if (!canRemovePhoto(row.uploadedBy, actor)) {
+    return fail('Only the person who added a photo, or the owner, can remove it', 403);
   }
   await db.batch([
     db.prepare('DELETE FROM attachment_data WHERE id = ?').bind(id),
     db.prepare('DELETE FROM attachments WHERE id = ?').bind(id),
   ]);
-  return json({ ok: true });
+  return ok();
 }
 
-export async function putAvatar(req: Request, db: D1Database, email: string) {
+export async function putAvatar(db: D1Database, email: string, req: Request) {
   const image = await readImage(req, MAX_AVATAR_BYTES);
   if (image instanceof Response) return image;
 
   const version = Date.now();
   await db.batch([
-    ensureProfile(db, email),
+    ensureProfileStatement(db, email),
     db
       .prepare(
         `INSERT INTO avatars (email, content_type, version, data) VALUES (?1, ?2, ?3, ?4)
@@ -175,45 +172,23 @@ export async function putAvatar(req: Request, db: D1Database, email: string) {
       )
       .bind(email, image.contentType, version, image.bytes),
   ]);
-  return json({ avatarVersion: version });
-}
-
-/** Whether two people are in a split together, so each can see the other's pictures */
-async function sharesSplit(db: D1Database, viewer: string, email: string) {
-  if (viewer === email) return true;
-  const shared = await db
-    .prepare(
-      `SELECT 1 FROM split_members a JOIN split_members b ON a.split_id = b.split_id
-       WHERE a.email = ? AND b.email = ? LIMIT 1`,
-    )
-    .bind(viewer, email)
-    .first();
-  return shared != null;
+  return json<AvatarResult>({ avatarVersion: version });
 }
 
 /**
  * Stores the QR code for one of your payment methods. Sent before the method itself
- * is saved (so a new method's id may not exist yet); an id that's someone else's is
- * refused.
+ * is saved (so a new method's id may not exist yet); an id that's someone else's gets
+ * the same 404 as their code would, so ids can't be probed.
  */
-export async function putPaymentQr(req: Request, db: D1Database, email: string, id: string) {
-  if (!/^[0-9a-f]{16}$/.test(id)) return json({ error: 'Invalid payment method' }, 400);
-  const owner = await db
-    .prepare(
-      `SELECT email FROM payment_methods WHERE id = ?1
-       UNION SELECT email FROM payment_qr_codes WHERE method_id = ?1`,
-    )
-    .bind(id)
-    .first<{ email: string }>();
-  if (owner != null && owner.email !== email) {
-    return json({ error: 'Invalid payment method' }, 400);
-  }
+export async function putPaymentQr(db: D1Database, id: string, email: string, req: Request) {
+  const owner = await paymentMethodOwner(db, id);
+  if (owner != null && owner !== email) return notFound();
   const image = await readImage(req, MAX_QR_BYTES);
   if (image instanceof Response) return image;
 
   const version = Date.now();
   await db.batch([
-    ensureProfile(db, email),
+    ensureProfileStatement(db, email),
     db
       .prepare(
         `INSERT INTO payment_qr_codes (method_id, email, content_type, version, data)
@@ -222,11 +197,11 @@ export async function putPaymentQr(req: Request, db: D1Database, email: string, 
       )
       .bind(id, email, image.contentType, version, image.bytes),
   ]);
-  return json({ qrVersion: version });
+  return json<PaymentQrResult>({ qrVersion: version });
 }
 
 /** A payment method's QR code, seen by its owner and the people they share a split with */
-export async function getPaymentQr(db: D1Database, viewer: string, id: string) {
+export async function servePaymentQr(db: D1Database, id: string, viewer: string) {
   const row = await db
     .prepare(
       'SELECT email, content_type AS contentType, data FROM payment_qr_codes WHERE method_id = ?',
@@ -234,29 +209,29 @@ export async function getPaymentQr(db: D1Database, viewer: string, id: string) {
     .bind(id)
     .first<{ email: string; contentType: string; data: ArrayBuffer | number[] }>();
   if (row == null || !(await sharesSplit(db, viewer, row.email))) {
-    return json({ error: 'Not found' }, 404);
+    return notFound();
   }
   return imageResponse(row.data, row.contentType);
 }
 
 export async function deleteAvatar(db: D1Database, email: string) {
   await db.prepare('DELETE FROM avatars WHERE email = ?').bind(email).run();
-  return json({ ok: true });
+  return ok();
 }
 
 /** Profile pictures are visible to their owner and to people they share a split with */
-export async function getAvatar(db: D1Database, viewer: string, email: string) {
-  if (!(await sharesSplit(db, viewer, email))) return json({ error: 'Not found' }, 404);
+export async function serveAvatar(db: D1Database, email: string, viewer: string) {
+  if (!(await sharesSplit(db, viewer, email))) return notFound();
   const row = await db
     .prepare('SELECT content_type AS contentType, data FROM avatars WHERE email = ?')
     .bind(email)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return json({ error: 'Not found' }, 404);
+  if (row == null) return notFound();
   return imageResponse(row.data, row.contentType);
 }
 
 /** A split's picture; set and removed by its owner, seen by its members */
-export async function putSplitPicture(req: Request, db: D1Database, splitId: string) {
+export async function putSplitPicture(db: D1Database, splitId: string, req: Request) {
   const image = await readImage(req, MAX_AVATAR_BYTES);
   if (image instanceof Response) return image;
   const version = Date.now();
@@ -267,19 +242,19 @@ export async function putSplitPicture(req: Request, db: D1Database, splitId: str
     )
     .bind(splitId, image.contentType, version, image.bytes)
     .run();
-  return json({ pictureVersion: version });
+  return json<SplitPictureResult>({ pictureVersion: version });
 }
 
 export async function deleteSplitPicture(db: D1Database, splitId: string) {
   await db.prepare('DELETE FROM split_pictures WHERE split_id = ?').bind(splitId).run();
-  return json({ ok: true });
+  return ok();
 }
 
-export async function getSplitPicture(db: D1Database, splitId: string) {
+export async function serveSplitPicture(db: D1Database, splitId: string) {
   const row = await db
     .prepare('SELECT content_type AS contentType, data FROM split_pictures WHERE split_id = ?')
     .bind(splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return json({ error: 'Not found' }, 404);
+  if (row == null) return notFound();
   return imageResponse(row.data, row.contentType);
 }
