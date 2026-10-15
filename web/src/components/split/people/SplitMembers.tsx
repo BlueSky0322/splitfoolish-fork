@@ -9,7 +9,7 @@ import { nameFor } from '../../../profile/ProfileContext';
 import UserAvatar from '../../ui/UserAvatar';
 import classes from './SplitMembers.module.css';
 import type { SplitInvite } from '../../../../../shared/api';
-import { reloadHomeData } from '../../../home/home-data';
+import { reloadMySplits } from '../../../my-splits/my-splits';
 import { canRemoveMember } from '../../../../../shared/rules';
 
 interface SplitMembersProps {
@@ -76,7 +76,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: Split
       (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== invite.id) }),
       async () => {
         await (approve ? api.acceptInvite(invite.id) : api.declineInvite(invite.id));
-        void reloadHomeData();
+        void reloadMySplits();
         // Approving adds them to the members list
         if (approve) await onChange();
       },

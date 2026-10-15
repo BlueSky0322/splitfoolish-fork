@@ -5,6 +5,7 @@ import {
   isRetryable,
   readOutbox,
   readOutboxIds,
+  sendQueued,
   readPendingCreates,
   removePendingCreate,
   requestBackgroundSync,
@@ -130,10 +131,7 @@ export function flushOfflineChanges(): Promise<number> {
         const queued = await readOutbox(id);
         if (queued.length === 0) return false;
         try {
-          await api.applyChanges(
-            id,
-            queued.map((q) => q.change),
-          );
+          await sendQueued(id, queued);
           sent++;
         } catch (err) {
           if (isRetryable(err)) return true;

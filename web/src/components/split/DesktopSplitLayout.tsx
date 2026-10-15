@@ -15,13 +15,8 @@ import ErrorBoundary from '../ui/ErrorBoundary';
 import { DesktopSelectionBar } from './items/ItemSelection';
 import SplitAvatar from '../ui/SplitAvatar';
 import { useSplitPage } from './SplitPageContext';
-import {
-  AvatarStack,
-  SaveStatus,
-  type SelectionUi,
-  type SplitPageParts,
-  otherCurrencyCount,
-} from './SplitPageParts';
+import { otherCurrencyCount } from '../../split/derive';
+import { AvatarStack, SaveStatus, type SelectionUi, type SplitPageParts } from './SplitPageParts';
 import { GROUP_ORDER, useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
 import { canChangePeople } from '../../../../shared/rules';

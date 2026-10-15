@@ -52,3 +52,7 @@ export function computeTotals(
 /** The person in the bill who is this account, if one is linked */
 export const findMe = (people: Person[], email: string | null | undefined) =>
   email == null ? null : people.find((p) => p.memberEmail === email) ?? null;
+
+/** How many currencies besides the split's own its items were paid in */
+export const otherCurrencyCount = (items: { original?: { currency: string } | null }[]) =>
+  new Set(items.map((i) => i.original?.currency).filter((c): c is string => c != null)).size;

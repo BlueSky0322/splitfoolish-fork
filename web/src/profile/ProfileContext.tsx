@@ -7,7 +7,7 @@ import { ApiError, api } from '../api';
 import { queryClient } from '../query-client';
 import { isOfflineFailure } from '../offline/outbox';
 import { syncAfterSignIn } from '../offline/sync';
-import { reloadHomeData } from '../home/home-data';
+import { reloadMySplits } from '../my-splits/my-splits';
 import { assumeLastUser, readCache, setCacheUser, writeCache } from '../offline/cache';
 import { isAccent } from '../theme/accents';
 import {
@@ -115,7 +115,7 @@ export function ProfileProvider({
         // Cached splits are kept per account; know whose before showing any
         await setCacheUser(me.email);
         fromDevice.current = false;
-        syncAfterSignIn(() => void reloadHomeData());
+        syncAfterSignIn(() => void reloadMySplits());
         void writeCache(ME_CACHE_KEY, me);
         return me;
       } catch (err) {

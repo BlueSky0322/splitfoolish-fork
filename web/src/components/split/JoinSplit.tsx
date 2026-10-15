@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import StateCard from '../ui/StateCard';
-import { reloadHomeData } from '../../home/home-data';
+import { reloadMySplits } from '../../my-splits/my-splits';
 
 const JoinSplit = ({ token }: { token: string }) => {
   // 'gone': the link isn't valid any more; 'failed': it couldn't be checked just now
@@ -19,7 +19,7 @@ const JoinSplit = ({ token }: { token: string }) => {
       .joinSplit(token)
       .then((result) => {
         if (cancelled) return;
-        void reloadHomeData();
+        void reloadMySplits();
         // Already in it: straight in. Otherwise the invite (or request) waits in Invites
         navigate(
           result.status === 'member'

@@ -11,7 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { countActionableInvites } from '../../api';
-import { useHomeData } from '../../home/useHomeData';
+import { useMySplits } from '../../my-splits/useMySplits';
 import type { Route } from '../../hooks/useRoute';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
@@ -24,7 +24,7 @@ import { SortableSplits } from '../home/SortableSplits';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
 import type { SplitSummary } from '../../../../shared/api';
-import { moveSplit } from '../../home/home-data';
+import { moveSplit } from '../../my-splits/my-splits';
 
 interface SidebarProps {
   route: Route;
@@ -117,7 +117,7 @@ function RailTile({ split, active }: { split: SplitSummary; active: boolean }) {
 }
 
 const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
-  const { splits, invites } = useHomeData();
+  const { splits, invites } = useMySplits();
   const { profile } = useProfile();
   const openNewSplit = useOpenNewSplit();
   const activeSplitId = route.view === 'split' ? route.id : null;

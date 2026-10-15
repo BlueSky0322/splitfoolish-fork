@@ -7,9 +7,9 @@ import { showError } from '../utils/notify';
 
 // My splits and pending invites, shared by the sidebar, My splits and Invites pages so
 // they load once and always agree. The last-seen copy shows while a fresh one loads.
-// The screens read it through useHomeData; anything can change or reload it here.
+// The screens read it through useMySplits; anything can change or reload it here.
 
-export interface HomeData {
+export interface MySplits {
   splits: SplitSummary[] | null;
   invites: MyInvite[] | null;
   error: string | null;
@@ -17,7 +17,7 @@ export interface HomeData {
 
 type Loaded = { splits: SplitSummary[]; invites: MyInvite[] };
 
-export const HOME_KEY = ['home'] as const;
+export const MY_SPLITS_KEY = ['home'] as const;
 const CACHE_KEY = 'home-v2';
 
 /** Adds splits made on this device that the server doesn't have yet (say, offline) */
@@ -26,7 +26,7 @@ const withCreating = async (listed: SplitSummary[]) => {
   return [...creating.filter((c) => !listed.some((s) => s.id === c.id)), ...listed];
 };
 
-export const fetchHome = async (): Promise<Loaded> => {
+export const fetchMySplits = async (): Promise<Loaded> => {
   let listed: SplitSummary[], invites: MyInvite[];
   try {
     [{ splits: listed }, { invites }] = await Promise.all([api.listSplits(), api.listInvites()]);
@@ -46,26 +46,26 @@ export const fetchHome = async (): Promise<Loaded> => {
  * or this one shown before
  */
 export function showSavedCopy() {
-  if (queryClient.getQueryData(HOME_KEY) !== undefined) return;
+  if (queryClient.getQueryData(MY_SPLITS_KEY) !== undefined) return;
   void readCache<Loaded>(CACHE_KEY).then(async (cached) => {
     if (cached == null) return;
     const splits = await withCreating(cached.splits);
-    if (queryClient.getQueryState(HOME_KEY)?.dataUpdatedAt) return;
+    if (queryClient.getQueryState(MY_SPLITS_KEY)?.dataUpdatedAt) return;
     // Marked as old, so it's shown but still fetched
-    queryClient.setQueryData(HOME_KEY, { ...cached, splits }, { updatedAt: 0 });
+    queryClient.setQueryData(MY_SPLITS_KEY, { ...cached, splits }, { updatedAt: 0 });
   });
 }
 
-export const toHomeData = (data: Loaded | undefined, failed: boolean): HomeData => ({
+export const toMySplits = (data: Loaded | undefined, failed: boolean): MySplits => ({
   splits: data?.splits ?? null,
   invites: data?.invites ?? null,
   error: failed && data == null ? 'Could not load your splits.' : null,
 });
 
 /** Changes what's shown straight away, before the server has confirmed it */
-export function updateHomeData(change: (data: HomeData) => Partial<Loaded>) {
-  queryClient.setQueryData<Loaded>(HOME_KEY, (old) => {
-    const next = change(toHomeData(old, false));
+export function updateMySplits(change: (data: MySplits) => Partial<Loaded>) {
+  queryClient.setQueryData<Loaded>(MY_SPLITS_KEY, (old) => {
+    const next = change(toMySplits(old, false));
     return {
       splits: next.splits ?? old?.splits ?? [],
       invites: next.invites ?? old?.invites ?? [],
@@ -75,28 +75,28 @@ export function updateHomeData(change: (data: HomeData) => Partial<Loaded>) {
 
 /** Adds a split to the top of My splits straight away */
 export const addListedSplit = (split: SplitSummary) =>
-  updateHomeData(({ splits }) => ({ splits: [split, ...(splits ?? [])] }));
+  updateMySplits(({ splits }) => ({ splits: [split, ...(splits ?? [])] }));
 
 /** Changes one split in My splits straight away */
 export const patchListedSplit = (id: string, changes: Partial<SplitSummary>) =>
-  updateHomeData(({ splits }) => ({
+  updateMySplits(({ splits }) => ({
     splits: splits?.map((s) => (s.id === id ? { ...s, ...changes } : s)),
   }));
 
 /** Takes a split out of My splits straight away */
 export const removeListedSplit = (id: string) =>
-  updateHomeData(({ splits }) => ({ splits: splits?.filter((s) => s.id !== id) }));
+  updateMySplits(({ splits }) => ({ splits: splits?.filter((s) => s.id !== id) }));
 
 /** Takes an invite out of the list straight away */
 export const removeListedInvite = (id: string) =>
-  updateHomeData(({ invites }) => ({ invites: invites?.filter((i) => i.id !== id) }));
+  updateMySplits(({ invites }) => ({ invites: invites?.filter((i) => i.id !== id) }));
 
 /**
  * Sends a change already shown in My splits. Either way the list is then fetched again,
  * so it shows what the server has: the change confirmed, or put back after a failure
  * (which is explained). Resolves with the server's answer, or undefined after a failure.
  */
-export async function sendHomeChange<T>(
+export async function sendMySplitsChange<T>(
   request: () => Promise<T>,
   failure: string,
 ): Promise<T | undefined> {
@@ -106,14 +106,14 @@ export async function sendHomeChange<T>(
     showError(err, failure);
     return undefined;
   } finally {
-    void reloadHomeData();
+    void reloadMySplits();
   }
 }
 
 /** Moves a split to where another one is, in your own order, and saves the new order */
 export function moveSplit(id: string, toId: string) {
   let ids: string[] | null = null;
-  updateHomeData(({ splits }) => {
+  updateMySplits(({ splits }) => {
     const list = [...(splits ?? [])];
     const from = list.findIndex((s) => s.id === id);
     const to = list.findIndex((s) => s.id === toId);
@@ -125,16 +125,16 @@ export function moveSplit(id: string, toId: string) {
   if (ids == null) return;
   api.reorderSplits(ids).catch((err: unknown) => {
     showError(err, 'Could not save the new order');
-    void reloadHomeData();
+    void reloadMySplits();
   });
 }
 
 /** Fetches the latest splits and invites; concurrent calls share one request */
-export function reloadHomeData(): Promise<void> {
-  return queryClient.refetchQueries({ queryKey: HOME_KEY, type: 'all' }).then(async () => {
+export function reloadMySplits(): Promise<void> {
+  return queryClient.refetchQueries({ queryKey: MY_SPLITS_KEY, type: 'all' }).then(async () => {
     // Nothing has asked for it yet: fetch it now so it's there when they do
-    if (queryClient.getQueryState(HOME_KEY) == null) {
-      await queryClient.prefetchQuery({ queryKey: HOME_KEY, queryFn: fetchHome });
+    if (queryClient.getQueryState(MY_SPLITS_KEY) == null) {
+      await queryClient.prefetchQuery({ queryKey: MY_SPLITS_KEY, queryFn: fetchMySplits });
     }
   });
 }

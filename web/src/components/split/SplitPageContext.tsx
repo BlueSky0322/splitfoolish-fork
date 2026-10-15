@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { type ReactNode, createContext, useContext } from 'react';
 import type { Attachment } from '../../../../shared/api';
 import type { Person } from '../../../../shared/types';
 import type { SplitTotals } from '../../split/derive';
@@ -55,7 +55,11 @@ export interface SplitPage {
   openDialog: (dialog: Dialog | null) => void;
 }
 
-export const SplitPageContext = createContext<SplitPage | null>(null);
+const SplitPageContext = createContext<SplitPage | null>(null);
+
+export const SplitPageProvider = ({ page, children }: { page: SplitPage; children: ReactNode }) => (
+  <SplitPageContext.Provider value={page}>{children}</SplitPageContext.Provider>
+);
 
 export function useSplitPage(): SplitPage {
   const value = useContext(SplitPageContext);

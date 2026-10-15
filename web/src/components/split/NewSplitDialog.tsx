@@ -9,7 +9,7 @@ import type { SplitFormValues } from './SplitForm';
 import SplitForm from './SplitForm';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import type { SplitDetail, SplitSummary } from '../../../../shared/api';
-import { addListedSplit, reloadHomeData, removeListedSplit } from '../../home/home-data';
+import { addListedSplit, reloadMySplits, removeListedSplit } from '../../my-splits/my-splits';
 import { showError } from '../../utils/notify';
 import { newId } from '../../utils/id';
 import { homeCurrency } from '../../utils/money';
@@ -67,7 +67,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
     replace({ ...profile, settings: { ...profile.settings, lastCurrency: currency } });
     addListedSplit(summary);
     startCreate({ id, name: trimmed, currency, summary })
-      .then(() => reloadHomeData())
+      .then(() => reloadMySplits())
       .catch((err) => {
         showError(err, 'Could not create the split');
         removeListedSplit(id);

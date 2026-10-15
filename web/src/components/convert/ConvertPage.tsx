@@ -20,7 +20,7 @@ import {
 import { useEffect, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, isCurrency, toCents } from '../../../../shared/rates';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { useHomeData } from '../../home/useHomeData';
+import { useMySplits } from '../../my-splits/useMySplits';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import { formatMoney, homeCurrency, listCurrencies } from '../../utils/money';
@@ -182,7 +182,7 @@ function SplitSheet({
 const ConvertPage = () => {
   const isDesktop = useIsDesktop();
   const { profile } = useProfile();
-  const { splits } = useHomeData();
+  const { splits } = useMySplits();
 
   const home = homeCurrency(profile?.settings);
   const [recent, setRecent] = useState(readRecent);

@@ -5,7 +5,7 @@ import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { useState } from 'react';
 import { countActionableInvites, api } from '../../api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { useHomeData } from '../../home/useHomeData';
+import { useMySplits } from '../../my-splits/useMySplits';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { formatMoney } from '../../utils/money';
@@ -19,7 +19,7 @@ import UserAvatar from '../ui/UserAvatar';
 import classes from './SplitsHome.module.css';
 import { InstallCard } from '../ui/InstallApp';
 import type { MyInvite, SplitSummary } from '../../../../shared/api';
-import { moveSplit, removeListedInvite, sendHomeChange } from '../../home/home-data';
+import { moveSplit, removeListedInvite, sendMySplitsChange } from '../../my-splits/my-splits';
 import { plural } from '../../utils/text';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
@@ -100,12 +100,12 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
   const respond = async (invite: MyInvite, accept: boolean) => {
     removeListedInvite(invite.id);
     if (!accept) {
-      void sendHomeChange(() => api.declineInvite(invite.id), 'Could not answer the invite');
+      void sendMySplitsChange(() => api.declineInvite(invite.id), 'Could not answer the invite');
       return;
     }
     // Joining has to finish before the split can be opened
     if (invite.kind === 'invite') setBusy(invite.id);
-    const joined = await sendHomeChange(
+    const joined = await sendMySplitsChange(
       () => api.acceptInvite(invite.id),
       'Could not answer the invite',
     );
@@ -241,7 +241,7 @@ function SplitListRow({ split }: { split: SplitSummary }) {
 }
 
 const SplitsHome = ({ tab }: { tab: string | null }) => {
-  const { splits, invites, error } = useHomeData();
+  const { splits, invites, error } = useMySplits();
   const { profile } = useProfile();
   const openNewSplit = useOpenNewSplit();
   const isDesktop = useIsDesktop();

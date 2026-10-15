@@ -1,7 +1,7 @@
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
 import type { Change } from '../../../shared/types';
 import type { SplitSummary } from '../../../shared/api';
-import { ApiError, NetworkError } from '../api';
+import { ApiError, NetworkError, api } from '../api';
 
 // Changes not yet saved, kept on the device (IndexedDB) so they survive the app being
 // closed, killed or offline. The app sends them when it can; if it's closed, the
@@ -48,6 +48,15 @@ export function withOutbox<T>(splitId: string, fn: () => Promise<T>): Promise<T>
   );
   return run;
 }
+
+/** Sends queued changes as one batch; the server applies all of them or none */
+export const sendQueued = (splitId: string, queued: Queued[]) =>
+  queued.length > 0
+    ? api.applyChanges(
+        splitId,
+        queued.map((q) => q.change),
+      )
+    : Promise.resolve();
 
 export const readOutbox = async (splitId: string) =>
   (await readCache<Queued[]>(outboxKey(splitId))) ?? [];

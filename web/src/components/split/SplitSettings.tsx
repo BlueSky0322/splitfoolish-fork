@@ -4,7 +4,7 @@ import { api } from '../../api';
 import { removeSplitPicture, uploadSplitPicture } from '../../split/pictures';
 import type { SplitFormValues } from './SplitForm';
 import SplitForm from './SplitForm';
-import { reloadHomeData } from '../../home/home-data';
+import { reloadMySplits } from '../../my-splits/my-splits';
 import { showError } from '../../utils/notify';
 
 interface SplitSettingsProps {
@@ -51,7 +51,7 @@ const SplitSettings = ({
         .then(({ converting }) => {
           // The server knows whether there was anything to convert
           onSaved({ converting });
-          return reloadHomeData();
+          return reloadMySplits();
         })
         .catch((err) => {
           onSaved({ name, currency });

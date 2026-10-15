@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api';
 import type { Change } from '../../../shared/types';
-import { reloadHomeData } from '../home/home-data';
+import { reloadMySplits } from '../my-splits/my-splits';
 import { whenCreated } from '../offline/pending-creates';
 import type { Queued } from '../offline/outbox';
 import {
@@ -9,6 +8,7 @@ import {
   isOfflineFailure,
   isOffline,
   readOutbox,
+  sendQueued,
   requestBackgroundSync,
   stillToSend,
   withOutbox,
@@ -148,12 +148,7 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
         if (await syncOutbox()) reloadAfterSave.current = true;
         batch = pending.current;
         pending.current = [];
-        if (batch.length > 0) {
-          await api.applyChanges(
-            splitId,
-            batch.map((q) => q.change),
-          );
-        }
+        await sendQueued(splitId, batch);
         sent = true;
         await syncOutbox();
       });
@@ -178,7 +173,7 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
     setStatus('saved');
     notifySavedWaiters();
     // Totals and balances in the sidebar and My splits follow the change
-    void reloadHomeData();
+    void reloadMySplits();
     // A new item name is suggested next time
     void queryClient.invalidateQueries({ queryKey: ITEM_NAMES_KEY });
     if (reloadAfterSave.current) {

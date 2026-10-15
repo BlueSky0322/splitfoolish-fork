@@ -3,7 +3,7 @@ import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import classes from './Split.module.css';
-import { removeListedSplit, sendHomeChange } from '../../home/home-data';
+import { removeListedSplit, sendMySplitsChange } from '../../my-splits/my-splits';
 
 interface EndSplitProps {
   splitId: string;
@@ -27,7 +27,7 @@ const EndSplit = ({ splitId, name, isOwner, myEmail, onCancel }: EndSplitProps) 
   const end = () => {
     removeListedSplit(splitId);
     navigate('');
-    void sendHomeChange(
+    void sendMySplitsChange(
       () => (isOwner ? api.deleteSplit(splitId) : api.removeMember(splitId, myEmail)),
       `Could not ${isOwner ? 'delete' : 'leave'} the split`,
     );

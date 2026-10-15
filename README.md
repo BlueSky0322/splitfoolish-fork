@@ -16,7 +16,22 @@ offline.
 
 `web/` and `worker/` never import each other; anything both need lives in `shared/`.
 Each has its own `tsconfig.json`, so the app gets browser types, the Worker gets Worker
-types and `shared/` gets neither.
+types and `shared/` gets neither. A rule both sides apply keeps one name across them:
+`shared/rates.ts` holds the arithmetic, `worker/rates.ts` and `web/src/utils/rates.ts`
+put it to use there.
+
+Inside `web/src`, what the app knows is kept apart from how it looks:
+
+| Folder                     | What it holds                                                          |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `split/`, `my-splits/`, …  | State, loading, saving and the rules: plain functions, hooks, contexts |
+| `components/<screen>/`     | What a screen draws, reading from the folders above                    |
+| `components/ui/`           | Pieces more than one screen draws (a split's picture, a balance tag)   |
+| `offline/`, `utils/`, etc. | What every feature leans on: the device cache, money, dates            |
+
+So `split/` is the bill and `components/split/` is the split page. The page's own parts
+sit in subfolders (`items/`, `people/`, …) and read the page's context from the folder
+above them.
 
 ## Running it
 

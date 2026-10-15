@@ -16,7 +16,7 @@ import { isOfflineFailure, isOffline } from '../offline/outbox';
 import { useSaveQueue } from './useSaveQueue';
 import { useSplitLive } from './useSplitLive';
 import type { SplitDetail } from '../../../shared/api';
-import { patchListedSplit, reloadHomeData } from '../home/home-data';
+import { patchListedSplit, reloadMySplits } from '../my-splits/my-splits';
 import { showError } from '../utils/notify';
 import type { SplitActions } from './actions';
 import { makeSplitActions } from './actions';
@@ -57,7 +57,7 @@ export function useSplit(splitId: string) {
   /** Deleted, or no longer shared with this person: the device's copy goes too */
   const markGone = useCallback(() => {
     void removeCacheEntry(cacheKey);
-    void reloadHomeData();
+    void reloadMySplits();
     setStatus('notfound');
   }, [cacheKey]);
   const isGone = (err: unknown) => err instanceof ApiError && err.status === 404;
@@ -235,7 +235,7 @@ export function useSplit(splitId: string) {
     return () => {
       clearInterval(timer);
       // Done (or left): the sidebar and My splits show the converted totals
-      void reloadHomeData();
+      void reloadMySplits();
     };
   }, [converting, load, backgroundLoadFailed]);
 
@@ -244,7 +244,7 @@ export function useSplit(splitId: string) {
   const onRemoteChange = useCallback(() => {
     load().catch(backgroundLoadFailed);
     // Totals in the sidebar and My splits follow
-    void reloadHomeData();
+    void reloadMySplits();
   }, [load, backgroundLoadFailed]);
   useSplitLive(splitId, status !== 'notfound', onRemoteChange);
 

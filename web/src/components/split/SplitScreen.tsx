@@ -18,10 +18,10 @@ import type { ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import type { Attachment } from '../../../../shared/api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { useHomeDataSnapshot } from '../../home/useHomeData';
+import { useMySplitsSnapshot } from '../../my-splits/useMySplits';
 import { useItemSelection, useSelectionKeys } from './items/useItemSelection';
 import { navigate } from '../../hooks/useRoute';
-import { computeTotals, findMe } from '../../split/derive';
+import { computeTotals, findMe, otherCurrencyCount } from '../../split/derive';
 import { groupItems } from '../../split/grouping';
 import type { SplitItem } from '../../split/state';
 import { useSplitState } from '../../split/SplitStateContext';
@@ -36,8 +36,8 @@ import { ItemCards, ItemTable } from './items/ItemViews';
 import MobileSplitLayout from './MobileSplitLayout';
 import { AvatarVersionsContext } from './PersonAvatar';
 import SplitDialogs from './SplitDialogs';
-import { type Dialog, type SplitPage, SplitPageContext } from './SplitPageContext';
-import { type SelectionUi, type SplitPageParts, otherCurrencyCount } from './SplitPageParts';
+import { type Dialog, type SplitPage, SplitPageProvider } from './SplitPageContext';
+import { type SelectionUi, type SplitPageParts } from './SplitPageParts';
 import type { Prefill } from './useConvertPrefill';
 import { useConvertPrefill } from './useConvertPrefill';
 import { makeDeleteItems } from './items/delete-items';
@@ -48,7 +48,7 @@ import { canRemovePhoto } from '../../../../shared/rules';
 
 // The split page: loads the split, works out what's shown from it, and builds the parts
 // both layouts place (the item list, the balances, the menu, the dialogs). The layouts
-// read the rest from SplitPageContext.
+// read the rest from SplitPageProvider.
 const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | null }) => {
   const { status, waiting, meta, metaChanges, refreshMeta, actions, retry, whenSaved } =
     useSplit(splitId);
@@ -73,7 +73,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     [state.people, state.items, distributorId],
   );
   // My splits hears about a new picture first (it may be uploaded from New split)
-  const listed = useHomeDataSnapshot().splits?.find((s) => s.id === splitId);
+  const listed = useMySplitsSnapshot().splits?.find((s) => s.id === splitId);
   const page: SplitPage = {
     splitId,
     myEmail,
@@ -367,7 +367,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   };
 
   return (
-    <SplitPageContext.Provider value={page}>
+    <SplitPageProvider page={page}>
       <SplitActionsContext.Provider value={actions}>
         <AvatarVersionsContext.Provider value={avatarVersions}>
           {isDesktop ? (
@@ -383,7 +383,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
           )}
         </AvatarVersionsContext.Provider>
       </SplitActionsContext.Provider>
-    </SplitPageContext.Provider>
+    </SplitPageProvider>
   );
 };
 

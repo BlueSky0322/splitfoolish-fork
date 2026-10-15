@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { api } from '../api';
 import { whenCreated } from '../offline/pending-creates';
 import { shrinkAvatar } from '../utils/image';
-import { patchListedSplit, sendHomeChange } from '../home/home-data';
+import { patchListedSplit, sendMySplitsChange } from '../my-splits/my-splits';
 
 // Split pictures being uploaded, shown from this device in the meantime
 
@@ -19,14 +19,14 @@ function subscribe(listener: () => void) {
 export const useSplitPicturePreview = (splitId: string) =>
   useSyncExternalStore(subscribe, () => previews.get(splitId) ?? null);
 
-// Both follow sendHomeChange: shown in My splits straight away, a failure explained
+// Both follow sendMySplitsChange: shown in My splits straight away, a failure explained
 // here, and resolving with the new picture version (or undefined after a failure)
 
 /** Shows the picture straight away and uploads it once the split exists */
 export async function uploadSplitPicture(splitId: string, file: File) {
   let url: string | null = null;
   try {
-    return await sendHomeChange(async () => {
+    return await sendMySplitsChange(async () => {
       const picture = await shrinkAvatar(file);
       url = URL.createObjectURL(picture);
       previews.set(splitId, url);
@@ -51,7 +51,7 @@ export async function uploadSplitPicture(splitId: string, file: File) {
 
 export function removeSplitPicture(splitId: string) {
   patchListedSplit(splitId, { pictureVersion: null });
-  return sendHomeChange(
+  return sendMySplitsChange(
     () => api.deleteSplitPicture(splitId).then(() => null),
     'Could not remove the picture',
   );

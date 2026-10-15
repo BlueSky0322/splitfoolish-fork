@@ -108,7 +108,3 @@ export function SaveStatus() {
     </div>
   );
 }
-
-/** How many currencies besides the split's own its items were paid in */
-export const otherCurrencyCount = (items: { original?: { currency: string } | null }[]) =>
-  new Set(items.map((i) => i.original?.currency).filter((c): c is string => c != null)).size;
