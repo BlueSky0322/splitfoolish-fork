@@ -1,8 +1,9 @@
 // The API end to end, against the real Worker and a fresh local database: who can see
 // and change what, the rules for changing a split, and the share-link invite flows.
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { LocalWorker, startLocalWorker } from './local-worker';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import type { LocalWorker } from './local-worker';
+import { startLocalWorker } from './local-worker';
 
 let api: LocalWorker;
 let n = 0;
@@ -17,13 +18,20 @@ beforeAll(async () => {
   api = await startLocalWorker();
 }, 120_000);
 
+// Each test sets the rates it needs
+afterEach(() => api.rates.reset());
+
 afterAll(() => api?.stop());
 
 /** A split owned by `owner`, with `members` already in it through the share link */
 async function splitWith(owner: string, ...members: string[]) {
-  const { data } = await api.call(owner, 'POST', '/api/splits', { name: 'Trip', currency: 'MYR' });
+  const { data } = await api.call(owner, 'POST', '/api/splits', {
+    id: hex(),
+    name: 'Trip',
+    currency: 'MYR',
+  });
   const id: string = data.id;
-  const token: string = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.inviteToken;
+  const token: string = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.shareToken;
   for (const m of members) {
     const opened = await api.call(m, 'POST', `/api/join/${token}`);
     await api.call(m, 'POST', `/api/invites/${opened.data.inviteId}/accept`);
@@ -33,6 +41,17 @@ async function splitWith(owner: string, ...members: string[]) {
 
 const change = (who: string, id: string, ...changes: unknown[]) =>
   api.call(who, 'POST', `/api/splits/${id}/changes`, { changes });
+
+// The smallest bytes that pass as a JPEG
+const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
+const upload = (who: string, method: string, path: string) =>
+  api.call(who, method, path, jpeg, { 'Content-Type': 'image/jpeg' });
+
+/** The person in a split's bill who is `email` */
+const personOf = async (who: string, id: string, email: string): Promise<string> =>
+  (await api.call(who, 'GET', `/api/splits/${id}`)).data.people.find(
+    (p: { memberEmail: string | null }) => p.memberEmail === email,
+  ).id;
 
 describe('who can see a split', () => {
   it('hides it from people who are not in it', async () => {
@@ -58,8 +77,8 @@ describe('who can see a split', () => {
       (await api.call(editor, 'DELETE', `/api/splits/${id}/members/${owner}`)).status,
     ).not.toBe(200);
     // Members share with a link of their own, never the owner's
-    const ownToken = (await api.call(editor, 'GET', `/api/splits/${id}`)).data.inviteToken;
-    const ownerToken = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.inviteToken;
+    const ownToken = (await api.call(editor, 'GET', `/api/splits/${id}`)).data.shareToken;
+    const ownerToken = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.shareToken;
     expect(ownToken).toBeTruthy();
     expect(ownToken).not.toBe(ownerToken);
   });
@@ -71,7 +90,7 @@ describe('changing a split', () => {
     const editor = person('editor');
     const { id } = await splitWith(owner, editor);
     expect((await change(editor, id, { op: 'addPerson', id: hex(), name: 'Guest' })).status).toBe(
-      409,
+      403,
     );
 
     const guest = hex();
@@ -95,7 +114,6 @@ describe('changing a split', () => {
       },
     );
     expect(res.status).toBe(409);
-    expect(res.data.index).toBe(1);
     expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.people).toEqual([]);
   });
 
@@ -155,6 +173,101 @@ describe('changing a split', () => {
     expect(
       (await change(owner, id, { op: 'setItemDate', id: hex(), createdAt: lastWeek })).status,
     ).toBe(200);
+  });
+
+  it('lets others link only themselves to a person, and never over someone else', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const guest = hex();
+    await change(owner, id, { op: 'addPerson', id: guest, name: 'Guest' });
+    const link = (who: string, personId: string, memberEmail: string | null) =>
+      change(who, id, { op: 'linkPerson', id: personId, memberEmail });
+
+    expect((await link(editor, guest, owner)).status).toBe(403);
+    const editorPerson = await personOf(owner, id, editor);
+    expect((await link(owner, editorPerson, owner)).status).toBe(409);
+    // Moving their own link from the person they joined as to the guest
+    const moved = await change(
+      editor,
+      id,
+      { op: 'linkPerson', id: editorPerson, memberEmail: null },
+      { op: 'linkPerson', id: guest, memberEmail: editor },
+    );
+    expect(moved.status).toBe(200);
+    expect(await personOf(owner, id, editor)).toBe(guest);
+  });
+
+  it('removes a person only when no item depends on them', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [a, b, c, d] = [hex(), hex(), hex(), hex()];
+    const item = (participantIds: string[], extra = {}) => ({
+      op: 'addItem',
+      item: { id: hex(), name: 'X', cost: 10, payerId: a, participantIds, ...extra },
+    });
+    await change(
+      owner,
+      id,
+      ...[a, b, c, d].map((p, i) => ({ op: 'addPerson', id: p, name: `P${i}` })),
+      item([a, b]),
+      item([c]),
+      item([a, d], { splitMode: 'exact', exact: { [a]: 5, [d]: 5 } }),
+    );
+    const remove = async (personId: string, fromItems?: boolean) => {
+      const res = await change(owner, id, { op: 'removePerson', id: personId, fromItems });
+      return res.status === 200 ? 'removed' : res.data.error;
+    };
+
+    expect(await remove(a, true)).toMatch(/paid for 3 items/);
+    expect(await remove(b)).toMatch(/is on 1 item/);
+    expect(await remove(c, true)).toMatch(/only person/);
+    expect(await remove(d, true)).toMatch(/exact amounts/);
+    expect(await remove(b, true)).toBe('removed');
+    const items = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items;
+    expect(items[0].participantIds).toEqual([a]);
+  });
+
+  it('clears people only once there are no items, taking away their access', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const p = await personOf(owner, id, editor);
+    const item = { id: hex(), name: 'Tea', cost: 4, payerId: p, participantIds: [p] };
+    await change(owner, id, { op: 'addItem', item });
+
+    expect((await change(owner, id, { op: 'clearPeople' })).status).toBe(409);
+    expect((await change(owner, id, { op: 'clearItems' }, { op: 'clearPeople' })).status).toBe(200);
+    expect((await api.call(editor, 'GET', `/api/splits/${id}`)).status).toBe(404);
+  });
+
+  it("refuses renaming someone whose name comes from their account, or a distributor who isn't in it", async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const p = await personOf(owner, id, editor);
+    expect((await change(owner, id, { op: 'renamePerson', id: p, name: 'Nick' })).status).toBe(409);
+    expect((await change(owner, id, { op: 'setDistributor', personId: hex() })).status).toBe(409);
+    expect((await change(owner, id, { op: 'setDistributor', personId: p })).status).toBe(200);
+  });
+
+  it("removes an item's photos with it", async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [p, itemId] = [hex(), hex()];
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: p, name: 'P' },
+      { op: 'addItem', item: { id: itemId, name: 'X', cost: 1, payerId: p, participantIds: [p] } },
+    );
+    const photo = await upload(owner, 'POST', `/api/splits/${id}/attachments?itemId=${itemId}`);
+    expect(photo.status).toBe(201);
+
+    expect((await change(owner, id, { op: 'removeItem', id: itemId })).status).toBe(200);
+    expect(
+      (await api.call(owner, 'GET', `/api/splits/${id}/attachments/${photo.data.id}`)).status,
+    ).toBe(404);
   });
 
   it('keeps notes on items, line breaks included, and limits their length', async () => {
@@ -239,7 +352,7 @@ describe('share link invites', () => {
     const { inviteId } = (await api.call(ben, 'POST', `/api/join/${token}`)).data;
 
     const reset = await api.call(owner, 'POST', `/api/splits/${id}/invite`);
-    expect(reset.data.inviteToken).not.toBe(token);
+    expect(reset.data.shareToken).not.toBe(token);
     expect((await api.call(ben, 'POST', `/api/invites/${inviteId}/accept`)).status).toBe(404);
     expect((await api.call(ben, 'POST', `/api/join/${token}`)).status).toBe(404);
   });
@@ -268,7 +381,7 @@ describe("sharing through a member's link", () => {
     const member = person('member');
     const { id, token } = await splitWith(owner, member);
     const memberToken: string = (await api.call(member, 'GET', `/api/splits/${id}`)).data
-      .inviteToken;
+      .shareToken;
     return { owner, member, id, token, memberToken };
   }
   const invitesOf = async (who: string) =>
@@ -339,7 +452,7 @@ describe("sharing through a member's link", () => {
     const reset = await api.call(owner, 'POST', `/api/splits/${id}/invite`);
     expect(reset.status).toBe(200);
     expect((await api.call(other, 'POST', `/api/join/${memberToken}`)).status).toBe(404);
-    const newToken = (await api.call(member, 'GET', `/api/splits/${id}`)).data.inviteToken;
+    const newToken = (await api.call(member, 'GET', `/api/splits/${id}`)).data.shareToken;
     expect(newToken).not.toBe(memberToken);
 
     await api.call(member, 'DELETE', `/api/splits/${id}/members/${member}`);
@@ -410,6 +523,84 @@ describe('live updates', () => {
       Origin: 'https://evil.example',
     });
     expect(crossSite.status).toBe(403);
+  });
+
+  it('closes the channel of someone taken out of the split', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner, devUser);
+    const live = listen(id);
+    await live.opened;
+
+    await api.call(owner, 'DELETE', `/api/splits/${id}/members/${devUser}`);
+    // The room has sent its close: the channel is closing or closed
+    await until(() => live.ws.readyState >= WebSocket.CLOSING);
+    expect(live.ws.readyState).toBeGreaterThanOrEqual(WebSocket.CLOSING);
+  });
+});
+
+describe('My splits', () => {
+  it('adds up each split, and where the person asking stands in it', async () => {
+    const owner = person('owner');
+    const member = person('member');
+    const { id } = await splitWith(owner, member);
+    const me = hex();
+    const ben = hex();
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: me, name: 'Me' },
+      { op: 'linkPerson', id: me, memberEmail: owner },
+      { op: 'addPerson', id: ben, name: 'Ben' },
+    );
+    const them = await personOf(owner, id, member);
+    const res = await change(
+      owner,
+      id,
+      // 90 shared by three, paid by the member: 30 each
+      {
+        op: 'addItem',
+        item: {
+          id: hex(),
+          name: 'Dinner',
+          cost: 90,
+          payerId: them,
+          participantIds: [me, them, ben],
+        },
+      },
+      // 10 paid by the owner: 4 theirs, 6 the member's
+      {
+        op: 'addItem',
+        item: {
+          id: hex(),
+          name: 'Taxi',
+          cost: 10,
+          payerId: me,
+          participantIds: [me, them],
+          splitMode: 'exact',
+          exact: { [me]: 4, [them]: 6 },
+        },
+      },
+    );
+    expect(res.status).toBe(200);
+    const listed = async (who: string) =>
+      ((await api.call(who, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
+        (s) => s.id === id,
+      );
+
+    // The owner paid 10 and owes 30 + 4; the member paid 90 and owes 30 + 6
+    expect(await listed(owner)).toMatchObject({
+      totalCents: 10_000,
+      peopleCount: 3,
+      myBalanceCents: -2400,
+    });
+    expect(await listed(member)).toMatchObject({ myBalanceCents: 5400 });
+    // Nobody in the bill is this account yet
+    const empty = (await splitWith(owner)).id;
+    expect(
+      ((await api.call(owner, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
+        (s) => s.id === empty,
+      ),
+    ).toMatchObject({ totalCents: 0, peopleCount: 0, myBalanceCents: null });
   });
 });
 
@@ -539,6 +730,16 @@ describe('safeguards', () => {
     expect((await splitWith(person('calm'))).id).toBeTruthy();
   });
 
+  it('creates a split only with the id and currency the app sends', async () => {
+    const owner = person('owner');
+    const create = (body: object) => api.call(owner, 'POST', '/api/splits', body);
+    expect((await create({ name: 'Trip', currency: 'MYR' })).status).toBe(400);
+    expect((await create({ id: 'not-hex', name: 'Trip', currency: 'MYR' })).status).toBe(400);
+    expect((await create({ id: hex(), name: 'Trip' })).status).toBe(400);
+    const id = hex();
+    expect((await create({ id, name: 'Trip', currency: 'MYR' })).data).toEqual({ id });
+  });
+
   it('turns away request bodies that are too large', async () => {
     const res = await api.call(person('owner'), 'POST', '/api/splits', {
       name: 'x'.repeat(300_000),
@@ -549,11 +750,6 @@ describe('safeguards', () => {
 });
 
 describe('profile, pictures and photos', () => {
-  // The smallest bytes that pass as a JPEG
-  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
-  const upload = (who: string, method: string, path: string) =>
-    api.call(who, method, path, jpeg, { 'Content-Type': 'image/jpeg' });
-
   it('saves the profile, settings and payment methods', async () => {
     const me = person('me');
     expect(
@@ -658,7 +854,7 @@ describe('profile, pictures and photos', () => {
     expect(saved.data.paymentMethods[0].qrVersion).toBe(uploaded.data.qrVersion);
 
     // Someone else can't put their code on your method
-    expect((await upload(other, 'PUT', `/api/me/payment-qr/${id}`)).status).toBe(400);
+    expect((await upload(other, 'PUT', `/api/me/payment-qr/${id}`)).status).toBe(404);
 
     const path = `/api/payment-qr/${id}`;
     expect((await api.call(me, 'GET', path)).status).toBe(200);
@@ -731,8 +927,9 @@ describe('exchange rates', () => {
     api.rates.set('JPY', 'MYR', 0.03);
     api.rates.set('SGD', 'MYR', 3.4);
     api.rates.set('SGD', 'JPY', 113);
-    await api.call(me, 'POST', '/api/splits', { name: 'Home', currency: 'MYR' });
+    await api.call(me, 'POST', '/api/splits', { id: hex(), name: 'Home', currency: 'MYR' });
     const { data: tokyo } = await api.call(me, 'POST', '/api/splits', {
+      id: hex(),
       name: 'Tokyo',
       currency: 'JPY',
     });
@@ -782,15 +979,15 @@ describe('exchange rates', () => {
     // A pair no other test uses, so no cached rate gets in the way
     api.rates.set('NZD', 'MYR', 2.75);
     const patch = await api.call(ecbFan, 'PATCH', '/api/me', {
-      settings: { rateSource: 'ecb', defaultCurrency: 'SGD' },
+      settings: { ratePreference: 'ecb', defaultCurrency: 'SGD' },
     });
-    expect(patch.data.settings).toMatchObject({ rateSource: 'ecb', defaultCurrency: 'SGD' });
+    expect(patch.data.settings).toMatchObject({ ratePreference: 'ecb', defaultCurrency: 'SGD' });
     expect((await api.call(ecbFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe(
       'frankfurter',
     );
     expect((await api.call(wiseFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe('wise');
     expect(
-      (await api.call(ecbFan, 'PATCH', '/api/me', { settings: { rateSource: 'xe' } })).status,
+      (await api.call(ecbFan, 'PATCH', '/api/me', { settings: { ratePreference: 'xe' } })).status,
     ).toBe(400);
     // Back to "last used"
     const reset = await api.call(ecbFan, 'PATCH', '/api/me', {

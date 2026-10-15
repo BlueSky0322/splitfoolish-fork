@@ -3,8 +3,10 @@
 // again from that, plain items become "paid in the old currency", and items paid in
 // the new currency become plain again, so switching back restores the exact amounts.
 
-import { RateSource, convertCents, convertParts } from '../shared/rates';
-import { Rate } from './rates';
+import type { RateSource } from '../shared/rates';
+import { convertCents, convertParts } from '../shared/rates';
+import type { SplitMode } from '../shared/settle';
+import type { Rate } from './exchange-rates';
 
 /** Started (and its time recorded) when the change is made; retried when this old */
 export const RETRY_AFTER_MS = 30_000;
@@ -12,7 +14,7 @@ export const RETRY_AFTER_MS = 30_000;
 interface ItemRow {
   id: string;
   costCents: number;
-  splitMode: string;
+  splitMode: SplitMode;
   originalCurrency: string | null;
   originalCents: number | null;
   rate: number | null;
@@ -37,7 +39,7 @@ export async function reconvertSplit(
   splitId: string,
   fetchRate: (from: string, to: string) => Promise<Rate>,
 ): Promise<void> {
-  const [splitRows, itemRows, partRows] = await db.batch<Record<string, unknown>>([
+  const [splitRows, itemRows, partRows] = await db.batch([
     db
       .prepare(
         `SELECT currency, converting_from AS fromCurrency, converting_since AS since
@@ -66,8 +68,11 @@ export async function reconvertSplit(
   if (split?.fromCurrency == null || split.since == null) return;
   const { currency: to, fromCurrency, since } = split;
 
-  const items = itemRows.results as unknown as ItemRow[];
-  const parts = partRows.results as unknown as PartRow[];
+  const items = itemRows.results as ItemRow[];
+  const partsOf = new Map<string, PartRow[]>();
+  for (const part of partRows.results as PartRow[]) {
+    partsOf.set(part.itemId, [...(partsOf.get(part.itemId) ?? []), part]);
+  }
   // What each item was paid in: its own currency, or the split's old one
   const paidIn = (item: ItemRow) => item.originalCurrency ?? fromCurrency;
 
@@ -83,8 +88,7 @@ export async function reconvertSplit(
   for (const item of items) {
     const from = paidIn(item);
     const paidCents = item.originalCents ?? item.costCents;
-    const itemParts = parts.filter((p) => p.itemId === item.id);
-    const paidParts = itemParts.map((p): [string, number] => [
+    const paidParts = (partsOf.get(item.id) ?? []).map((p): [string, number] => [
       p.personId,
       p.originalExactCents ?? p.exactCents ?? 0,
     ]);

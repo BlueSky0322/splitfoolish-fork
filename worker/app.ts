@@ -1,94 +1,71 @@
 // What every route shares: the Worker's bindings, who's asking, and the checks that
 // decide whether they may see or change a split.
+//
+// Routes (routes/*.ts) gate who gets in: membership, and ownership (or a rule from
+// shared/rules.ts) where only the owner may act. Rules that depend on a row (who
+// uploaded a photo, which person is being linked or removed) are checked by the handler
+// that loads that row, such as deleteAttachment and applyChanges. The work lives in the
+// feature modules (photos, profiles, sharing, split-lifecycle, reconvert, split-content, split-detail,
+// summaries), which export these kinds of function:
+//   - handlers, taking the database, the ids and person involved, then the request or
+//     its body, and answering with a Response;
+//   - loaders, returning data shaped as in shared/api.ts for the route to send with
+//     json<T>(), and assemblers (assemble*) shaping rows a route read in one batch;
+//   - statement builders (*Statement, *Statements), returning statements for a route to
+//     run in one batch with others, and planners (plan*), reading what they need first;
+//   - actions, which write themselves and answer with what changed (a new token, say).
+// Reading requests is in http.ts, and telling the apps that have a split open about
+// changes in room.ts.
 
 import { createMiddleware } from 'hono/factory';
-import { AuthEnv } from './auth';
-import { RatesEnv } from './rates';
-import type { RoomMessage, SplitRoom } from './room';
+import type { Role } from '../shared/types';
+import type { AuthEnv } from './auth';
+import { fail, notFound } from './http';
+import type { RatesEnv } from './exchange-rates';
+import type { RoomEnv } from './room';
+import { ROW_ID_CHARS } from '../shared/api';
 
-export interface Env extends AuthEnv, RatesEnv {
+export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   DB: D1Database;
   ASSETS: Fetcher;
   /** Changes per account per minute */
   API_LIMITER: RateLimit;
-  /** One room per split, for telling the apps that have it open when it changes */
-  SPLIT_ROOM: DurableObjectNamespace<SplitRoom>;
   /** How long a currency change may take before opening the split retries it; for tests */
   RECONVERT_RETRY_MS?: string;
 }
 
-export type Role = 'owner' | 'editor';
-
 export type AppEnv = {
   Bindings: Env;
-  /** email: the signed-in user. role: theirs in the split the route is about */
-  Variables: { email: string; role: Role };
+  /**
+   * email: the signed-in user. role: theirs in the split the route is about.
+   * changedSplit: the split a change was saved to, told about once the response is ready.
+   */
+  Variables: { email: string; role: Role; changedSplit?: string };
 };
 
-/** A split, invite or attachment id in a path */
-export const ID = '{[A-Za-z0-9_-]{8,64}}';
-export const SPLIT = `/splits/:id${ID}`;
+const ID_CHARS = '[A-Za-z0-9_-]{8,64}';
+/** A split, invite or attachment id in a path: the constraint after its :param */
+export const ID_PARAM = `{${ID_CHARS}}`;
+/** Route constraint for a row's id, such as a payment method's */
+export const ROW_ID_PARAM = `{${ROW_ID_CHARS}}`;
+/** The same id sent in a body */
+export const ID_PATTERN = new RegExp(`^${ID_CHARS}$`);
+/** The path of one split, which the routes under it extend */
+export const SPLIT_PATH = `/splits/:id${ID_PARAM}`;
 
-const MAX_BODY_BYTES = 256 * 1024;
-export const MAX_NAME_LENGTH = 80;
-export const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+/** Marks a split as just changed, for the order of My splits */
+export const touchSplitStatement = (db: D1Database, splitId: string) =>
+  db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), splitId);
 
-export const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' },
-  });
-
-/** The room for a split, where everyone with it open is listening */
-export const splitRoom = (env: Env, splitId: string) =>
-  env.SPLIT_ROOM.get(env.SPLIT_ROOM.idFromName(splitId));
-
-/**
- * Tells everyone with the split open that it changed, after the response is sent.
- * `by` is the tab that made the change (X-Client-Id), which ignores it.
- */
-export const notifySplit = (
-  env: Env,
-  ctx: { waitUntil: (p: Promise<unknown>) => void },
-  splitId: string,
-  by: string | null,
-) => {
-  const message: RoomMessage = { type: 'changed', by };
-  ctx.waitUntil(
-    splitRoom(env, splitId)
-      .broadcast(JSON.stringify(message))
-      .catch((err: unknown) => console.error(err)),
-  );
-};
-
-/** The tab that sent a request, as the app identifies itself */
-export const clientId = (req: Request) => req.headers.get('X-Client-Id')?.slice(0, 64) ?? null;
-
-export const notFound = () => json({ error: 'Not found' }, 404);
-
-export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-
-export async function readJson(req: Request): Promise<Record<string, unknown> | Response> {
-  // Turned away before reading when it says it's too big; checked again after, as the
-  // header can be missing or wrong
-  if (Number(req.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) {
-    return json({ error: 'Too large' }, 413);
-  }
-  const text = await req.text();
-  if (text.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
-  try {
-    const body: unknown = JSON.parse(text);
-    if (body == null || typeof body !== 'object') throw new Error();
-    return body as Record<string, unknown>;
-  } catch {
-    return json({ error: 'Invalid JSON' }, 400);
-  }
+/** Runs groups of statements in one batch, and hands back each group's results */
+export async function batchGroups(
+  db: D1Database,
+  groups: D1PreparedStatement[][],
+): Promise<D1Result[][]> {
+  const results = await db.batch(groups.flat());
+  let start = 0;
+  return groups.map((group) => results.slice(start, (start += group.length)));
 }
-
-export const readName = (body: Record<string, unknown>) => {
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  return name.length > 0 && name.length <= MAX_NAME_LENGTH ? name : null;
-};
 
 export async function getRole(
   db: D1Database,
@@ -106,16 +83,16 @@ export async function getRole(
  * For routes under a split: only its members get past, as `role`. Others get the same
  * 404 as a missing split, so ids can't be probed.
  */
-export const member = createMiddleware<AppEnv>(async (c, next) => {
+export const membersOnly = createMiddleware<AppEnv>(async (c, next) => {
   const role = await getRole(c.env.DB, c.req.param('id')!, c.var.email);
   if (role == null) return notFound();
   c.set('role', role);
   await next();
 });
 
-/** After `member`: only the split's owner gets past */
-export const ownerOnly = (error: string) =>
+/** After `membersOnly`: only members whose role `can` allows get past */
+export const allowedIf = (can: (role: Role) => boolean, error: string) =>
   createMiddleware<AppEnv>(async (c, next) => {
-    if (c.var.role !== 'owner') return json({ error }, 403);
+    if (!can(c.var.role)) return fail(error, 403);
     await next();
   });

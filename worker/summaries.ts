@@ -1,10 +1,15 @@
 // My Splits: each split the person belongs to, with its total and their own balance.
 // Everything is read in one round trip and balanced with the same maths as the app.
+// Also the names of items across those splits, for suggesting as you type one, and the
+// currencies used in them, for Settings.
 
-import { SettleItem, SplitMode, balances } from '../shared/settle';
+import type { ItemNameUse, SplitSummary } from '../shared/api';
+import type { SettleItem, SplitMode } from '../shared/settle';
+import { balances } from '../shared/settle';
+import type { Role } from '../shared/types';
 
-export async function listSplitSummaries(db: D1Database, email: string) {
-  const [splits, items, participants, mine, people] = await db.batch<Record<string, unknown>>([
+export async function listSplitSummaries(db: D1Database, email: string): Promise<SplitSummary[]> {
+  const [splits, items, participants, mine, people] = await db.batch([
     db
       .prepare(
         `SELECT s.id, s.name, s.currency, s.updated_at AS updatedAt, m.role,
@@ -84,7 +89,7 @@ export async function listSplitSummaries(db: D1Database, email: string) {
       name: string;
       currency: string;
       updatedAt: number;
-      role: string;
+      role: Role;
       memberCount: number;
       pictureVersion: number | null;
     }[]
@@ -95,8 +100,58 @@ export async function listSplitSummaries(db: D1Database, email: string) {
       ...s,
       peopleCount: peopleCount.get(s.id) ?? 0,
       totalCents: splitItems.reduce((a, i) => a + i.costCents, 0),
-      /** Null when no one in the bill is linked to this account */
-      myBalanceCents: me == null ? null : balances([me], splitItems).get(me)?.balanceCents ?? 0,
+      // Null when no one in the bill is linked to this account; balances() gives every
+      // id it's asked about an entry
+      myBalanceCents: me == null ? null : balances([me], splitItems).get(me)!.balanceCents,
     };
   });
+}
+
+const MAX_ITEM_NAMES = 500;
+
+/**
+ * Names of items in someone's splits, most recent first. Each name once (ignoring case),
+ * with the category it was last given.
+ */
+export async function listItemNames(db: D1Database, email: string): Promise<ItemNameUse[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT name, category, uses FROM (
+         SELECT i.name, i.category, count(*) OVER (PARTITION BY lower(i.name)) AS uses,
+           row_number() OVER (PARTITION BY lower(i.name) ORDER BY i.created_at DESC) AS n,
+           max(i.created_at) OVER (PARTITION BY lower(i.name)) AS last
+         FROM items i JOIN split_members m ON m.split_id = i.split_id AND m.email = ?
+       ) WHERE n = 1 ORDER BY last DESC LIMIT ?`,
+    )
+    .bind(email, MAX_ITEM_NAMES)
+    .all<ItemNameUse>();
+  return results;
+}
+
+/** At most this many currencies in Settings' "Rates in your splits" */
+const MAX_USED_CURRENCIES = 12;
+
+/**
+ * The currencies in a person's splits other than `except` (the splits' own, and those
+ * items were paid in), with how many splits each is in, most used first
+ */
+export async function listUsedCurrencies(
+  db: D1Database,
+  email: string,
+  except: string,
+): Promise<{ currency: string; splits: number }[]> {
+  const used = await db
+    .prepare(
+      `SELECT cur AS currency, count(DISTINCT split_id) AS splits FROM (
+         SELECT s.currency AS cur, s.id AS split_id
+           FROM splits s JOIN split_members m ON m.split_id = s.id WHERE m.email = ?1
+         UNION ALL
+         SELECT i.original_currency, i.split_id
+           FROM items i JOIN split_members m ON m.split_id = i.split_id
+           WHERE m.email = ?1 AND i.original_currency IS NOT NULL
+       ) WHERE cur != ?2 GROUP BY cur ORDER BY splits DESC, cur LIMIT ?3`,
+    )
+    .bind(email, except, MAX_USED_CURRENCIES)
+    .all<{ currency: string; splits: number }>();
+  return used.results;
 }

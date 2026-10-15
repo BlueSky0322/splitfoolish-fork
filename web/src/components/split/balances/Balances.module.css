@@ -1,0 +1,231 @@
+/* Who owes whom: the balance panel, transfers and balance bars */
+
+/* ---------- Balance panel ---------- */
+
+.panel,
+.sheetPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.panel {
+  background: var(--sf-surface);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: var(--sf-shadow-sm);
+}
+
+.heroAmount {
+  font-family: var(--sf-font-num);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats {
+  display: flex;
+  gap: 32px;
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+}
+
+.statValue {
+  font-family: var(--sf-font-num);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.panelSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------- Transfer row ---------- */
+
+.transfer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--sf-tint);
+}
+
+.transfer[data-size='lg'] {
+  min-height: 56px;
+}
+
+.transfer[data-size='xl'] {
+  gap: 20px;
+  padding: 20px 24px;
+  border-radius: 16px;
+}
+
+.transferArrow {
+  color: color-mix(in srgb, var(--sf-text) 45%, transparent);
+  flex-shrink: 0;
+}
+
+.transfer[data-size='xl'] .transferArrow {
+  color: var(--sf-text-label);
+}
+
+.transferText {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.3;
+  /* Wrap long names onto a second line rather than cutting them off */
+  overflow-wrap: anywhere;
+}
+
+.transferAmount {
+  font-family: var(--sf-font-num);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.transfer[data-size='lg'] .transferAmount {
+  font-size: 16px;
+}
+
+.transfer[data-size='xl'] .transferText,
+.transfer[data-size='xl'] .transferAmount {
+  font-size: 30px;
+}
+
+/* A transfer you make, with how to pay under it in the same box */
+.transferGroup {
+  border-radius: 8px;
+  background: var(--sf-tint);
+}
+
+.transferGroup > .transfer {
+  background: none;
+}
+
+.payLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px 12px;
+}
+
+.payMethod {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payChip {
+  font-family: var(--sf-font-num);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sf-accent);
+  background: color-mix(in srgb, var(--sf-accent) 12%, transparent);
+  white-space: nowrap;
+}
+
+.transferGroup[data-size='lg'] .payChip {
+  height: 36px;
+}
+
+/* Settle up sheet: the row to balances and routing, and back */
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px;
+  border-top: 1px solid var(--sf-divider);
+}
+
+.sheetBack {
+  align-self: flex-start;
+  height: 44px;
+  margin-left: -12px;
+}
+
+/* ---------- Balance bars ---------- */
+
+.bars {
+  /* One grid for every row, so the name column is as wide as the longest name
+     (up to half the panel) and the bars still line up */
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(56px, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
+  font-size: 13px;
+}
+
+.barRow {
+  display: contents;
+}
+
+.barName {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barTrack {
+  display: flex;
+  height: 6px;
+}
+
+.barHalf {
+  flex: 1;
+  display: flex;
+}
+
+.barHalf:first-child {
+  justify-content: flex-end;
+}
+
+.bar {
+  height: 6px;
+}
+
+.barNegative {
+  background: var(--sf-negative);
+  border-radius: 3px 0 0 3px;
+}
+
+.barPositive {
+  background: var(--sf-positive);
+  border-radius: 0 3px 3px 0;
+}
+
+.barAmount {
+  font-family: var(--sf-font-num);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.balanceLine {
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

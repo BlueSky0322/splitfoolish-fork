@@ -22,7 +22,7 @@ jobs:
           cache: 'yarn'
 
       - run: yarn install --frozen-lockfile
-      - run: npx tsc -p worker
+      - run: yarn typecheck
       - run: yarn lint
       - run: yarn vitest run
       - run: yarn build

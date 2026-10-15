@@ -1,0 +1,125 @@
+.preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1080 / 1350;
+  max-height: 60dvh;
+  margin: 0 auto;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--sf-bg);
+  box-shadow: var(--sf-shadow-sm);
+}
+
+.previewImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.offscreen {
+  position: fixed;
+  left: -20000px;
+  top: 0;
+  pointer-events: none;
+}
+
+.card {
+  --sf-rule: color-mix(in srgb, var(--sf-text) 16%, transparent);
+  background: var(--sf-bg);
+  color: var(--sf-text);
+  font-family: Inter, system-ui, sans-serif;
+  padding: 88px 96px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  /* Everything inside is drawn at 2x the app's size */
+  font-size: 26px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--sf-accent);
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.title {
+  font-size: 56px;
+  font-weight: 500;
+  line-height: 1.15;
+  margin-top: 24px;
+}
+
+.meta {
+  color: var(--sf-text-muted);
+  font-size: 26px;
+}
+
+.heading {
+  margin-top: 32px;
+  color: var(--sf-accent);
+  font-size: 24px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.transfers {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rule {
+  height: 2px;
+  margin: 24px 0 8px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--sf-rule) 96px,
+    var(--sf-rule) calc(100% - 96px),
+    transparent
+  );
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 24px;
+}
+
+.itemRow {
+  display: flex;
+  gap: 16px;
+}
+
+.itemName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemPayer {
+  color: var(--sf-text-muted);
+}
+
+.itemAmount {
+  font-family: var(--sf-font-num);
+  width: 200px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An item paid in another currency: what was paid, under the converted amount */
+.itemOriginal {
+  display: block;
+  font-size: 10px;
+  opacity: 0.6;
+}
