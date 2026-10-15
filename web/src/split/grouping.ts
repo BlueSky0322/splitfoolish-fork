@@ -21,14 +21,16 @@ export const GROUP_LABELS: Record<GroupBy, string> = {
   category: 'By category',
 };
 
-const dayKey = (time: number) => {
+/** The day a time falls on, as YYYY-MM-DD in local time */
+export const dayKey = (time: number) => {
   const d = new Date(time);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate(),
   ).padStart(2, '0')}`;
 };
 
-const dayLabel = (time: number) =>
+/** "Sat 11 Oct" */
+export const dayLabel = (time: number) =>
   new Date(time).toLocaleDateString(undefined, {
     weekday: 'short',
     day: 'numeric',

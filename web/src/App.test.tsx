@@ -44,11 +44,21 @@ describe('the app', () => {
     renderApp(fakeServer(splitDetail('trip')), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     // Enabled once the split has loaded
-    const settle = await screen.findByRole('button', { name: 'Settle up' });
-    await waitFor(() => expect(settle.hasAttribute('disabled')).toBe(false));
-    await user.click(settle);
+    const more = await screen.findByRole('button', { name: 'More' });
+    await waitFor(() => expect(more.hasAttribute('disabled')).toBe(false));
+    await user.click(more);
     expect(await screen.findByRole('dialog')).toBeTruthy();
 
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.location.search).toBe('?s=trip');
+
+    // A sheet opened from another (People, from the menu) is the one Back closes
+    await user.click(more);
+    await user.click(
+      within(await screen.findByRole('dialog')).getByText('People', { exact: true }),
+    );
+    expect(await screen.findByText('Add someone')).toBeTruthy();
     window.history.back();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(window.location.search).toBe('?s=trip');

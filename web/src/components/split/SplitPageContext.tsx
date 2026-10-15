@@ -25,6 +25,8 @@ export type Dialog =
   /** Opened from Split settings, where Cancel goes back to */
   | { kind: 'end' }
   | { kind: 'settings' }
+  /** The split's menu, as a sheet on phones (computers use a dropdown) */
+  | { kind: 'menu' }
   | { kind: 'photos' }
   | { kind: 'currencies' }
   /** Deleting items would delete their photos too */

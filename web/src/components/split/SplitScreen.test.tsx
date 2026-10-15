@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
 import {
@@ -186,17 +186,32 @@ describe('the split page', () => {
     );
   });
 
-  test('on a phone, leads with where you stand and who owes whom', async () => {
+  test('on a phone, leads with where you stand, with settling up and photos as tabs', async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     expect(await screen.findByText('Dinner')).toBeTruthy();
     // Ryan paid 90 and Ann 30 of 120 split evenly: Ann owes Ryan 30
     expect(screen.getByText("You're owed")).toBeTruthy();
-    expect(screen.getByText('Ann owes you')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Settle up' }));
-    const sheet = await screen.findByRole('dialog');
-    expect(within(sheet).getByText('1 transfer clears every balance')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Settle up/ }));
+    expect(screen.getByRole('tab', { name: 'Settle up' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(await screen.findByText('Ann pays Ryan')).toBeTruthy();
+    expect(screen.queryByText('Dinner')).toBeNull();
+
+    // A swipe moves on to the next tab
+    const content = screen.getByText('Ann pays Ryan').closest('[class*=content]')!;
+    fireEvent.touchStart(content, { touches: [{ clientX: 300, clientY: 400 }] });
+    fireEvent.touchEnd(content, { changedTouches: [{ clientX: 100, clientY: 410 }] });
+    expect(screen.getByRole('tab', { name: 'Photos' }).getAttribute('aria-selected')).toBe('true');
+    expect(await screen.findByText(/No photos yet/)).toBeTruthy();
+
+    // The split's menu is a sheet
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    const menu = await screen.findByRole('dialog');
+    expect(within(menu).getByText('People')).toBeTruthy();
+    expect(within(menu).getByText('Split settings')).toBeTruthy();
   });
 
   test("explains that a split isn't there, or isn't shared with you", async () => {

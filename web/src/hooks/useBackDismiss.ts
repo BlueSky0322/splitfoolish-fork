@@ -17,6 +17,11 @@ const layers: Layer[] = [];
 let nextId = 1;
 // Set while this code itself goes back, so that popstate isn't taken as the user's
 let selfBack = 0;
+// Entries to add once those goes-back land: Back is asynchronous, and an entry pushed
+// before it lands is the one it would take off (a sheet opening as another closes)
+let waiting: number[] = [];
+
+const push = (id: number) => window.history.pushState({ [LAYER_KEY]: id }, '');
 
 const layerOf = (state: unknown) =>
   typeof state === 'object' && state != null ? (state as Record<string, unknown>)[LAYER_KEY] : null;
@@ -24,6 +29,10 @@ const layerOf = (state: unknown) =>
 function onPopState() {
   if (selfBack > 0) {
     selfBack--;
+    if (selfBack === 0) {
+      for (const id of waiting) push(id);
+      waiting = [];
+    }
     return;
   }
   const top = layers.at(-1);
@@ -31,7 +40,7 @@ function onPopState() {
   if (top == null || layerOf(window.history.state) === top.id) return;
   if (top.onBack() === false) {
     // Kept open (say, to ask about unsaved changes): it needs its entry back
-    window.history.pushState({ [LAYER_KEY]: top.id }, '');
+    push(top.id);
     return;
   }
   layers.pop();
@@ -52,12 +61,18 @@ export function useBackDismiss(opened: boolean, onBack: () => boolean | void) {
     if (!opened || !isMobile) return;
     const layer: Layer = { id: nextId++, onBack: () => latest.current() };
     layers.push(layer);
-    window.history.pushState({ [LAYER_KEY]: layer.id }, '');
+    if (selfBack > 0) waiting.push(layer.id);
+    else push(layer.id);
     return () => {
       const at = layers.indexOf(layer);
       // Already taken off by Back
       if (at === -1) return;
       layers.splice(at, 1);
+      // Closed before its entry was even added
+      if (waiting.includes(layer.id)) {
+        waiting = waiting.filter((id) => id !== layer.id);
+        return;
+      }
       // Closed some other way: its entry comes off too, unless the page moved on since
       if (layerOf(window.history.state) === layer.id) {
         selfBack++;

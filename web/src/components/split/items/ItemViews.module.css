@@ -9,8 +9,7 @@
 }
 
 .groups.mobile {
-  gap: 14px;
-  padding: 0 14px;
+  gap: 0;
 }
 
 .group {
@@ -29,8 +28,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Phones: a 36px band across the page, the day on the left and its total on the right */
 .mobile .groupHeader {
-  padding: 0 8px;
+  align-items: center;
+  height: 36px;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--sf-text) 5%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--sf-text);
+}
+
+.mobile .groupHeader > :last-child {
+  font-weight: 400;
+  color: var(--sf-text-muted);
+}
+
+.mobile .group {
+  gap: 0;
 }
 
 .itemCard {
@@ -41,8 +58,10 @@
 }
 
 .mobile .itemCard {
-  border-radius: 14px;
+  border-radius: 0;
   padding: 0;
+  background: none;
+  box-shadow: none;
 }
 
 .itemRow {
@@ -56,8 +75,23 @@
 }
 
 .mobile .itemRow {
-  min-height: 56px;
-  padding: 8px 14px;
+  min-height: 64px;
+  padding: 10px 20px;
+}
+
+.mobile .itemRow + .itemRow {
+  border-top: none;
+}
+
+.iconTile {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sf-text) 7%, transparent);
+  color: var(--sf-text-secondary);
 }
 
 .itemRow + .itemRow {

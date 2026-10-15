@@ -27,8 +27,9 @@ const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) =
         className={`min-h-dvh ${isMobile ? classes.withTabs : ''}`}
         data-tabs={isMobile || undefined}
       >
+        {isMobile && <OfflineNotice inline />}
         {children}
-        <OfflineNotice />
+        {!isMobile && <OfflineNotice />}
         <UpdateNotice />
         {isMobile && <BottomTabs route={route} />}
       </main>

@@ -6,6 +6,7 @@ import PeopleSheet from '../people/PeopleSheet';
 import ResetLink from '../people/ResetLink';
 import ShareImage from './ShareImage';
 import SplitMembers, { ShareTitle } from '../people/SplitMembers';
+import SplitMenuSheet from './SplitMenuSheet';
 import SplitSettings from './SplitSettings';
 import PhotoStrip from '../photos/PhotoStrip';
 import ResponsiveDialog from '../../ui/ResponsiveDialog';
@@ -135,6 +136,13 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             }}
           />
         )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'menu'}
+        onClose={close}
+        title={null}
+      >
+        {dialog?.kind === 'menu' && <SplitMenuSheet />}
       </ResponsiveDialog>
       <ResponsiveDialog
         opened={dialog?.kind === 'settle'}

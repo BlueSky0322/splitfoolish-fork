@@ -22,12 +22,11 @@
   background: var(--sf-accent);
 }
 
-/* Phones: round, like a photo picker */
+/* Phones: a size bigger, for a thumb */
 @media (max-width: 1023px) {
   .check {
     width: 22px;
     height: 22px;
-    border-radius: 999px;
   }
 }
 
