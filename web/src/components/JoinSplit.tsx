@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { navigate } from '../hooks/useRoute';
 import StateCard from './ui/StateCard';
-import { reloadHomeData } from '../home-data';
+import { reloadHomeData } from '../home/home-data';
 
 const JoinSplit = ({ token }: { token: string }) => {
   const [failed, setFailed] = useState(false);

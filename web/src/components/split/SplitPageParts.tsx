@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import type { Person } from '../../../../shared/types';
 import { useSplitState } from '../../split/SplitStateContext';
 import { plural } from '../../utils/text';
-import type { SelectionBarProps } from './ItemSelection';
-import PersonAvatar from './PersonAvatar';
+import type { SelectionBarProps } from './items/ItemSelection';
+import PersonAvatar from './people/PersonAvatar';
 import { useSplitPage } from './SplitPageContext';
 import classes from './Split.module.css';
 

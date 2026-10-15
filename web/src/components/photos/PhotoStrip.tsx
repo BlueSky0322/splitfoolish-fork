@@ -2,7 +2,7 @@ import { ActionIcon, Loader, UnstyledButton } from '@mantine/core';
 import { Camera, X } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { photoUrl } from '../../api';
-import PhotoViewer, { ViewerPhoto } from './PhotoViewer';
+import PhotoViewer, { ViewerPhoto } from '../ui/PhotoViewer';
 import classes from './Photos.module.css';
 import type { Attachment } from '../../../../shared/api';
 

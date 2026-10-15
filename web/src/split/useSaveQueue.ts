@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Change } from '../../../shared/types';
-import { reloadHomeData } from '../home-data';
+import { reloadHomeData } from '../home/home-data';
 import { whenCreated } from '../offline/pending-creates';
 import {
   Queued,

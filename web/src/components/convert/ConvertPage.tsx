@@ -20,14 +20,14 @@ import {
 import { useEffect, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, toCents } from '../../../../shared/rates';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { useHomeData } from '../../hooks/useHomeData';
+import { useHomeData } from '../../home/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import { formatMoney, listCurrencies, homeCurrency } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import CurrencySelect from '../ui/CurrencySelect';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
-import SplitAvatar from '../split/SplitAvatar';
+import SplitAvatar from '../ui/SplitAvatar';
 import classes from './Convert.module.css';
 import { type SplitSummary } from '../../../../shared/api';
 import { showError } from '../../utils/notify';

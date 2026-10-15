@@ -1,11 +1,11 @@
-import { BalanceHero } from './BalancePanel';
+import { BalanceHero } from './balances/BalancePanel';
 import CurrenciesSheet from './CurrenciesSheet';
 import EndSplit, { EndSplitTitle } from './EndSplit';
-import ItemForm from './ItemForm';
-import PeopleSheet from './PeopleSheet';
-import ResetLink from './ResetLink';
+import ItemForm from './items/ItemForm';
+import PeopleSheet from './people/PeopleSheet';
+import ResetLink from './people/ResetLink';
 import ShareImage from './ShareImage';
-import SplitMembers, { ShareTitle } from './SplitMembers';
+import SplitMembers, { ShareTitle } from './people/SplitMembers';
 import SplitSettings from './SplitSettings';
 import PhotoStrip from '../photos/PhotoStrip';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
@@ -19,7 +19,7 @@ import { useSplitActions } from '../../split/useSplit';
 import { newId } from '../../utils/id';
 import { notifications } from '@mantine/notifications';
 import { type Dialog, useSplitPage } from './SplitPageContext';
-import type { useDeleteItems } from './useDeleteItems';
+import type { useDeleteItems } from './items/useDeleteItems';
 
 /** Under Settle up's title: how many transfers settle everyone */
 const settleNote = (totals: SplitTotals) => {

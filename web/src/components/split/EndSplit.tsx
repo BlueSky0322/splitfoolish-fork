@@ -2,8 +2,8 @@ import { Button } from '@mantine/core';
 import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
-import classes from './SplitMembers.module.css';
-import { reloadHomeData, updateHomeData } from '../../home-data';
+import classes from './people/SplitMembers.module.css';
+import { reloadHomeData, updateHomeData } from '../../home/home-data';
 import { showError } from '../../utils/notify';
 
 interface EndSplitProps {

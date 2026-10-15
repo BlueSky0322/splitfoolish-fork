@@ -3,7 +3,7 @@ import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { removeSplitPicture, uploadSplitPicture } from '../../split/pictures';
 import SplitForm, { SplitFormValues } from './SplitForm';
-import { reloadHomeData } from '../../home-data';
+import { reloadHomeData } from '../../home/home-data';
 import { showError } from '../../utils/notify';
 
 interface SplitSettingsProps {

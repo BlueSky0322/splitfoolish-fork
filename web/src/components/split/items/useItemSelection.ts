@@ -1,6 +1,6 @@
 import { PointerEvent, MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 
-// Picking several items at once (see components/split/ItemSelection.tsx)
+// Picking several items at once (see ItemSelection.tsx)
 
 /** What item rows need to take part in selecting */
 export interface RowSelection {

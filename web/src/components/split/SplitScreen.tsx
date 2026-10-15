@@ -16,8 +16,8 @@ import {
 import { ReactNode, useCallback, useMemo, useState } from 'react';
 import type { Attachment } from '../../../../shared/api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { useHomeDataSnapshot } from '../../hooks/useHomeData';
-import { useItemSelection, useSelectionKeys } from '../../hooks/useItemSelection';
+import { useHomeDataSnapshot } from '../../home/useHomeData';
+import { useItemSelection, useSelectionKeys } from './items/useItemSelection';
 import { navigate } from '../../hooks/useRoute';
 import { computeTotals, findMe } from '../../split/derive';
 import { groupItems } from '../../split/grouping';
@@ -27,18 +27,18 @@ import { SplitActionsContext, useSplit } from '../../split/useSplit';
 import { plural } from '../../utils/text';
 import { usePhotos } from '../photos/usePhotos';
 import StateCard from '../ui/StateCard';
-import BalancePanel from './BalancePanel';
+import BalancePanel from './balances/BalancePanel';
 import DesktopSplitLayout from './DesktopSplitLayout';
-import { MoveDateDialog } from './ItemSelection';
-import { ItemCards, ItemTable } from './ItemViews';
+import { MoveDateDialog } from './items/ItemSelection';
+import { ItemCards, ItemTable } from './items/ItemViews';
 import MobileSplitLayout from './MobileSplitLayout';
-import { AvatarVersionsContext } from './PersonAvatar';
+import { AvatarVersionsContext } from './people/PersonAvatar';
 import SplitDialogs from './SplitDialogs';
 import { type Dialog, type SplitPage, SplitPageContext } from './SplitPageContext';
 import { type SelectionUi, type SplitPageParts, otherCurrencyCount } from './SplitPageParts';
 import { Prefill, useConvertPrefill } from './useConvertPrefill';
-import { useDeleteItems } from './useDeleteItems';
-import { ViewPrefs, useItemViewPrefs } from './useItemViewPrefs';
+import { useDeleteItems } from './items/useDeleteItems';
+import { ViewPrefs, useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
 
 // The split page: loads the split, works out what's shown from it, and builds the parts

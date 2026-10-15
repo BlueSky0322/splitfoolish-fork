@@ -1,8 +1,8 @@
 import { Button } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import type { SplitActions } from '../../split/actions';
-import { SplitItem, toApiItem } from '../../split/state';
-import { plural } from '../../utils/text';
+import type { SplitActions } from '../../../split/actions';
+import { SplitItem, toApiItem } from '../../../split/state';
+import { plural } from '../../../utils/text';
 
 interface Photos {
   photosOf: (itemId: string | null) => unknown[];

@@ -1,7 +1,7 @@
 import { Button } from '@mantine/core';
 import { useState } from 'react';
-import { api } from '../../api';
-import { showError } from '../../utils/notify';
+import { api } from '../../../api';
+import { showError } from '../../../utils/notify';
 
 interface ResetLinkProps {
   splitId: string;

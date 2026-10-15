@@ -1,6 +1,6 @@
-import { DEFAULT_SETTINGS, ITEMS_GROUPS, type Settings } from '../../../../shared/api';
-import { useProfile } from '../../profile/ProfileContext';
-import { GroupBy, MOBILE_SORTS, SortDir, SortKey } from '../../split/grouping';
+import { DEFAULT_SETTINGS, ITEMS_GROUPS, type Settings } from '../../../../../shared/api';
+import { useProfile } from '../../../profile/ProfileContext';
+import { GroupBy, MOBILE_SORTS, SortDir, SortKey } from '../../../split/grouping';
 
 // How a split's items are shown (cards or a table, grouped, sorted), saved with the
 // account so every split and device shows them the same way

@@ -1,6 +1,6 @@
 .sheet {
   height: auto;
-  /* Above the on-screen keyboard where the page doesn't shrink for it (keyboard-inset.ts) */
+  /* Above the on-screen keyboard where the page doesn't shrink for it (pwa/keyboard-inset.ts) */
   margin-bottom: var(--sf-keyboard, 0px);
   max-height: calc(100dvh - 40px - var(--sf-keyboard, 0px));
   transition: margin-bottom 120ms ease-out;

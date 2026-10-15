@@ -8,7 +8,7 @@ import { useProfile } from '../../profile/ProfileContext';
 import { ACCENTS } from '../../theme/accents';
 import type { Accent } from '../../../../shared/api';
 import { formatMoney } from '../../utils/money';
-import TransferRow from './TransferRow';
+import TransferRow from './balances/TransferRow';
 import classes from './ShareImage.module.css';
 import { toCents } from '../../../../shared/rates';
 import { DEFAULT_SETTINGS } from '../../../../shared/api';

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { installState, promptInstall, subscribeInstall } from '../install';
+import { installState, promptInstall, subscribeInstall } from './install';
 
 /** Whether and how this browser can install the app (see install.ts) */
 export function useInstall() {

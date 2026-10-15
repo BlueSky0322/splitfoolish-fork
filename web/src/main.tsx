@@ -2,8 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import ErrorBoundary from './components/ui/ErrorBoundary.tsx';
 import { Root } from './Root.tsx';
-import { trackKeyboardInset } from './keyboard-inset';
-import { trackInstall } from './install';
+import { trackKeyboardInset } from './pwa/keyboard-inset';
+import { trackInstall } from './pwa/install';
 import { restoreLastPage } from './hooks/useRoute';
 import { syncWhenOnline } from './offline/sync';
 

@@ -12,8 +12,8 @@ import { GROUP_LABELS } from '../../split/grouping';
 import { useSplitState } from '../../split/SplitStateContext';
 import { currencySymbol } from '../../utils/money';
 import ErrorBoundary from '../ui/ErrorBoundary';
-import { DesktopSelectionBar } from './ItemSelection';
-import SplitAvatar from './SplitAvatar';
+import { DesktopSelectionBar } from './items/ItemSelection';
+import SplitAvatar from '../ui/SplitAvatar';
 import { useSplitPage } from './SplitPageContext';
 import {
   AvatarStack,
@@ -22,7 +22,7 @@ import {
   type SplitPageParts,
   otherCurrencyCount,
 } from './SplitPageParts';
-import { GROUP_ORDER, useItemViewPrefs } from './useItemViewPrefs';
+import { GROUP_ORDER, useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
 
 /** The split page on a computer: the items, with the balances alongside */

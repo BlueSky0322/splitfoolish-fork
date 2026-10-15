@@ -11,19 +11,19 @@ import {
 } from '@phosphor-icons/react';
 import { ReactNode } from 'react';
 import { actionableInvites } from '../../api';
-import { useHomeData } from '../../hooks/useHomeData';
+import { useHomeData } from '../../home/useHomeData';
 import { Route, navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { useOpenNewSplit } from '../NewSplitDialog';
 import BalanceTag from '../ui/BalanceTag';
-import SplitAvatar from '../split/SplitAvatar';
+import SplitAvatar from '../ui/SplitAvatar';
 import ThemeToggle from '../ui/ThemeToggle';
-import { justDragged, useSortableSplit } from '../../hooks/useSortableSplit';
+import { justDragged, useSortableSplit } from '../home/useSortableSplit';
 import { SortableSplits } from '../home/SortableSplits';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
 import type { SplitSummary } from '../../../../shared/api';
-import { moveSplit } from '../../home-data';
+import { moveSplit } from '../../home/home-data';
 
 interface SidebarProps {
   route: Route;

@@ -7,7 +7,7 @@ import { uploadSplitPicture } from '../split/pictures';
 import SplitForm, { SplitFormValues } from './split/SplitForm';
 import ResponsiveDialog from './ui/ResponsiveDialog';
 import type { SplitDetail, SplitSummary } from '../../../shared/api';
-import { reloadHomeData, updateHomeData } from '../home-data';
+import { reloadHomeData, updateHomeData } from '../home/home-data';
 import { showError } from '../utils/notify';
 import { newId } from '../utils/id';
 import { homeCurrency } from '../utils/money';

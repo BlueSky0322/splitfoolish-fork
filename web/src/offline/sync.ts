@@ -1,4 +1,4 @@
-import { reloadHomeData } from '../home-data';
+import { reloadHomeData } from '../home/home-data';
 import { flushOfflineChanges } from './pending-creates';
 
 // Sending what was kept on this device while offline (splits made, changes to them):

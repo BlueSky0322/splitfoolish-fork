@@ -1,19 +1,19 @@
 import { ActionIcon, UnstyledButton, UnstyledButtonProps } from '@mantine/core';
 import { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
-import { SplitItem } from '../../split/state';
-import type { Person } from '../../../../shared/types';
-import { useSplitState } from '../../split/SplitStateContext';
-import { useSplitPage } from './SplitPageContext';
-import { categoryIcon } from '../../split/categories';
-import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
-import { currencySymbol, formatMoney } from '../../utils/money';
-import { RowSelection, useLongPress } from '../../hooks/useItemSelection';
+import { SplitItem } from '../../../split/state';
+import type { Person } from '../../../../../shared/types';
+import { useSplitState } from '../../../split/SplitStateContext';
+import { useSplitPage } from '../SplitPageContext';
+import { categoryIcon } from '../../../split/categories';
+import { ItemGroup, SortDir, SortKey } from '../../../split/grouping';
+import { currencySymbol, formatMoney } from '../../../utils/money';
+import { RowSelection, useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
-import PersonAvatar from './PersonAvatar';
-import classes from './Split.module.css';
-import { toCents } from '../../../../shared/rates';
-import { plural } from '../../utils/text';
+import PersonAvatar from '../people/PersonAvatar';
+import classes from '../Split.module.css';
+import { toCents } from '../../../../../shared/rates';
+import { plural } from '../../../utils/text';
 
 interface ItemViewProps {
   groups: ItemGroup[];

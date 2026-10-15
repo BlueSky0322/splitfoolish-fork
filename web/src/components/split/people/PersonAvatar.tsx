@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
-import type { Person } from '../../../../shared/types';
-import UserAvatar from '../ui/UserAvatar';
+import type { Person } from '../../../../../shared/types';
+import UserAvatar from '../../ui/UserAvatar';
 
 /** Profile picture versions by account email, for people linked to an account */
 export const AvatarVersionsContext = createContext<Map<string, number | null>>(new Map());

@@ -15,7 +15,7 @@ import { isNetworkError, isOffline } from '../offline/outbox';
 import { useSaveQueue } from './useSaveQueue';
 import { useSplitLive } from './useSplitLive';
 import type { SplitDetail, Attachment } from '../../../shared/api';
-import { reloadHomeData, updateHomeData } from '../home-data';
+import { reloadHomeData, updateHomeData } from '../home/home-data';
 import { showError } from '../utils/notify';
 import { SplitActions, makeSplitActions } from './actions';
 import { useSplitState } from './SplitStateContext';

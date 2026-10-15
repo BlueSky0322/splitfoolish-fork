@@ -10,7 +10,7 @@ import {
 import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { SortableContext, SortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { ReactNode } from 'react';
-import { markDragged } from '../../hooks/useSortableSplit';
+import { markDragged } from './useSortableSplit';
 
 // Dragging splits into your own order, in the sidebar and on My splits. A mouse drags
 // after moving a few pixels; a finger after a short press, so lists still scroll.

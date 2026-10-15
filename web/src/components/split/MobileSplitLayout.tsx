@@ -16,13 +16,13 @@ import { useSplitState } from '../../split/SplitStateContext';
 import { plural } from '../../utils/text';
 import ErrorBoundary from '../ui/ErrorBoundary';
 import Fab from '../ui/Fab';
-import { BalanceHero, BalanceLine } from './BalancePanel';
-import { MobileSelectionBar } from './ItemSelection';
-import SplitAvatar from './SplitAvatar';
+import { BalanceHero, BalanceLine } from './balances/BalancePanel';
+import { MobileSelectionBar } from './items/ItemSelection';
+import SplitAvatar from '../ui/SplitAvatar';
 import { useSplitPage } from './SplitPageContext';
 import { AvatarStack, SaveStatus, type SelectionUi, type SplitPageParts } from './SplitPageParts';
 import { useHeroHidden } from './useHeroHidden';
-import { useItemViewPrefs } from './useItemViewPrefs';
+import { useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
 
 const MAX_AVATARS = 4;

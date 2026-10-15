@@ -1,18 +1,18 @@
 import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
 import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { useSplitActions } from '../../split/useSplit';
-import type { Person } from '../../../../shared/types';
-import { nameFor } from '../../profile/ProfileContext';
-import { formatMoney } from '../../utils/money';
+import { useSplitActions } from '../../../split/useSplit';
+import type { Person } from '../../../../../shared/types';
+import { nameFor } from '../../../profile/ProfileContext';
+import { formatMoney } from '../../../utils/money';
 import PersonAvatar from './PersonAvatar';
-import TransferRow from './TransferRow';
+import TransferRow from '../balances/TransferRow';
 import classes from './PeopleSheet.module.css';
-import { MAX_NAME_LENGTH } from '../../../../shared/types';
-import { useSplitPage } from './SplitPageContext';
-import { showRefusal } from '../../utils/notify';
-import { removalBlocker } from '../../split/rules';
-import { useSplitState } from '../../split/SplitStateContext';
+import { MAX_NAME_LENGTH } from '../../../../../shared/types';
+import { useSplitPage } from '../SplitPageContext';
+import { showRefusal } from '../../../utils/notify';
+import { removalBlocker } from '../../../split/rules';
+import { useSplitState } from '../../../split/SplitStateContext';
 
 interface PeopleSheetProps {
   /** Opens on this person's page */

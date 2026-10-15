@@ -1,4 +1,4 @@
-import { quietly } from './utils/quietly';
+import { quietly } from '../utils/quietly';
 // Installing Splitfoolish as an app. Chrome, Edge and Android offer an install prompt the
 // app can open (beforeinstallprompt); Safari on iPhone and iPad has none, so it's
 // "Share, then Add to Home Screen". Nothing is offered once it's installed, or opened

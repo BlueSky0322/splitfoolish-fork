@@ -1,13 +1,13 @@
-import { api } from './api';
-import { isNetworkError, readPendingCreates } from './offline/outbox';
-import { queryClient } from './query-client';
-import { readCache, writeCache } from './offline/cache';
-import type { MyInvite, SplitSummary } from '../../shared/api';
-import { showError } from './utils/notify';
+import { api } from '../api';
+import { isNetworkError, readPendingCreates } from '../offline/outbox';
+import { queryClient } from '../query-client';
+import { readCache, writeCache } from '../offline/cache';
+import type { MyInvite, SplitSummary } from '../../../shared/api';
+import { showError } from '../utils/notify';
 
 // My splits and pending invites, shared by the sidebar, My splits and Invites pages so
 // they load once and always agree. The last-seen copy shows while a fresh one loads.
-// The screens read it through hooks/useHomeData; anything can change or reload it here.
+// The screens read it through useHomeData; anything can change or reload it here.
 
 export interface HomeData {
   splits: SplitSummary[] | null;
