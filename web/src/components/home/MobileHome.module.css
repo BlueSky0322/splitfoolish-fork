@@ -1,0 +1,234 @@
+/* Splits, Invites and Search on phones (10a, 10f, 10n) */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 16px 120px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 44px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--sf-border);
+  font-size: 14px;
+  color: var(--sf-text-secondary);
+}
+
+.chip[data-selected] {
+  border-color: var(--sf-accent);
+  background: var(--sf-accent-tint);
+  color: var(--sf-text);
+}
+
+/* Rows run edge to edge */
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -16px;
+}
+
+.swipe {
+  position: relative;
+  overflow: hidden;
+}
+
+.actions {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: flex;
+  visibility: hidden;
+}
+
+/* Only behind a row being swiped, or left open */
+.swipe[data-revealed] .actions {
+  visibility: visible;
+}
+
+.action {
+  width: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--sf-text) 12%, var(--sf-bg));
+  color: var(--sf-text);
+}
+
+.actionDanger {
+  background: var(--sf-negative);
+  color: var(--sf-bg);
+}
+
+.row {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 0 16px;
+  background: var(--sf-bg);
+  touch-action: pan-y;
+}
+
+.rowName {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+}
+
+.rowMeta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: 0 0 auto;
+}
+
+.balanceAmount {
+  font-family: var(--sf-font-num);
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.arrow {
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+.balanceCurrency {
+  font-size: 11px;
+  color: var(--sf-text-muted);
+}
+
+.radio {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.radio :global(.mantine-Radio-label) {
+  font-size: 15px;
+}
+
+.sheetLabel {
+  margin: 14px 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* A rounded group of rows, dividers inset on both sides */
+.group {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-sm);
+}
+
+.group > * + * {
+  border-top: 1px solid var(--sf-divider);
+}
+
+.inviteRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+}
+
+.inviteRow[data-highlight] .rowName {
+  color: var(--sf-accent);
+}
+
+.helper {
+  padding: 0 16px;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cancel {
+  font-size: 15px;
+  color: var(--sf-accent);
+}
+
+.sectionLabel {
+  margin: 4px 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sf-text-muted);
+}
+
+.resultRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+}
+
+.iconTile {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sf-tag);
+}
+
+.resultAmount {
+  font-family: var(--sf-font-num);
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.match {
+  background: var(--mantine-color-accent-2);
+  color: var(--mantine-color-accent-9);
+  border-radius: 3px;
+}

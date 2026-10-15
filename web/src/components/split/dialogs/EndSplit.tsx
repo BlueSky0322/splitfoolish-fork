@@ -11,6 +11,8 @@ interface EndSplitProps {
   canDelete: boolean;
   myEmail: string;
   onCancel: () => void;
+  /** Done, where it was asked from; otherwise it goes to My splits */
+  onEnded?: () => void;
 }
 
 /** The title: a red-tinted icon beside "Delete this split?" (or "Leave this split?") */
@@ -25,10 +27,11 @@ export const EndSplitTitle = ({ canDelete }: { canDelete: boolean }) => (
 
 // Asks before the owner deletes a split, or someone else leaves it. Either way the
 // split goes from their list straight away and the server catches up.
-const EndSplit = ({ splitId, name, canDelete, myEmail, onCancel }: EndSplitProps) => {
+const EndSplit = ({ splitId, name, canDelete, myEmail, onCancel, onEnded }: EndSplitProps) => {
   const end = () => {
     removeListedSplit(splitId);
-    navigate('');
+    if (onEnded) onEnded();
+    else navigate('');
     void sendMySplitsChange(
       () => (canDelete ? api.deleteSplit(splitId) : api.removeMember(splitId, myEmail)),
       `Could not ${canDelete ? 'delete' : 'leave'} the split`,

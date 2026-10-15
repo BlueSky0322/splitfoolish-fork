@@ -1,10 +1,10 @@
 import { ActionIcon, Button, Loader, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { ArrowsLeftRight, Check, Plus, X } from '@phosphor-icons/react';
 import { rectSortingStrategy } from '@dnd-kit/sortable';
-import { useState } from 'react';
-import { countActionableInvites, api } from '../../api';
-import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { countActionableInvites } from '../../api';
+import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
+import MobileHome from './MobileHome';
+import MobileInvites from './MobileInvites';
 import { useMySplits } from '../../my-splits/useMySplits';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
@@ -19,7 +19,8 @@ import UserAvatar from '../ui/UserAvatar';
 import classes from './SplitsHome.module.css';
 import { InstallCard } from '../common/InstallApp';
 import type { MyInvite, SplitSummary } from '@shared/api';
-import { moveSplit, removeListedInvite, sendMySplitsChange } from '../../my-splits/my-splits';
+import { moveSplit } from '../../my-splits/my-splits';
+import { describeInvite, linkedInviteId, useAnswerInvite } from './invite-answers';
 import { plural } from '../../utils/text';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
@@ -69,56 +70,9 @@ const splitMeta = (split: SplitSummary) =>
     split.currency,
   )}`;
 
-// The invite you just picked up from a share link, picked out in the list
-const linkedInviteId = () => new URLSearchParams(window.location.search).get('invite');
-
-/** What a row says, by kind: an invite to you, your request, or someone asking to join yours */
-function describeInvite(invite: MyInvite) {
-  const from = invite.invitedByName ?? invite.invitedBy;
-  const expires = new Date(invite.expiresAt).toLocaleDateString();
-  switch (invite.kind) {
-    case 'request':
-      return {
-        title: `${nameFor(invite.email, invite.name)} wants to join`,
-        meta: `${invite.splitName} · shared by ${from}`,
-      };
-    case 'sent':
-      return {
-        title: invite.splitName,
-        meta: `Waiting for ${nameFor(invite.owner, invite.ownerName)} to approve · expires ${expires}`,
-      };
-    default:
-      return { title: invite.splitName, meta: `From ${from} · expires ${expires}` };
-  }
-}
-
 function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
   const highlight = linkedInviteId();
-  const [busy, setBusy] = useState<string | null>(null);
-
-  // The invite leaves the list straight away; the server catches up in the background
-  const respond = async (invite: MyInvite, accept: boolean) => {
-    removeListedInvite(invite.id);
-    if (!accept) {
-      void sendMySplitsChange(() => api.declineInvite(invite.id), 'Could not answer the invite');
-      return;
-    }
-    // Joining has to finish before the split can be opened
-    if (invite.kind === 'invite') setBusy(invite.id);
-    const joined = await sendMySplitsChange(
-      () => api.acceptInvite(invite.id),
-      'Could not answer the invite',
-    );
-    setBusy(null);
-    if (joined == null) return;
-    if (invite.kind === 'invite') {
-      navigate(`?s=${joined.id}`);
-    } else if (invite.kind === 'request') {
-      notifications.show({
-        message: `${nameFor(invite.email, invite.name)} joined ${invite.splitName}`,
-      });
-    }
-  };
+  const { busy, respond } = useAnswerInvite();
 
   return (
     <div className={`sf-card ${classes.list}`}>
@@ -245,11 +199,14 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
   const { profile } = useProfile();
   const openNewSplit = useOpenNewSplit();
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const filter = isFilter(tab) ? tab : 'all';
   const setFilter = (next: string) =>
     navigate(next === 'all' ? '' : `?tab=${next}`, { replace: true });
 
   const loading = splits == null && error == null;
+  // Phones: Splits and Invites are tabs of their own (10a, 10f)
+  if (isMobile) return filter === 'invites' ? <MobileInvites /> : <MobileHome />;
   const inviteCount = countActionableInvites(invites);
   const footnote = <p className={classes.footnote}>Invites expire after {INVITE_DAYS} days.</p>;
 
