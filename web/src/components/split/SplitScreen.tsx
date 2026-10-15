@@ -37,7 +37,7 @@ import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeDataSnapshot } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { SplitActionsContext, SyncStatus, useSplit } from '../../split/useSplit';
-import { Person } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import { SplitTotals, computeTotals, findMe } from '../../split/derive';
 import { GROUP_LABELS, groupItems } from '../../split/grouping';
 import { currencySymbol } from '../../utils/money';
@@ -135,11 +135,11 @@ function SaveStatus({
 }
 
 /** "Chen and Dev owe you", for the phone's people summary */
-function oweLine(people: Person[], summary: SplitTotals, me: Person | null) {
-  if (!summary.hasItems) return 'No items yet';
+function oweLine(people: Person[], totals: SplitTotals, me: Person | null) {
+  if (!totals.hasItems) return 'No items yet';
   if (me == null) return 'Tap to edit or pick yourself';
-  const owe = summary.transfers.filter((t) => t.toId === me.id).map((t) => t.fromId);
-  const youOwe = summary.transfers.filter((t) => t.fromId === me.id).map((t) => t.toId);
+  const owe = totals.transfers.filter((t) => t.toId === me.id).map((t) => t.fromId);
+  const youOwe = totals.transfers.filter((t) => t.fromId === me.id).map((t) => t.toId);
   const names = (ids: string[]) => {
     const list = ids.map((id) => people.find((p) => p.id === id)?.name ?? '');
     return list.length <= 2
@@ -180,7 +180,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const distributorId = state.people.some((p) => p.id === meta?.distributorId)
     ? meta?.distributorId ?? null
     : null;
-  const summary = useMemo(
+  const totals = useMemo(
     () => computeTotals(state.people, state.items, distributorId),
     [state.people, state.items, distributorId],
   );
@@ -410,7 +410,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     <ItemTable
       groups={groups}
       grouped={grouped}
-      summary={summary}
+      totals={totals}
       me={me}
       people={state.people}
       currency={currency}
@@ -428,7 +428,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     <ItemCards
       groups={groups}
       grouped={grouped}
-      summary={summary}
+      totals={totals}
       me={me}
       people={state.people}
       currency={currency}
@@ -443,7 +443,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const panel = (
     <BalancePanel
       people={state.people}
-      summary={summary}
+      totals={totals}
       currency={currency}
       me={me}
       distributorId={distributorId}
@@ -464,7 +464,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       meta={meta}
       metaChanges={metaChanges}
       refreshMeta={refreshMeta}
-      summary={summary}
+      totals={totals}
       currency={currency}
       me={me}
       photos={photos}
@@ -657,7 +657,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                 >
                   <span className={classes.compactName}>{meta?.name}</span>
                   <BalanceLine
-                    summary={summary}
+                    totals={totals}
                     currency={currency}
                     me={me}
                   />
@@ -675,7 +675,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                   size={40}
                   aria-label="Share image"
                   onClick={() => setDialog({ kind: 'share' })}
-                  disabled={!summary.hasItems}
+                  disabled={!totals.hasItems}
                 >
                   <ImageSquare size={20} />
                 </ActionIcon>
@@ -729,7 +729,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               </div>
             )}
             <BalanceHero
-              summary={summary}
+              totals={totals}
               currency={currency}
               me={me}
               onLinkMe={linkMe}
@@ -748,7 +748,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               <Button
                 variant="default"
                 onClick={() => setDialog({ kind: 'share' })}
-                disabled={!summary.hasItems}
+                disabled={!totals.hasItems}
               >
                 Share image
               </Button>
@@ -775,7 +775,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
                 <div className={classes.peopleSummaryTitle}>
                   {plural(state.people.length, 'person', 'people')}
                 </div>
-                <div className={classes.peopleSummarySub}>{oweLine(state.people, summary, me)}</div>
+                <div className={classes.peopleSummarySub}>{oweLine(state.people, totals, me)}</div>
               </div>
               <CaretRight size={16} />
             </UnstyledButton>

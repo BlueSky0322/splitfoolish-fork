@@ -1,11 +1,14 @@
 // What every route shares: the Worker's bindings, who's asking, and the checks that
 // decide whether they may see or change a split.
 //
-// Routes (routes/*.ts) say who may do what. The work lives in the feature modules
-// (photos, profiles, split-content, summaries), which export two kinds of function:
-// handlers, taking the database, the ids and person involved, then the request or its
-// body, and answering with a Response; and statement builders, returning statements for
-// a route to run in one batch with others. A route that is one short query keeps it.
+// Routes (routes/*.ts) gate who gets in: membership, and ownership where only the owner
+// may act. Rules that depend on a row (who uploaded a photo, which person is being linked
+// or removed) are checked by the handler that loads that row, such as deleteAttachment
+// and applyChanges. The work lives in the feature modules (photos, profiles, sharing,
+// split-content, split-detail, summaries), which export two kinds of function: handlers,
+// taking the database, the ids and person involved, then the request or its body, and
+// answering with a Response; and statement builders, returning statements for a route
+// to run in one batch with others. A route that is one short query keeps it.
 
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
@@ -25,8 +28,6 @@ export interface Env extends AuthEnv, RatesEnv {
   RECONVERT_RETRY_MS?: string;
 }
 
-export type { Role };
-
 /** Who is making a change, and their role in the split */
 export interface Actor {
   email: string;
@@ -35,16 +36,35 @@ export interface Actor {
 
 export type AppEnv = {
   Bindings: Env;
-  /** email: the signed-in user. role: theirs in the split the route is about */
-  Variables: { email: string; role: Role };
+  /**
+   * email: the signed-in user. role: theirs in the split the route is about.
+   * changedSplit: the split a change was saved to, told about once the response is ready.
+   */
+  Variables: { email: string; role: Role; changedSplit?: string };
 };
 
+const ID_CHARS = '[A-Za-z0-9_-]{8,64}';
 /** A split, invite or attachment id in a path */
-export const ID = '{[A-Za-z0-9_-]{8,64}}';
+export const ID = `{${ID_CHARS}}`;
+/** The same id sent in a body */
+export const VALID_ID = new RegExp(`^${ID_CHARS}$`);
 export const SPLIT = `/splits/:id${ID}`;
 
 const MAX_BODY_BYTES = 256 * 1024;
-export const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** Marks a split as just changed, for the order of My splits */
+export const touchSplit = (db: D1Database, splitId: string) =>
+  db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), splitId);
+
+/** Runs groups of statements in one batch, and hands back each group's results */
+export async function batchGroups(
+  db: D1Database,
+  groups: D1PreparedStatement[][],
+): Promise<D1Result<Record<string, unknown>>[][]> {
+  const results = await db.batch<Record<string, unknown>>(groups.flat());
+  let start = 0;
+  return groups.map((group) => results.slice(start, (start += group.length)));
+}
 
 /** The room for a split, where everyone with it open is listening */
 export const splitRoom = (env: Env, splitId: string) =>
@@ -111,10 +131,10 @@ export async function readJson(req: Request): Promise<Record<string, unknown> | 
   if (Number(req.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) {
     return fail('Too large', 413);
   }
-  const text = await req.text();
-  if (text.length > MAX_BODY_BYTES) return fail('Too large', 413);
+  const bytes = await req.arrayBuffer();
+  if (bytes.byteLength > MAX_BODY_BYTES) return fail('Too large', 413);
   try {
-    const body: unknown = JSON.parse(text);
+    const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
     if (body == null || typeof body !== 'object') throw new Error();
     return body as Record<string, unknown>;
   } catch {

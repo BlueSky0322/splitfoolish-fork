@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ApiError } from '../api';
-import { Queued, isRetryable, saveFailure, stillToSend, withOutbox } from './outbox';
+import { Queued, isRetryable, classifySaveFailure, stillToSend, withOutbox } from './outbox';
 
 const q = (cid: string): Queued => ({ cid, change: { op: 'removeItem', id: cid } });
 
@@ -33,7 +33,7 @@ describe('what a failed send means', () => {
     // Anything else (storage failing, say) isn't the change's fault either
     [new Error('IndexedDB is closed'), 'retry'],
   ])('%s: %s', (err, kind) => {
-    expect(saveFailure(err)).toBe(kind);
+    expect(classifySaveFailure(err)).toBe(kind);
   });
 
   test('the service worker and pending creates retry the same answers from the server', () => {

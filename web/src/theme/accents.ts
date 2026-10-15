@@ -1,5 +1,5 @@
 import { MantineColorsTuple } from '@mantine/core';
-import type { Accent } from '../../../shared/api';
+import { ACCENTS as ACCENT_NAMES, type Accent } from '../../../shared/api';
 
 // The accent colours someone can pick in Settings. Each ramp is in OKLCH on the same
 // lightness scale as the default blurple, so every accent reads the same. Shade 4 is
@@ -97,7 +97,5 @@ export const ACCENTS = {
   },
 } satisfies Record<Accent, { label: string; ramp: MantineColorsTuple }>;
 
-export type { Accent };
-
 export const isAccent = (value: unknown): value is Accent =>
-  typeof value === 'string' && value in ACCENTS;
+  (ACCENT_NAMES as readonly unknown[]).includes(value);

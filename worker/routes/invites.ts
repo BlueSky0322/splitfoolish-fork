@@ -4,64 +4,11 @@
 
 import { Hono } from 'hono';
 import type { AcceptResult, JoinResult, MyInvite } from '../../shared/api';
-import { AppEnv, ID, INVITE_TTL_MS, clientId, getRole, notifySplit } from '../app';
-import { json, newId, fail, ok } from '../http';
-import { newInviteToken, touchSplit } from '../split-content';
+import { AppEnv, ID, getRole } from '../app';
+import { json, fail, ok } from '../http';
+import { addEditor, openInvite } from '../sharing';
 
 const invites = new Hono<AppEnv>();
-
-/**
- * Adds an editor (no-op if already a member), clears any pending invite for them, and
- * puts them in the bill: a guest with their name becomes them, otherwise they're added
- */
-async function addEditor(db: D1Database, splitId: string, email: string) {
-  const [profileRows, peopleRows] = await db.batch<Record<string, unknown>>([
-    db.prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?').bind(email),
-    db
-      .prepare('SELECT id, name, member_email AS memberEmail FROM people WHERE split_id = ?')
-      .bind(splitId),
-  ]);
-  const people = peopleRows.results as { id: string; name: string; memberEmail: string | null }[];
-  const displayName = (profileRows.results[0] as { displayName: string | null } | undefined)
-    ?.displayName;
-
-  const statements = [
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO split_members (split_id, email, role, joined_at, share_token)
-         VALUES (?, ?, 'editor', ?, ?)`,
-      )
-      .bind(splitId, email, Date.now(), newInviteToken()),
-    db.prepare('DELETE FROM split_invites WHERE split_id = ? AND email = ?').bind(splitId, email),
-  ];
-
-  if (!people.some((p) => p.memberEmail === email)) {
-    const name = displayName?.trim() || email.split('@')[0];
-    const guest = people.find(
-      (p) => p.memberEmail == null && p.name.toLowerCase() === name.toLowerCase(),
-    );
-    if (guest) {
-      statements.push(
-        db.prepare('UPDATE people SET member_email = ? WHERE id = ?').bind(email, guest.id),
-      );
-    } else {
-      // Names are unique in a split; their account name is shown either way
-      const taken = new Set(people.map((p) => p.name));
-      const unique = [name, email].find((n) => !taken.has(n)) ?? `${email} ${newId()}`;
-      statements.push(
-        db
-          .prepare(
-            `INSERT OR IGNORE INTO people (id, split_id, name, member_email, position)
-             VALUES (?1, ?2, ?3, ?4,
-               (SELECT coalesce(max(position), -1) + 1 FROM people WHERE split_id = ?2))`,
-          )
-          .bind(newId(), splitId, unique, email),
-      );
-    }
-    statements.push(touchSplit(db, splitId));
-  }
-  await db.batch(statements);
-}
 
 invites.get('/invites', async (c) => {
   const db = c.env.DB;
@@ -141,17 +88,16 @@ invites.post(`/invites/:inviteId${ID}/:action{accept|decline}`, async (c) => {
   const isInvitee = invite?.email === email;
   const isApprover = invite?.needsApproval === 1 && invite.owner === email;
   if (invite == null || (!isInvitee && !isApprover)) return fail(GONE, 404);
+  // Each of these changes the owner's list of who's waiting, or who's in
+  c.set('changedSplit', invite.splitId);
 
   if (!accept) {
     await db.prepare('DELETE FROM split_invites WHERE id = ?').bind(inviteId).run();
-    // The owner's list of who's waiting changes
-    notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
     return ok();
   }
   if (isApprover) {
     // Approving joins them; they asked, so there's nothing more for them to accept
     await addEditor(db, invite.splitId, invite.email);
-    notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
     return json<AcceptResult>({ id: invite.splitId });
   }
   if (invite.needsApproval === 1) {
@@ -159,7 +105,6 @@ invites.post(`/invites/:inviteId${ID}/:action{accept|decline}`, async (c) => {
   }
   // Joining also clears the invite, so accepting twice lands in the split either way
   await addEditor(db, invite.splitId, email);
-  notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
   return json<AcceptResult>({ id: invite.splitId });
 });
 
@@ -188,46 +133,13 @@ invites.post(`/join/:token${ID}`, async (c) => {
     return json<JoinResult>({ status: 'member', id: split.id });
   }
 
-  // One per person per split: opening a link again keeps it, an expired one starts over,
-  // and an invite from the owner's link is never turned back into a request
-  const now = Date.now();
-  const live = 'expires_at > ?5';
-  await db
-    .prepare(
-      `INSERT INTO split_invites
-         (id, split_id, email, invited_by, needs_approval, created_at, expires_at)
-       VALUES (?1, ?2, ?3, ?4, ?6, ?5, ?7)
-       ON CONFLICT (split_id, email) DO UPDATE SET
-         id = CASE WHEN ${live} THEN id ELSE excluded.id END,
-         invited_by = CASE WHEN ${live} AND needs_approval <= excluded.needs_approval
-           THEN invited_by ELSE excluded.invited_by END,
-         needs_approval = CASE WHEN ${live} THEN min(needs_approval, excluded.needs_approval)
-           ELSE excluded.needs_approval END,
-         created_at = CASE WHEN ${live} THEN created_at ELSE excluded.created_at END,
-         expires_at = CASE WHEN ${live} THEN expires_at ELSE excluded.expires_at END`,
-    )
-    .bind(
-      newId(),
-      split.id,
-      email,
-      split.sharer ?? split.owner,
-      now,
-      split.sharer == null ? 0 : 1,
-      now + INVITE_TTL_MS,
-    )
-    .run();
-  const invite = await db
-    .prepare(
-      'SELECT id, needs_approval AS needsApproval FROM split_invites WHERE split_id = ? AND email = ?',
-    )
-    .bind(split.id, email)
-    .first<{ id: string; needsApproval: number }>();
+  const invite = await openInvite(db, split.id, email, split);
   // Shows up in the owner's list of who's waiting
-  notifySplit(c.env, c.executionCtx, split.id, clientId(c.req.raw));
+  c.set('changedSplit', split.id);
   return json<JoinResult>({
-    status: invite!.needsApproval ? 'requested' : 'invited',
+    status: invite.needsApproval ? 'requested' : 'invited',
     id: split.id,
-    inviteId: invite!.id,
+    inviteId: invite.id,
   });
 });
 

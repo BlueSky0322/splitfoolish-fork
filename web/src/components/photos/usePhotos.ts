@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { api } from '../../api';
-import { MetaChanges, SplitMeta } from '../../split/useSplit';
+import { MetaChanges } from '../../split/useSplit';
+import type { SplitMeta } from '../../split/state';
 import { shrinkImage } from '../../utils/image';
 import type { Attachment } from '../../../../shared/api';
 import { showError } from '../../utils/notify';

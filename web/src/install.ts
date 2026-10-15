@@ -1,3 +1,4 @@
+import { quietly } from './utils/quietly';
 // Installing Splitfoolish as an app. Chrome, Edge and Android offer an install prompt the
 // app can open (beforeinstallprompt); Safari on iPhone and iPad has none, so it's
 // "Share, then Add to Home Screen". Nothing is offered once it's installed, or opened
@@ -34,20 +35,11 @@ const set = (patch: Partial<InstallState>) => {
 const INSTALLED_KEY = 'sf-installed';
 
 /** Installed on this device before, though now open in a browser tab */
-const installedBefore = () => {
-  try {
-    return localStorage.getItem(INSTALLED_KEY) === '1';
-  } catch {
-    return false;
-  }
-};
+const installedBefore = () => quietly(() => localStorage.getItem(INSTALLED_KEY)) === '1';
 
 const rememberInstalled = () => {
-  try {
-    localStorage.setItem(INSTALLED_KEY, '1');
-  } catch {
-    // Forgotten next time; the browser stops offering it anyway
-  }
+  // Forgotten next time if storage is unavailable; the browser stops offering it anyway
+  quietly(() => localStorage.setItem(INSTALLED_KEY, '1'));
   set({ canPrompt: false, installed: true });
 };
 
@@ -76,11 +68,7 @@ export function trackInstall() {
     e.preventDefault();
     deferred = e as InstallPromptEvent;
     // Offered again: it was uninstalled since
-    try {
-      localStorage.removeItem(INSTALLED_KEY);
-    } catch {
-      // ignore
-    }
+    quietly(() => localStorage.removeItem(INSTALLED_KEY));
     set({ canPrompt: true, installed: standalone() });
   });
   window.addEventListener('appinstalled', () => {

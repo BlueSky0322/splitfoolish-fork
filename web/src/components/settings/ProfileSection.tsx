@@ -59,7 +59,7 @@ const ProfileSection = ({ track }: { track: Track }) => {
   const removeAvatar = () => {
     const before = profile.avatarVersion;
     patch((p) => ({ ...p, avatarVersion: null, avatarPreview: null }));
-    track(api.removeAvatar()).catch((err) => {
+    track(api.deleteAvatar()).catch((err) => {
       patch((p) => ({ ...p, avatarVersion: before }));
       showError(err, 'Could not remove your picture');
     });

@@ -28,9 +28,17 @@ const onceOnline = () =>
     window.addEventListener('online', () => resolve(), { once: true }),
   );
 
+/** Whichever comes first: the delay, or the connection coming back */
 const wait = (ms: number) =>
-  // Whichever comes first: the delay, or the connection coming back
-  Promise.race([new Promise<void>((r) => setTimeout(r, ms)), onceOnline()]);
+  new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      window.removeEventListener('online', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    window.addEventListener('online', done);
+  });
 
 /** Sends one create; true once the server has it, false to try again later */
 const sendCreateOnce = (create: PendingCreate) =>

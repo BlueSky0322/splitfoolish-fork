@@ -29,11 +29,7 @@ import {
   THEMES,
 } from '../shared/api';
 import type { Role } from '../shared/types';
-import { json, fail, isConstraintError } from './http';
-
-export const CURRENCY = /^[A-Z]{3}$/;
-
-export type { PaymentMethod };
+import { CURRENCY, json, fail, isConstraintError } from './http';
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {
@@ -134,19 +130,21 @@ export function settingsStatements(db: D1Database, email: string, changes: Setti
   ];
 }
 
-/** Checks the settings in a request; returns the changes, or why they're refused */
-function readSettings(raw: unknown): SettingChanges | string {
-  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return 'Invalid settings';
+/** Checks the settings in a request; returns the changes, or the refusal */
+function readSettings(raw: unknown): SettingChanges | Response {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return fail('Invalid settings', 400);
+  }
   const changes: SettingChanges = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (!Object.hasOwn(SETTINGS, key)) return `Unknown setting ${key}`;
+    if (!Object.hasOwn(SETTINGS, key)) return fail(`Unknown setting ${key}`, 400);
     const spec = SETTINGS[key as SettingKey];
     if (spec.values == null) {
       if (value !== null && (typeof value !== 'string' || !CURRENCY.test(value))) {
-        return 'Invalid currency';
+        return fail('Invalid currency', 400);
       }
     } else if (!(spec.values as readonly unknown[]).includes(value)) {
-      return `Invalid ${key}`;
+      return fail(`Invalid ${key}`, 400);
     }
     changes[key as SettingKey] = value as string | boolean | null;
   }
@@ -174,7 +172,7 @@ export async function patchProfile(db: D1Database, email: string, body: Record<s
 
   if ('settings' in body) {
     const changes = readSettings(body.settings);
-    if (typeof changes === 'string') return fail(changes, 400);
+    if (changes instanceof Response) return changes;
     statements.push(...settingsStatements(db, email, changes));
   }
 

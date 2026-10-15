@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { SplitItem, Person } from './state';
+import { SplitItem } from './state';
+import type { Person } from '../../../shared/types';
 import { findMe, computeTotals } from './derive';
 
 const ann: Person = { id: 'a', name: 'Ann', memberEmail: 'ann@example.com' };

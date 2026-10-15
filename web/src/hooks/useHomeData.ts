@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { HOME_KEY, HomeData, fetchHome, readSavedCopy, toHomeData } from '../home-data';
+import { HOME_KEY, HomeData, fetchHome, showSavedCopy, toHomeData } from '../home-data';
 
 // My splits and pending invites for the screens that show them (see home-data.ts)
 
@@ -11,7 +11,7 @@ export function useHomeDataSnapshot(): HomeData {
 }
 
 export function useHomeData(): HomeData {
-  useEffect(readSavedCopy, []);
+  useEffect(showSavedCopy, []);
   const { data, isError } = useQuery({ queryKey: HOME_KEY, queryFn: fetchHome });
   return toHomeData(data, isError);
 }

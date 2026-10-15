@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LAST_PAGE_KEY } from '../offline/cache';
+import { quietly } from '../utils/quietly';
 
 export type Route =
   | { view: 'home'; tab: string | null }
@@ -30,11 +31,8 @@ function rememberPage() {
   if (params.has('join')) return;
   for (const key of TRANSIENT) params.delete(key);
   const search = params.toString();
-  try {
-    localStorage.setItem(LAST_PAGE_KEY, search ? `?${search}` : '');
-  } catch {
-    // Storage can be unavailable; the app opens on My splits then
-  }
+  // Without storage, the app opens on My splits
+  quietly(() => localStorage.setItem(LAST_PAGE_KEY, search ? `?${search}` : ''));
 }
 
 /**
@@ -43,7 +41,8 @@ function rememberPage() {
  * particular page, keeps its own address. Called once at start, before the first render.
  */
 export function restoreLastPage() {
-  try {
+  // Without storage, the app opens where the address says
+  quietly(() => {
     const fresh = sessionStorage.getItem(SESSION_KEY) == null;
     sessionStorage.setItem(SESSION_KEY, '1');
     if (!fresh || window.location.search !== '') return;
@@ -51,9 +50,7 @@ export function restoreLastPage() {
     if (last?.startsWith('?')) {
       window.history.replaceState(null, '', `${window.location.pathname}${last}`);
     }
-  } catch {
-    // Storage can be unavailable; the app opens where the address says
-  }
+  });
 }
 
 export function navigate(search: string, { replace = false } = {}) {

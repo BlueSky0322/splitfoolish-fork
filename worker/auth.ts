@@ -31,14 +31,18 @@ interface JwtPayload {
   email?: unknown;
 }
 
-/** A token part as JSON, or null when it isn't valid base64url JSON */
-function decodeJson<T>(s: string): T | null {
+/** What `decode` returns, or null when the token part isn't valid base64url or JSON */
+function tryDecode<T>(decode: () => T): T | null {
   try {
-    return JSON.parse(new TextDecoder().decode(decodeBase64Url(s))) as T;
+    return decode();
   } catch {
     return null;
   }
 }
+
+/** A token part as JSON, or null when it can't be read */
+const decodeJson = <T>(s: string) =>
+  tryDecode(() => JSON.parse(new TextDecoder().decode(decodeBase64Url(s))) as T);
 
 async function getSigningKey(certsUrl: string, kid: string): Promise<CryptoKey | undefined> {
   const fresh =
@@ -78,17 +82,17 @@ async function verifyAccessJwt(
   if (parts.length !== 3) return null;
   const [rawHeader, rawPayload, rawSignature] = parts;
 
-  // A token that can't be read is simply not valid; failing to fetch the team's keys is
-  // an outage, which reaches the error handler instead of looking like being signed out
   const header = decodeJson<JwtHeader>(rawHeader);
   // Always verified as RS256 with the team's key, whatever alg the token claims
   if (typeof header?.kid !== 'string') return null;
 
   const team = teamDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  // A token that can't be read is simply not valid; failing to fetch the team's keys is
+  // an outage, which reaches the error handler instead of looking like being signed out
   const key = await getSigningKey(`https://${team}/cdn-cgi/access/certs`, header.kid);
   if (key == null) return null;
 
-  const signature = readable(() => decodeBase64Url(rawSignature));
+  const signature = tryDecode(() => decodeBase64Url(rawSignature));
   if (signature == null) return null;
   const valid = await crypto.subtle
     .verify(
@@ -111,15 +115,6 @@ async function verifyAccessJwt(
   if (typeof payload.email !== 'string' || payload.email === '') return null;
 
   return payload.email.toLowerCase();
-}
-
-/** What `decode` returns, or null when the token part isn't valid base64url or JSON */
-function readable<T>(decode: () => T): T | null {
-  try {
-    return decode();
-  } catch {
-    return null;
-  }
 }
 
 const readCookie = (req: Request, name: string) =>

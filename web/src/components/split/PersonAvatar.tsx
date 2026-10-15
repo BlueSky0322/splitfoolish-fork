@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { Person } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import UserAvatar from '../ui/UserAvatar';
 
 /** Profile picture versions by account email, for people linked to an account */

@@ -5,6 +5,7 @@ import { ReactNode, useState } from 'react';
 import { useInstall } from '../../hooks/useInstall';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import classes from './InstallApp.module.css';
+import { quietly } from '../../utils/quietly';
 
 // Getting people to install Splitfoolish as an app: a card on My splits they can put
 // off for a while, and an App section in Settings that's always there
@@ -13,13 +14,8 @@ const DISMISSED_KEY = 'sf-install-dismissed';
 /** "Not now" hides the card this long */
 const SNOOZE_MS = 30 * 24 * 60 * 60 * 1000;
 
-const snoozed = () => {
-  try {
-    return Date.now() - Number(localStorage.getItem(DISMISSED_KEY) ?? 0) < SNOOZE_MS;
-  } catch {
-    return false;
-  }
-};
+const snoozed = () =>
+  Date.now() - Number(quietly(() => localStorage.getItem(DISMISSED_KEY)) ?? 0) < SNOOZE_MS;
 
 type Platform = 'ios' | 'android';
 
@@ -137,11 +133,8 @@ export function InstallCard() {
   const [hidden, setHidden] = useState(snoozed);
   if (!install.available || hidden) return steps;
   const dismiss = () => {
-    try {
-      localStorage.setItem(DISMISSED_KEY, String(Date.now()));
-    } catch {
-      // Hidden for this visit only
-    }
+    // Without storage, hidden for this visit only
+    quietly(() => localStorage.setItem(DISMISSED_KEY, String(Date.now())));
     setHidden(true);
   };
   return (

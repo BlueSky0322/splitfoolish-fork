@@ -5,9 +5,12 @@ import { Root } from './Root.tsx';
 import { trackKeyboardInset } from './keyboard-inset';
 import { trackInstall } from './install';
 import { restoreLastPage } from './hooks/useRoute';
+import { syncWhenOnline } from './offline/sync';
 
 // Back to the page that was open last time, before anything reads the address
 restoreLastPage();
+// What's kept on this device while offline is sent once the connection is back
+syncWhenOnline();
 // Bottom sheets stay above the on-screen keyboard
 trackKeyboardInset();
 // The browser's install prompt comes once, early; keep it for the app's own buttons

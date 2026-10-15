@@ -21,6 +21,7 @@ import type {
 } from '../../shared/api';
 import type { PaymentMethod } from '../../shared/payments';
 import type { Change, Item as ApiItem } from '../../shared/types';
+import { newId } from './utils/id';
 
 /** The signed-in account, as this device holds it */
 export interface Profile extends ApiProfile {
@@ -38,6 +39,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The server's own explanation, written for the person using the app */
+    public explanation: string | null = null,
   ) {
     super(message);
   }
@@ -47,7 +50,7 @@ export class ApiError extends Error {
  * This tab, sent with every request so that when the server tells open splits about a
  * change, the tab that made it knows to ignore it
  */
-export const CLIENT_ID = crypto.randomUUID();
+export const CLIENT_ID = newId();
 
 async function request<T>(
   method: string,
@@ -66,16 +69,28 @@ async function request<T>(
     // Lets a call send something other than JSON, such as a photo
     ...init,
   });
-  const data = (await res.json().catch(() => ({}))) as unknown;
+  // Sent to the sign-in page: the session has run out
+  if (res.redirected) throw new ApiError(401, `${method} ${path} was sent to sign in`);
+  const data = (await res.json().catch(() => null)) as unknown;
   if (!res.ok) {
-    const { error } = data as Partial<ApiErrorBody>;
-    throw new ApiError(res.status, error ?? `${method} ${path} failed`);
+    const error = (data as Partial<ApiErrorBody> | null)?.error ?? null;
+    throw new ApiError(res.status, error ?? `${method} ${path} failed`, error);
   }
+  // Answered by something other than the API (a proxy, say): worth trying again, like a 5xx
+  if (data == null) throw new ApiError(502, `${method} ${path} didn't answer with JSON`);
   return data as T;
 }
 
+/** Sends a picture as the body, rather than JSON */
+const upload = <T>(method: string, path: string, picture: Blob) =>
+  request<T>(method, path, undefined, {
+    body: picture,
+    headers: { 'Content-Type': picture.type || 'image/jpeg' },
+  });
+
 const splitPath = (id: string) => `/api/splits/${encodeURIComponent(id)}`;
 
+// The server calls photos "attachments" (its table and paths); the app calls them photos
 export const api = {
   me: () => request<Profile>('GET', '/api/me'),
   updateMe: (patch: ProfilePatch) => request<Profile>('PATCH', '/api/me', patch),
@@ -84,16 +99,9 @@ export const api = {
     request<Profile>('PUT', '/api/me/payment-methods', { methods, preferredId }),
   /** Uploads a QR code method's image; done before saving the method itself */
   setPaymentQr: (methodId: string, image: Blob) =>
-    request<PaymentQrResult>('PUT', `/api/me/payment-qr/${methodId}`, undefined, {
-      body: image,
-      headers: { 'Content-Type': image.type || 'image/jpeg' },
-    }),
-  setAvatar: (photo: Blob) =>
-    request<AvatarResult>('PUT', '/api/me/avatar', undefined, {
-      body: photo,
-      headers: { 'Content-Type': photo.type || 'image/jpeg' },
-    }),
-  removeAvatar: () => request<Ok>('DELETE', '/api/me/avatar'),
+    upload<PaymentQrResult>('PUT', `/api/me/payment-qr/${methodId}`, image),
+  setAvatar: (photo: Blob) => upload<AvatarResult>('PUT', '/api/me/avatar', photo),
+  deleteAvatar: () => request<Ok>('DELETE', '/api/me/avatar'),
   listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
   /** Names of items in your splits, most recent first, with the category last given */
   itemNames: () => request<{ names: ItemNameUse[] }>('GET', '/api/item-names'),
@@ -110,20 +118,16 @@ export const api = {
     request<UpdateSplitResult>('PATCH', splitPath(id), patch),
   /** Uploads a photo of an item's receipt, or of the whole split when itemId is null */
   uploadPhoto: (id: string, photo: Blob, itemId: string | null) =>
-    request<Attachment>(
+    upload<Attachment>(
       'POST',
       `${splitPath(id)}/attachments${itemId ? `?itemId=${encodeURIComponent(itemId)}` : ''}`,
-      undefined,
-      { body: photo, headers: { 'Content-Type': photo.type || 'image/jpeg' } },
+      photo,
     ),
   deletePhoto: (id: string, attachmentId: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   setSplitPicture: (id: string, picture: Blob) =>
-    request<SplitPictureResult>('PUT', `${splitPath(id)}/picture`, undefined, {
-      body: picture,
-      headers: { 'Content-Type': picture.type || 'image/jpeg' },
-    }),
-  removeSplitPicture: (id: string) => request<Ok>('DELETE', `${splitPath(id)}/picture`),
+    upload<SplitPictureResult>('PUT', `${splitPath(id)}/picture`, picture),
+  deleteSplitPicture: (id: string) => request<Ok>('DELETE', `${splitPath(id)}/picture`),
   deleteSplit: (id: string) => request<Ok>('DELETE', splitPath(id)),
   resetInvite: (id: string) => request<InviteTokenResult>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>

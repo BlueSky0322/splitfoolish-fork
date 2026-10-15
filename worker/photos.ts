@@ -11,7 +11,7 @@ const MAX_QR_BYTES = 512_000;
 const MAX_PHOTOS_PER_SPLIT = 300;
 
 import type { Attachment, AvatarResult, PaymentQrResult, SplitPictureResult } from '../shared/api';
-import { json, newId, fail, ok, isConstraintError } from './http';
+import { json, newId, fail, notFound, ok, isConstraintError } from './http';
 import { ensureProfile } from './profiles';
 import type { Actor } from './app';
 
@@ -62,6 +62,9 @@ export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
        FROM attachments WHERE split_id = ? ORDER BY created_at`,
     )
     .bind(splitId);
+
+export const assembleAttachments = (result: D1Result<Record<string, unknown>>) =>
+  result.results as unknown as Attachment[];
 
 export async function uploadAttachment(
   db: D1Database,
@@ -122,7 +125,7 @@ export async function uploadAttachment(
   return json<Attachment>(attachment, 201);
 }
 
-export async function getAttachment(db: D1Database, splitId: string, id: string) {
+export async function serveAttachment(db: D1Database, splitId: string, id: string) {
   const row = await db
     .prepare(
       `SELECT a.content_type AS contentType, d.data FROM attachments a
@@ -130,7 +133,7 @@ export async function getAttachment(db: D1Database, splitId: string, id: string)
     )
     .bind(id, splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return fail('Not found', 404);
+  if (row == null) return notFound();
   return imageResponse(row.data, row.contentType);
 }
 
@@ -185,8 +188,7 @@ async function sharesSplit(db: D1Database, viewer: string, email: string) {
  * is saved (so a new method's id may not exist yet); an id that's someone else's is
  * refused.
  */
-export async function putPaymentQr(db: D1Database, email: string, id: string, req: Request) {
-  if (!/^[0-9a-f]{16}$/.test(id)) return fail('Invalid payment method', 400);
+export async function putPaymentQr(db: D1Database, id: string, email: string, req: Request) {
   const owner = await db
     .prepare(
       `SELECT email FROM payment_methods WHERE id = ?1
@@ -215,7 +217,7 @@ export async function putPaymentQr(db: D1Database, email: string, id: string, re
 }
 
 /** A payment method's QR code, seen by its owner and the people they share a split with */
-export async function getPaymentQr(db: D1Database, viewer: string, id: string) {
+export async function servePaymentQr(db: D1Database, id: string, viewer: string) {
   const row = await db
     .prepare(
       'SELECT email, content_type AS contentType, data FROM payment_qr_codes WHERE method_id = ?',
@@ -223,7 +225,7 @@ export async function getPaymentQr(db: D1Database, viewer: string, id: string) {
     .bind(id)
     .first<{ email: string; contentType: string; data: ArrayBuffer | number[] }>();
   if (row == null || !(await sharesSplit(db, viewer, row.email))) {
-    return fail('Not found', 404);
+    return notFound();
   }
   return imageResponse(row.data, row.contentType);
 }
@@ -234,13 +236,13 @@ export async function deleteAvatar(db: D1Database, email: string) {
 }
 
 /** Profile pictures are visible to their owner and to people they share a split with */
-export async function getAvatar(db: D1Database, viewer: string, email: string) {
-  if (!(await sharesSplit(db, viewer, email))) return fail('Not found', 404);
+export async function serveAvatar(db: D1Database, email: string, viewer: string) {
+  if (!(await sharesSplit(db, viewer, email))) return notFound();
   const row = await db
     .prepare('SELECT content_type AS contentType, data FROM avatars WHERE email = ?')
     .bind(email)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return fail('Not found', 404);
+  if (row == null) return notFound();
   return imageResponse(row.data, row.contentType);
 }
 
@@ -264,11 +266,11 @@ export async function deleteSplitPicture(db: D1Database, splitId: string) {
   return ok();
 }
 
-export async function getSplitPicture(db: D1Database, splitId: string) {
+export async function serveSplitPicture(db: D1Database, splitId: string) {
   const row = await db
     .prepare('SELECT content_type AS contentType, data FROM split_pictures WHERE split_id = ?')
     .bind(splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return fail('Not found', 404);
+  if (row == null) return notFound();
   return imageResponse(row.data, row.contentType);
 }

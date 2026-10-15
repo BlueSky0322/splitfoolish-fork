@@ -1,21 +1,26 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch } from 'react';
 import type { ItemInput } from '../api';
 import type { Item as ApiItem, Change } from '../../../shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
-import { atRate, removeBlocker } from './rules';
+import { atRate, removalBlocker } from './rules';
 import { SplitAction, SplitState, toApiItem, type SplitMeta } from './state';
+import type { MetaChanges } from './useSplit';
 
 // What can be done to an open split: each checks the change, shows it straight away
 // and queues it to be saved (see useSplit, which does the saving)
 
-/** Each returns false (after explaining why) when the change isn't allowed */
+/**
+ * Each returns true when the change was made and queued, false when it wasn't: a change
+ * that isn't allowed is explained with a notification, while one that would do nothing
+ * (an empty name, an unknown person) is just ignored
+ */
 export interface SplitActions {
   addPerson: (name: string, memberEmail?: string) => boolean;
   renamePerson: (personId: string, name: string) => boolean;
   /** "This is me": links a person to an account, or unlinks with null */
   linkPerson: (personId: string, memberEmail: string | null) => boolean;
-  /** fromItems also takes them off items they share; see removeBlocker for what's allowed */
+  /** fromItems also takes them off items they share; see removalBlocker for what's allowed */
   removePerson: (personId: string, fromItems?: boolean) => boolean;
   clearPeople: () => boolean;
   /**
@@ -44,8 +49,8 @@ export interface ActionDeps {
   meta: () => SplitMeta | null;
   dispatch: Dispatch<SplitAction>;
   /** Queues a change to be saved */
-  queue: (change: Change) => boolean;
-  setMeta: Dispatch<SetStateAction<SplitMeta | null>>;
+  queue: (change: Change) => void;
+  metaChanges: Pick<MetaChanges, 'removeMember' | 'setDistributor'>;
   /** The server works out something the app can't (say, a conversion): load once saved */
   reloadAfterSave: () => void;
 }
@@ -64,7 +69,8 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
     }
     const person = { id: newId(), name: trimmed, memberEmail: memberEmail ?? null };
     d.dispatch({ type: 'ADD_PERSON', payload: person });
-    return d.queue({ op: 'addPerson', ...person });
+    d.queue({ op: 'addPerson', ...person });
+    return true;
   },
   renamePerson: (personId, name) => {
     const trimmed = name.trim();
@@ -77,7 +83,8 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
       return refuse(`${trimmed} is already in this split`);
     }
     d.dispatch({ type: 'UPDATE_PERSON', payload: { id: personId, name: trimmed } });
-    return d.queue({ op: 'renamePerson', id: personId, name: trimmed });
+    d.queue({ op: 'renamePerson', id: personId, name: trimmed });
+    return true;
   },
   linkPerson: (personId, memberEmail) => {
     const people = d.current().people;
@@ -96,46 +103,52 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
       type: 'UPDATE_PERSON',
       payload: { id: personId, memberEmail, ...(displayName ? { name: displayName } : {}) },
     });
-    return d.queue({ op: 'linkPerson', id: personId, memberEmail });
+    d.queue({ op: 'linkPerson', id: personId, memberEmail });
+    return true;
   },
   removePerson: (personId, fromItems = false) => {
     const person = d.current().people.find((p) => p.id === personId);
     if (person == null) return false;
-    const blocker = removeBlocker(d.current(), personId, fromItems);
+    const blocker = removalBlocker(d.current(), personId, fromItems);
     if (blocker) return refuse(blocker);
     d.dispatch({ type: 'REMOVE_PERSON', payload: personId });
     // Someone with an account loses access too, and the share link changes
     const email = person.memberEmail;
     if (email != null && d.meta()?.members.some((m) => m.email === email && m.role !== 'owner')) {
-      d.setMeta((m) => (m ? { ...m, members: m.members.filter((x) => x.email !== email) } : m));
+      d.metaChanges.removeMember(email);
       d.reloadAfterSave();
     }
-    return d.queue({ op: 'removePerson', id: personId, fromItems });
+    d.queue({ op: 'removePerson', id: personId, fromItems });
+    return true;
   },
   clearPeople: () => {
     if (d.current().items.length > 0) {
       return refuse('Remove the items first, then clear the people.');
     }
     d.dispatch({ type: 'CLEAR_PEOPLE', payload: null });
-    return d.queue({ op: 'clearPeople' });
+    d.queue({ op: 'clearPeople' });
+    return true;
   },
   addItem: (input, id = newId(), createdAt = Date.now()) => {
     const item = { id, createdAt, ...input };
     d.dispatch({ type: 'ADD_ITEM', payload: item });
     // In another currency the server works out the amounts; show its numbers after
     if (input.original) d.reloadAfterSave();
-    return d.queue({ op: 'addItem', item });
+    d.queue({ op: 'addItem', item });
+    return true;
   },
   updateItem: (itemId, input) => {
     const existing = d.current().items.find((i) => i.id === itemId);
     const item = { id: itemId, createdAt: existing?.createdAt ?? Date.now(), ...input };
     d.dispatch({ type: 'UPDATE_ITEM', payload: item });
     if (input.original || existing?.original) d.reloadAfterSave();
-    return d.queue({ op: 'updateItem', item });
+    d.queue({ op: 'updateItem', item });
+    return true;
   },
   removeItem: (itemId) => {
     d.dispatch({ type: 'REMOVE_ITEM', payload: itemId });
-    return d.queue({ op: 'removeItem', id: itemId });
+    d.queue({ op: 'removeItem', id: itemId });
+    return true;
   },
   moveItemsToDay: (itemIds, day) => {
     const ids = new Set(itemIds);
@@ -155,23 +168,27 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
     return moved;
   },
   setDistributor: (personId) => {
-    d.setMeta((m) => (m ? { ...m, distributorId: personId } : m));
-    return d.queue({ op: 'setDistributor', personId });
+    d.metaChanges.setDistributor(personId);
+    d.queue({ op: 'setDistributor', personId });
+    return true;
   },
   restoreItem: (item) => {
     if (d.current().items.some((i) => i.id === item.id)) return false;
     d.dispatch({ type: 'ADD_ITEM', payload: item });
-    return d.queue({ op: 'addItem', item });
+    d.queue({ op: 'addItem', item });
+    return true;
   },
   clearItems: () => {
     d.dispatch({ type: 'CLEAR_ITEMS', payload: null });
-    return d.queue({ op: 'clearItems' });
+    d.queue({ op: 'clearItems' });
+    return true;
   },
   refreshRates: (currencies) => {
     if (currencies.length === 0) return false;
     // The server fetches the rates; its numbers show once saved
     d.reloadAfterSave();
-    return d.queue({ op: 'refreshRates', currencies });
+    d.queue({ op: 'refreshRates', currencies });
+    return true;
   },
   setRate: (currency, rate) => {
     if (rate == null) {
@@ -182,6 +199,7 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => ({
         d.dispatch({ type: 'UPDATE_ITEM', payload: toApiItem(atRate(item, rate)) });
       }
     }
-    return d.queue({ op: 'setRate', currency, rate });
+    d.queue({ op: 'setRate', currency, rate });
+    return true;
   },
 });

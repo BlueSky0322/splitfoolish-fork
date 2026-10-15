@@ -4,6 +4,7 @@
 // the new currency become plain again, so switching back restores the exact amounts.
 
 import { RateSource, convertCents, convertParts } from '../shared/rates';
+import type { SplitMode } from '../shared/settle';
 import { Rate } from './rates';
 
 /** Started (and its time recorded) when the change is made; retried when this old */
@@ -12,7 +13,7 @@ export const RETRY_AFTER_MS = 30_000;
 interface ItemRow {
   id: string;
   costCents: number;
-  splitMode: string;
+  splitMode: SplitMode;
   originalCurrency: string | null;
   originalCents: number | null;
   rate: number | null;

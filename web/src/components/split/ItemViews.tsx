@@ -1,7 +1,8 @@
 import { ActionIcon, UnstyledButton, UnstyledButtonProps } from '@mantine/core';
 import { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
-import { SplitItem, Person } from '../../split/state';
+import { SplitItem } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import { SplitTotals } from '../../split/derive';
 import { categoryIcon } from '../../split/categories';
 import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
@@ -17,7 +18,7 @@ interface ItemViewProps {
   groups: ItemGroup[];
   /** Hide group headers when there's only the one "all items" group */
   grouped: boolean;
-  summary: SplitTotals;
+  totals: SplitTotals;
   me: Person | null;
   people: Person[];
   currency: string;
@@ -124,9 +125,9 @@ const who = (item: SplitItem, people: Person[]) =>
     ? 'everyone'
     : item.participants.map((p) => p.name).join(', ');
 
-function useMyShare(summary: SplitTotals, me: Person | null) {
+function useMyShare(totals: SplitTotals, me: Person | null) {
   return (item: SplitItem) =>
-    me == null ? null : summary.sharesByItem.get(item.id)?.get(me.id) ?? 0;
+    me == null ? null : totals.sharesByItem.get(item.id)?.get(me.id) ?? 0;
 }
 
 function RowActions({
@@ -168,7 +169,7 @@ export function ItemCards({
   photoCounts,
   groups,
   grouped,
-  summary,
+  totals,
   me,
   people,
   currency,
@@ -177,7 +178,7 @@ export function ItemCards({
   onDelete,
   selection,
 }: ItemViewProps) {
-  const myShare = useMyShare(summary, me);
+  const myShare = useMyShare(totals, me);
   return (
     <div
       className={classes.groups}
@@ -311,7 +312,7 @@ export function ItemTable({
   photoCounts,
   groups,
   grouped,
-  summary,
+  totals,
   me,
   people,
   currency,
@@ -324,7 +325,7 @@ export function ItemTable({
   totalCents,
   selection,
 }: ItemTableProps) {
-  const myShare = useMyShare(summary, me);
+  const myShare = useMyShare(totals, me);
   const sort = { sortKey, sortDir, onSort };
 
   return (
@@ -490,7 +491,7 @@ export function ItemTable({
         {mobile ? (
           <>
             <span className={classes.num}>
-              {me ? ((summary.balances.get(me.id)?.shareCents ?? 0) / 100).toFixed(2) : ''}
+              {me ? ((totals.balances.get(me.id)?.shareCents ?? 0) / 100).toFixed(2) : ''}
             </span>
             <span className={classes.num}>{(totalCents / 100).toFixed(2)}</span>
           </>
@@ -499,7 +500,7 @@ export function ItemTable({
             <span />
             <span />
             <span className={`${classes.num} sf-muted`}>
-              {me ? formatMoney(summary.balances.get(me.id)?.shareCents ?? 0, currency) : ''}
+              {me ? formatMoney(totals.balances.get(me.id)?.shareCents ?? 0, currency) : ''}
             </span>
             <span className={classes.num}>{formatMoney(totalCents, currency)}</span>
           </>

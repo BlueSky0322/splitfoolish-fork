@@ -51,12 +51,10 @@ const defaultDeps = (): Deps => ({
   now: Date.now,
 });
 
-/** Wise first (the default), or the ECB first for people who picked it in Settings */
-export type { RatePreference };
-
 export interface RateOptions {
   /** Use a cached rate younger than this rather than fetching */
   maxAgeMs?: number;
+  /** Wise first (the default), or the ECB first for people who picked it in Settings */
   prefer?: RatePreference;
   /** The network, cache and clock; tests stand in for them */
   deps?: Deps;

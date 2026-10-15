@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS } from '../../../../shared/api';
+import { DEFAULT_SETTINGS, ITEMS_GROUPS, type Settings } from '../../../../shared/api';
 import { useProfile } from '../../profile/ProfileContext';
 import { GroupBy, MOBILE_SORTS, SortDir, SortKey } from '../../split/grouping';
 
@@ -6,13 +6,13 @@ import { GroupBy, MOBILE_SORTS, SortDir, SortKey } from '../../split/grouping';
 // account so every split and device shows them the same way
 
 export interface ViewPrefs {
-  view: 'card' | 'table';
+  view: Settings['itemsView'];
   groupBy: GroupBy;
   sortKey: SortKey;
   sortDir: SortDir;
 }
 
-export const GROUP_ORDER: GroupBy[] = ['none', 'day', 'payer', 'category'];
+export const GROUP_ORDER: readonly GroupBy[] = ITEMS_GROUPS;
 // Item and payer read best A to Z; amounts largest first
 const FIRST_DIR: Record<SortKey, SortDir> = {
   name: 'asc',

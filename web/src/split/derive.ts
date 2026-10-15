@@ -6,7 +6,8 @@ import {
   itemShares,
   transfers,
 } from '../../../shared/settle';
-import { SplitItem, Person } from './state';
+import { SplitItem } from './state';
+import type { Person } from '../../../shared/types';
 import { toCents } from '../../../shared/rates';
 
 // Everything the split view shows that is worked out from its people and items. The

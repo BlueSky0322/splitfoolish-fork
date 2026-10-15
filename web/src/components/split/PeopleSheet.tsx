@@ -2,7 +2,7 @@ import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
 import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { useSplitActions } from '../../split/useSplit';
-import { Person } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import { nameFor } from '../../profile/ProfileContext';
 import { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
@@ -12,11 +12,11 @@ import classes from './PeopleSheet.module.css';
 import { MAX_NAME_LENGTH } from '../../../../shared/types';
 import type { SplitInvite, SplitMember } from '../../../../shared/api';
 import { showRefusal } from '../../utils/notify';
-import { removeBlocker } from '../../split/rules';
+import { removalBlocker } from '../../split/rules';
 import { useSplitState } from '../../split/SplitStateContext';
 
 interface PeopleSheetProps {
-  summary: SplitTotals;
+  totals: SplitTotals;
   currency: string;
   myEmail: string | null;
   members: SplitMember[];
@@ -52,7 +52,7 @@ function BalanceText({
 
 function PersonPage({
   person,
-  summary,
+  totals,
   currency,
   myEmail,
   meId,
@@ -61,7 +61,7 @@ function PersonPage({
   onShowItems,
 }: {
   person: Person;
-  summary: SplitTotals;
+  totals: SplitTotals;
   currency: string;
   myEmail: string | null;
   meId: string | null;
@@ -69,14 +69,14 @@ function PersonPage({
   onBack: () => void;
   onShowItems: (personId: string) => void;
 }) {
-  const actions = useSplitActions()!;
+  const actions = useSplitActions();
   const { state } = useSplitState();
   const [name, setName] = useState(person.name);
   // What removing them would do, while waiting for a yes
   const [confirming, setConfirming] = useState<{ text: string; fromItems: boolean } | null>(null);
   const byId = new Map(state.people.map((p) => [p.id, p]));
-  const balance = summary.balances.get(person.id);
-  const theirs = summary.transfers.filter((t) => t.fromId === person.id || t.toId === person.id);
+  const balance = totals.balances.get(person.id);
+  const theirs = totals.transfers.filter((t) => t.fromId === person.id || t.toId === person.id);
   const itemCount = state.items.filter(
     (i) => i.payer.id === person.id || i.participants.some((p) => p.id === person.id),
   ).length;
@@ -87,9 +87,9 @@ function PersonPage({
   const losesAccess = hasAccount && !isMe;
 
   const remove = () => {
-    const plain = removeBlocker(state, person.id, false);
+    const plain = removalBlocker(state, person.id, false);
     // Can't go even from shared items (they paid, or it would empty an item): explain why
-    const blocker = plain == null ? null : removeBlocker(state, person.id, true);
+    const blocker = plain == null ? null : removalBlocker(state, person.id, true);
     if (blocker != null) {
       showRefusal(blocker);
       return;
@@ -150,7 +150,7 @@ function PersonPage({
           <BalanceText
             cents={balance?.balanceCents ?? 0}
             currency={currency}
-            hasItems={summary.hasItems}
+            hasItems={totals.hasItems}
           />
         </div>
       </div>
@@ -262,7 +262,7 @@ function PersonPage({
 // Everyone in the bill. People with an account go by their own name and picture;
 // guests (no account) are named by whoever adds them. Tap someone for their page.
 const PeopleSheet = ({
-  summary,
+  totals,
   currency,
   myEmail,
   members,
@@ -271,7 +271,7 @@ const PeopleSheet = ({
   initialPersonId,
   onShowItems,
 }: PeopleSheetProps) => {
-  const actions = useSplitActions()!;
+  const actions = useSplitActions();
   const { state } = useSplitState();
   const [openId, setOpenId] = useState<string | null>(initialPersonId ?? null);
   const [newName, setNewName] = useState('');
@@ -283,7 +283,7 @@ const PeopleSheet = ({
       <PersonPage
         key={open.id}
         person={open}
-        summary={summary}
+        totals={totals}
         currency={currency}
         myEmail={myEmail}
         meId={meId}
@@ -377,9 +377,9 @@ const PeopleSheet = ({
                   <div className={classes.sub}>{p.memberEmail ?? 'Guest'}</div>
                 </div>
                 <BalanceText
-                  cents={summary.balances.get(p.id)?.balanceCents ?? 0}
+                  cents={totals.balances.get(p.id)?.balanceCents ?? 0}
                   currency={currency}
-                  hasItems={summary.hasItems}
+                  hasItems={totals.hasItems}
                 />
                 <CaretRight
                   size={14}

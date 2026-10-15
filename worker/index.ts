@@ -12,9 +12,6 @@ import splits from './routes/splits';
 
 export { SplitRoom } from './room';
 
-/** A split's id in an API path, for the routes under /api/splits/:id */
-const SPLIT_PATH = /^\/api\/splits\/([A-Za-z0-9_-]{8,64})(?:\/|$)/;
-
 /**
  * True for a change (not a read) started by another site. The sign-in cookie rides
  * along with such requests, so without this a page elsewhere could, say, open a share
@@ -43,13 +40,14 @@ api.use('*', async (c, next) => {
   await next();
 });
 
-// Any change saved under a split tells the apps that have it open. Invites aren't under
-// /splits, so their routes do this themselves.
+// A route that saves a change to a split says which (changedSplit), and the apps that
+// have it open are told once it has succeeded
 api.use('*', async (c, next) => {
   await next();
-  if (c.req.method === 'GET' || c.req.method === 'HEAD' || c.res.status >= 400) return;
-  const id = new URL(c.req.url).pathname.match(SPLIT_PATH)?.[1];
-  if (id) notifySplit(c.env, c.executionCtx, id, clientId(c.req.raw));
+  const splitId = c.var.changedSplit;
+  if (splitId != null && c.res.status < 400) {
+    notifySplit(c.env, c.executionCtx, splitId, clientId(c.req.raw));
+  }
 });
 
 api.route('/', me);

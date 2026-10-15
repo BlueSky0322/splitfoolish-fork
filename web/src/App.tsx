@@ -1,5 +1,5 @@
 import { Button } from '@mantine/core';
-import { SignIn } from '@phosphor-icons/react';
+import { CloudSlash, SignIn } from '@phosphor-icons/react';
 import ConvertPage from './components/convert/ConvertPage';
 import JoinSplit from './components/JoinSplit';
 import StateCard from './components/ui/StateCard';
@@ -16,7 +16,7 @@ import { SplitStateProvider } from './split/SplitStateContext';
 // runs the user is known; /api/me just tells us who. Pages load alongside it.
 function App() {
   const route = useRoute();
-  const { profile, signedOut } = useProfile();
+  const { profile, signedOut, unreachable, retry } = useProfile();
 
   if (signedOut) {
     return (
@@ -25,6 +25,17 @@ function App() {
         title="You're signed out"
         body="Sign in again to see your splits."
         action={<Button onClick={() => window.location.reload()}>Sign in</Button>}
+      />
+    );
+  }
+
+  if (unreachable && profile == null) {
+    return (
+      <StateCard
+        icon={<CloudSlash size={36} />}
+        title="Couldn't reach Splitfoolish"
+        body="Something went wrong on our side, or with the connection. Try again in a moment."
+        action={<Button onClick={retry}>Try again</Button>}
       />
     );
   }

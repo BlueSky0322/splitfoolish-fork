@@ -1,6 +1,8 @@
 // Photos are shrunk in the browser before upload: phone photos are several MB, and a
 // receipt is perfectly readable at 1600px. The server stores up to 1.5 MB per photo.
 
+import { UserError } from './notify';
+
 const MAX_BYTES = 1_400_000;
 /** Profile pictures are small and square-ish; the server takes up to 256 KB */
 export const AVATAR = { maxSide: 512, maxBytes: 240_000 };
@@ -38,17 +40,17 @@ export async function shrinkImage(file: Blob, maxSide = 1600, maxBytes = MAX_BYT
     canvas.width = Math.max(1, Math.round(image.width * scale));
     canvas.height = Math.max(1, Math.round(image.height * scale));
     const ctx = canvas.getContext('2d');
-    if (ctx == null) throw new Error('Could not read that photo');
+    if (ctx == null) throw new UserError('Could not read that photo');
     // JPEG has no transparency: put PNG screenshots on white rather than black
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob = await toBlob(canvas, 'image/jpeg', 0.82);
-    if (blob == null) throw new Error('Could not read that photo');
+    if (blob == null) throw new UserError('Could not read that photo');
     if (blob.size <= maxBytes) return blob;
     scale *= 0.75;
   }
-  throw new Error('That photo is too large');
+  throw new UserError('That photo is too large');
 }
 
 /** Near-white or see-through: the frame some pictures come with */
@@ -112,16 +114,16 @@ export async function shrinkAvatar(file: Blob): Promise<Blob> {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = Math.max(1, out);
     const ctx = canvas.getContext('2d');
-    if (ctx == null) throw new Error('Could not read that picture');
+    if (ctx == null) throw new UserError('Could not read that picture');
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, sx, sy, side, side, 0, 0, canvas.width, canvas.height);
     const blob = await toBlob(canvas, 'image/jpeg', 0.85);
-    if (blob == null) throw new Error('Could not read that picture');
+    if (blob == null) throw new UserError('Could not read that picture');
     if (blob.size <= AVATAR.maxBytes) return blob;
     out = Math.round(out * 0.75);
   }
-  throw new Error('That picture is too large');
+  throw new UserError('That picture is too large');
 }
 
 interface DetectedCode {
@@ -174,7 +176,7 @@ export async function prepareQrCode(file: Blob): Promise<{ blob: Blob; cropped: 
   canvas.width = Math.max(1, Math.round(area.width * scale));
   canvas.height = Math.max(1, Math.round(area.height * scale));
   const ctx = canvas.getContext('2d');
-  if (ctx == null) throw new Error('Could not read that picture');
+  if (ctx == null) throw new UserError('Could not read that picture');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(image, area.x, area.y, area.width, area.height, 0, 0, canvas.width, canvas.height);
@@ -184,5 +186,5 @@ export async function prepareQrCode(file: Blob): Promise<{ blob: Blob; cropped: 
     const jpeg = await toBlob(canvas, 'image/jpeg', quality);
     if (jpeg != null && jpeg.size <= QR_MAX_BYTES) return { blob: jpeg, cropped: found != null };
   }
-  throw new Error('That picture is too large');
+  throw new UserError('That picture is too large');
 }

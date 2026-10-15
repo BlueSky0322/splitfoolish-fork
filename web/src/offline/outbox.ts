@@ -117,7 +117,7 @@ export function stillToSend(pending: Queued[], written: Set<string>, inOutbox: S
 }
 
 /** What a failed save means: the split is gone, the server refused it, or try again */
-export function saveFailure(err: unknown): 'gone' | 'refused' | 'retry' {
+export function classifySaveFailure(err: unknown): 'gone' | 'refused' | 'retry' {
   if (err instanceof ApiError && err.status === 404) return 'gone';
   if (err instanceof ApiError && !isRetryable(err)) return 'refused';
   return 'retry';

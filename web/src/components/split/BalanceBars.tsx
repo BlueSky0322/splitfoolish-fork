@@ -1,5 +1,5 @@
 import { Balance } from '../../../../shared/settle';
-import { Person } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import { formatSigned } from '../../utils/money';
 import classes from './Split.module.css';
 

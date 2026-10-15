@@ -41,12 +41,15 @@ export const fetchHome = async (): Promise<Loaded> => {
   return { splits: await withCreating(listed), invites };
 };
 
-let cacheRead = false;
+let savedCopyShown = false;
 
-/** Shows the copy saved on this device, unless a fresh one has already arrived */
-export function readSavedCopy() {
-  if (cacheRead) return;
-  cacheRead = true;
+/**
+ * Shows the copy saved on this device, unless a fresh one has already arrived. Once per
+ * page: after that, what's on screen is newer.
+ */
+export function showSavedCopy() {
+  if (savedCopyShown) return;
+  savedCopyShown = true;
   void readCache<Loaded>(CACHE_KEY).then(async (cached) => {
     if (cached == null) return;
     const splits = await withCreating(cached.splits);

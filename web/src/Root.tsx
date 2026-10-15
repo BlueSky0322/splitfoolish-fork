@@ -13,7 +13,7 @@ import App from './App.tsx';
 import './index.css';
 import { ProfileProvider, readAppearance } from './profile/ProfileContext.tsx';
 import { queryClient } from './query-client.ts';
-import { Accent } from './theme/accents.ts';
+import type { Accent } from '../../shared/api';
 import { buildTheme, cssVariablesResolver } from './theme/theme.ts';
 import './theme/tokens.css';
 

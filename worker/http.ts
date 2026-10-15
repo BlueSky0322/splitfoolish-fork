@@ -28,7 +28,8 @@ export const isConstraintError = (err: unknown) => String(err).includes('CONSTRA
 /** A new id for a row: 16 hex characters */
 export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 
-export { MAX_NAME_LENGTH };
+/** A currency code, like MYR */
+export const CURRENCY = /^[A-Z]{3}$/;
 
 /** A name as sent, trimmed; null when it's missing, empty or too long */
 export const readName = (value: unknown) => {

@@ -9,8 +9,8 @@ import {
 } from 'react';
 import { ApiError, api } from '../api';
 import type { Change } from '../../../shared/types';
-import { SplitState, toApiItem, type StoredItem, type SplitMeta } from './state';
-import { readCache, removeCache, writeCache } from '../offline/cache';
+import { SplitState, toApiItem, type SplitMeta } from './state';
+import { readCache, removeCache, splitCacheKey, writeCache } from '../offline/cache';
 import { whenCreated } from '../offline/pending-creates';
 import {
   Queued,
@@ -20,7 +20,7 @@ import {
   requestBackgroundSync,
   withOutbox,
   writeOutbox,
-  saveFailure,
+  classifySaveFailure,
   stillToSend,
 } from '../offline/outbox';
 import { queryClient } from '../query-client';
@@ -28,13 +28,10 @@ import { ITEM_NAMES_KEY } from './item-names';
 import { useSplitLive } from './useSplitLive';
 import type { SplitDetail, Attachment } from '../../../shared/api';
 import { reloadHomeData } from '../home-data';
-import { showRefusal, showError } from '../utils/notify';
+import { showError } from '../utils/notify';
 import { SplitActions, makeSplitActions } from './actions';
 import { newId } from '../utils/id';
 import { useSplitState } from './SplitStateContext';
-
-/** A split as this device keeps it: an older copy's items may predate some fields */
-type CachedSplit = Omit<SplitDetail, 'items'> & { items: StoredItem[] };
 
 /**
  * 'refreshing' means a cached copy is showing while the latest loads; 'offline' that
@@ -49,8 +46,6 @@ export type SyncStatus =
   | 'offline'
   | 'notfound';
 
-export type { SplitMeta };
-
 /** The ways the split page changes what it shows about the split besides its bill */
 export interface MetaChanges {
   addAttachment: (photo: Attachment) => void;
@@ -61,14 +56,22 @@ export interface MetaChanges {
   patchSettings: (
     changes: Partial<Pick<SplitMeta, 'name' | 'currency' | 'pictureVersion' | 'converting'>>,
   ) => void;
+  /** Someone who lost access when their person was removed */
+  removeMember: (email: string) => void;
+  /** Who everyone settles up through, or null for the fewest transfers */
+  setDistributor: (personId: string | null) => void;
   /** Shows a sharing change straight away; fetches it again if the server says no */
   changeSharing: (show: (meta: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => void;
 }
 
-/** Provided by the split page. Null outside it, e.g. in modals opened from elsewhere. */
+/** Provided by the split page */
 export const SplitActionsContext = createContext<SplitActions | null>(null);
 
-export const useSplitActions = () => useContext(SplitActionsContext);
+export function useSplitActions(): SplitActions {
+  const value = useContext(SplitActionsContext);
+  if (value == null) throw new Error('useSplitActions is only for inside the split page');
+  return value;
+}
 
 /** Changes are sent together once there's been a pause this long */
 const SAVE_DELAY_MS = 500;
@@ -91,7 +94,7 @@ export function useSplit(splitId: string) {
   const metaRef = useRef(meta);
   metaRef.current = meta;
 
-  const cacheKey = `split:${splitId}`;
+  const cacheKey = splitCacheKey(splitId);
   // What's on screen, for checking changes before they're queued
   const current = useRef<SplitState>(state);
   current.current = state;
@@ -110,7 +113,7 @@ export function useSplit(splitId: string) {
   const reloadAfterSave = useRef(false);
 
   const show = useCallback(
-    ({ people, items, ...rest }: CachedSplit) => {
+    ({ people, items, ...rest }: SplitDetail) => {
       setMeta(rest);
       dispatch({ type: 'LOAD_STATE', payload: { people, items } });
     },
@@ -144,10 +147,9 @@ export function useSplit(splitId: string) {
     const inOutbox = new Set((await readOutbox(splitId)).map((q) => q.cid));
     const { left, sentElsewhere } = stillToSend(pending.current, stored.current, inOutbox);
     pending.current = left;
-    const now = left;
-    await writeOutbox(splitId, now);
-    stored.current = new Set(now.map((q) => q.cid));
-    setWaiting(pending.current.length);
+    await writeOutbox(splitId, left);
+    stored.current = new Set(left.map((q) => q.cid));
+    setWaiting(left.length);
     return sentElsewhere;
   }, [splitId]);
 
@@ -163,7 +165,7 @@ export function useSplit(splitId: string) {
    */
   const failed = useCallback(
     async (err: unknown, batch: Queued[]): Promise<boolean> => {
-      const kind = saveFailure(err);
+      const kind = classifySaveFailure(err);
       // Removed from the split (or it was deleted) while it was open
       if (kind === 'gone') {
         pending.current = [];
@@ -176,7 +178,7 @@ export function useSplit(splitId: string) {
       }
       if (kind === 'refused') {
         // Refused: everything queued after it was built on top of it, so start over
-        showRefusal((err as Error).message);
+        showError(err, "Couldn't save that change");
         pending.current = [];
         await withOutbox(splitId, syncOutbox);
         reloadAfterSave.current = false;
@@ -271,12 +273,11 @@ export function useSplit(splitId: string) {
       if (isOffline()) {
         setStatus('offline');
         requestBackgroundSync();
-        return true;
+        return;
       }
       setStatus('saving');
       clearTimeout(timer.current);
       timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
-      return true;
     },
     [save, splitId, syncOutbox],
   );
@@ -289,7 +290,7 @@ export function useSplit(splitId: string) {
     setMeta(null);
 
     // Show the last-seen copy straight away, unless the server has already answered
-    void readCache<CachedSplit>(cacheKey).then((cached) => {
+    void readCache<SplitDetail>(cacheKey).then((cached) => {
       if (cached == null || cancelled || answered) return;
       show(cached);
       setStatus('refreshing');
@@ -406,6 +407,9 @@ export function useSplit(splitId: string) {
           m ? { ...m, attachments: m.attachments.filter((a) => a.itemId !== itemId) } : m,
         ),
       patchSettings: (changes) => setMeta((m) => (m ? { ...m, ...changes } : m)),
+      removeMember: (email) =>
+        setMeta((m) => (m ? { ...m, members: m.members.filter((x) => x.email !== email) } : m)),
+      setDistributor: (personId) => setMeta((m) => (m ? { ...m, distributorId: personId } : m)),
       changeSharing: (show, request) => {
         setMeta((m) => (m ? show(m) : m));
         request().catch((err: unknown) => {
@@ -425,10 +429,10 @@ export function useSplit(splitId: string) {
         meta: () => metaRef.current,
         dispatch,
         queue,
-        setMeta,
+        metaChanges,
         reloadAfterSave: () => (reloadAfterSave.current = true),
       }),
-    [dispatch, queue],
+    [dispatch, queue, metaChanges],
   );
 
   /** Tries a failed save again now, rather than waiting for the automatic retry */
@@ -436,8 +440,10 @@ export function useSplit(splitId: string) {
     void save();
   }, [save]);
 
-  /** Saves anything queued now, resolving once the server has it (photos need their item saved) */
-  /** Resolves once everything queued is saved (or refused); gives up after 20 seconds */
+  /**
+   * Saves anything queued now, resolving once everything is saved or refused (photos
+   * need their item saved first); gives up after 20 seconds
+   */
   const whenSaved = useCallback(() => {
     if (pending.current.length === 0 && !inFlight.current) return Promise.resolve();
     const saved = new Promise<void>((resolve) => savedWaiters.current.push(resolve));

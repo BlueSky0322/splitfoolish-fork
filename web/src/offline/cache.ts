@@ -1,4 +1,5 @@
 import { clear, del, get, set } from 'idb-keyval';
+import { quietly } from '../utils/quietly';
 
 // Last-seen copies of API responses (My splits, the profile, each split, and the
 // outbox of unsaved changes), kept in IndexedDB so pages show instantly on reload and
@@ -21,13 +22,6 @@ interface Entry<T> {
 }
 
 /** Storage can be unavailable (private browsing, quota); the app works without it */
-function quietly<T>(access: () => T): T | undefined {
-  try {
-    return access();
-  } catch {
-    return undefined;
-  }
-}
 const quietlyAsync = <T>(access: () => Promise<T>): Promise<T | undefined> =>
   access().catch(() => undefined);
 
@@ -61,6 +55,12 @@ export async function writeCache<T>(key: string, value: T): Promise<void> {
 
 export const removeCache = (key: string) => quietlyAsync(() => del(key));
 
+/**
+ * Where a split's last-seen copy (a SplitDetail) is kept. Versioned, so a copy saved in
+ * an older shape is never read: the split just loads afresh.
+ */
+export const splitCacheKey = (id: string) => `split-v2:${id}`;
+
 /** Call once the signed-in email is known; someone else's cache is dropped. */
 export async function setCacheUser(email: string): Promise<void> {
   if (lastEmail() !== email) {
@@ -87,7 +87,9 @@ export function assumeLastUser(): string | null {
   return email;
 }
 
+/** Empties this device's cache, which is then nobody's until setCacheUser */
 export async function clearCache(): Promise<void> {
+  user = null;
   quietly(() => {
     localStorage.removeItem(LAST_EMAIL_KEY);
     // The page they had open is theirs too

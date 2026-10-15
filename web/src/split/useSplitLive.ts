@@ -21,7 +21,6 @@ export function useSplitLive(splitId: string, enabled: boolean, onChange: () => 
     let ws: WebSocket | null = null;
     let retry = 0;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
-    let ping: ReturnType<typeof setInterval> | undefined;
     let closed = false;
     // Set after a disconnect, so the next connection catches up on what was missed
     let missed = false;
@@ -34,6 +33,7 @@ export function useSplitLive(splitId: string, enabled: boolean, onChange: () => 
       const url = `${location.origin.replace(/^http/, 'ws')}/api/splits/${encodeURIComponent(splitId)}/ws`;
       const socket = new WebSocket(url);
       ws = socket;
+      let ping: ReturnType<typeof setInterval> | undefined;
       socket.onopen = () => {
         if (missed) latest.current();
         missed = false;
@@ -55,7 +55,9 @@ export function useSplitLive(splitId: string, enabled: boolean, onChange: () => 
       };
       socket.onclose = () => {
         clearInterval(ping);
-        if (ws === socket) ws = null;
+        // A socket let go of earlier, closing after a new one opened: nothing to do
+        if (ws !== socket) return;
+        ws = null;
         missed = true;
         if (closed || !wanted()) return;
         reconnect = setTimeout(connect, Math.min(MAX_RETRY_MS, 1000 * 2 ** retry++));
@@ -64,7 +66,6 @@ export function useSplitLive(splitId: string, enabled: boolean, onChange: () => 
 
     const disconnect = () => {
       clearTimeout(reconnect);
-      clearInterval(ping);
       const socket = ws;
       ws = null;
       if (socket) {

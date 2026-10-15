@@ -1,6 +1,6 @@
 import { ReactNode, createContext, useCallback, useContext, useState } from 'react';
 import { startCreate } from '../offline/pending-creates';
-import { removeCache, writeCache } from '../offline/cache';
+import { removeCache, splitCacheKey, writeCache } from '../offline/cache';
 import { navigate } from '../hooks/useRoute';
 import { useProfile } from '../profile/ProfileContext';
 import { uploadSplitPicture } from '../split/pictures';
@@ -69,7 +69,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
       .catch((err) => {
         showError(err, 'Could not create the split');
         updateHomeData((data) => ({ splits: (data.splits ?? []).filter((x) => x.id !== id) }));
-        void removeCache(`split:${id}`);
+        void removeCache(splitCacheKey(id));
         if (new URLSearchParams(window.location.search).get('s') === id) navigate('');
       });
     // The picture shows from this device while it uploads after the split is created
@@ -77,7 +77,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
       uploadSplitPicture(id, picture).catch((err) => showError(err, 'Could not add the picture'));
     }
     // Shown from this copy until the server answers
-    void writeCache(`split:${id}`, detail).finally(() => {
+    void writeCache(splitCacheKey(id), detail).finally(() => {
       onDone();
       navigate(`?s=${id}`);
     });

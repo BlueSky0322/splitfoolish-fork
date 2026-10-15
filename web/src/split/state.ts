@@ -6,8 +6,6 @@ import { ImmerReducer } from 'use-immer';
 import type { Item as ApiItem, Person } from '../../../shared/types';
 import type { SplitDetail } from '../../../shared/api';
 
-export type { Person };
-
 /** Everything about the open split besides its bill: name, members, photos and so on */
 export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
 
@@ -22,13 +20,6 @@ export interface SplitState {
   items: SplitItem[];
 }
 
-/**
- * An item as this device may have it: copies cached before split modes, categories and
- * dates existed lack them
- */
-export type StoredItem = Omit<ApiItem, 'splitMode' | 'category' | 'createdAt'> &
-  Partial<Pick<ApiItem, 'splitMode' | 'category' | 'createdAt'>>;
-
 // Every action is a change made on this device. Items arrive as the API shapes them.
 export type SplitAction =
   | { type: 'ADD_PERSON'; payload: Person }
@@ -39,13 +30,13 @@ export type SplitAction =
   | { type: 'UPDATE_ITEM'; payload: ApiItem }
   | { type: 'REMOVE_ITEM'; payload: string }
   | { type: 'CLEAR_ITEMS'; payload: null }
-  | { type: 'LOAD_STATE'; payload: { people?: Person[]; items?: StoredItem[] } };
+  | { type: 'LOAD_STATE'; payload: { people: Person[]; items: ApiItem[] } };
 
 /**
  * The item with its people looked up. Null when its payer isn't in the bill, which only
  * a copy out of step with the server can have; it comes back with the next load.
  */
-export const toClientItem = (item: StoredItem, people: Person[]): SplitItem | null => {
+export const toClientItem = (item: ApiItem, people: Person[]): SplitItem | null => {
   const byId = new Map(people.map((p) => [p.id, p]));
   const payer = byId.get(item.payerId);
   if (payer == null) return null;
@@ -57,17 +48,17 @@ export const toClientItem = (item: StoredItem, people: Person[]): SplitItem | nu
     participants: item.participantIds
       .map((id) => byId.get(id))
       .filter((p): p is Person => p != null),
-    splitMode: item.splitMode ?? 'equal',
+    splitMode: item.splitMode,
     shares: item.shares,
     exact: item.exact,
-    category: item.category ?? null,
+    category: item.category,
     notes: item.notes ?? null,
-    createdAt: item.createdAt ?? 0,
+    createdAt: item.createdAt,
     original: item.original ?? null,
   };
 };
 
-const toClientItems = (items: StoredItem[], people: Person[]) =>
+const toClientItems = (items: ApiItem[], people: Person[]) =>
   items.map((i) => toClientItem(i, people)).filter((i): i is SplitItem => i != null);
 
 export const toApiItem = (item: SplitItem): ApiItem => ({
@@ -139,9 +130,9 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
       break;
 
     case 'LOAD_STATE': {
-      const people = action.payload.people ?? [];
+      const { people, items } = action.payload;
       draft.people = people;
-      draft.items = toClientItems(action.payload.items ?? [], people);
+      draft.items = toClientItems(items, people);
       break;
     }
 

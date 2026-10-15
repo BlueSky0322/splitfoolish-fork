@@ -11,6 +11,7 @@ import { DEFAULT_SETTINGS } from '../../../shared/api';
 import type { Change, Item } from '../../../shared/types';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
+import { clearCache } from '../offline/cache';
 
 // What jsdom doesn't have, and the app (or Mantine) uses
 function stubBrowser() {
@@ -50,8 +51,8 @@ function stubBrowser() {
 
 /** The data the stand-in server holds; tests set it up and read it back */
 export interface FakeServer {
-  /** False: every request is turned away, as when the sign-in has expired */
-  signedIn: boolean;
+  /** Signed out (the sign-in expired) or down: every request is turned away */
+  health: 'up' | 'signedOut' | 'down';
   me: Profile;
   splits: Map<string, SplitDetail>;
   invites: MyInvite[];
@@ -148,7 +149,8 @@ function serve(server: FakeServer) {
     const path = url.pathname;
     const splitMatch = path.match(/^\/api\/splits\/([^/]+)(\/changes)?$/);
 
-    if (!server.signedIn) return json({ error: 'Signed out' }, 401);
+    if (server.health === 'signedOut') return json({ error: 'Signed out' }, 401);
+    if (server.health === 'down') return json({ error: 'Internal error' }, 500);
     if (path === '/api/me' && method === 'GET') return json(server.me);
     if (path === '/api/me' && method === 'PATCH') {
       const patch = body as Partial<Profile>;
@@ -199,7 +201,7 @@ function serve(server: FakeServer) {
 /** A fresh server with the signed-in account and the given splits */
 export function fakeServer(...splits: SplitDetail[]): FakeServer {
   return {
-    signedIn: true,
+    health: 'up',
     me: {
       email: EMAIL,
       displayName: 'Ryan',
@@ -229,9 +231,11 @@ export function setupAppTests() {
     localStorage.clear();
     sessionStorage.clear();
   });
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
     queryClient.clear();
+    // The device's cache, and whose it is, start empty for the next test
+    await clearCache();
     vi.unstubAllGlobals();
   });
 }

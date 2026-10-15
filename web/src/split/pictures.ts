@@ -51,7 +51,7 @@ export async function removeSplitPicture(splitId: string) {
     splits: data.splits?.map((s) => (s.id === splitId ? { ...s, pictureVersion: null } : s)),
   }));
   try {
-    await api.removeSplitPicture(splitId);
+    await api.deleteSplitPicture(splitId);
   } catch (err) {
     void reloadHomeData();
     throw err;

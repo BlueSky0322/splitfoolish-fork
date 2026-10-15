@@ -35,7 +35,7 @@ export function atRate(item: SplitItem, rate: number): SplitItem {
  * paid for anything stays; with fromItems they come off items they share, unless that
  * would leave an item with nobody or break an exact split.
  */
-export function removeBlocker(
+export function removalBlocker(
   state: SplitState,
   personId: string,
   fromItems: boolean,

@@ -4,72 +4,63 @@
 
 import { Hono } from 'hono';
 import type {
-  Attachment,
   ItemNameUse,
   SplitDetail,
-  SplitInvite,
   SplitSummary,
   Created,
   InviteTokenResult,
+  RatePreference,
   UpdateSplitResult,
 } from '../../shared/api';
+import { MAX_NAME_LENGTH } from '../../shared/types';
 import {
   AppEnv,
   Env,
   ID,
-  Role,
   SPLIT,
+  VALID_ID,
+  batchGroups,
   evictFromRoom,
+  getRole,
   isCrossSite,
   joinRoom,
   membersOnly,
   ownerOnly,
   readJson,
+  touchSplit,
 } from '../app';
-import {
-  MAX_NAME_LENGTH,
-  json,
-  newId,
-  notFound,
-  readName,
-  fail,
-  ok,
-  isConstraintError,
-} from '../http';
+import { CURRENCY, json, newId, notFound, readName, fail, ok, isConstraintError } from '../http';
 import {
   deleteAttachment,
   deleteSplitPicture,
-  getAttachment,
-  getSplitPicture,
-  listAttachmentsStatement,
   putSplitPicture,
+  serveAttachment,
+  serveSplitPicture,
   uploadAttachment,
 } from '../photos';
+import { getRateSource, settingsStatements } from '../profiles';
+import { REFRESH_MAX_AGE_MS, getRate } from '../rates';
+import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
 import {
-  CURRENCY,
-  assembleMembers,
-  getRateSource,
-  memberProfileStatements,
-  settingsStatements,
-} from '../profiles';
-import {
-  applyChanges,
-  assembleContent,
-  contentStatements,
-  deleteContentStatements,
+  leaveStatement,
   newInviteToken,
   removeAccessStatements,
-  touchSplit,
-} from '../split-content';
-import { REFRESH_MAX_AGE_MS, RatePreference, getRate } from '../rates';
-import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
+  resetShareLinks,
+} from '../sharing';
+import { applyChanges, deleteContentStatements } from '../split-content';
+import { assembleSplitDetail, splitDetailStatements } from '../split-detail';
 import { listSplitSummaries } from '../summaries';
 
 const splits = new Hono<AppEnv>();
 
 const MAX_ORDERED = 500;
 const MAX_ITEM_NAMES = 500;
-const SPLIT_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+/** How long a conversion may take before opening the split retries it */
+const retryAfterMs = (env: Env) => {
+  const configured = Number.parseInt(env.RECONVERT_RETRY_MS ?? '', 10);
+  return Number.isNaN(configured) ? RETRY_AFTER_MS : configured;
+};
 
 /**
  * Converts the split's items after the response is sent, at rates from the source the
@@ -89,6 +80,12 @@ const startReconvert = (
       .catch((err) => console.error(err)),
   );
 
+// Any change saved under a split tells the apps that have it open, once it succeeds
+splits.use(`${SPLIT}/*`, async (c, next) => {
+  if (c.req.method !== 'GET' && c.req.method !== 'HEAD') c.set('changedSplit', c.req.param('id'));
+  await next();
+});
+
 splits.get('/splits', async (c) =>
   json<{ splits: SplitSummary[] }>({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
 );
@@ -102,7 +99,7 @@ splits.put('/splits/order', async (c) => {
   if (
     !Array.isArray(ids) ||
     ids.length > MAX_ORDERED ||
-    !ids.every((id) => typeof id === 'string' && SPLIT_ID.test(id))
+    !ids.every((id) => typeof id === 'string' && VALID_ID.test(id))
   ) {
     return fail('Send the split ids in order', 400);
   }
@@ -179,85 +176,18 @@ splits.post('/splits', async (c) => {
 splits.get(SPLIT, async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
-  // One round trip, membership check included: the database can be far from the user,
-  // so every query costs
-  // Statements whose result count other modules decide go last, sliced by their length
-  const memberStatements = memberProfileStatements(db, id);
-  const [roleRows, splitRows, inviteRows, attachmentRows, ...rest] = await db.batch<
-    Record<string, unknown>
-  >([
-    db
-      .prepare(
-        'SELECT role, share_token AS shareToken FROM split_members WHERE split_id = ? AND email = ?',
-      )
-      .bind(id, c.var.email),
-    db
-      .prepare(
-        `SELECT s.name, s.currency, s.invite_token AS inviteToken,
-             s.distributor_person_id AS distributorId, p.version AS pictureVersion,
-             s.converting_since AS convertingSince
-           FROM splits s LEFT JOIN split_pictures p ON p.split_id = s.id WHERE s.id = ?`,
-      )
-      .bind(id),
-    db
-      .prepare(
-        `SELECT i.id, i.email, i.invited_by AS invitedBy, p.display_name AS invitedByName,
-             i.needs_approval = 1 AS needsApproval, i.created_at AS createdAt,
-             i.expires_at AS expiresAt
-           FROM split_invites i LEFT JOIN profiles p ON p.email = i.invited_by
-           WHERE i.split_id = ? AND i.expires_at > ? ORDER BY i.created_at`,
-      )
-      .bind(id, Date.now()),
-    listAttachmentsStatement(db, id),
-    ...memberStatements,
-    ...contentStatements(db, id),
-  ]);
-  const memberResults = rest.slice(0, memberStatements.length);
-  const content = rest.slice(memberStatements.length);
-  const { role, shareToken } =
-    (roleRows.results[0] as { role: Role; shareToken: string | null } | undefined) ?? {};
-  const split = splitRows.results[0] as
-    | {
-        name: string;
-        currency: string;
-        inviteToken: string;
-        distributorId: string | null;
-        pictureVersion: number | null;
-        convertingSince: number | null;
-      }
-    | undefined;
-  // Non-members get the same 404 as a missing split, so ids can't be probed
-  if (role == null || split == null) return notFound();
+  const opened = assembleSplitDetail(
+    id,
+    await batchGroups(db, splitDetailStatements(db, id, c.var.email)),
+  );
+  if (opened == null) return notFound();
 
   // A conversion that should have finished by now (say, the rates were down): try again
-  const converting = split.convertingSince != null;
-  const retryAfter = Number(c.env.RECONVERT_RETRY_MS ?? RETRY_AFTER_MS);
-  if (converting && Date.now() - split.convertingSince! >= retryAfter) {
+  const since = opened.convertingSince;
+  if (since != null && Date.now() - since >= retryAfterMs(c.env)) {
     startReconvert(c.env, c.executionCtx, id, c.var.email);
   }
-
-  return json<SplitDetail>({
-    id,
-    name: split.name,
-    currency: split.currency,
-    distributorId: split.distributorId,
-    pictureVersion: split.pictureVersion,
-    converting,
-    role,
-    members: assembleMembers(memberResults),
-    invites:
-      role === 'owner'
-        ? (
-            inviteRows.results as unknown as (Omit<SplitInvite, 'needsApproval'> & {
-              needsApproval: number;
-            })[]
-          ).map((i) => ({ ...i, needsApproval: Boolean(i.needsApproval) }))
-        : undefined,
-    // Everyone shares with their own link; a member's asks the owner to approve
-    inviteToken: role === 'owner' ? split.inviteToken : shareToken ?? undefined,
-    attachments: attachmentRows.results as unknown as Attachment[],
-    ...assembleContent(content),
-  });
+  return json<SplitDetail>(opened.detail);
 });
 
 // Live updates: a WebSocket that hears when anyone saves a change to the split. Opened
@@ -334,22 +264,18 @@ splits.post(`${SPLIT}/changes`, membersOnly, async (c) => {
   if (body instanceof Response) return body;
   // Looked up only if the changes need a rate
   let prefer: Promise<RatePreference> | null = null;
-  return applyChanges(
-    c.env.DB,
-    c.req.param('id'),
-    body,
-    { email: c.var.email, role: c.var.role },
-    async (from, to, recent) =>
+  return applyChanges(c.env.DB, c.req.param('id'), { email: c.var.email, role: c.var.role }, body, {
+    fetchRate: async (from, to, recent) =>
       getRate(c.env, from, to, {
         prefer: await (prefer ??= getRateSource(c.env.DB, c.var.email)),
         maxAgeMs: recent ? REFRESH_MAX_AGE_MS : undefined,
       }),
-    (emails) => evictFromRoom(c.env, c.executionCtx, c.req.param('id'), emails),
-  );
+    onAccessRemoved: (emails) => evictFromRoom(c.env, c.executionCtx, c.req.param('id'), emails),
+  });
 });
 
 // The split's picture: anyone in it sees it, only the owner changes it
-splits.get(`${SPLIT}/picture`, membersOnly, (c) => getSplitPicture(c.env.DB, c.req.param('id')));
+splits.get(`${SPLIT}/picture`, membersOnly, (c) => serveSplitPicture(c.env.DB, c.req.param('id')));
 splits.put(
   `${SPLIT}/picture`,
   membersOnly,
@@ -363,12 +289,12 @@ splits.delete(
   (c) => deleteSplitPicture(c.env.DB, c.req.param('id')),
 );
 
-// Photos can be added by any membersOnly, and removed by whoever added them or the owner
+// Photos can be added by any member, and removed by whoever added them or the owner
 splits.post(`${SPLIT}/attachments`, membersOnly, (c) =>
   uploadAttachment(c.env.DB, c.req.param('id'), c.var.email, c.req.raw),
 );
 splits.get(`${SPLIT}/attachments/:attachmentId${ID}`, membersOnly, (c) =>
-  getAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId')),
+  serveAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId')),
 );
 splits.delete(`${SPLIT}/attachments/:attachmentId${ID}`, membersOnly, (c) =>
   deleteAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId'), {
@@ -382,22 +308,8 @@ splits.post(
   `${SPLIT}/invite`,
   membersOnly,
   ownerOnly('Only the owner can reset the invite link'),
-  async (c) => {
-    const db = c.env.DB;
-    const id = c.req.param('id');
-    const inviteToken = newInviteToken();
-    await db.batch([
-      db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(inviteToken, id),
-      db
-        .prepare(
-          `UPDATE split_members SET share_token = lower(hex(randomblob(18)))
-           WHERE split_id = ? AND role = 'editor'`,
-        )
-        .bind(id),
-      db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
-    ]);
-    return json<InviteTokenResult>({ inviteToken });
-  },
+  async (c) =>
+    json<InviteTokenResult>({ inviteToken: await resetShareLinks(c.env.DB, c.req.param('id')) }),
 );
 
 splits.delete(
@@ -420,25 +332,18 @@ splits.delete(`${SPLIT}/members/:email`, membersOnly, async (c) => {
   const email = c.var.email;
   const target = c.req.param('email').toLowerCase();
 
-  const targetRow = await db
-    .prepare('SELECT role FROM split_members WHERE split_id = ? AND email = ?')
-    .bind(id, target)
-    .first<{ role: Role }>();
-  if (targetRow == null) return notFound();
-  if (targetRow.role === 'owner') return fail('The owner cannot be removed', 400);
+  const targetRole = await getRole(db, id, target);
+  // Already gone is fine, as for every other delete: the result is the same
+  if (targetRole == null) return ok();
+  if (targetRole === 'owner') return fail('The owner cannot be removed', 400);
   if (c.var.role !== 'owner' && target !== email) {
     return fail('Only the owner can remove members', 403);
   }
 
   // Leaving is a choice and the link still works; being removed shuts the door
-  if (target === email) {
-    await db
-      .prepare('DELETE FROM split_members WHERE split_id = ? AND email = ?')
-      .bind(id, target)
-      .run();
-  } else {
-    await db.batch(removeAccessStatements(db, id, target));
-  }
+  await db.batch(
+    target === email ? [leaveStatement(db, id, target)] : removeAccessStatements(db, id, target),
+  );
   evictFromRoom(c.env, c.executionCtx, id, [target]);
   return ok();
 });

@@ -15,9 +15,11 @@ import type { Attachment } from '../../../../shared/api';
 import { ItemInput } from '../../api';
 import { updateHomeData } from '../../home-data';
 import { SplitTotals } from '../../split/derive';
-import { SplitItem, Person, toApiItem } from '../../split/state';
+import { SplitItem, toApiItem } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import { useSplitState } from '../../split/SplitStateContext';
-import { MetaChanges, SplitMeta, useSplitActions } from '../../split/useSplit';
+import { MetaChanges, useSplitActions } from '../../split/useSplit';
+import type { SplitMeta } from '../../split/state';
 import { newId } from '../../utils/id';
 import { notifications } from '@mantine/notifications';
 import type { Prefill } from './useConvertPrefill';
@@ -42,10 +44,10 @@ export type Dialog =
   | { kind: 'currencies' };
 
 /** Under Settle up's title: how many transfers settle everyone */
-const settleNote = (summary: SplitTotals) => {
-  const n = summary.transfers.length;
+const settleNote = (totals: SplitTotals) => {
+  const n = totals.transfers.length;
   if (n > 0) return `${n} ${n === 1 ? 'transfer clears' : 'transfers clear'} every balance`;
-  return summary.hasItems ? 'Everyone is settled up' : 'No items yet';
+  return totals.hasItems ? 'Everyone is settled up' : 'No items yet';
 };
 
 interface SplitDialogsProps {
@@ -56,7 +58,7 @@ interface SplitDialogsProps {
   meta: SplitMeta | null;
   metaChanges: MetaChanges;
   refreshMeta: () => Promise<void>;
-  summary: SplitTotals;
+  totals: SplitTotals;
   currency: string;
   me: Person | null;
   photos: ReturnType<typeof usePhotos>;
@@ -80,7 +82,7 @@ const SplitDialogs = ({
   meta,
   metaChanges,
   refreshMeta,
-  summary,
+  totals,
   currency,
   me,
   photos,
@@ -93,7 +95,7 @@ const SplitDialogs = ({
   onLinkMe,
 }: SplitDialogsProps) => {
   const { state } = useSplitState();
-  const actions = useSplitActions()!;
+  const actions = useSplitActions();
   const close = () => setDialog(null);
 
   const saveItem = (input: ItemInput, newPhotos: File[]) => {
@@ -172,7 +174,7 @@ const SplitDialogs = ({
       >
         {dialog?.kind === 'people' && (
           <PeopleSheet
-            summary={summary}
+            totals={totals}
             currency={currency}
             myEmail={myEmail}
             members={meta?.members ?? []}
@@ -191,7 +193,7 @@ const SplitDialogs = ({
         onClose={close}
         title={
           <BalanceHero
-            summary={summary}
+            totals={totals}
             currency={currency}
             me={me}
             onLinkMe={onLinkMe}
@@ -200,7 +202,7 @@ const SplitDialogs = ({
           />
         }
       >
-        <div className="sf-muted text-sm mb-4">{settleNote(summary)}</div>
+        <div className="sf-muted text-sm mb-4">{settleNote(totals)}</div>
         {panel}
       </ResponsiveDialog>
       <ResponsiveDialog
@@ -215,7 +217,7 @@ const SplitDialogs = ({
             currency={currency}
             people={state.people}
             items={state.items}
-            summary={summary}
+            totals={totals}
           />
         )}
       </ResponsiveDialog>

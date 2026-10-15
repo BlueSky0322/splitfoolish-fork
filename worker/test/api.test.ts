@@ -37,6 +37,17 @@ async function splitWith(owner: string, ...members: string[]) {
 const change = (who: string, id: string, ...changes: unknown[]) =>
   api.call(who, 'POST', `/api/splits/${id}/changes`, { changes });
 
+// The smallest bytes that pass as a JPEG
+const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
+const upload = (who: string, method: string, path: string) =>
+  api.call(who, method, path, jpeg, { 'Content-Type': 'image/jpeg' });
+
+/** The person in a split's bill who is `email` */
+const personOf = async (who: string, id: string, email: string): Promise<string> =>
+  (await api.call(who, 'GET', `/api/splits/${id}`)).data.people.find(
+    (p: { memberEmail: string | null }) => p.memberEmail === email,
+  ).id;
+
 describe('who can see a split', () => {
   it('hides it from people who are not in it', async () => {
     const owner = person('owner');
@@ -158,6 +169,101 @@ describe('changing a split', () => {
     expect(
       (await change(owner, id, { op: 'setItemDate', id: hex(), createdAt: lastWeek })).status,
     ).toBe(200);
+  });
+
+  it('lets others link only themselves to a person, and never over someone else', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const guest = hex();
+    await change(owner, id, { op: 'addPerson', id: guest, name: 'Guest' });
+    const link = (who: string, personId: string, memberEmail: string | null) =>
+      change(who, id, { op: 'linkPerson', id: personId, memberEmail });
+
+    expect((await link(editor, guest, owner)).status).toBe(409);
+    const editorPerson = await personOf(owner, id, editor);
+    expect((await link(owner, editorPerson, owner)).status).toBe(409);
+    // Moving their own link from the person they joined as to the guest
+    const moved = await change(
+      editor,
+      id,
+      { op: 'linkPerson', id: editorPerson, memberEmail: null },
+      { op: 'linkPerson', id: guest, memberEmail: editor },
+    );
+    expect(moved.status).toBe(200);
+    expect(await personOf(owner, id, editor)).toBe(guest);
+  });
+
+  it('removes a person only when no item depends on them', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [a, b, c, d] = [hex(), hex(), hex(), hex()];
+    const item = (participantIds: string[], extra = {}) => ({
+      op: 'addItem',
+      item: { id: hex(), name: 'X', cost: 10, payerId: a, participantIds, ...extra },
+    });
+    await change(
+      owner,
+      id,
+      ...[a, b, c, d].map((p, i) => ({ op: 'addPerson', id: p, name: `P${i}` })),
+      item([a, b]),
+      item([c]),
+      item([a, d], { splitMode: 'exact', exact: { [a]: 5, [d]: 5 } }),
+    );
+    const remove = async (personId: string, fromItems?: boolean) => {
+      const res = await change(owner, id, { op: 'removePerson', id: personId, fromItems });
+      return res.status === 200 ? 'removed' : res.data.error;
+    };
+
+    expect(await remove(a, true)).toMatch(/paid for 3 items/);
+    expect(await remove(b)).toMatch(/is on 1 item/);
+    expect(await remove(c, true)).toMatch(/only person/);
+    expect(await remove(d, true)).toMatch(/exact amounts/);
+    expect(await remove(b, true)).toBe('removed');
+    const items = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items;
+    expect(items[0].participantIds).toEqual([a]);
+  });
+
+  it('clears people only once there are no items, taking away their access', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const p = await personOf(owner, id, editor);
+    const item = { id: hex(), name: 'Tea', cost: 4, payerId: p, participantIds: [p] };
+    await change(owner, id, { op: 'addItem', item });
+
+    expect((await change(owner, id, { op: 'clearPeople' })).status).toBe(409);
+    expect((await change(owner, id, { op: 'clearItems' }, { op: 'clearPeople' })).status).toBe(200);
+    expect((await api.call(editor, 'GET', `/api/splits/${id}`)).status).toBe(404);
+  });
+
+  it("refuses renaming someone whose name comes from their account, or a distributor who isn't in it", async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const p = await personOf(owner, id, editor);
+    expect((await change(owner, id, { op: 'renamePerson', id: p, name: 'Nick' })).status).toBe(409);
+    expect((await change(owner, id, { op: 'setDistributor', personId: hex() })).status).toBe(409);
+    expect((await change(owner, id, { op: 'setDistributor', personId: p })).status).toBe(200);
+  });
+
+  it("removes an item's photos with it", async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [p, itemId] = [hex(), hex()];
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: p, name: 'P' },
+      { op: 'addItem', item: { id: itemId, name: 'X', cost: 1, payerId: p, participantIds: [p] } },
+    );
+    const photo = await upload(owner, 'POST', `/api/splits/${id}/attachments?itemId=${itemId}`);
+    expect(photo.status).toBe(201);
+
+    expect((await change(owner, id, { op: 'removeItem', id: itemId })).status).toBe(200);
+    expect(
+      (await api.call(owner, 'GET', `/api/splits/${id}/attachments/${photo.data.id}`)).status,
+    ).toBe(404);
   });
 
   it('keeps notes on items, line breaks included, and limits their length', async () => {
@@ -564,11 +670,6 @@ describe('safeguards', () => {
 });
 
 describe('profile, pictures and photos', () => {
-  // The smallest bytes that pass as a JPEG
-  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
-  const upload = (who: string, method: string, path: string) =>
-    api.call(who, method, path, jpeg, { 'Content-Type': 'image/jpeg' });
-
   it('saves the profile, settings and payment methods', async () => {
     const me = person('me');
     expect(

@@ -5,10 +5,13 @@ import { Hono } from 'hono';
 import type { Profile } from '../../shared/api';
 import { AppEnv, readJson } from '../app';
 import { json } from '../http';
-import { deleteAvatar, getAvatar, getPaymentQr, putAvatar, putPaymentQr } from '../photos';
+import { deleteAvatar, putAvatar, putPaymentQr, serveAvatar, servePaymentQr } from '../photos';
 import { getProfile, patchProfile, putPaymentMethods } from '../profiles';
 
 const me = new Hono<AppEnv>();
+
+/** A payment method's id in a path, as the app makes them */
+const METHOD_ID = '{[0-9a-f]{16}}';
 
 me.get('/me', async (c) => json<Profile>(await getProfile(c.env.DB, c.var.email)));
 
@@ -28,13 +31,15 @@ me.put('/me/avatar', (c) => putAvatar(c.env.DB, c.var.email, c.req.raw));
 me.delete('/me/avatar', (c) => deleteAvatar(c.env.DB, c.var.email));
 
 // A QR code is uploaded first, then saved with its method in the list above
-me.put('/me/payment-qr/:id', (c) =>
-  putPaymentQr(c.env.DB, c.var.email, c.req.param('id'), c.req.raw),
+me.put(`/me/payment-qr/:id${METHOD_ID}`, (c) =>
+  putPaymentQr(c.env.DB, c.req.param('id'), c.var.email, c.req.raw),
 );
-me.get('/payment-qr/:id', (c) => getPaymentQr(c.env.DB, c.var.email, c.req.param('id')));
+me.get(`/payment-qr/:id${METHOD_ID}`, (c) =>
+  servePaymentQr(c.env.DB, c.req.param('id'), c.var.email),
+);
 
 me.get('/avatars/:email', (c) =>
-  getAvatar(c.env.DB, c.var.email, c.req.param('email').toLowerCase()),
+  serveAvatar(c.env.DB, c.req.param('email').toLowerCase(), c.var.email),
 );
 
 export default me;

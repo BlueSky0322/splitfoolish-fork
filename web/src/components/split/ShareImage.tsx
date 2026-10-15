@@ -1,10 +1,12 @@
 import { Button, Loader, useComputedColorScheme } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { SplitItem, Person } from '../../split/state';
+import { SplitItem } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import { SplitTotals } from '../../split/derive';
 import { useProfile } from '../../profile/ProfileContext';
-import { ACCENTS, Accent } from '../../theme/accents';
+import { ACCENTS } from '../../theme/accents';
+import type { Accent } from '../../../../shared/api';
 import { formatMoney } from '../../utils/money';
 import TransferRow from './TransferRow';
 import classes from './ShareImage.module.css';
@@ -17,7 +19,7 @@ interface ShareImageProps {
   currency: string;
   people: Person[];
   items: SplitItem[];
-  summary: SplitTotals;
+  totals: SplitTotals;
 }
 
 /** a mixed into b by amount (0-1), as plain hex */
@@ -65,7 +67,7 @@ function dateRange(items: SplitItem[]) {
 
 // The settle-up summary as a 1080x1350 picture to post in a group chat. Drawn from a
 // hidden copy of the card, in the theme and accent on screen.
-const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps) => {
+const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) => {
   const scheme = useComputedColorScheme('dark');
   const { profile } = useProfile();
   const accent = profile?.settings.accent ?? DEFAULT_SETTINGS.accent;
@@ -192,7 +194,7 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
             {[
               range,
               plural(people.length, 'person', 'people'),
-              formatMoney(summary.totalCents, currency),
+              formatMoney(totals.totalCents, currency),
             ]
               .filter(Boolean)
               .join(' · ')}
@@ -200,12 +202,12 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
 
           <div className={classes.heading}>Who pays who</div>
           <div className={classes.transfers}>
-            {summary.transfers.length === 0 && (
+            {totals.transfers.length === 0 && (
               <div className={classes.meta}>
                 {items.length > 0 ? 'Everyone is settled up.' : 'No items yet.'}
               </div>
             )}
-            {summary.transfers.map((t) => (
+            {totals.transfers.map((t) => (
               <TransferRow
                 key={`${t.fromId}-${t.toId}`}
                 from={byId.get(t.fromId)!}

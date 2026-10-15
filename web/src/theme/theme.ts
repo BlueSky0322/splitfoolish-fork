@@ -1,5 +1,6 @@
 import { CSSVariablesResolver, createTheme } from '@mantine/core';
-import { ACCENTS, Accent } from './accents';
+import { ACCENTS } from './accents';
+import type { Accent } from '../../../shared/api';
 
 // Nocturne neutrals, laid out the way Mantine reads them: text at 0, the page at 7
 // and raised surfaces at 6

@@ -32,6 +32,7 @@ import classes from './Convert.module.css';
 import { type SplitSummary } from '../../../../shared/api';
 import { showError } from '../../utils/notify';
 import { useRate } from '../../hooks/useRate';
+import { quietly } from '../../utils/quietly';
 
 const RECENT_KEY = 'sf-convert-recent';
 const MAX_RECENT = 5;
@@ -39,25 +40,18 @@ const MAX_RECENT = 5;
 type Pair = [from: string, to: string];
 
 function readRecent(): Pair[] {
-  try {
-    const saved = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as unknown;
-    return Array.isArray(saved)
-      ? saved.filter(
-          (p): p is Pair =>
-            Array.isArray(p) && p.length === 2 && p.every((c) => /^[A-Z]{3}$/.test(String(c))),
-        )
-      : [];
-  } catch {
-    return [];
-  }
+  const saved = quietly(() => JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as unknown);
+  return Array.isArray(saved)
+    ? saved.filter(
+        (p): p is Pair =>
+          Array.isArray(p) && p.length === 2 && p.every((c) => /^[A-Z]{3}$/.test(String(c))),
+      )
+    : [];
 }
 
 function saveRecent(pairs: Pair[]) {
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(pairs));
-  } catch {
-    // Private mode: recents just aren't kept
-  }
+  // Without storage, recents just aren't kept
+  quietly(() => localStorage.setItem(RECENT_KEY, JSON.stringify(pairs)));
 }
 
 /** "3,000" or "12.50" as a number; null while it isn't one */
@@ -91,8 +85,7 @@ function CurrencySheet({
   const all = listCurrencies();
   const q = query.trim().toLowerCase();
   const matches = q === '' ? all : all.filter((c) => c.label.toLowerCase().includes(q));
-  const top =
-    q === '' ? suggested.map((code) => all.find((c) => c.value === code)!).filter(Boolean) : [];
+  const top = q === '' ? suggested.flatMap((code) => all.filter((c) => c.value === code)) : [];
   const row = (c: { value: string; label: string }) => {
     const [code, ...rest] = c.label.split(' · ');
     return (

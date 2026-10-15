@@ -1,20 +1,22 @@
 import { useMantineColorScheme } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { Profile, api } from '../api';
+import { ApiError, Profile, api } from '../api';
 import { queryClient } from '../query-client';
-import { isOffline } from '../offline/outbox';
-import { flushOfflineChanges } from '../offline/pending-creates';
+import { isNetworkError } from '../offline/outbox';
+import { syncAfterSignIn } from '../offline/sync';
 import { assumeLastUser, readCache, setCacheUser, writeCache } from '../offline/cache';
-import { Accent, isAccent } from '../theme/accents';
+import { isAccent } from '../theme/accents';
 import {
   DEFAULT_SETTINGS,
+  THEMES,
+  type Accent,
   type ProfilePatch,
   type Settings,
   type ThemeSetting,
 } from '../../../shared/api';
-import { reloadHomeData } from '../home-data';
 import { showError } from '../utils/notify';
+import { quietly } from '../utils/quietly';
 
 // The signed-in user's profile. Theme and accent are also kept in localStorage so
 // the app paints in the right colours before /api/me answers.
@@ -26,35 +28,30 @@ export interface Appearance {
 }
 
 const isTheme = (value: unknown): value is ThemeSetting =>
-  value === 'dark' || value === 'light' || value === 'auto';
+  (THEMES as readonly unknown[]).includes(value);
 
 export function readAppearance(): Appearance {
-  try {
-    // Whatever was saved, checked field by field
-    const saved = JSON.parse(localStorage.getItem(APPEARANCE_KEY) ?? '{}') as {
-      theme?: unknown;
-      accent?: unknown;
-    };
-    return {
-      theme: isTheme(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme,
-      accent: isAccent(saved.accent) ? saved.accent : DEFAULT_SETTINGS.accent,
-    };
-  } catch {
-    return { theme: DEFAULT_SETTINGS.theme, accent: DEFAULT_SETTINGS.accent };
-  }
+  // Whatever was saved, checked field by field
+  const saved = quietly(
+    () => JSON.parse(localStorage.getItem(APPEARANCE_KEY) ?? '{}') as Record<string, unknown>,
+  );
+  return {
+    theme: isTheme(saved?.theme) ? saved.theme : DEFAULT_SETTINGS.theme,
+    accent: isAccent(saved?.accent) ? saved.accent : DEFAULT_SETTINGS.accent,
+  };
 }
 
-function saveAppearance(appearance: Appearance) {
-  try {
-    localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance));
-  } catch {
-    // Private mode: the colours just load a moment later next time
-  }
-}
+// Without storage, the colours just load a moment later next time
+const saveAppearance = (appearance: Appearance) =>
+  quietly(() => localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)));
 
 interface ProfileContextValue {
   profile: Profile | null;
   signedOut: boolean;
+  /** The server couldn't be reached, or failed, before the profile loaded */
+  unreachable: boolean;
+  /** Asks the server again */
+  retry: () => void;
   /** Saves profile fields or settings, showing the change straight away */
   update: (patch: ProfilePatch) => Promise<void>;
   /** Saves some settings, showing the change straight away */
@@ -90,7 +87,7 @@ export function ProfileProvider({
   const fromDevice = useRef(false);
   // Loaded once: after that, this device's changes are the latest, and a refetch
   // landing mid-change would undo one
-  const { data, isError: signedOut } = useQuery({
+  const { data, error, refetch } = useQuery({
     queryKey: ME_KEY,
     queryFn: async () => {
       try {
@@ -98,14 +95,13 @@ export function ProfileProvider({
         // Cached splits are kept per account; know whose before showing any
         await setCacheUser(me.email);
         fromDevice.current = false;
-        // Splits made and changes kept on this device before it was last closed
-        void flushOfflineChanges().then((sent) => (sent > 0 ? reloadHomeData() : undefined));
+        syncAfterSignIn();
         void writeCache(ME_CACHE_KEY, me);
         return me;
       } catch (err) {
-        // Offline: carry on as whoever last used this device, from their saved profile.
-        // Online, a failure means signing in again (Cloudflare Access).
-        if (isOffline() && assumeLastUser() != null) {
+        // No connection: carry on as whoever last used this device, from their saved
+        // profile
+        if (isNetworkError(err) && assumeLastUser() != null) {
           const saved = await readCache<Profile>(ME_CACHE_KEY);
           if (saved) {
             fromDevice.current = true;
@@ -122,13 +118,15 @@ export function ProfileProvider({
     networkMode: 'always',
   });
   const profile = data ?? null;
+  // Signing in happens in front of the app (Cloudflare Access), so a 401 means it ran out
+  const signedOut = error instanceof ApiError && error.status === 401;
+  const unreachable = error != null && !signedOut;
+  const retry = useCallback(() => void refetch(), [refetch]);
 
-  // Back online: send what was kept on this device, and fetch the real profile if this
-  // one came from the device
+  // Back online: fetch the real profile if this one came from the device
   useEffect(() => {
     const refresh = () => {
       if (fromDevice.current) void queryClient.invalidateQueries({ queryKey: ME_KEY });
-      void flushOfflineChanges().then(() => reloadHomeData());
     };
     window.addEventListener('online', refresh);
     return () => window.removeEventListener('online', refresh);
@@ -199,7 +197,9 @@ export function ProfileProvider({
   );
 
   return (
-    <ProfileContext.Provider value={{ profile, signedOut, update, updateSettings, replace, patch }}>
+    <ProfileContext.Provider
+      value={{ profile, signedOut, unreachable, retry, update, updateSettings, replace, patch }}
+    >
       {children}
     </ProfileContext.Provider>
   );

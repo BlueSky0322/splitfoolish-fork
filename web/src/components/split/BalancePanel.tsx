@@ -8,7 +8,7 @@ import {
   ShareNetwork,
 } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { Person } from '../../split/state';
+import type { Person } from '../../../../shared/types';
 import { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodName } from '../../utils/payments';
@@ -21,7 +21,7 @@ import type { SplitMember } from '../../../../shared/api';
 
 interface BalancePanelProps {
   people: Person[];
-  summary: SplitTotals;
+  totals: SplitTotals;
   currency: string;
   me: Person | null;
   distributorId: string | null;
@@ -35,14 +35,14 @@ interface BalancePanelProps {
 }
 
 export function BalanceHero({
-  summary,
+  totals,
   currency,
   me,
   onLinkMe,
   size,
   prefix,
 }: {
-  summary: SplitTotals;
+  totals: SplitTotals;
   currency: string;
   me: Person | null;
   onLinkMe: () => void;
@@ -57,7 +57,7 @@ export function BalanceHero({
           className={classes.heroAmount}
           style={{ fontSize: size }}
         >
-          {formatMoney(summary.totalCents, currency)}
+          {formatMoney(totals.totalCents, currency)}
         </div>
         <button
           type="button"
@@ -69,8 +69,8 @@ export function BalanceHero({
       </div>
     );
   }
-  const cents = summary.balances.get(me.id)?.balanceCents ?? 0;
-  const label = !summary.hasItems
+  const cents = totals.balances.get(me.id)?.balanceCents ?? 0;
+  const label = !totals.hasItems
     ? 'nothing spent yet'
     : cents > 0
       ? "you're owed"
@@ -94,23 +94,23 @@ export function BalanceHero({
 
 /** Where you stand in one line, for the phone's bar once the big figure scrolls away */
 export function BalanceLine({
-  summary,
+  totals,
   currency,
   me,
 }: {
-  summary: SplitTotals;
+  totals: SplitTotals;
   currency: string;
   me: Person | null;
 }) {
   if (me == null) {
     return (
       <span className={classes.balanceLine}>
-        <span className="sf-muted">Total</span> {formatMoney(summary.totalCents, currency)}
+        <span className="sf-muted">Total</span> {formatMoney(totals.totalCents, currency)}
       </span>
     );
   }
-  const cents = summary.balances.get(me.id)?.balanceCents ?? 0;
-  const label = !summary.hasItems
+  const cents = totals.balances.get(me.id)?.balanceCents ?? 0;
+  const label = !totals.hasItems
     ? 'Nothing spent yet'
     : cents > 0
       ? "You're owed"
@@ -205,7 +205,7 @@ const ROUTE_HELP =
 
 const BalancePanel = ({
   people,
-  summary,
+  totals,
   currency,
   me,
   distributorId,
@@ -219,18 +219,18 @@ const BalancePanel = ({
   const memberFor = (person: Person) => members.find((m) => m.email === person.memberEmail);
   const methodsFor = (person: Person) => memberFor(person)?.paymentMethods ?? [];
   const byId = new Map(people.map((p) => [p.id, p]));
-  const mine = me ? summary.balances.get(me.id) : null;
-  const count = summary.transfers.length;
+  const mine = me ? totals.balances.get(me.id) : null;
+  const count = totals.transfers.length;
   const isSheet = variant === 'sheet';
   // The sheet keeps balances and routing on a second view (4f)
   const [view, setView] = useState<'transfers' | 'balances'>('transfers');
 
-  const bars = people.length > 0 && summary.hasItems && (
+  const bars = people.length > 0 && totals.hasItems && (
     <section className={classes.panelSection}>
       <h6 className="sf-label">Balances</h6>
       <BalanceBars
         people={people}
-        balances={summary.balances}
+        balances={totals.balances}
       />
     </section>
   );
@@ -278,13 +278,13 @@ const BalancePanel = ({
       {variant === 'panel' && (
         <>
           <BalanceHero
-            summary={summary}
+            totals={totals}
             currency={currency}
             me={me}
             onLinkMe={onLinkMe}
             size={42}
           />
-          {mine && summary.hasItems && (
+          {mine && totals.hasItems && (
             <div className={classes.stats}>
               <div>
                 <div className={classes.statLabel}>You paid</div>
@@ -304,13 +304,13 @@ const BalancePanel = ({
         <h6 className="sf-label">Who pays who</h6>
         {count === 0 ? (
           <div className="sf-muted text-sm">
-            {summary.hasItems
+            {totals.hasItems
               ? 'Everyone is settled up.'
               : 'No items yet. Add what was bought and who paid, and who pays who appears here.'}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {summary.transfers.map((t) => {
+            {totals.transfers.map((t) => {
               const to = byId.get(t.toId)!;
               const yours = me != null && t.fromId === me.id;
               return (
@@ -363,7 +363,7 @@ const BalancePanel = ({
         variant="default"
         leftSection={<ShareNetwork size={16} />}
         onClick={onShareImage}
-        disabled={!summary.hasItems}
+        disabled={!totals.hasItems}
       >
         Share as image
       </Button>

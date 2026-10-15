@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { atRate, removeBlocker } from './rules';
-import { Person, SplitItem, SplitState } from './state';
+import { atRate, removalBlocker } from './rules';
+import { SplitItem, SplitState } from './state';
+import type { Person } from '../../../shared/types';
 
 // The same cases as the server's tests of these rules (worker/test/api.test.ts), so the
 // app's instant answer is the one the server gives once the change is sent
@@ -23,41 +24,41 @@ const item = (over: Partial<SplitItem>): SplitItem => ({
 
 const bill = (...items: SplitItem[]): SplitState => ({ people: [ann, ben, cat], items });
 
-describe('removeBlocker', () => {
+describe('removalBlocker', () => {
   test('someone who paid for anything stays', () => {
-    expect(removeBlocker(bill(item({})), 'a', true)).toBe(
+    expect(removalBlocker(bill(item({})), 'a', true)).toBe(
       'Ann paid for 1 item. Edit or remove those items first.',
     );
   });
 
   test('someone on items can go from them, but only when asked to', () => {
-    expect(removeBlocker(bill(item({})), 'b', false)).toBe('Ben is on 1 item.');
-    expect(removeBlocker(bill(item({})), 'b', true)).toBeNull();
+    expect(removalBlocker(bill(item({})), 'b', false)).toBe('Ben is on 1 item.');
+    expect(removalBlocker(bill(item({})), 'b', true)).toBeNull();
   });
 
   test("can't leave an item with nobody on it", () => {
     const state = bill(item({ participants: [ben] }));
-    expect(removeBlocker(state, 'b', true)).toBe(
+    expect(removalBlocker(state, 'b', true)).toBe(
       'Ben is the only person on an item. Edit or remove it first.',
     );
   });
 
   test("says which, when it'd leave several items with nobody", () => {
     const state = bill(item({ participants: [ben] }), item({ id: 'j', participants: [ben] }));
-    expect(removeBlocker(state, 'b', true)).toBe(
+    expect(removalBlocker(state, 'b', true)).toBe(
       'Ben is the only person on some items. Edit or remove them first.',
     );
   });
 
   test("can't break an exact split", () => {
     const state = bill(item({ splitMode: 'exact', exact: { a: 10, b: 20 } }));
-    expect(removeBlocker(state, 'b', true)).toBe(
+    expect(removalBlocker(state, 'b', true)).toBe(
       'Ben is on an item split by exact amounts. Edit that item first.',
     );
   });
 
   test('someone on nothing can go', () => {
-    expect(removeBlocker(bill(item({})), 'c', false)).toBeNull();
+    expect(removalBlocker(bill(item({})), 'c', false)).toBeNull();
   });
 });
 
