@@ -1,11 +1,11 @@
 import { ActionIcon, Loader, UnstyledButton } from '@mantine/core';
 import { Camera, X } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { photoUrl } from '../../api';
-import type { ViewerPhoto } from '../ui/PhotoViewer';
-import PhotoViewer from '../ui/PhotoViewer';
+import { photoUrl } from '../../../api';
+import type { ViewerPhoto } from '../../ui/PhotoViewer';
+import PhotoViewer from '../../ui/PhotoViewer';
 import classes from './Photos.module.css';
-import type { Attachment } from '../../../../shared/api';
+import type { Attachment } from '../../../../../shared/api';
 
 interface PhotoStripProps {
   splitId: string;

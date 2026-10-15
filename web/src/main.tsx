@@ -6,11 +6,12 @@ import { trackKeyboardInset } from './pwa/keyboard-inset';
 import { trackInstall } from './pwa/install';
 import { restoreLastPage } from './hooks/useRoute';
 import { syncWhenOnline } from './offline/sync';
+import { reloadHomeData } from './home/home-data';
 
 // Back to the page that was open last time, before anything reads the address
 restoreLastPage();
 // What's kept on this device while offline is sent once the connection is back
-syncWhenOnline();
+syncWhenOnline(() => void reloadHomeData());
 // Bottom sheets stay above the on-screen keyboard
 trackKeyboardInset();
 // The browser's install prompt comes once, early; keep it for the app's own buttons

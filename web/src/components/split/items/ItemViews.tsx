@@ -12,7 +12,7 @@ import { currencySymbol, formatMoney } from '../../../utils/money';
 import type { RowSelection } from './useItemSelection';
 import { useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
-import PersonAvatar from '../people/PersonAvatar';
+import PersonAvatar from '../PersonAvatar';
 import classes from '../Split.module.css';
 import { toCents } from '../../../../../shared/rates';
 import { plural } from '../../../utils/text';

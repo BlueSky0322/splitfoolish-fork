@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError } from '../api';
 import type { PendingCreate } from './outbox';
 
@@ -28,6 +28,11 @@ const create = (id: string): PendingCreate => ({
   name: 'Trip',
   currency: 'MYR',
   summary: {} as PendingCreate['summary'],
+});
+
+// A test that fails part way doesn't leave fake timers behind
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 beforeEach(() => {
@@ -68,7 +73,6 @@ describe('creating a split made on this device', () => {
     await done;
     expect(createSplit).toHaveBeenCalledTimes(2);
     expect(kept.has('four')).toBe(false);
-    vi.useRealTimers();
   });
 
   test('takes any split it never started as already there', async () => {

@@ -290,6 +290,11 @@ export function renderApp(
 export function setupAppTests() {
   beforeEach(() => {
     stubBrowser();
+    // What the app tries again, it tries again straight away
+    queryClient.setDefaultOptions({
+      ...queryClient.getDefaultOptions(),
+      queries: { ...queryClient.getDefaultOptions().queries, retryDelay: 0 },
+    });
     localStorage.clear();
     sessionStorage.clear();
   });

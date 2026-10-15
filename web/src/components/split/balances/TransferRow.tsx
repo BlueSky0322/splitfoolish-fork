@@ -2,7 +2,7 @@ import { ArrowRight } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import type { Person } from '../../../../../shared/types';
 import { formatMoney } from '../../../utils/money';
-import PersonAvatar from '../people/PersonAvatar';
+import PersonAvatar from '../PersonAvatar';
 import classes from '../Split.module.css';
 
 interface TransferRowProps {

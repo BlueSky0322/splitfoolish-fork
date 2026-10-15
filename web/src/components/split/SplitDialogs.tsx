@@ -7,7 +7,7 @@ import ResetLink from './people/ResetLink';
 import ShareImage from './ShareImage';
 import SplitMembers, { ShareTitle } from './people/SplitMembers';
 import SplitSettings from './SplitSettings';
-import PhotoStrip from '../photos/PhotoStrip';
+import PhotoStrip from './photos/PhotoStrip';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import { Button } from '@mantine/core';
 import type { ReactNode } from 'react';

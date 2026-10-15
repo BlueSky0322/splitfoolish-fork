@@ -15,7 +15,7 @@ import { useHomeData } from '../../home/useHomeData';
 import type { Route } from '../../hooks/useRoute';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
-import { useOpenNewSplit } from '../NewSplitDialog';
+import { useOpenNewSplit } from '../split/NewSplitDialog';
 import BalanceTag from '../ui/BalanceTag';
 import SplitAvatar from '../ui/SplitAvatar';
 import ThemeToggle from '../ui/ThemeToggle';

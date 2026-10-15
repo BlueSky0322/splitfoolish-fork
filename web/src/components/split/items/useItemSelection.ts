@@ -17,39 +17,39 @@ export function useItemSelection(order: string[]) {
   // Computers: picking is switched on with a button, and stays on until Done
   const [on, setOn] = useState(false);
   const anchor = useRef<string | null>(null);
+  // The order as shown now, read when picking; a new array each render, so the callbacks
+  // below stay the same and the effect runs only when the order really changes
+  const latestOrder = useRef(order);
+  latestOrder.current = order;
   const orderKey = order.join();
 
   // Items removed (here or by someone else) drop out of the selection
   useEffect(() => {
     setSelected((was) => {
-      const present = new Set(order);
+      const present = new Set(latestOrder.current);
       const kept = [...was].filter((id) => present.has(id));
       return kept.length === was.size ? was : new Set(kept);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderKey]);
 
-  const toggle = useCallback(
-    (id: string, range = false) => {
-      setSelected((was) => {
-        const next = new Set(was);
-        const from = anchor.current == null ? -1 : order.indexOf(anchor.current);
-        const to = order.indexOf(id);
-        if (range && from >= 0 && to >= 0) {
-          const [a, b] = from < to ? [from, to] : [to, from];
-          for (const between of order.slice(a, b + 1)) next.add(between);
-        } else if (next.has(id)) {
-          next.delete(id);
-        } else {
-          next.add(id);
-        }
-        return next;
-      });
-      anchor.current = id;
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [orderKey],
-  );
+  const toggle = useCallback((id: string, range = false) => {
+    const order = latestOrder.current;
+    setSelected((was) => {
+      const next = new Set(was);
+      const from = anchor.current == null ? -1 : order.indexOf(anchor.current);
+      const to = order.indexOf(id);
+      if (range && from >= 0 && to >= 0) {
+        const [a, b] = from < to ? [from, to] : [to, from];
+        for (const between of order.slice(a, b + 1)) next.add(between);
+      } else if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    anchor.current = id;
+  }, []);
 
   /** Stops picking, letting go of everything picked */
   const clear = useCallback(() => {
@@ -59,7 +59,7 @@ export function useItemSelection(order: string[]) {
   }, []);
   /** Starts picking with nothing picked yet (computers) */
   const start = useCallback(() => setOn(true), []);
-  const selectAll = useCallback(() => setSelected(new Set(order)), [orderKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selectAll = useCallback(() => setSelected(new Set(latestOrder.current)), []);
 
   // Phones pick from a long press, so picking ends when nothing's left picked
   const active = on || selected.size > 0;

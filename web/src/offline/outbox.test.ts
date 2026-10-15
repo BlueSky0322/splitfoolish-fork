@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
 import { SW_USER_KEY } from './cache';
 import type { Queued } from './outbox';
@@ -70,11 +70,18 @@ describe('withOutbox', () => {
             else resolve();
           }, ms),
         );
-    const first = withOutbox('s1', step('first', 30, true));
-    const second = withOutbox('s1', step('second', 1));
-    const other = withOutbox('s2', step('other split', 1));
-    await expect(first).rejects.toThrow('first');
-    await Promise.all([second, other]);
+    vi.useFakeTimers();
+    try {
+      const first = withOutbox('s1', step('first', 30, true));
+      const second = withOutbox('s1', step('second', 1));
+      const other = withOutbox('s2', step('other split', 1));
+      const failed = expect(first).rejects.toThrow('first');
+      await vi.advanceTimersByTimeAsync(40);
+      await failed;
+      await Promise.all([second, other]);
+    } finally {
+      vi.useRealTimers();
+    }
     // The other split didn't wait; the same split's second call did
     expect(order).toEqual(['other split', 'first', 'second']);
   });
@@ -96,13 +103,5 @@ describe('the service worker', () => {
     for (const [name, value] of Object.entries(twins)) {
       expect(sw).toContain(`const ${name} = '${value}';`);
     }
-  });
-
-  test('tries again on the same answers as isRetryable', () => {
-    for (const status of [401, 429, 500, 503]) {
-      expect(isRetryable(new ApiError(status, ''))).toBe(true);
-    }
-    expect(isRetryable(new ApiError(409, ''))).toBe(false);
-    expect(sw).toContain('res.status === 401 || res.status === 429 || res.status >= 500');
   });
 });

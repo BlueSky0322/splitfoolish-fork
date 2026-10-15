@@ -4,7 +4,7 @@ import type { Person } from '../../../../shared/types';
 import type { SplitTotals } from '../../split/derive';
 import type { SplitItem, SplitMeta } from '../../split/state';
 import type { MetaChanges, SyncStatus } from '../../split/state';
-import type { usePhotos } from '../photos/usePhotos';
+import type { usePhotos } from './photos/usePhotos';
 import type { Prefill } from './useConvertPrefill';
 import type { DeleteConfirmation } from './items/useDeleteItems';
 

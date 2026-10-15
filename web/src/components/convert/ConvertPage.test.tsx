@@ -21,9 +21,7 @@ describe('Convert', () => {
   test('says so when there is no rate', async () => {
     renderApp(fakeServer(), '/?convert');
     // After one retry
-    expect(
-      await screen.findByText("Couldn't get a rate right now", {}, { timeout: 3000 }),
-    ).toBeTruthy();
+    expect(await screen.findByText("Couldn't get a rate right now")).toBeTruthy();
   });
 
   test('adds the amount to a split as a new item, in the currency it was in', async () => {

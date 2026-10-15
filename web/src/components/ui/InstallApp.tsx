@@ -4,7 +4,7 @@ import { DotsThreeVertical, DownloadSimple, Export, PlusSquare } from '@phosphor
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useInstall } from '../../pwa/useInstall';
-import ResponsiveDialog from '../ui/ResponsiveDialog';
+import ResponsiveDialog from './ResponsiveDialog';
 import classes from './InstallApp.module.css';
 import { quietly } from '../../utils/quietly';
 

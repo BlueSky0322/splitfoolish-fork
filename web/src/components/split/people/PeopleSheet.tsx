@@ -5,7 +5,7 @@ import { useSplitActions } from '../../../split/useSplit';
 import type { Person } from '../../../../../shared/types';
 import { nameFor } from '../../../profile/ProfileContext';
 import { formatMoney } from '../../../utils/money';
-import PersonAvatar from './PersonAvatar';
+import PersonAvatar from '../PersonAvatar';
 import TransferRow from '../balances/TransferRow';
 import classes from './PeopleSheet.module.css';
 import { MAX_NAME_LENGTH } from '../../../../../shared/types';

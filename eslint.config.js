@@ -52,7 +52,7 @@ export default tseslint.config(
     // These export hooks or helpers next to their component by design (and main.tsx is
     // the entry point); fast refresh just reloads the page for them
     files: [
-      'web/src/components/NewSplitDialog.tsx',
+      'web/src/components/split/NewSplitDialog.tsx',
       'web/src/components/settings/SettingsPage.tsx',
       'web/src/components/split/ShareImage.tsx',
       'web/src/profile/ProfileContext.tsx',

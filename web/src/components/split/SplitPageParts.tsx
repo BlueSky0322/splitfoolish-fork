@@ -4,7 +4,7 @@ import type { Person } from '../../../../shared/types';
 import { useSplitState } from '../../split/SplitStateContext';
 import { plural } from '../../utils/text';
 import type { SelectionBarProps } from './items/ItemSelection';
-import PersonAvatar from './people/PersonAvatar';
+import PersonAvatar from './PersonAvatar';
 import { useSplitPage } from './SplitPageContext';
 import classes from './Split.module.css';
 

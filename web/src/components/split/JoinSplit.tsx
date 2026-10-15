@@ -1,10 +1,10 @@
 import { Button } from '@mantine/core';
 import { CircleNotch, CloudSlash, LinkBreak } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { ApiError, api } from '../api';
-import { navigate } from '../hooks/useRoute';
-import StateCard from './ui/StateCard';
-import { reloadHomeData } from '../home/home-data';
+import { ApiError, api } from '../../api';
+import { navigate } from '../../hooks/useRoute';
+import StateCard from '../ui/StateCard';
+import { reloadHomeData } from '../../home/home-data';
 
 const JoinSplit = ({ token }: { token: string }) => {
   // 'gone': the link isn't valid any more; 'failed': it couldn't be checked just now

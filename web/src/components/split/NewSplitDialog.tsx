@@ -1,18 +1,18 @@
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useState } from 'react';
-import { startCreate } from '../offline/pending-creates';
-import { removeCacheEntry, splitCacheKey, writeCache } from '../offline/cache';
-import { navigate } from '../hooks/useRoute';
-import { useProfile } from '../profile/ProfileContext';
-import { uploadSplitPicture } from '../split/pictures';
-import type { SplitFormValues } from './split/SplitForm';
-import SplitForm from './split/SplitForm';
-import ResponsiveDialog from './ui/ResponsiveDialog';
-import type { SplitDetail, SplitSummary } from '../../../shared/api';
-import { reloadHomeData, updateHomeData } from '../home/home-data';
-import { showError } from '../utils/notify';
-import { newId } from '../utils/id';
-import { homeCurrency } from '../utils/money';
+import { startCreate } from '../../offline/pending-creates';
+import { removeCacheEntry, splitCacheKey, writeCache } from '../../offline/cache';
+import { navigate } from '../../hooks/useRoute';
+import { useProfile } from '../../profile/ProfileContext';
+import { uploadSplitPicture } from '../../split/pictures';
+import type { SplitFormValues } from './SplitForm';
+import SplitForm from './SplitForm';
+import ResponsiveDialog from '../ui/ResponsiveDialog';
+import type { SplitDetail, SplitSummary } from '../../../../shared/api';
+import { reloadHomeData, updateHomeData } from '../../home/home-data';
+import { showError } from '../../utils/notify';
+import { newId } from '../../utils/id';
+import { homeCurrency } from '../../utils/money';
 
 // The one "New split" form, opened from the sidebar, My splits and the phone's FAB
 
