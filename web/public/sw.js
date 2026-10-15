@@ -174,6 +174,16 @@ async function post(path, body) {
   }
   // Signed out (Cloudflare Access sends a sign-in page): the app sends it once signed in
   if (res.redirected || res.type === 'opaqueredirect') throw new TryLater('Signed out');
+  // Answered by something other than the API (a proxy, say), as the app sees it too
+  if (
+    res.ok &&
+    !(await res.json().then(
+      () => true,
+      () => false,
+    ))
+  ) {
+    throw new TryLater('Not answered with JSON');
+  }
   // Otherwise done; a refusal (4xx) is dropped, and the app shows the split as the
   // server has it
   return res;

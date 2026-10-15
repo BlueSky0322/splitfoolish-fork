@@ -140,3 +140,10 @@ export async function getRate(
   if (saved) return saved;
   throw new RatesUnavailable(`No rate for ${from} to ${to} right now`);
 }
+
+/** getRate, or null when neither service has the rate (nor a copy of it) */
+export const rateOrNull = (env: RatesEnv, from: string, to: string, options?: RateOptions) =>
+  getRate(env, from, to, options).catch((err: unknown) => {
+    if (err instanceof RatesUnavailable) return null;
+    throw err;
+  });

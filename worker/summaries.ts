@@ -1,6 +1,7 @@
 // My Splits: each split the person belongs to, with its total and their own balance.
 // Everything is read in one round trip and balanced with the same maths as the app.
-// Also the names of items across those splits, for suggesting as you type one.
+// Also the names of items across those splits, for suggesting as you type one, and the
+// currencies used in them, for Settings.
 
 import type { ItemNameUse, SplitSummary } from '../shared/api';
 import type { SettleItem, SplitMode } from '../shared/settle';
@@ -125,4 +126,32 @@ export async function listItemNames(db: D1Database, email: string): Promise<Item
     .bind(email, MAX_ITEM_NAMES)
     .all<ItemNameUse>();
   return results;
+}
+
+/** At most this many currencies in Settings' "Rates in your splits" */
+const MAX_USED_CURRENCIES = 12;
+
+/**
+ * The currencies in a person's splits other than `except` (the splits' own, and those
+ * items were paid in), with how many splits each is in, most used first
+ */
+export async function listUsedCurrencies(
+  db: D1Database,
+  email: string,
+  except: string,
+): Promise<{ currency: string; splits: number }[]> {
+  const used = await db
+    .prepare(
+      `SELECT cur AS currency, count(DISTINCT split_id) AS splits FROM (
+         SELECT s.currency AS cur, s.id AS split_id
+           FROM splits s JOIN split_members m ON m.split_id = s.id WHERE m.email = ?1
+         UNION ALL
+         SELECT i.original_currency, i.split_id
+           FROM items i JOIN split_members m ON m.split_id = i.split_id
+           WHERE m.email = ?1 AND i.original_currency IS NOT NULL
+       ) WHERE cur != ?2 GROUP BY cur ORDER BY splits DESC, cur LIMIT ?3`,
+    )
+    .bind(email, except, MAX_USED_CURRENCIES)
+    .all<{ currency: string; splits: number }>();
+  return used.results;
 }

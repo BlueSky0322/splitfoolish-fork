@@ -14,10 +14,10 @@ import { OUTBOX_PREFIX, SYNC_TAG, isRetryable } from './outbox';
 const source = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
 
 /** Loads the service worker with `answer` as the server, and fires its background sync */
-async function backgroundSync(answer: number) {
+async function backgroundSync(answer: number, body?: string) {
   const handlers: Record<string, (event: unknown) => void> = {};
   const fetch = vi.fn((_path: string, init: RequestInit) =>
-    Promise.resolve(new Response(init.body ?? null, { status: answer })),
+    Promise.resolve(new Response(body ?? init.body ?? null, { status: answer })),
   );
   runInNewContext(source, {
     self: {
@@ -68,6 +68,13 @@ describe('the service worker, sending offline changes', () => {
       expect(isRetryable(new ApiError(status, ''))).toBe(true);
     },
   );
+
+  test('keeps them when something other than the API answers, as the app does', async () => {
+    await keep('ryan@example.com');
+    const { outcome } = await backgroundSync(200, '<html>Gateway</html>');
+    expect(outcome).toBe('try later');
+    expect(await get(`${OUTBOX_PREFIX}trip`)).toBeDefined();
+  });
 
   test('drops changes the server refuses; the app shows the split as the server has it', async () => {
     await keep('ryan@example.com');
