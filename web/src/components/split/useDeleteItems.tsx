@@ -1,5 +1,4 @@
 import { Button } from '@mantine/core';
-import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import type { SplitActions } from '../../split/actions';
 import { SplitItem, toApiItem } from '../../split/state';
@@ -10,12 +9,24 @@ interface Photos {
   forgetItem: (itemId: string) => void;
 }
 
+/** Asking before items go with their photos */
+export interface DeleteConfirmation {
+  /** "Dinner", or "3 items" */
+  label: string;
+  photoCount: number;
+  remove: () => void;
+}
+
 /**
  * Deleting one item or several. Without photos it happens at once, with Undo; photos
  * go with their item and can't be brought back, so then it asks first (unless that was
  * asked already, as the item form does).
  */
-export function useDeleteItems(actions: SplitActions, photos: Photos) {
+export function useDeleteItems(
+  actions: SplitActions,
+  photos: Photos,
+  confirm: (confirmation: DeleteConfirmation) => void,
+) {
   return (items: SplitItem[], { confirmed = false, onDeleted = () => {} } = {}) => {
     if (items.length === 0) return;
     const photoCount = items.reduce((n, i) => n + photos.photosOf(i.id).length, 0);
@@ -55,17 +66,6 @@ export function useDeleteItems(actions: SplitActions, photos: Photos) {
       remove();
       return;
     }
-    modals.openConfirmModal({
-      title: `Delete ${label}?`,
-      children: (
-        <p className="text-sm">
-          {photoCount === 1 ? 'A photo' : `${photoCount} photos`} will be deleted too. This can't be
-          undone.
-        </p>
-      ),
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
-      onConfirm: remove,
-    });
+    confirm({ label, photoCount, remove });
   };
 }

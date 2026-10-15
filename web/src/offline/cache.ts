@@ -11,7 +11,8 @@ import { quietly } from '../utils/quietly';
 export const LAST_PAGE_KEY = 'splitfoolish:lastPage';
 const LAST_EMAIL_KEY = 'splitfoolish:lastEmail';
 /** The signed-in email in IndexedDB, where the service worker reads it (public/sw.js) */
-const SW_USER_KEY = 'sf-user';
+/** Also read by public/sw.js (outbox.test.ts checks they match) */
+export const SW_USER_KEY = 'sf-user';
 /** Pictures the service worker keeps (IMAGE_CACHE in public/sw.js) */
 const IMAGE_CACHE = 'splitfoolish-images-v1';
 

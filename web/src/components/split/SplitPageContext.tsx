@@ -6,6 +6,7 @@ import type { SplitItem, SplitMeta } from '../../split/state';
 import type { MetaChanges, SyncStatus } from '../../split/useSplit';
 import type { usePhotos } from '../photos/usePhotos';
 import type { Prefill } from './useConvertPrefill';
+import type { DeleteConfirmation } from './useDeleteItems';
 
 // What the split page has loaded and worked out, for the components on it to read
 // rather than have it handed down through each one in between. The bill itself (people
@@ -25,7 +26,9 @@ export type Dialog =
   | { kind: 'end' }
   | { kind: 'settings' }
   | { kind: 'photos' }
-  | { kind: 'currencies' };
+  | { kind: 'currencies' }
+  /** Deleting items would delete their photos too */
+  | ({ kind: 'confirmDelete' } & DeleteConfirmation);
 
 export interface SplitPage {
   splitId: string;

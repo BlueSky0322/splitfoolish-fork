@@ -113,7 +113,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const selection = useItemSelection(groups.flatMap((g) => g.items.map((i) => i.id)));
   const [moving, setMoving] = useState(false);
 
-  const deleteItems = useDeleteItems(actions, photos);
+  const deleteItems = useDeleteItems(actions, photos, (c) =>
+    setDialog({ kind: 'confirmDelete', ...c }),
+  );
   /** Deletes the picked items: with Undo, or after asking when photos would go too */
   const deleteSelected = () =>
     deleteItems(

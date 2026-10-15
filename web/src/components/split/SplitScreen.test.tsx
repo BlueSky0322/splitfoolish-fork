@@ -56,6 +56,32 @@ describe('the split page', () => {
     await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(2));
   });
 
+  test('asks before deleting an item whose photos would go with it', async () => {
+    const split = trip();
+    split.attachments = [
+      { id: 'receipt', itemId: 'taxi', size: 1, uploadedBy: 'ryan@example.com', createdAt: 1 },
+    ];
+    const server = fakeServer(split);
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Delete Taxi' }));
+
+    const ask = await screen.findByRole('dialog', { name: 'Delete Taxi?' });
+    expect(within(ask).getByText(/A photo will be deleted too/)).toBeTruthy();
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('Taxi')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Delete Taxi' }));
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Delete Taxi?' })).getByRole('button', {
+        name: 'Delete',
+      }),
+    );
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.map((i) => i.name)).toEqual(['Dinner']),
+    );
+  });
+
   test('on a phone, leads with where you stand and who owes whom', async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();

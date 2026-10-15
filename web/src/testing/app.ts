@@ -3,7 +3,7 @@
 
 // IndexedDB, for the offline cache
 import 'fake-indexeddb/auto';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, configure, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { MyInvite, Profile, SplitDetail, SplitSummary } from '../../../shared/api';
@@ -12,6 +12,10 @@ import type { Change, Item } from '../../../shared/types';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
 import { clearCache } from '../offline/cache';
+
+// The whole app renders in each test, which takes a while when every test file runs at
+// once: wait longer than the default second for things to appear
+configure({ asyncUtilTimeout: 4000 });
 
 /** The screen tests run at: a computer, or a phone */
 let screenSize: 'desktop' | 'phone' = 'desktop';

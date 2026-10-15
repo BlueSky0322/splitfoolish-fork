@@ -25,10 +25,10 @@ export interface PendingCreate {
 }
 
 // The keys and lock below are also used by public/sw.js, which can't import them: a
-// change here needs the same change there
-const OUTBOX_PREFIX = 'outbox:';
-const CREATE_PREFIX = 'create:';
-const LOCK_PREFIX = 'sf-outbox:';
+// change here needs the same change there (outbox.test.ts checks they match)
+export const OUTBOX_PREFIX = 'outbox:';
+export const CREATE_PREFIX = 'create:';
+export const LOCK_PREFIX = 'sf-outbox:';
 const outboxKey = (splitId: string) => `${OUTBOX_PREFIX}${splitId}`;
 const createKey = (splitId: string) => `${CREATE_PREFIX}${splitId}`;
 export const SYNC_TAG = 'sf-outbox';

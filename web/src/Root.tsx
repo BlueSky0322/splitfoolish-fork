@@ -1,9 +1,8 @@
 // The app with everything around it: theme, icons, data, the signed-in profile,
-// notifications and modals. main.tsx starts it; tests render it the same way.
+// and notifications. main.tsx starts it; tests render it the same way.
 
 import { MantineProvider } from '@mantine/core';
 import '@mantine/core/styles.css';
-import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import '@mantine/notifications/styles.css';
 import { IconContext } from '@phosphor-icons/react';
@@ -33,9 +32,7 @@ export function Root() {
         <QueryClientProvider client={queryClient}>
           <ProfileProvider onAccentChange={setAccent}>
             <Notifications />
-            <ModalsProvider>
-              <App />
-            </ModalsProvider>
+            <App />
           </ProfileProvider>
         </QueryClientProvider>
       </IconContext.Provider>

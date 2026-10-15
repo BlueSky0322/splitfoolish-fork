@@ -9,6 +9,7 @@ import SplitMembers, { ShareTitle } from './SplitMembers';
 import SplitSettings from './SplitSettings';
 import PhotoStrip from '../photos/PhotoStrip';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
+import { Button } from '@mantine/core';
 import { ReactNode } from 'react';
 import { ItemInput } from '../../api';
 import type { SplitTotals } from '../../split/derive';
@@ -258,6 +259,38 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             onRefresh={actions.refreshRates}
             onSetRate={actions.setRate}
           />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'confirmDelete'}
+        onClose={close}
+        title={dialog?.kind === 'confirmDelete' ? `Delete ${dialog.label}?` : ''}
+        width={400}
+      >
+        {dialog?.kind === 'confirmDelete' && (
+          <div className="flex flex-col gap-4">
+            <p className="sf-muted text-sm">
+              {dialog.photoCount === 1 ? 'A photo' : `${dialog.photoCount} photos`} will be deleted
+              too. This can't be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="default"
+                onClick={close}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="red"
+                onClick={() => {
+                  close();
+                  dialog.remove();
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
         )}
       </ResponsiveDialog>
       <ResponsiveDialog

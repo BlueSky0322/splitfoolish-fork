@@ -1,6 +1,18 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { ApiError } from '../api';
-import { Queued, isRetryable, classifySaveFailure, stillToSend, withOutbox } from './outbox';
+import { SW_USER_KEY } from './cache';
+import {
+  CREATE_PREFIX,
+  LOCK_PREFIX,
+  OUTBOX_PREFIX,
+  Queued,
+  SYNC_TAG,
+  classifySaveFailure,
+  isRetryable,
+  stillToSend,
+  withOutbox,
+} from './outbox';
 
 const q = (cid: string): Queued => ({ cid, change: { op: 'removeItem', id: cid } });
 
@@ -63,5 +75,32 @@ describe('withOutbox', () => {
     await Promise.all([second, other]);
     // The other split didn't wait; the same split's second call did
     expect(order).toEqual(['other split', 'first', 'second']);
+  });
+});
+
+// The service worker sends the outbox while the app is closed. It can't import these,
+// so it keeps its own copies, which have to match.
+describe('the service worker', () => {
+  const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
+
+  test('uses the same keys, lock and sync tag as the app', () => {
+    const twins = {
+      SYNC_TAG,
+      OUTBOX_PREFIX,
+      CREATE_PREFIX,
+      LOCK_PREFIX,
+      USER_KEY: SW_USER_KEY,
+    };
+    for (const [name, value] of Object.entries(twins)) {
+      expect(sw).toContain(`const ${name} = '${value}';`);
+    }
+  });
+
+  test('tries again on the same answers as isRetryable', () => {
+    for (const status of [401, 429, 500, 503]) {
+      expect(isRetryable(new ApiError(status, ''))).toBe(true);
+    }
+    expect(isRetryable(new ApiError(409, ''))).toBe(false);
+    expect(sw).toContain('res.status === 401 || res.status === 429 || res.status >= 500');
   });
 });
