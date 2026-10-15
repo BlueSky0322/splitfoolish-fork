@@ -1,7 +1,7 @@
 // The API end to end, against the real Worker and a fresh local database: who can see
 // and change what, the rules for changing a split, and the share-link invite flows.
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { LocalWorker, startLocalWorker } from './local-worker';
 
 let api: LocalWorker;
@@ -16,6 +16,9 @@ const hex = () =>
 beforeAll(async () => {
   api = await startLocalWorker();
 }, 120_000);
+
+// Each test sets the rates it needs
+afterEach(() => api.rates.reset());
 
 afterAll(() => api?.stop());
 

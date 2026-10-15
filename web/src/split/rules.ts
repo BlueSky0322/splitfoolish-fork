@@ -47,9 +47,14 @@ export function removeBlocker(
     return `${person.name} paid for ${plural(paid, 'item')}. Edit or remove those items first.`;
   const shared = state.items.filter((i) => i.participants.some((p) => p.id === personId));
   if (shared.length === 0) return null;
+  // Said before asking whether to take them off those items too (the server, sent a
+  // removal without that, adds "Edit or remove those items first")
   if (!fromItems) return `${person.name} is on ${plural(shared.length, 'item')}.`;
-  if (shared.some((i) => i.participants.length === 1)) {
-    return `${person.name} is the only person on an item. Edit or remove it first.`;
+  const emptied = shared.filter((i) => i.participants.length === 1).length;
+  if (emptied > 0) {
+    return emptied === 1
+      ? `${person.name} is the only person on an item. Edit or remove it first.`
+      : `${person.name} is the only person on some items. Edit or remove them first.`;
   }
   if (shared.some((i) => i.splitMode === 'exact')) {
     return `${person.name} is on an item split by exact amounts. Edit that item first.`;

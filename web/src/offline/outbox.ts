@@ -106,6 +106,24 @@ export const isOffline = () => typeof navigator !== 'undefined' && navigator.onL
 export const isNetworkError = (err: unknown) => err instanceof TypeError || isOffline();
 
 /**
+ * What's still to send, given what this page queued, which of those it had written to
+ * the outbox, and what the outbox holds now: a change written there that's since gone
+ * was sent by someone else (the service worker, or another tab). Changes queued since
+ * the last write are kept either way.
+ */
+export function stillToSend(pending: Queued[], written: Set<string>, inOutbox: Set<string>) {
+  const left = pending.filter((q) => !written.has(q.cid) || inOutbox.has(q.cid));
+  return { left, sentElsewhere: left.length < pending.length };
+}
+
+/** What a failed save means: the split is gone, the server refused it, or try again */
+export function saveFailure(err: unknown): 'gone' | 'refused' | 'retry' {
+  if (err instanceof ApiError && err.status === 404) return 'gone';
+  if (err instanceof ApiError && !isRetryable(err)) return 'refused';
+  return 'retry';
+}
+
+/**
  * Whether a failed send is worth trying again: no connection, busy (429), something
  * wrong on the server's side (5xx, including no exchange rate yet), or signed out (401).
  * Anything else is the server refusing the change itself. public/sw.js follows the

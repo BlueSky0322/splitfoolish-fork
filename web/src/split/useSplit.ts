@@ -20,7 +20,8 @@ import {
   requestBackgroundSync,
   withOutbox,
   writeOutbox,
-  isRetryable,
+  saveFailure,
+  stillToSend,
 } from '../offline/outbox';
 import { queryClient } from '../query-client';
 import { ITEM_NAMES_KEY } from './item-names';
@@ -140,11 +141,10 @@ export function useSplit(splitId: string) {
    * Returns true if the service worker sent some while this page was asleep.
    */
   const syncOutbox = useCallback(async () => {
-    const there = new Set((await readOutbox(splitId)).map((q) => q.cid));
-    const before = pending.current.length;
-    pending.current = pending.current.filter((q) => !stored.current.has(q.cid) || there.has(q.cid));
-    const sentElsewhere = pending.current.length < before;
-    const now = pending.current;
+    const inOutbox = new Set((await readOutbox(splitId)).map((q) => q.cid));
+    const { left, sentElsewhere } = stillToSend(pending.current, stored.current, inOutbox);
+    pending.current = left;
+    const now = left;
     await writeOutbox(splitId, now);
     stored.current = new Set(now.map((q) => q.cid));
     setWaiting(pending.current.length);
@@ -163,8 +163,9 @@ export function useSplit(splitId: string) {
    */
   const failed = useCallback(
     async (err: unknown, batch: Queued[]): Promise<boolean> => {
+      const kind = saveFailure(err);
       // Removed from the split (or it was deleted) while it was open
-      if (err instanceof ApiError && err.status === 404) {
+      if (kind === 'gone') {
         pending.current = [];
         void withOutbox(splitId, syncOutbox);
         void removeCache(cacheKey);
@@ -173,9 +174,9 @@ export function useSplit(splitId: string) {
         settled();
         return false;
       }
-      if (err instanceof ApiError && !isRetryable(err)) {
+      if (kind === 'refused') {
         // Refused: everything queued after it was built on top of it, so start over
-        showRefusal(err.message);
+        showRefusal((err as Error).message);
         pending.current = [];
         await withOutbox(splitId, syncOutbox);
         reloadAfterSave.current = false;

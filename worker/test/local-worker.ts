@@ -43,6 +43,8 @@ export interface FakeRates {
   set: (from: string, to: string, rate: number) => void;
   /** Makes one service answer 500 */
   down: (service: 'wise' | 'frankfurter', isDown: boolean) => void;
+  /** Forgets every rate and brings both services back, so tests don't lean on each other */
+  reset: () => void;
 }
 
 /** A tiny HTTP server answering like Wise's /v1/rates and Frankfurter's /v1/latest */
@@ -76,6 +78,11 @@ async function startFakeRates(): Promise<FakeRates & { base: string; close: () =
     set: (from, to, rate) => table.set(`${from}${to}`, rate),
     down: (service, value) => {
       isDown[service] = value;
+    },
+    reset: () => {
+      table.clear();
+      isDown.wise = false;
+      isDown.frankfurter = false;
     },
     close: () => server.close(),
   };
