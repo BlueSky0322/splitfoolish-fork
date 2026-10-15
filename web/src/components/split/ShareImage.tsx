@@ -1,18 +1,14 @@
 import { isShareCancelled } from '../../utils/share';
-import { Button, Loader, useComputedColorScheme } from '@mantine/core';
+import { Button, Loader } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { SplitItem } from '../../split/state';
 import type { Person } from '../../../../shared/types';
 import type { SplitTotals } from '../../split/derive';
-import { useProfile } from '../../profile/ProfileContext';
-import { ACCENTS } from '../../theme/accents';
-import type { Accent } from '../../../../shared/api';
 import { formatMoney } from '../../utils/money';
 import TransferRow from './balances/TransferRow';
 import classes from './ShareImage.module.css';
 import { toCents } from '../../../../shared/rates';
-import { DEFAULT_SETTINGS } from '../../../../shared/api';
 import { plural } from '../../utils/text';
 
 interface ShareImageProps {
@@ -21,36 +17,6 @@ interface ShareImageProps {
   people: Person[];
   items: SplitItem[];
   totals: SplitTotals;
-}
-
-/** a mixed into b by amount (0-1), as plain hex */
-function mix(a: string, b: string, amount: number) {
-  const channels = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const [ca, cb] = [channels(a), channels(b)];
-  return `#${ca
-    .map((v, i) => Math.round(v * amount + cb[i] * (1 - amount)))
-    .map((v) => v.toString(16).padStart(2, '0'))
-    .join('')}`;
-}
-
-/** The theme's colours in plain hex, so the picture matches what's on screen */
-export function shareImagePalette(scheme: 'dark' | 'light', accent: Accent) {
-  const dark = scheme === 'dark';
-  const bg = dark ? '#161826' : '#eceef6';
-  const surface = dark ? '#232532' : '#f8f9fd';
-  const text = dark ? '#e9e9ed' : '#1e202b';
-  const accentColour = ACCENTS[accent].ramp[dark ? 4 : 6];
-  return {
-    '--sf-bg': bg,
-    '--sf-surface': surface,
-    '--sf-text': text,
-    '--sf-accent': accentColour,
-    '--sf-tint': mix(text, bg, 0.05),
-    '--sf-avatar': mix(accentColour, surface, 0.24),
-    '--sf-text-muted': mix(text, bg, 0.58),
-    '--sf-text-label': mix(text, bg, 0.5),
-    '--sf-rule': mix(text, bg, 0.16),
-  } as React.CSSProperties;
 }
 
 const WIDTH = 1080;
@@ -69,10 +35,6 @@ function dateRange(items: SplitItem[]) {
 // The settle-up summary as a 1080x1350 picture to post in a group chat. Drawn from a
 // hidden copy of the card, in the theme and accent on screen.
 const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) => {
-  const scheme = useComputedColorScheme('dark');
-  const { profile } = useProfile();
-  const accent = profile?.settings.accent ?? DEFAULT_SETTINGS.accent;
-  const palette = shareImagePalette(scheme, accent);
   const cardRef = useRef<HTMLDivElement>(null);
   const [showItems, setShowItems] = useState(true);
   const [image, setImage] = useState<{ url: string; blob: Blob } | null>(null);
@@ -91,22 +53,13 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
     let url: string | null = null;
     const card = cardRef.current;
     if (card == null) return;
-    import('html2canvas')
-      .then(({ default: html2canvas }) =>
-        html2canvas(card, {
-          width: WIDTH,
-          height: HEIGHT,
-          scale: 1,
-          backgroundColor: (palette as Record<string, string>)['--sf-bg'],
-        }),
-      )
-      .then(
-        (canvas) =>
-          new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png')),
+    // Drawn by the browser itself, so the card looks as it does on screen
+    import('modern-screenshot')
+      .then(({ domToBlob }) =>
+        domToBlob(card, { width: WIDTH, height: HEIGHT, scale: 1, type: 'image/png' }),
       )
       .then((blob) => {
         if (cancelled) return;
-        if (blob == null) throw new Error('No image');
         url = URL.createObjectURL(blob);
         setImage({ url, blob });
       })
@@ -115,8 +68,6 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-    // palette is a new object each render, so depending on it would redraw in a loop
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showItems]);
 
   const fileName = `${name.replace(/[^\w-]+/g, '-').toLowerCase() || 'split'}.png`;
@@ -184,7 +135,7 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
         <div
           ref={cardRef}
           className={classes.card}
-          style={{ width: WIDTH, height: HEIGHT, ...palette }}
+          style={{ width: WIDTH, height: HEIGHT }}
         >
           <div className={classes.brand}>
             <ArrowsSplit size={28} />

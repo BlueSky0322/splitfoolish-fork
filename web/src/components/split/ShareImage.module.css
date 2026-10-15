@@ -25,9 +25,8 @@
   pointer-events: none;
 }
 
-/* Colours come from shareImagePalette in plain hex: the image renderer doesn't
-   understand color-mix() */
 .card {
+  --sf-rule: color-mix(in srgb, var(--sf-text) 16%, transparent);
   background: var(--sf-bg);
   color: var(--sf-text);
   font-family: Inter, system-ui, sans-serif;

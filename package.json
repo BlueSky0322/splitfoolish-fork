@@ -27,9 +27,9 @@
     "@phosphor-icons/react": "^2.1.7",
     "@tanstack/react-query": "^5.104.2",
     "hono": "^4.13.13",
-    "html2canvas": "^1.4.1",
     "idb-keyval": "^6.3.0",
     "immer": "^10.1.1",
+    "modern-screenshot": "^4.7.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "use-immer": "^0.9.0"
