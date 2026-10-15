@@ -12,7 +12,7 @@ import type { SplitState } from './state';
 import { toApiItem, type MetaChanges, type SplitMeta, type SyncStatus } from './state';
 import { readCache, removeCacheEntry, splitCacheKey, writeCache } from '../offline/cache';
 import { whenCreated } from '../offline/pending-creates';
-import { isNetworkError, isOffline } from '../offline/outbox';
+import { isOfflineFailure, isOffline } from '../offline/outbox';
 import { useSaveQueue } from './useSaveQueue';
 import { useSplitLive } from './useSplitLive';
 import type { SplitDetail } from '../../../shared/api';
@@ -51,7 +51,7 @@ export function useSplit(splitId: string) {
   const { saves, waiting } = useSaveQueue(splitId, {
     setStatus,
     reload: () => load(),
-    onGone: () => markGone(),
+    loadFailed: (err) => backgroundLoadFailed(err),
   });
 
   /** Deleted, or no longer shared with this person: the device's copy goes too */
@@ -66,7 +66,7 @@ export function useSplit(splitId: string) {
   const backgroundLoadFailed = useCallback(
     (err: unknown) => {
       if (isGone(err)) markGone();
-      else if (isNetworkError(err)) setStatus('offline');
+      else if (isOfflineFailure(err)) setStatus('offline');
       else console.error(err);
     },
     [markGone],
@@ -125,7 +125,7 @@ export function useSplit(splitId: string) {
         if (cancelled) return;
         if (isGone(err)) return markGone();
         console.error(err);
-        setStatus(isNetworkError(err) ? 'offline' : 'error');
+        setStatus(isOfflineFailure(err) ? 'offline' : 'error');
       });
 
     return () => {
@@ -173,10 +173,15 @@ export function useSplit(splitId: string) {
   }, [status, meta, state.people, state.items, cacheKey]);
 
   // Refresh members and invites after sharing changes, without touching people/items
+  // Failures are handled here (a split gone shows as gone), so callers needn't
   const refreshMeta = useCallback(async () => {
-    const { people, items, ...rest } = await api.getSplit(splitId);
-    setMeta(rest);
-  }, [splitId]);
+    try {
+      const { people, items, ...rest } = await api.getSplit(splitId);
+      setMeta(rest);
+    } catch (err) {
+      backgroundLoadFailed(err);
+    }
+  }, [splitId, backgroundLoadFailed]);
 
   // Everything besides the bill that the split page changes, each in its own way, so
   // nothing outside edits meta directly
@@ -201,7 +206,7 @@ export function useSplit(splitId: string) {
         setMeta((m) => (m ? show(m) : m));
         request().catch((err: unknown) => {
           showError(err, 'Something went wrong');
-          refreshMeta().catch((e: unknown) => console.error(e));
+          void refreshMeta();
         });
       },
     }),

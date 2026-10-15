@@ -54,7 +54,9 @@ const QrViewer = ({
   currency,
   methods,
 }: QrViewerProps) => {
-  const codes = methods.filter((m) => isQr(m) && m.qrVersion != null);
+  const codes = methods.filter(
+    (m): m is PaymentMethod & { qrVersion: number } => isQr(m) && m.qrVersion != null,
+  );
   const [shownId, setShownId] = useState<string | null>(null);
   useEffect(() => {
     if (opened) setShownId(null);
@@ -92,7 +94,7 @@ const QrViewer = ({
             {shown.detail && <div className={classes.label}>{shown.detail}</div>}
             <img
               className={classes.code}
-              src={paymentQrUrl(shown.id, shown.qrVersion!)}
+              src={paymentQrUrl(shown.id, shown.qrVersion)}
               alt={`${methodName(shown)} for ${name}`}
             />
             <div className={classes.hint}>Scan with your banking app, then enter {amount}</div>
@@ -100,7 +102,7 @@ const QrViewer = ({
           <div className={classes.actions}>
             <Button
               component="a"
-              href={paymentQrUrl(shown.id, shown.qrVersion!)}
+              href={paymentQrUrl(shown.id, shown.qrVersion)}
               download={`${methodName(shown)} - ${name}`}
               variant="default"
               size="md"

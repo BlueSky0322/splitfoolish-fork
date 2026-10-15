@@ -848,65 +848,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- People sheet ---------- */
-
-.peopleList {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.peopleList > * + * {
-  border-top: 1px solid var(--sf-divider);
-}
-
-.personRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 56px;
-  padding: 8px 12px;
-}
-
-.personRow:hover {
-  background: var(--sf-hover);
-}
-
-.personName {
-  font-size: 15px;
-}
-
-.personMeta {
-  font-size: 12px;
-  color: var(--sf-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.personBalance {
-  font-family: var(--sf-font-num);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.personDetail {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px 12px 16px 52px;
-}
-
-/* Asking before taking someone off their items */
-.confirm {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--sf-tint);
-}
-
 /* ---------- Banners and empty states ---------- */
 
 .banner {

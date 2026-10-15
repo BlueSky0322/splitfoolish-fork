@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom';
 import { convertCents, isValidRate, toCents } from '../../../../../shared/rates';
 import type { SplitMode } from '../../../../../shared/settle';
 import { itemShares, MAX_SHARES } from '../../../../../shared/settle';
-import { MAX_NOTES_LENGTH, MAX_NAME_LENGTH } from '../../../../../shared/types';
+import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../../../../../shared/types';
 import type { ItemInput } from '../../../api';
 import { api } from '../../../api';
 import type { SplitItem } from '../../../split/state';
@@ -88,7 +88,7 @@ const ItemForm = ({
     original?.currency ?? (item ? currency : initialCurrency ?? currency),
   );
   const foreign = entryCurrency !== currency;
-  const [useOwnRate, setUseOwnRate] = useState(original?.rateSource === 'manual');
+  const [ownRateChosen, setOwnRateChosen] = useState(original?.rateSource === 'manual');
   const [ownRate, setOwnRate] = useState<number | ''>(
     original?.rateSource === 'manual' ? original.rate ?? '' : '',
   );
@@ -127,12 +127,12 @@ const ItemForm = ({
 
   // The rate for the preview. The server converts again when saving, except that an
   // edit leaving the amount alone keeps the rate the item was saved with.
-  const fetchedRate = useRate(entryCurrency, currency, { enabled: foreign && !useOwnRate });
+  const fetchedRate = useRate(entryCurrency, currency, { enabled: foreign && !ownRateChosen });
   const { rate, source: rateSource } = chooseRate({
     foreign,
     entryCurrency,
     enteredCents,
-    useOwnRate,
+    ownRateChosen,
     ownRate,
     original,
     fetched: fetchedRate.data,
@@ -148,27 +148,33 @@ const ItemForm = ({
   };
 
   // What each person's part comes to, shown next to them
-  const preview = useMemo(() => {
-    if (costCents == null || chosen.length === 0) return new Map<string, number>();
-    return itemShares({
-      costCents,
-      payerId: payerId ?? '',
-      splitMode: mode,
-      participants: chosen.map((p) => ({
-        personId: p.id,
-        shares: shares[p.id] ?? 1,
-        exactCents: exactCents(exact[p.id]),
-      })),
-    });
-  }, [costCents, chosen, payerId, mode, shares, exact]);
+  // A handful of people: cheap to work out on every change
+  const preview =
+    costCents == null || chosen.length === 0
+      ? new Map<string, number>()
+      : itemShares({
+          costCents,
+          payerId: payerId ?? '',
+          splitMode: mode,
+          participants: chosen.map((p) => ({
+            personId: p.id,
+            shares: shares[p.id] ?? 1,
+            exactCents: exactCents(exact[p.id]),
+          })),
+        });
 
   const assignedCents = chosen.reduce((sum, p) => sum + exactCents(exact[p.id]), 0);
   // Exact amounts are typed in the currency it was paid in
   const leftCents = (enteredCents ?? 0) - assignedCents;
 
   const problems = {
-    cost: enteredCents == null ? 'Enter an amount, like 90 or 30*3' : null,
-    rate: foreign && useOwnRate && !isValidRate(ownRate) ? 'Enter the rate, like 0.03' : null,
+    cost:
+      enteredCents == null
+        ? 'Enter an amount, like 90 or 30*3'
+        : enteredCents > toCents(MAX_COST)
+          ? `Amounts go up to ${MAX_COST.toLocaleString()}`
+          : null,
+    rate: foreign && ownRateChosen && !isValidRate(ownRate) ? 'Enter the rate, like 0.03' : null,
     name: name.trim() ? null : 'Enter what it was for',
     payer: payerId ? null : 'Choose who paid',
     people: chosen.length > 0 ? null : 'Choose at least one person to split with',
@@ -196,7 +202,7 @@ const ItemForm = ({
         rate,
         foreign,
         entryCurrency,
-        useOwnRate,
+        ownRateChosen,
         ownRate,
         payerId,
         participantIds: chosen.map((p) => p.id),
@@ -292,7 +298,7 @@ const ItemForm = ({
       {tried && problems.cost && <div className={classes.error}>{problems.cost}</div>}
       {foreign && (
         <div className={classes.conversion}>
-          {useOwnRate ? (
+          {ownRateChosen ? (
             <>
               <span>1 {entryCurrency} =</span>
               <NumberInput
@@ -313,7 +319,7 @@ const ItemForm = ({
               )}
               <UnstyledButton
                 className={classes.rateToggle}
-                onClick={() => setUseOwnRate(false)}
+                onClick={() => setOwnRateChosen(false)}
               >
                 Use the live rate
               </UnstyledButton>
@@ -329,7 +335,7 @@ const ItemForm = ({
               <UnstyledButton
                 className={classes.rateToggle}
                 onClick={() => {
-                  setUseOwnRate(true);
+                  setOwnRateChosen(true);
                   if (ownRate === '' && rate != null) setOwnRate(rate);
                 }}
               >

@@ -18,12 +18,13 @@ import {
   Plus,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { COMMON_CURRENCIES, convertCents, toCents } from '../../../../shared/rates';
+import { COMMON_CURRENCIES, convertCents, isCurrency, toCents } from '../../../../shared/rates';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeData } from '../../home/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
-import { formatMoney, listCurrencies, homeCurrency } from '../../utils/money';
+import { formatMoney, homeCurrency, listCurrencies } from '../../utils/money';
+import type { CurrencyOption } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import CurrencySelect from '../ui/CurrencySelect';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
@@ -42,10 +43,7 @@ type Pair = [from: string, to: string];
 function readRecent(): Pair[] {
   const saved = quietly(() => JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as unknown);
   return Array.isArray(saved)
-    ? saved.filter(
-        (p): p is Pair =>
-          Array.isArray(p) && p.length === 2 && p.every((c) => /^[A-Z]{3}$/.test(String(c))),
-      )
+    ? saved.filter((p): p is Pair => Array.isArray(p) && p.length === 2 && p.every(isCurrency))
     : [];
 }
 
@@ -86,8 +84,7 @@ function CurrencySheet({
   const q = query.trim().toLowerCase();
   const matches = q === '' ? all : all.filter((c) => c.label.toLowerCase().includes(q));
   const top = q === '' ? suggested.flatMap((code) => all.filter((c) => c.value === code)) : [];
-  const row = (c: { value: string; label: string }) => {
-    const [code, ...rest] = c.label.split(' · ');
+  const row = (c: CurrencyOption) => {
     return (
       <UnstyledButton
         key={c.value}
@@ -98,8 +95,8 @@ function CurrencySheet({
           onClose();
         }}
       >
-        <span className={classes.currencyCode}>{code}</span>
-        <span className="sf-muted min-w-0 flex-1 truncate text-sm">{rest.join(' · ')}</span>
+        <span className={classes.currencyCode}>{c.value}</span>
+        <span className="sf-muted min-w-0 flex-1 truncate text-sm">{c.detail}</span>
       </UnstyledButton>
     );
   };

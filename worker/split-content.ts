@@ -4,28 +4,27 @@
 // people editing the same split don't overwrite each other.
 
 import type { RateSource } from '../shared/rates';
-import { convertCents, convertParts, isValidRate, toCents } from '../shared/rates';
+import {
+  convertCents,
+  convertParts,
+  isCurrency,
+  isValidRate,
+  keepsSavedConversion,
+  toCents,
+} from '../shared/rates';
 import type { SplitMode } from '../shared/settle';
 import { MAX_SHARES, isSplitMode } from '../shared/settle';
-import type { Change, Item, ItemOriginal, Person } from '../shared/types';
-import { MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../shared/types';
-import {
-  type Unchecked,
-  fail,
-  ok,
-  readName,
-  isClientId,
-  isConstraintError,
-  isCurrency,
-} from './http';
-import { type Actor, touchSplitStatement } from './app';
+import type { Change, Item, ItemOriginal, Person, Role } from '../shared/types';
+import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../shared/types';
+import { type Unchecked, fail, ok, readName, isClientId, isConstraintError } from './http';
+import type { Actor } from '../shared/rules';
+import { touchSplitStatement } from './app';
 import type { ChangesBody } from '../shared/api';
-import { removalBlocker } from '../shared/rules';
+import { canChangePeople, canLinkPerson, removalBlocker } from '../shared/rules';
 import { type Rate, RatesUnavailable } from './rates';
 import { removeAccessStatements } from './sharing';
 
 const MAX_CATEGORY_LENGTH = 32;
-const MAX_COST = 1_000_000_000;
 
 /** Reads a split's people and items; run as part of a larger batch, then pass to assembleContent */
 export const contentStatements = (db: D1Database, splitId: string) => [
@@ -81,17 +80,15 @@ interface ParticipantRow {
   originalExactCents: number | null;
 }
 
-export function assembleContent([people, items, participants]: D1Result<
-  Record<string, unknown>
->[]) {
+export function assembleContent([people, items, participants]: D1Result[]) {
   const byItem = new Map<string, ParticipantRow[]>();
-  for (const row of participants.results as unknown as ParticipantRow[]) {
+  for (const row of participants.results as ParticipantRow[]) {
     byItem.set(row.itemId, [...(byItem.get(row.itemId) ?? []), row]);
   }
 
   return {
-    people: people.results as unknown as Person[],
-    items: (items.results as unknown as ItemRow[]).map((i): Item => {
+    people: people.results as Person[],
+    items: (items.results as ItemRow[]).map((i): Item => {
       const rows = byItem.get(i.id) ?? [];
       return {
         id: i.id,
@@ -179,9 +176,7 @@ interface Model {
 }
 
 async function loadModel(db: D1Database, splitId: string): Promise<Model> {
-  const [people, items, participants, positions, members, split] = await db.batch<
-    Record<string, unknown>
-  >([
+  const [people, items, participants, positions, members, split] = await db.batch([
     db
       .prepare('SELECT id, name, member_email AS memberEmail FROM people WHERE split_id = ?')
       .bind(splitId),
@@ -211,7 +206,7 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
       .prepare('SELECT currency, converting_since AS convertingSince FROM splits WHERE id = ?')
       .bind(splitId),
   ]);
-  const memberRows = members.results as { email: string; role: string }[];
+  const memberRows = members.results as { email: string; role: Role }[];
 
   const model: Model = {
     people: new Map(
@@ -301,7 +296,7 @@ interface OriginalInput {
 /** An amount as sent, checked */
 function readCost(value: unknown) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > MAX_COST) {
-    throw new Refused('Cost must be a number of 0 or more');
+    throw new Refused(`Cost must be between 0 and ${MAX_COST.toLocaleString('en-US')}`);
   }
   return value;
 }
@@ -327,15 +322,10 @@ function readOriginal(model: Model, raw: unknown): OriginalInput | null {
   };
 }
 
-/** The saved conversion an edit can keep: same currency and amount, rate not retyped */
+/** The saved conversion an edit keeps, by the rule the app's preview follows too */
 const reusableConversion = (model: Model, itemId: unknown, original: OriginalInput) => {
   const saved = typeof itemId === 'string' ? model.items.get(itemId)?.converted : null;
-  if (saved == null || saved.currency !== original.currency || saved.cents !== original.cents) {
-    return null;
-  }
-  if (original.manualRate != null && original.manualRate !== saved.rate) return null;
-  if (original.manualRate == null && saved.source === 'manual') return null;
-  return saved;
+  return saved != null && keepsSavedConversion(saved, original) ? saved : null;
 };
 
 /** The currencies a batch needs a fetched rate for, read before the batch is checked */
@@ -739,7 +729,7 @@ function changeStatements(
   rates: FetchedRates,
 ): D1PreparedStatement[] {
   // Who's in the split is the owner's call; anyone can add and edit items
-  if (change != null && PEOPLE_OPS.has(change.op) && actor.role !== 'owner') {
+  if (change != null && PEOPLE_OPS.has(change.op) && !canChangePeople(actor.role)) {
     throw new Forbidden(OWNER_ONLY_PEOPLE);
   }
   switch (change?.op) {
@@ -782,7 +772,7 @@ function changeStatements(
       if (person == null) throw new Refused('That person was removed by someone else');
       const memberEmail = readMemberEmail(model, change.memberEmail, id);
       // Others can only say which person they are, or that they aren't
-      if (actor.role !== 'owner' && (memberEmail ?? person.memberEmail) !== actor.email) {
+      if (!canLinkPerson(memberEmail ?? person.memberEmail, actor)) {
         throw new Forbidden(OWNER_ONLY_PEOPLE);
       }
       // Someone else's link has to be removed first, so no one takes over another person
@@ -885,11 +875,12 @@ function changeStatements(
     }
 
     case 'setItemDate': {
+      const id = readId(change.id);
       // Already removed (by someone else): nothing to move
-      if (typeof change.id !== 'string' || !model.items.has(change.id)) return [];
+      if (!model.items.has(id)) return [];
       const at = change.createdAt;
       if (!isItemDate(at)) throw new Refused('Pick a date that has already come');
-      return [db.prepare('UPDATE items SET created_at = ? WHERE id = ?').bind(at, change.id)];
+      return [db.prepare('UPDATE items SET created_at = ? WHERE id = ?').bind(at, id)];
     }
 
     case 'clearItems':
@@ -926,8 +917,8 @@ interface ApplyOptions {
   fetchRate: (
     from: string,
     to: string,
-    /** Refreshing rates on purpose: a recent rate, not one from hours ago */
-    recent: boolean,
+    /** fresh: refreshing rates on purpose, so a recent rate, not one from hours ago */
+    options: { fresh: boolean },
   ) => Promise<Rate>;
   /** Called once saved with the accounts the changes took out of the split */
   onAccessRemoved?: (emails: string[]) => void;
@@ -958,13 +949,13 @@ export async function applyChanges(
 
   // Rates for items in other currencies, fetched before anything is checked or saved
   const rates: FetchedRates = new Map();
-  const recent = batch.some(
+  const fresh = batch.some(
     (c) => c?.op === 'refreshRates' || (c?.op === 'setRate' && c.rate == null),
   );
   try {
     await Promise.all(
       [...currenciesToFetch(model, batch)].map(async (from) => {
-        rates.set(from, await fetchRate(from, model.currency, recent));
+        rates.set(from, await fetchRate(from, model.currency, { fresh }));
       }),
     );
   } catch (err) {

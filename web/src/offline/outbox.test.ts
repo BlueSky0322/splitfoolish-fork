@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
-import { SW_USER_KEY } from './cache';
+import { CLIENT_ID_HEADER } from '../../../shared/api';
+import { IMAGE_CACHE, SW_USER_KEY } from './cache';
 import type { Queued } from './outbox';
 import {
   CREATE_PREFIX,
@@ -99,6 +100,8 @@ describe('the service worker', () => {
       CREATE_PREFIX,
       LOCK_PREFIX,
       USER_KEY: SW_USER_KEY,
+      IMAGE_CACHE,
+      CLIENT_ID_HEADER,
     };
     for (const [name, value] of Object.entries(twins)) {
       expect(sw).toContain(`const ${name} = '${value}';`);

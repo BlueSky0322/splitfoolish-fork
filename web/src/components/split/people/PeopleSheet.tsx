@@ -13,6 +13,7 @@ import { useSplitPage } from '../SplitPageContext';
 import { showRefusal } from '../../../utils/notify';
 import { removalBlocker } from '../../../split/rules';
 import { useSplitState } from '../../../split/SplitStateContext';
+import { canChangePeople } from '../../../../../shared/rules';
 
 interface PeopleSheetProps {
   /** Opens on this person's page */
@@ -54,7 +55,7 @@ function PersonPage({
   onShowItems: (personId: string) => void;
 }) {
   const { totals, currency, myEmail, meta } = useSplitPage();
-  const isOwner = meta?.role === 'owner';
+  const isOwner = meta != null && canChangePeople(meta.role);
   const actions = useSplitActions();
   const { state } = useSplitState();
   const [name, setName] = useState(person.name);
@@ -252,7 +253,7 @@ const PeopleSheet = ({ initialPersonId, onShowItems }: PeopleSheetProps) => {
   const members = meta?.members ?? [];
   const invites = meta?.invites ?? [];
   // Only the owner adds, renames and removes people
-  const isOwner = meta?.role === 'owner';
+  const isOwner = meta != null && canChangePeople(meta.role);
   const actions = useSplitActions();
   const { state } = useSplitState();
   const [openId, setOpenId] = useState<string | null>(initialPersonId ?? null);

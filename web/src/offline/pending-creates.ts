@@ -97,6 +97,7 @@ export async function startCreate(create: PendingCreate) {
 /** Carries on creating splits made on this device before it was last closed */
 export async function resumeCreates() {
   for (const create of await readPendingCreates()) {
+    // A failure is kept with the split (whenCreated rejects for it) and explained there
     void ensureCreating(create).catch(() => undefined);
   }
 }

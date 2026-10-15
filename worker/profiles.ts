@@ -29,8 +29,9 @@ import {
   type SplitMember,
   THEMES,
 } from '../shared/api';
+import { isCurrency } from '../shared/rates';
 import type { Role } from '../shared/types';
-import { type Unchecked, json, fail, isClientId, isConstraintError, isCurrency } from './http';
+import { type Unchecked, json, fail, isClientId, isConstraintError } from './http';
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {
@@ -59,7 +60,7 @@ export const ensureProfileStatement = (db: D1Database, email: string) =>
     .bind(email, Date.now());
 
 export async function getProfile(db: D1Database, email: string): Promise<Profile> {
-  const [profile, settings, avatar, methods] = await db.batch<Record<string, unknown>>([
+  const [profile, settings, avatar, methods] = await db.batch([
     db.prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?').bind(email),
     db
       .prepare(
@@ -81,14 +82,15 @@ export async function getProfile(db: D1Database, email: string): Promise<Profile
       )
       .bind(email),
   ]);
-  const saved = settings.results[0] as unknown as
+  const saved = settings.results[0] as
     | (Omit<Settings, 'sidebarOpen'> & { sidebarOpen: number })
     | undefined;
-  const all = methods.results as unknown as (PaymentMethod & { isPreferred: number })[];
+  const all = methods.results as (PaymentMethod & { isPreferred: number })[];
   return {
     email,
-    displayName: (profile.results[0]?.displayName as string | null | undefined) ?? null,
-    avatarVersion: (avatar.results[0]?.version as number | undefined) ?? null,
+    displayName:
+      (profile.results[0] as { displayName: string | null } | undefined)?.displayName ?? null,
+    avatarVersion: (avatar.results[0] as { version: number } | undefined)?.version ?? null,
     paymentMethods: all.map(({ id, type, detail, bank, accountName, qrVersion }) => ({
       id,
       type,
@@ -302,11 +304,9 @@ export const memberProfileStatements = (db: D1Database, splitId: string) => [
     .bind(splitId),
 ];
 
-export function assembleMembers([members, methods]: D1Result<
-  Record<string, unknown>
->[]): SplitMember[] {
+export function assembleMembers([members, methods]: D1Result[]): SplitMember[] {
   const byEmail = new Map<string, PaymentMethod[]>();
-  for (const m of methods.results as unknown as (PaymentMethod & { email: string })[]) {
+  for (const m of methods.results as (PaymentMethod & { email: string })[]) {
     byEmail.set(m.email, [
       ...(byEmail.get(m.email) ?? []),
       {
@@ -320,7 +320,7 @@ export function assembleMembers([members, methods]: D1Result<
     ]);
   }
   return (
-    members.results as unknown as {
+    members.results as {
       email: string;
       role: Role;
       displayName: string | null;

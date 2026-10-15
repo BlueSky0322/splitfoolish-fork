@@ -76,7 +76,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
       });
     // The picture shows from this device while it uploads after the split is created
     if (picture instanceof File) {
-      uploadSplitPicture(id, picture).catch((err) => showError(err, 'Could not add the picture'));
+      void uploadSplitPicture(id, picture);
     }
     // Shown from this copy until the server answers
     void writeCache(splitCacheKey(id), detail).finally(() => {

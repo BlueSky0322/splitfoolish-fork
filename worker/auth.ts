@@ -45,10 +45,13 @@ const decodeJson = <T>(s: string) =>
   tryDecode(() => JSON.parse(new TextDecoder().decode(decodeBase64Url(s))) as T);
 
 async function getSigningKey(certsUrl: string, kid: string): Promise<CryptoKey | undefined> {
-  const fresh =
-    keyCache != null && keyCache.url === certsUrl && Date.now() - keyCache.fetchedAt < KEYS_TTL_MS;
+  const cached = keyCache;
   // Refetch on an unknown kid too, so a key rotation doesn't lock everyone out for an hour
-  if (fresh && keyCache!.keys.has(kid)) return keyCache!.keys.get(kid);
+  const key =
+    cached?.url === certsUrl && Date.now() - cached.fetchedAt < KEYS_TTL_MS
+      ? cached.keys.get(kid)
+      : undefined;
+  if (key != null) return key;
 
   const res = await fetch(certsUrl);
   if (!res.ok) throw new Error(`Access certs fetch failed: ${res.status}`);

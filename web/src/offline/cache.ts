@@ -1,4 +1,4 @@
-import { clear, del, get, set } from 'idb-keyval';
+import { clear, del, get, keys, set } from 'idb-keyval';
 import { quietly } from '../utils/quietly';
 
 // Last-seen copies of API responses (My splits, the profile, each split, and the
@@ -13,7 +13,7 @@ const LAST_EMAIL_KEY = 'splitfoolish:lastEmail';
 /** The signed-in email in IndexedDB, also read by public/sw.js (outbox.test.ts checks they match) */
 export const SW_USER_KEY = 'sf-user';
 /** Pictures the service worker keeps (IMAGE_CACHE in public/sw.js) */
-const IMAGE_CACHE = 'splitfoolish-images-v1';
+export const IMAGE_CACHE = 'splitfoolish-images-v1';
 
 /** An entry as stored; public/sw.js reads the same shape */
 interface Entry<T> {
@@ -54,6 +54,12 @@ export async function writeCache<T>(key: string, value: T): Promise<void> {
 }
 
 export const removeCacheEntry = (key: string) => quietlyAsync(() => del(key));
+
+/** The ids kept under a key prefix ('outbox:', say), whoever's they are */
+export const listCacheIds = async (prefix: string): Promise<string[]> =>
+  ((await quietlyAsync(() => keys())) ?? [])
+    .filter((k): k is string => typeof k === 'string' && k.startsWith(prefix))
+    .map((k) => k.slice(prefix.length));
 
 /**
  * Where a split's last-seen copy (a SplitDetail) is kept. Versioned, so a copy saved in

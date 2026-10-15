@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import QrViewer from '../ui/QrViewer';
-import classes from './Settings.module.css';
+import classes from './PaymentMethods.module.css';
 import type { PaymentMethod } from '../../../../shared/payments';
 
 interface PayHintProps {

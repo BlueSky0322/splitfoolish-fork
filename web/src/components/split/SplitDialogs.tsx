@@ -20,7 +20,8 @@ import { useSplitActions } from '../../split/useSplit';
 import { newId } from '../../utils/id';
 import { notifications } from '@mantine/notifications';
 import { type Dialog, useSplitPage } from './SplitPageContext';
-import type { useDeleteItems } from './items/useDeleteItems';
+import type { DeleteItems } from './items/delete-items';
+import { canEditSplitSettings } from '../../../../shared/rules';
 
 /** Under Settle up's title: how many transfers settle everyone */
 const settleNote = (totals: SplitTotals) => {
@@ -34,7 +35,7 @@ interface SplitDialogsProps {
   dialog: Dialog | null;
   /** The balances and transfers, shown in Settle up */
   panel: ReactNode;
-  deleteItems: ReturnType<typeof useDeleteItems>;
+  deleteItems: DeleteItems;
   /** Shows only this person's items */
   onShowItems: (personId: string) => void;
 }
@@ -190,7 +191,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
           <ResetLink
             splitId={splitId}
             onDone={() => {
-              refreshMeta().catch((err) => console.error(err));
+              void refreshMeta();
               setDialog({ kind: 'members' });
             }}
             onCancel={() => setDialog({ kind: 'members' })}
@@ -296,7 +297,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             name={meta.name}
             currency={meta.currency}
             pictureVersion={pictureVersion}
-            canEdit={meta.role === 'owner'}
+            canEdit={canEditSplitSettings(meta.role)}
             onEnd={() => setDialog({ kind: 'end' })}
             onSaved={metaChanges.patchSettings}
             onClose={close}

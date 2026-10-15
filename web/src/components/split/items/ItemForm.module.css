@@ -12,11 +12,6 @@
   border-bottom: 1px solid var(--sf-divider);
 }
 
-.symbol {
-  font-size: 20px;
-  color: var(--sf-text-muted);
-}
-
 .amountInput {
   font-family: var(--sf-font-num);
   flex: 1;

@@ -39,7 +39,7 @@ export async function reconvertSplit(
   splitId: string,
   fetchRate: (from: string, to: string) => Promise<Rate>,
 ): Promise<void> {
-  const [splitRows, itemRows, partRows] = await db.batch<Record<string, unknown>>([
+  const [splitRows, itemRows, partRows] = await db.batch([
     db
       .prepare(
         `SELECT currency, converting_from AS fromCurrency, converting_since AS since
@@ -68,8 +68,8 @@ export async function reconvertSplit(
   if (split?.fromCurrency == null || split.since == null) return;
   const { currency: to, fromCurrency, since } = split;
 
-  const items = itemRows.results as unknown as ItemRow[];
-  const parts = partRows.results as unknown as PartRow[];
+  const items = itemRows.results as ItemRow[];
+  const parts = partRows.results as PartRow[];
   // What each item was paid in: its own currency, or the split's old one
   const paidIn = (item: ItemRow) => item.originalCurrency ?? fromCurrency;
 

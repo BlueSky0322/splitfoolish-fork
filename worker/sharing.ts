@@ -65,7 +65,7 @@ export async function resetShareLinks(db: D1Database, splitId: string) {
  * Gives someone who opened a share link an invite: from the owner's link one to accept,
  * from a member's (`sharer`) a request for the owner to approve. Returns the invite.
  */
-export async function openInvite(
+export async function inviteFromShareLink(
   db: D1Database,
   splitId: string,
   email: string,
@@ -113,7 +113,7 @@ export async function openInvite(
  * puts them in the bill: a guest with their name becomes them, otherwise they're added
  */
 export async function addEditor(db: D1Database, splitId: string, email: string) {
-  const [profileRows, peopleRows] = await db.batch<Record<string, unknown>>([
+  const [profileRows, peopleRows] = await db.batch([
     db.prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?').bind(email),
     db
       .prepare('SELECT id, name, member_email AS memberEmail FROM people WHERE split_id = ?')
@@ -180,7 +180,7 @@ export async function sharesSplit(db: D1Database, viewer: string, email: string)
  */
 export async function listInvites(db: D1Database, email: string): Promise<MyInvite[]> {
   const now = Date.now();
-  const [mine, requests] = await db.batch<Record<string, unknown>>([
+  const [mine, requests] = await db.batch([
     // To me: invites to accept, and my requests waiting for the owner
     db
       .prepare(
@@ -220,15 +220,21 @@ export async function listInvites(db: D1Database, email: string): Promise<MyInvi
   type Mine = Base & { needsApproval: number; owner: string; ownerName: string | null };
   type Request = Base & { email: string; name: string | null };
   return [
-    ...(requests.results as unknown as Request[]).map((r): MyInvite => ({ ...r, kind: 'request' })),
-    ...(mine.results as unknown as Mine[]).map(
+    ...(requests.results as Request[]).map((r): MyInvite => ({ ...r, kind: 'request' })),
+    ...(mine.results as Mine[]).map(
       ({ needsApproval, owner, ownerName, ...r }): MyInvite =>
         needsApproval ? { ...r, kind: 'sent', owner, ownerName } : { ...r, kind: 'invite' },
     ),
   ];
 }
 
+export type InviteAction = 'accept' | 'decline';
+
 const GONE = 'This invite has expired or was withdrawn. Ask for the link again.';
+
+/** Withdraws an invite to a split; one already gone is left as it is */
+export const revokeInviteStatement = (db: D1Database, splitId: string, inviteId: string) =>
+  db.prepare('DELETE FROM split_invites WHERE id = ? AND split_id = ?').bind(inviteId, splitId);
 
 /**
  * Accepts or declines an invite. The person it's for accepts (joins) or declines it, or
@@ -240,7 +246,7 @@ export async function answerInvite(
   db: D1Database,
   inviteId: string,
   email: string,
-  accept: boolean,
+  action: InviteAction,
   onChanged: (splitId: string) => void,
 ) {
   const invite = await db
@@ -258,7 +264,7 @@ export async function answerInvite(
   if (invite == null || (!isInvitee && !isApprover)) return fail(GONE, 404);
   onChanged(invite.splitId);
 
-  if (!accept) {
+  if (action === 'decline') {
     await db.prepare('DELETE FROM split_invites WHERE id = ?').bind(inviteId).run();
     return ok();
   }

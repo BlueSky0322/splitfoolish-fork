@@ -1,13 +1,14 @@
 // My Splits: each split the person belongs to, with its total and their own balance.
 // Everything is read in one round trip and balanced with the same maths as the app.
+// Also the names of items across those splits, for suggesting as you type one.
 
-import type { SplitSummary } from '../shared/api';
+import type { ItemNameUse, SplitSummary } from '../shared/api';
 import type { SettleItem, SplitMode } from '../shared/settle';
 import { balances } from '../shared/settle';
 import type { Role } from '../shared/types';
 
 export async function listSplitSummaries(db: D1Database, email: string): Promise<SplitSummary[]> {
-  const [splits, items, participants, mine, people] = await db.batch<Record<string, unknown>>([
+  const [splits, items, participants, mine, people] = await db.batch([
     db
       .prepare(
         `SELECT s.id, s.name, s.currency, s.updated_at AS updatedAt, m.role,
@@ -98,8 +99,30 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
       ...s,
       peopleCount: peopleCount.get(s.id) ?? 0,
       totalCents: splitItems.reduce((a, i) => a + i.costCents, 0),
-      /** Null when no one in the bill is linked to this account */
-      myBalanceCents: me == null ? null : balances([me], splitItems).get(me)?.balanceCents ?? 0,
+      // Null when no one in the bill is linked to this account; balances() gives every
+      // id it's asked about an entry
+      myBalanceCents: me == null ? null : balances([me], splitItems).get(me)!.balanceCents,
     };
   });
+}
+
+const MAX_ITEM_NAMES = 500;
+
+/**
+ * Names of items in someone's splits, most recent first. Each name once (ignoring case),
+ * with the category it was last given.
+ */
+export async function listItemNames(db: D1Database, email: string): Promise<ItemNameUse[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT name, category, uses FROM (
+         SELECT i.name, i.category, count(*) OVER (PARTITION BY lower(i.name)) AS uses,
+           row_number() OVER (PARTITION BY lower(i.name) ORDER BY i.created_at DESC) AS n,
+           max(i.created_at) OVER (PARTITION BY lower(i.name)) AS last
+         FROM items i JOIN split_members m ON m.split_id = i.split_id AND m.email = ?
+       ) WHERE n = 1 ORDER BY last DESC LIMIT ?`,
+    )
+    .bind(email, MAX_ITEM_NAMES)
+    .all<ItemNameUse>();
+  return results;
 }

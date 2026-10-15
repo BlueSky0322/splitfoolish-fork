@@ -37,7 +37,7 @@ export interface Profile extends ApiProfile {
 }
 
 /** Invites that need you to do something, for the count badges */
-export const actionableInvites = (invites: MyInvite[] | null) =>
+export const countActionableInvites = (invites: MyInvite[] | null) =>
   (invites ?? []).filter((i) => i.kind !== 'sent').length;
 
 export type ItemInput = Omit<ApiItem, 'id' | 'createdAt'>;
@@ -105,7 +105,8 @@ const upload = <T>(method: string, path: string, picture: Blob) =>
 
 const splitPath = (id: string) => `/api/splits/${encodeURIComponent(id)}`;
 
-// The server calls photos "attachments" (its table and paths); the app calls them photos
+// Photos of a split or an item are "attachments" to the server, and in these calls; the
+// screens call them photos
 export const api = {
   getMe: () => request<Profile>('GET', '/api/me'),
   updateMe: (patch: ProfilePatch) => request<Profile>('PATCH', '/api/me', patch),
@@ -138,13 +139,13 @@ export const api = {
   updateSplit: (id: string, patch: SplitPatch) =>
     request<UpdateSplitResult>('PATCH', splitPath(id), patch),
   /** Uploads a photo of an item's receipt, or of the whole split when itemId is null */
-  uploadPhoto: (id: string, photo: Blob, itemId: string | null) =>
+  uploadAttachment: (id: string, photo: Blob, itemId: string | null) =>
     upload<Attachment>(
       'POST',
       `${splitPath(id)}/attachments${itemId ? `?itemId=${encodeURIComponent(itemId)}` : ''}`,
       photo,
     ),
-  deletePhoto: (id: string, attachmentId: string) =>
+  deleteAttachment: (id: string, attachmentId: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   setSplitPicture: (id: string, picture: Blob) =>
     upload<SplitPictureResult>('PUT', `${splitPath(id)}/picture`, picture),
@@ -176,7 +177,7 @@ export const api = {
     request<JoinResult>('POST', `/api/join/${encodeURIComponent(token)}`),
 };
 
-export const photoUrl = (splitId: string, attachmentId: string) =>
+export const attachmentUrl = (splitId: string, attachmentId: string) =>
   `${splitPath(splitId)}/attachments/${encodeURIComponent(attachmentId)}`;
 
 export const splitPictureUrl = (splitId: string, version: number) =>

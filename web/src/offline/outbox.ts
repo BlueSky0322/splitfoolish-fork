@@ -1,5 +1,4 @@
-import { del, keys } from 'idb-keyval';
-import { readCache, writeCache } from './cache';
+import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
 import type { Change } from '../../../shared/types';
 import type { SplitSummary } from '../../../shared/api';
 import { ApiError, NetworkError } from '../api';
@@ -42,6 +41,7 @@ export function withOutbox<T>(splitId: string, fn: () => Promise<T>): Promise<T>
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
   if (locks) return locks.request(name, fn);
   const run = (chains.get(name) ?? Promise.resolve()).then(fn, fn);
+  // The next in line runs whether this one succeeded or not; its caller hears the failure
   chains.set(
     name,
     run.catch(() => undefined),
@@ -53,37 +53,21 @@ export const readOutbox = async (splitId: string) =>
   (await readCache<Queued[]>(outboxKey(splitId))) ?? [];
 
 export const writeOutbox = (splitId: string, queued: Queued[]) =>
-  queued.length > 0
-    ? writeCache(outboxKey(splitId), queued)
-    : del(outboxKey(splitId)).catch(() => undefined);
+  queued.length > 0 ? writeCache(outboxKey(splitId), queued) : removeCacheEntry(outboxKey(splitId));
 
 export const savePendingCreate = (create: PendingCreate) =>
   writeCache(createKey(create.id), create);
 
-export const removePendingCreate = (id: string) => del(createKey(id)).catch(() => undefined);
+export const removePendingCreate = (id: string) => removeCacheEntry(createKey(id));
 
 /** Splits with changes kept on this device */
-export async function readOutboxIds(): Promise<string[]> {
-  try {
-    return (await keys())
-      .filter((k): k is string => typeof k === 'string' && k.startsWith(OUTBOX_PREFIX))
-      .map((k) => k.slice(OUTBOX_PREFIX.length));
-  } catch {
-    return [];
-  }
-}
+export const readOutboxIds = () => listCacheIds(OUTBOX_PREFIX);
 
 /** Splits created on this device that the server hasn't confirmed yet */
 export async function readPendingCreates(): Promise<PendingCreate[]> {
-  try {
-    const all = (await keys()).filter(
-      (k): k is string => typeof k === 'string' && k.startsWith(CREATE_PREFIX),
-    );
-    const found = await Promise.all(all.map((k) => readCache<PendingCreate>(k)));
-    return found.filter((c): c is PendingCreate => c != null);
-  } catch {
-    return [];
-  }
+  const ids = await listCacheIds(CREATE_PREFIX);
+  const found = await Promise.all(ids.map((id) => readCache<PendingCreate>(createKey(id))));
+  return found.filter((c): c is PendingCreate => c != null);
 }
 
 /** Asks the service worker to send what's waiting once there's a connection */
@@ -102,8 +86,11 @@ export function requestBackgroundSync() {
 
 export const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 
-/** A fetch that failed to reach the server at all, rather than an answer from it */
-export const isNetworkError = (err: unknown) => err instanceof NetworkError || isOffline();
+/**
+ * A failure for want of a connection: the request never reached the server, or the
+ * browser says it's offline (when any failure is put down to that)
+ */
+export const isOfflineFailure = (err: unknown) => err instanceof NetworkError || isOffline();
 
 /**
  * What's still to send, given what this page queued, which of those it had written to
@@ -130,5 +117,5 @@ export function classifySaveFailure(err: unknown): 'gone' | 'refused' | 'retry' 
  * same rule.
  */
 export const isRetryable = (err: unknown) =>
-  isNetworkError(err) ||
+  isOfflineFailure(err) ||
   (err instanceof ApiError && (err.status === 401 || err.status === 429 || err.status >= 500));

@@ -214,17 +214,19 @@ export function MoveDateDialog({
         }}
       >
         <div className="flex gap-2">
-          {[
-            ['Today', today],
-            ['Yesterday', yesterday],
-          ].map(([label, d]) => (
+          {(
+            [
+              ['Today', today],
+              ['Yesterday', yesterday],
+            ] as const
+          ).map(([label, d]) => (
             <UnstyledButton
-              key={label as string}
+              key={label}
               className={classes.chip}
-              data-selected={value === toInput(d as Date) || undefined}
-              onClick={() => setValue(toInput(d as Date))}
+              data-selected={value === toInput(d) || undefined}
+              onClick={() => setValue(toInput(d))}
             >
-              {label as string}
+              {label}
             </UnstyledButton>
           ))}
         </div>

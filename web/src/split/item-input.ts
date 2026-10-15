@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS, RATE_PROVIDERS } from '../../../shared/api';
 import type { RateSource } from '../../../shared/rates';
-import { convertParts, isValidRate, toCents } from '../../../shared/rates';
+import { convertParts, isValidRate, keepsSavedConversion, toCents } from '../../../shared/rates';
 import type { SplitMode } from '../../../shared/settle';
 import type { ItemOriginal } from '../../../shared/types';
 import type { ItemInput } from '../api';
@@ -17,7 +17,7 @@ export interface RateInputs {
   entryCurrency: string;
   /** The amount as typed, in cents of the currency it was paid in */
   enteredCents: number | null;
-  useOwnRate: boolean;
+  ownRateChosen: boolean;
   ownRate: number | '';
   /** What the item was saved with, when editing one */
   original: ItemOriginal | null;
@@ -27,18 +27,25 @@ export interface RateInputs {
 
 /**
  * The rate for the preview, and where it came from: 1 in the split's own currency; the
- * one typed; the one the item was saved with, if the amount and currency haven't
- * changed (the server keeps it too); or else today's rate. Null until there is one.
+ * one typed; the one the item was saved with, if the server would keep it too
+ * (keepsSavedConversion); or else today's rate. Null until there is one.
  */
 export function chooseRate(r: RateInputs): { rate: number | null; source: RateSource | null } {
   if (!r.foreign) return { rate: 1, source: null };
-  if (r.useOwnRate) return { rate: isValidRate(r.ownRate) ? r.ownRate : null, source: 'manual' };
+  if (r.ownRateChosen) return { rate: isValidRate(r.ownRate) ? r.ownRate : null, source: 'manual' };
   const saved = r.original;
   if (
     saved?.rate != null &&
-    saved.currency === r.entryCurrency &&
-    r.enteredCents === toCents(saved.amount) &&
-    saved.rateSource !== 'manual'
+    r.enteredCents != null &&
+    keepsSavedConversion(
+      {
+        currency: saved.currency,
+        cents: toCents(saved.amount),
+        rate: saved.rate,
+        source: saved.rateSource,
+      },
+      { currency: r.entryCurrency, cents: r.enteredCents, manualRate: null },
+    )
   ) {
     return {
       rate: saved.rate,
@@ -57,7 +64,7 @@ export interface ItemFields {
   rate: number | null;
   foreign: boolean;
   entryCurrency: string;
-  useOwnRate: boolean;
+  ownRateChosen: boolean;
   ownRate: number | '';
   payerId: string;
   participantIds: string[];
@@ -111,7 +118,7 @@ export function buildItemInput(f: ItemFields): ItemInput {
           currency: f.entryCurrency,
           amount: f.enteredCents / 100,
           exact: f.mode === 'exact' ? typedExact : undefined,
-          ...(f.useOwnRate && isValidRate(f.ownRate)
+          ...(f.ownRateChosen && isValidRate(f.ownRate)
             ? { rate: f.ownRate, rateSource: 'manual' as const }
             : {}),
         }

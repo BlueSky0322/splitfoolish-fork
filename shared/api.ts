@@ -231,6 +231,8 @@ export const CLIENT_ID_HEADER = 'X-Client-Id';
 /** Sent by the app to keep a quiet live-update socket open, and the room's answer */
 export const LIVE_PING = 'ping';
 export const LIVE_PONG = 'pong';
+/** The room's close code for someone taken out of the split, so the app stops reconnecting */
+export const LIVE_REMOVED_CODE = 4403;
 
 /** What a split's room sends: it changed, and which tab changed it (that tab ignores it) */
 export interface RoomMessage {

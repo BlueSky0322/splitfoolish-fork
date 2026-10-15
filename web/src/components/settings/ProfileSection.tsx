@@ -13,7 +13,7 @@ import { showError } from '../../utils/notify';
 
 // Profile: your picture, the name people see, and the email you sign in with
 const ProfileSection = ({ track }: { track: Track }) => {
-  const { profile, update, patch } = useProfile();
+  const { profile, update, change, patch } = useProfile();
   // What's typed, until it's saved; the saved name otherwise
   const [draft, setDraft] = useState<string | null>(null);
   const name = draft ?? profile?.displayName ?? '';
@@ -58,14 +58,13 @@ const ProfileSection = ({ track }: { track: Track }) => {
     }
   };
 
-  const removeAvatar = () => {
-    const before = profile.avatarVersion;
-    patch((p) => ({ ...p, avatarVersion: null, avatarPreview: null }));
-    track(api.deleteAvatar()).catch((err) => {
-      patch((p) => ({ ...p, avatarVersion: before }));
-      showError(err, 'Could not remove your picture');
-    });
-  };
+  const removeAvatar = () =>
+    void track(
+      change(
+        (p) => ({ ...p, avatarVersion: null, avatarPreview: null }),
+        async () => void (await api.deleteAvatar()),
+      ),
+    ).catch((err: unknown) => showError(err, 'Could not remove your picture'));
 
   return (
     <>

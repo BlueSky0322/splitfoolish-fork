@@ -50,12 +50,6 @@
   background: var(--sf-surface);
 }
 
-.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .add {
   display: flex;
   flex-direction: column;

@@ -28,8 +28,19 @@ export interface DeleteConfirmation {
  * go with their item and can't be brought back, so then it asks first (unless that was
  * asked already, as the item form does).
  */
-export function useDeleteItems({ actions, photosOf, forgetItemAttachments, confirm }: DeleteDeps) {
-  return (items: SplitItem[], { confirmed = false, onDeleted = () => {} } = {}) => {
+/** Deletes items; `confirmed` when photos going too was asked about already */
+export type DeleteItems = (
+  items: SplitItem[],
+  options?: { confirmed?: boolean; onDeleted?: () => void },
+) => void;
+
+export function makeDeleteItems({
+  actions,
+  photosOf,
+  forgetItemAttachments,
+  confirm,
+}: DeleteDeps): DeleteItems {
+  return (items, { confirmed = false, onDeleted = () => {} } = {}) => {
     if (items.length === 0) return;
     const photoCount = items.reduce((n, i) => n + photosOf(i.id).length, 0);
     const label = items.length === 1 ? items[0].name : plural(items.length, 'item');

@@ -10,7 +10,7 @@ import {
   Stack,
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
-import { actionableInvites } from '../../api';
+import { countActionableInvites } from '../../api';
 import { useHomeData } from '../../home/useHomeData';
 import type { Route } from '../../hooks/useRoute';
 import { navigate } from '../../hooks/useRoute';
@@ -251,7 +251,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
             label="Invites"
             active={route.view === 'home' && route.tab === 'invites'}
             onClick={() => navigate('?tab=invites')}
-            badge={actionableInvites(invites)}
+            badge={countActionableInvites(invites)}
           />
           <NavItem
             icon={<ArrowsLeftRight size={18} />}

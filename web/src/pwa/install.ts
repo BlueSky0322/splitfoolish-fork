@@ -62,6 +62,7 @@ export function trackInstall() {
     .then((apps) => {
       if (apps.length > 0) rememberInstalled();
     })
+    // Some browsers can't say; then it's simply not known
     .catch(() => undefined);
   window.addEventListener('beforeinstallprompt', (e) => {
     // Shown from the app's own buttons instead of the browser's banner

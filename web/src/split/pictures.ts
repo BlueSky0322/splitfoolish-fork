@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { api } from '../api';
 import { whenCreated } from '../offline/pending-creates';
 import { shrinkAvatar } from '../utils/image';
-import { patchListedSplit, reloadHomeData } from '../home/home-data';
+import { patchListedSplit, sendHomeChange } from '../home/home-data';
 
 // Split pictures being uploaded, shown from this device in the meantime
 
@@ -19,37 +19,40 @@ function subscribe(listener: () => void) {
 export const useSplitPicturePreview = (splitId: string) =>
   useSyncExternalStore(subscribe, () => previews.get(splitId) ?? null);
 
+// Both follow sendHomeChange: shown in My splits straight away, a failure explained
+// here, and resolving with the new picture version (or undefined after a failure)
+
 /** Shows the picture straight away and uploads it once the split exists */
-export async function uploadSplitPicture(
-  splitId: string,
-  file: File,
-  onSaved?: (pictureVersion: number) => void,
-) {
-  const picture = await shrinkAvatar(file);
-  const url = URL.createObjectURL(picture);
-  previews.set(splitId, url);
-  notify();
+export async function uploadSplitPicture(splitId: string, file: File) {
+  let url: string | null = null;
   try {
-    await whenCreated(splitId);
-    const { pictureVersion } = await api.setSplitPicture(splitId, picture);
-    patchListedSplit(splitId, { pictureVersion });
-    onSaved?.(pictureVersion);
+    return await sendHomeChange(async () => {
+      const picture = await shrinkAvatar(file);
+      url = URL.createObjectURL(picture);
+      previews.set(splitId, url);
+      notify();
+      await whenCreated(splitId);
+      const { pictureVersion } = await api.setSplitPicture(splitId, picture);
+      patchListedSplit(splitId, { pictureVersion });
+      return pictureVersion;
+    }, 'Could not change the picture');
   } finally {
     // Keep the local copy a moment longer, so the uploaded one has time to load
-    setTimeout(() => {
-      if (previews.get(splitId) === url) previews.delete(splitId);
-      URL.revokeObjectURL(url);
-      notify();
-    }, 3000);
+    const shown = url;
+    if (shown != null) {
+      setTimeout(() => {
+        if (previews.get(splitId) === shown) previews.delete(splitId);
+        URL.revokeObjectURL(shown);
+        notify();
+      }, 3000);
+    }
   }
 }
 
-export async function removeSplitPicture(splitId: string) {
+export function removeSplitPicture(splitId: string) {
   patchListedSplit(splitId, { pictureVersion: null });
-  try {
-    await api.deleteSplitPicture(splitId);
-  } catch (err) {
-    void reloadHomeData();
-    throw err;
-  }
+  return sendHomeChange(
+    () => api.deleteSplitPicture(splitId).then(() => null),
+    'Could not remove the picture',
+  );
 }

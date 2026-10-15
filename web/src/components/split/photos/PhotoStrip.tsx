@@ -1,7 +1,7 @@
 import { ActionIcon, Loader, UnstyledButton } from '@mantine/core';
 import { Camera, X } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { photoUrl } from '../../../api';
+import { attachmentUrl } from '../../../api';
 import type { ViewerPhoto } from '../../ui/PhotoViewer';
 import PhotoViewer from '../../ui/PhotoViewer';
 import classes from './Photos.module.css';
@@ -105,7 +105,7 @@ const PhotoStrip = ({
   const viewer: ViewerPhoto[] = [
     ...photos.map((photo) => ({
       key: photo.id,
-      src: photoUrl(splitId, photo.id),
+      src: attachmentUrl(splitId, photo.id),
       onRemove: canRemove(photo) ? () => onRemove(photo) : undefined,
     })),
     ...pending.map((file, ix) => ({
@@ -144,7 +144,7 @@ const PhotoStrip = ({
             aria-label={`Open photo ${ix + 1}`}
           >
             <img
-              src={photoUrl(splitId, photo.id)}
+              src={attachmentUrl(splitId, photo.id)}
               alt=""
               loading="lazy"
             />

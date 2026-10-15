@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../../hooks/useRoute';
+import { isCurrency } from '../../../../shared/rates';
 
 export interface Prefill {
   amount: string;
@@ -11,9 +12,7 @@ function readPrefill(): Prefill | null {
   const params = new URLSearchParams(window.location.search);
   const amount = params.get('amount');
   const from = params.get('from');
-  return params.has('add') && amount && from && /^[A-Z]{3}$/.test(from)
-    ? { amount, currency: from }
-    : null;
+  return params.has('add') && amount && isCurrency(from) ? { amount, currency: from } : null;
 }
 
 /**

@@ -17,8 +17,10 @@ export interface Person {
 /** The longest name a split, person or item can have */
 export const MAX_NAME_LENGTH = 80;
 
-/** The longest notes an item can have */
 export const MAX_NOTES_LENGTH = 2000;
+
+/** The largest amount an item can cost, in currency units, whatever it was paid in */
+export const MAX_COST = 1_000_000_000;
 
 export interface Item {
   id: string;

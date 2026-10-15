@@ -24,6 +24,7 @@ import {
 } from './SplitPageParts';
 import { GROUP_ORDER, useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
+import { canChangePeople } from '../../../../shared/rules';
 
 /** The split page on a computer: the items, with the balances alongside */
 const DesktopSplitLayout = ({
@@ -118,7 +119,7 @@ const DesktopSplitLayout = ({
                 className={classes.linkButton}
                 onClick={() => openDialog({ kind: 'people' })}
               >
-                {meta?.role === 'owner' ? 'Edit people' : 'See people'}
+                {meta != null && canChangePeople(meta.role) ? 'Edit people' : 'See people'}
               </button>
             </div>
           )}

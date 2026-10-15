@@ -13,10 +13,11 @@ import {
   type PaymentQrResult,
   type SplitPictureResult,
 } from '../shared/api';
+import { canRemovePhoto } from '../shared/rules';
 import { json, newId, fail, notFound, ok, isConstraintError } from './http';
 import { ensureProfileStatement, paymentMethodOwner } from './profiles';
 import { sharesSplit } from './sharing';
-import type { Actor } from './app';
+import type { Actor } from '../shared/rules';
 
 const MAX_PHOTOS_PER_SPLIT = 300;
 
@@ -68,8 +69,7 @@ export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
     )
     .bind(splitId);
 
-export const assembleAttachments = (result: D1Result<Record<string, unknown>>) =>
-  result.results as unknown as Attachment[];
+export const assembleAttachments = (result: D1Result) => result.results as Attachment[];
 
 export async function uploadAttachment(
   db: D1Database,
@@ -148,7 +148,7 @@ export async function deleteAttachment(db: D1Database, splitId: string, id: stri
     .bind(id, splitId)
     .first<{ uploadedBy: string }>();
   if (row == null) return ok();
-  if (row.uploadedBy !== actor.email && actor.role !== 'owner') {
+  if (!canRemovePhoto(row.uploadedBy, actor)) {
     return fail('Only the person who added a photo, or the owner, can remove it', 403);
   }
   await db.batch([

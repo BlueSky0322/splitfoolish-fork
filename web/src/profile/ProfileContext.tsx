@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useRef } from 'react
 import type { Profile } from '../api';
 import { ApiError, api } from '../api';
 import { queryClient } from '../query-client';
-import { isNetworkError } from '../offline/outbox';
+import { isOfflineFailure } from '../offline/outbox';
 import { syncAfterSignIn } from '../offline/sync';
 import { reloadHomeData } from '../home/home-data';
 import { assumeLastUser, readCache, setCacheUser, writeCache } from '../offline/cache';
@@ -60,6 +60,14 @@ interface ProfileContextValue {
    * isn't saved (the change is undone), for the caller to say so.
    */
   update: (patch: ProfilePatch) => Promise<void>;
+  /**
+   * Shows a change straight away and saves it, as update() does: rejects if it isn't
+   * saved (the change is undone); `save` may answer with the saved profile
+   */
+  change: (
+    show: (profile: Profile) => Profile,
+    save: () => Promise<Profile | void>,
+  ) => Promise<void>;
   /** update() for settings alone */
   updateSettings: (settings: Partial<Settings>) => Promise<void>;
   /**
@@ -113,7 +121,7 @@ export function ProfileProvider({
       } catch (err) {
         // No connection: carry on as whoever last used this device, from their saved
         // profile
-        if (isNetworkError(err) && assumeLastUser() != null) {
+        if (isOfflineFailure(err) && assumeLastUser() != null) {
           const saved = await readCache<Profile>(ME_CACHE_KEY);
           if (saved) {
             fromDevice.current = true;
@@ -175,25 +183,34 @@ export function ProfileProvider({
   // Each change shows straight away. The server's reply only replaces what's on screen
   // if no newer change has been made since, so quick changes never jump back.
   const latest = useRef(0);
-  const update = useCallback(
-    async (patch: ProfilePatch) => {
+  const change = useCallback(
+    async (show: (profile: Profile) => Profile, save: () => Promise<Profile | void>) => {
       const current = profileRef.current;
       if (current == null) return;
       const id = ++latest.current;
-      replace({
-        ...current,
-        ...('displayName' in patch ? { displayName: patch.displayName ?? null } : {}),
-        settings: { ...current.settings, ...patch.settings },
-      });
+      replace(show(current));
       try {
-        const saved = await api.updateMe(patch);
-        if (id === latest.current) replace(saved);
+        const saved = await save();
+        if (saved && id === latest.current) replace(saved);
       } catch (err) {
         if (id === latest.current) replace(current);
         throw err;
       }
     },
     [replace],
+  );
+
+  const update = useCallback(
+    (patch: ProfilePatch) =>
+      change(
+        (current) => ({
+          ...current,
+          ...('displayName' in patch ? { displayName: patch.displayName ?? null } : {}),
+          settings: { ...current.settings, ...patch.settings },
+        }),
+        () => api.updateMe(patch),
+      ),
+    [change],
   );
 
   const patch = useCallback(
@@ -223,6 +240,7 @@ export function ProfileProvider({
         signedOut,
         unreachable,
         retry,
+        change,
         update,
         updateSettings,
         rememberSettings,

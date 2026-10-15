@@ -1,6 +1,7 @@
 import { Autocomplete, Button, Loader, Select, TextInput, UnstyledButton } from '@mantine/core';
 import { Camera, Image, PencilSimple, Plus, QrCode, UploadSimple } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import { api, paymentQrUrl } from '../../api';
 import {
   BANK_TRANSFER,
@@ -17,7 +18,7 @@ import {
 } from '../../../../shared/payments';
 import { prepareQrCode } from '../../utils/image';
 import { isQr, methodLine, methodName } from '../../utils/payments';
-import classes from './Settings.module.css';
+import classes from './PaymentMethods.module.css';
 import { showError } from '../../utils/notify';
 import { newId } from '../../utils/id';
 
@@ -36,7 +37,8 @@ const DEFAULT_DETAIL = { label: 'Details', placeholder: 'How to pay you' };
 interface PaymentMethodsProps {
   methods: PaymentMethod[];
   preferredId: string | null;
-  onChange: (methods: PaymentMethod[], preferredId: string | null) => Promise<boolean>;
+  /** Saves them in the background: the change shows straight away */
+  onChange: (methods: PaymentMethod[], preferredId: string | null) => void;
   /** On phones the list is one grouped card */
   grouped: boolean;
   /** Already inside a card: the list runs edge to edge without one of its own */
@@ -65,6 +67,14 @@ function QrField({
   onPick: (file: File) => void;
   onRemove: () => void;
 }) {
+  // Picked or photographed: either way, the same file to read; cleared so the same one
+  // can be picked again
+  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) onPick(file);
+  };
+
   const choose = useRef<HTMLInputElement>(null);
   const camera = useRef<HTMLInputElement>(null);
   const src = picked?.url ?? existing;
@@ -75,11 +85,7 @@ function QrField({
         type="file"
         accept="image/*"
         hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file) onPick(file);
-        }}
+        onChange={onFile}
       />
       <input
         ref={camera}
@@ -87,11 +93,7 @@ function QrField({
         accept="image/*"
         capture="environment"
         hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file) onPick(file);
-        }}
+        onChange={onFile}
       />
     </>
   );
@@ -369,21 +371,22 @@ const PaymentMethods = ({
   // A method's id, or 'new' while adding one
   const [editing, setEditing] = useState<string | null>(null);
 
-  const save = async (method: PaymentMethod) => {
+  const save = (method: PaymentMethod) => {
     const next =
       editing === 'new'
         ? [...methods, method]
         : methods.map((m) => (m.id === editing ? method : m));
     // The first one added is preferred until another is picked
     const preferred = preferredId ?? next[0]?.id ?? null;
-    if (await onChange(next, preferred)) setEditing(null);
+    onChange(next, preferred);
+    setEditing(null);
+    return Promise.resolve();
   };
 
-  const remove = async (id: string) => {
+  const remove = (id: string) => {
     const next = methods.filter((m) => m.id !== id);
-    if (await onChange(next, preferredId === id ? next[0]?.id ?? null : preferredId)) {
-      setEditing(null);
-    }
+    onChange(next, preferredId === id ? next[0]?.id ?? null : preferredId);
+    setEditing(null);
   };
 
   const addButton =

@@ -6,7 +6,7 @@ import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import { showError } from '../../utils/notify';
-import { listCurrencies, homeCurrency } from '../../utils/money';
+import { FALLBACK_CURRENCY, homeCurrency, listCurrencies } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
@@ -54,10 +54,9 @@ const CurrencySection = ({ track }: { track: Track }) => {
   });
 
   if (profile == null || settings == null) return null;
-  const lastUsed = settings.lastCurrency ?? 'MYR';
-  const nameOf = (code: string) =>
-    currencies.find((c) => c.value === code)?.label.split(' · ')[1] ?? code;
-  const chosen = settings.defaultCurrency ?? lastUsed;
+  const lastUsed = settings.lastCurrency ?? FALLBACK_CURRENCY;
+  const nameOf = (code: string) => currencies.find((c) => c.value === code)?.name ?? code;
+  const chosen = homeCurrency(settings);
   const rows = rates.data?.currencies ?? [];
   const latest = Math.max(0, ...rows.map((r) => r.fetchedAt ?? 0));
   const sourceUsed = rows.find((r) => r.source)?.source;

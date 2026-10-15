@@ -10,6 +10,7 @@ import {
   setupAppTests,
   splitDetail,
 } from '../../testing/app';
+import { LIVE_REMOVED_CODE } from '../../../../shared/api';
 
 setupAppTests();
 
@@ -81,7 +82,7 @@ describe('the split page', () => {
     await waitFor(() => expect(liveSockets().at(-1)?.readyState).toBe(1));
 
     server.splits.delete('trip');
-    liveSockets().at(-1)!.close(4403);
+    liveSockets().at(-1)!.close(LIVE_REMOVED_CODE);
     expect(await screen.findByText(/doesn't exist, or you don't have access/)).toBeTruthy();
     expect(liveSockets()).toHaveLength(1);
   });

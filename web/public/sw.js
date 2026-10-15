@@ -11,9 +11,9 @@
 const SHELL = 'splitfoolish-shell-v1';
 const ASSETS = 'splitfoolish-assets-v1';
 /** IMAGE_CACHE in web/src/offline/cache.ts, which clears it on sign-out */
-const IMAGES = 'splitfoolish-images-v1';
+const IMAGE_CACHE = 'splitfoolish-images-v1';
 const FONTS = 'splitfoolish-fonts-v1';
-const KEEP = [SHELL, ASSETS, IMAGES, FONTS];
+const KEEP = [SHELL, ASSETS, IMAGE_CACHE, FONTS];
 
 // Shared with the app, which can't be imported here: keep each the same as its twin
 /** SYNC_TAG in web/src/offline/outbox.ts */
@@ -24,6 +24,8 @@ const CREATE_PREFIX = 'create:';
 const LOCK_PREFIX = 'sf-outbox:';
 /** SW_USER_KEY in web/src/offline/cache.ts; entries there are { email, value } */
 const USER_KEY = 'sf-user';
+/** CLIENT_ID_HEADER in shared/api.ts */
+const CLIENT_ID_HEADER = 'X-Client-Id';
 
 // Profile pictures and payment QR codes (always with ?v=), and photos of splits and receipts
 const isImage = (url) =>
@@ -119,7 +121,7 @@ self.addEventListener('fetch', (event) => {
   } else if (isImage(url)) {
     event.respondWith(
       cacheFirst(
-        IMAGES,
+        IMAGE_CACHE,
         event.request,
         (r) => r.type === 'basic' && (r.headers.get('Content-Type') ?? '').startsWith('image/'),
       ),
@@ -159,7 +161,7 @@ async function post(path, body) {
   try {
     res = await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'background-sync' },
+      headers: { 'Content-Type': 'application/json', [CLIENT_ID_HEADER]: 'background-sync' },
       body: JSON.stringify(body),
     });
   } catch {

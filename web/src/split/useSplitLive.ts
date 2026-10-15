@@ -1,10 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { CLIENT_ID } from '../api';
-import { LIVE_PING, LIVE_PONG, type RoomMessage } from '../../../shared/api';
+import { LIVE_PING, LIVE_PONG, LIVE_REMOVED_CODE, type RoomMessage } from '../../../shared/api';
 
 const PING_MS = 30_000;
-/** The server's close when this person is removed from the split (worker/room.ts) */
-const REMOVED_CODE = 4403;
 const MAX_RETRY_MS = 30_000;
 
 /**
@@ -61,7 +59,7 @@ export function useSplitLive(splitId: string, enabled: boolean, onChange: () => 
         // A socket let go of earlier, closing after a new one opened: nothing to do
         if (ws !== socket) return;
         ws = null;
-        if (e.code === REMOVED_CODE) {
+        if (e.code === LIVE_REMOVED_CODE) {
           // No longer in the split: don't reconnect. Fetching it shows that it's gone.
           closed = true;
           latest.current();

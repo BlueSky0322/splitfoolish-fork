@@ -3,7 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { ArrowsLeftRight, Check, Plus, X } from '@phosphor-icons/react';
 import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { useState } from 'react';
-import { actionableInvites, api } from '../../api';
+import { countActionableInvites, api } from '../../api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeData } from '../../home/useHomeData';
 import { navigate } from '../../hooks/useRoute';
@@ -250,7 +250,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
     navigate(next === 'all' ? '' : `?tab=${next}`, { replace: true });
 
   const loading = splits == null && error == null;
-  const inviteCount = actionableInvites(invites);
+  const inviteCount = countActionableInvites(invites);
   const footnote = <p className={classes.footnote}>Invites expire after {INVITE_DAYS} days.</p>;
 
   // Desktop has its own Invites page, reached from the sidebar

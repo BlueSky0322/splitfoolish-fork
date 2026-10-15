@@ -51,8 +51,14 @@ export function formatSigned(cents: number) {
 }
 
 export interface CurrencyOption {
+  /** The code, "MYR" */
   value: string;
+  /** "MYR · Malaysian ringgit (RM)" */
   label: string;
+  /** "Malaysian ringgit" */
+  name: string;
+  /** "Malaysian ringgit (RM)": the name, with the symbol where it isn't the code */
+  detail: string;
 }
 
 let currencyOptions: CurrencyOption[] | null = null;
@@ -80,16 +86,14 @@ export function listCurrencies(): CurrencyOption[] {
   currencyOptions = codes.map((code) => {
     const name = names.of(code) ?? code;
     const symbol = currencySymbol(code);
-    return {
-      value: code,
-      label: symbol === code ? `${code} · ${name}` : `${code} · ${name} (${symbol})`,
-    };
+    const detail = symbol === code ? name : `${name} (${symbol})`;
+    return { value: code, label: `${code} · ${detail}`, name, detail };
   });
   return currencyOptions;
 }
 
 /** Before anyone has made a split or picked a default */
-const FALLBACK_CURRENCY = 'MYR';
+export const FALLBACK_CURRENCY = 'MYR';
 
 /** The currency someone works in: their default for new splits, else the one used last */
 export const homeCurrency = (settings: Settings | null | undefined) =>

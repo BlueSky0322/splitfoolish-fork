@@ -1,17 +1,17 @@
 // What every route shares: the Worker's bindings, who's asking, and the checks that
 // decide whether they may see or change a split.
 //
-// Routes (routes/*.ts) gate who gets in: membership, and ownership where only the owner
-// may act. Rules that depend on a row (who uploaded a photo, which person is being linked
-// or removed) are checked by the handler that loads that row, such as deleteAttachment
-// and applyChanges. The work lives in the feature modules (photos, profiles, sharing,
-// split-content, split-detail, summaries), which export three kinds of function:
-// handlers, taking the database, the ids and person involved, then the request or its
-// body, and answering with a Response; loaders, returning data shaped as in
-// shared/api.ts for the route to send with json<T>(); and statement builders (named
-// *Statement or *Statements), returning statements for a route to run in one batch with
-// others. A route that is one short query keeps it. Reading requests is in http.ts, and
-// telling the apps that have a split open about changes in room.ts.
+// Routes (routes/*.ts) gate who gets in: membership, and ownership (or a rule from
+// shared/rules.ts) where only the owner may act. Rules that depend on a row (who
+// uploaded a photo, which person is being linked or removed) are checked by the handler
+// that loads that row, such as deleteAttachment and applyChanges. The work lives in the
+// feature modules (photos, profiles, sharing, splits, split-content, split-detail,
+// summaries), which export three kinds of function: handlers, taking the database, the
+// ids and person involved, then the request or its body, and answering with a
+// Response; loaders, returning data shaped as in shared/api.ts for the route to send
+// with json<T>(); and statement builders (named *Statement or *Statements), returning
+// statements for a route to run in one batch with others. Reading requests is in
+// http.ts, and telling the apps that have a split open about changes in room.ts.
 
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
@@ -31,12 +31,6 @@ export interface Env extends AuthEnv, RatesEnv {
   RECONVERT_RETRY_MS?: string;
 }
 
-/** Who is making a change, and their role in the split */
-export interface Actor {
-  email: string;
-  role: Role;
-}
-
 export type AppEnv = {
   Bindings: Env;
   /**
@@ -47,11 +41,12 @@ export type AppEnv = {
 };
 
 const ID_CHARS = '[A-Za-z0-9_-]{8,64}';
-/** A split, invite or attachment id in a path */
-export const ID = `{${ID_CHARS}}`;
+/** A split, invite or attachment id in a path: the constraint after its :param */
+export const ID_PARAM = `{${ID_CHARS}}`;
 /** The same id sent in a body */
-export const VALID_ID = new RegExp(`^${ID_CHARS}$`);
-export const SPLIT = `/splits/:id${ID}`;
+export const ID_PATTERN = new RegExp(`^${ID_CHARS}$`);
+/** The path of one split, which the routes under it extend */
+export const SPLIT_PATH = `/splits/:id${ID_PARAM}`;
 
 /** Marks a split as just changed, for the order of My splits */
 export const touchSplitStatement = (db: D1Database, splitId: string) =>
@@ -61,8 +56,8 @@ export const touchSplitStatement = (db: D1Database, splitId: string) =>
 export async function batchGroups(
   db: D1Database,
   groups: D1PreparedStatement[][],
-): Promise<D1Result<Record<string, unknown>>[][]> {
-  const results = await db.batch<Record<string, unknown>>(groups.flat());
+): Promise<D1Result[][]> {
+  const results = await db.batch(groups.flat());
   let start = 0;
   return groups.map((group) => results.slice(start, (start += group.length)));
 }
@@ -90,9 +85,12 @@ export const membersOnly = createMiddleware<AppEnv>(async (c, next) => {
   await next();
 });
 
-/** After `membersOnly`: only the split's owner gets past */
-export const ownerOnly = (error: string) =>
+/** After `membersOnly`: only members whose role `can` allows get past */
+export const allowedIf = (can: (role: Role) => boolean, error: string) =>
   createMiddleware<AppEnv>(async (c, next) => {
-    if (c.var.role !== 'owner') return fail(error, 403);
+    if (!can(c.var.role)) return fail(error, 403);
     await next();
   });
+
+/** After `membersOnly`: only the split's owner gets past */
+export const ownerOnly = (error: string) => allowedIf((role) => role === 'owner', error);

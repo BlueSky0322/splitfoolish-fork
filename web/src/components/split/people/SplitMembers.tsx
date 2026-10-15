@@ -10,6 +10,7 @@ import UserAvatar from '../../ui/UserAvatar';
 import classes from './SplitMembers.module.css';
 import type { SplitInvite } from '../../../../../shared/api';
 import { reloadHomeData } from '../../../home/home-data';
+import { canRemoveMember } from '../../../../../shared/rules';
 
 interface SplitMembersProps {
   meta: SplitMeta;
@@ -194,21 +195,22 @@ const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: Split
                 <div className={classes.email}>{m.email}</div>
               </div>
               <span className="sf-tag">{m.role === 'owner' ? 'Owner' : 'Editor'}</span>
-              {isOwner && m.role !== 'owner' && (
-                <UnstyledButton
-                  className={classes.textAction}
-                  aria-label={`Remove ${nameFor(m.email, m.displayName)}`}
-                  onClick={() =>
-                    changeSharing(
-                      (x) => ({ ...x, members: x.members.filter((y) => y.email !== m.email) }),
-                      // The share link changes too, so fetch the new one
-                      () => api.removeMember(meta.id, m.email).then(onChange),
-                    )
-                  }
-                >
-                  Remove
-                </UnstyledButton>
-              )}
+              {m.email !== myEmail &&
+                canRemoveMember(m.email, { email: myEmail, role: meta.role }) && (
+                  <UnstyledButton
+                    className={classes.textAction}
+                    aria-label={`Remove ${nameFor(m.email, m.displayName)}`}
+                    onClick={() =>
+                      changeSharing(
+                        (x) => ({ ...x, members: x.members.filter((y) => y.email !== m.email) }),
+                        // The share link changes too, so fetch the new one
+                        () => api.removeMember(meta.id, m.email).then(onChange),
+                      )
+                    }
+                  >
+                    Remove
+                  </UnstyledButton>
+                )}
             </div>
           ))}
         </div>

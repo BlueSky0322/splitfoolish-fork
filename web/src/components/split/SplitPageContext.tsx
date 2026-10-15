@@ -6,7 +6,7 @@ import type { SplitItem, SplitMeta } from '../../split/state';
 import type { MetaChanges, SyncStatus } from '../../split/state';
 import type { usePhotos } from './photos/usePhotos';
 import type { Prefill } from './useConvertPrefill';
-import type { DeleteConfirmation } from './items/useDeleteItems';
+import type { DeleteConfirmation } from './items/delete-items';
 
 // What the split page has loaded and worked out, for the components on it to read
 // rather than have it handed down through each one in between. The bill itself (people

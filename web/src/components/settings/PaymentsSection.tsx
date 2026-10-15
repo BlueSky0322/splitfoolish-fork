@@ -10,22 +10,17 @@ import { homeCurrency } from '../../utils/money';
 
 // Getting paid: how people who owe you can pay, and how that looks to them
 const PaymentsSection = ({ track }: { track: Track }) => {
-  const { profile, patch } = useProfile();
+  const { profile, change } = useProfile();
   if (profile == null) return null;
 
   // Shown straight away; put back if the server refuses it
-  const save = (methods: PaymentMethod[], preferredId: string | null) => {
-    const before = {
-      paymentMethods: profile.paymentMethods,
-      preferredPaymentMethodId: profile.preferredPaymentMethodId,
-    };
-    patch((p) => ({ ...p, paymentMethods: methods, preferredPaymentMethodId: preferredId }));
-    track(api.setPaymentMethods(methods, preferredId)).catch((err: unknown) => {
-      patch((p) => ({ ...p, ...before }));
-      showError(err, 'Could not save your payment methods');
-    });
-    return Promise.resolve(true);
-  };
+  const save = (methods: PaymentMethod[], preferredId: string | null) =>
+    void track(
+      change(
+        (p) => ({ ...p, paymentMethods: methods, preferredPaymentMethodId: preferredId }),
+        () => api.setPaymentMethods(methods, preferredId),
+      ),
+    ).catch((err: unknown) => showError(err, 'Could not save your payment methods'));
 
   const preferred = profile.paymentMethods.find((m) => m.id === profile.preferredPaymentMethodId);
   const ordered = preferred

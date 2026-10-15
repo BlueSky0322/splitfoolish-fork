@@ -6,7 +6,7 @@ import { whenCreated } from '../offline/pending-creates';
 import type { Queued } from '../offline/outbox';
 import {
   classifySaveFailure,
-  isNetworkError,
+  isOfflineFailure,
   isOffline,
   readOutbox,
   requestBackgroundSync,
@@ -16,7 +16,7 @@ import {
 } from '../offline/outbox';
 import { queryClient } from '../query-client';
 import { newId } from '../utils/id';
-import { showError } from '../utils/notify';
+import { UserError, showError } from '../utils/notify';
 import { ITEM_NAMES_KEY } from './item-names';
 import type { SyncStatus } from './state';
 
@@ -32,8 +32,11 @@ export interface SaveQueueEvents {
   setStatus: (status: SyncStatus) => void;
   /** Fetches the split again: after a refusal, or once saved when asked to */
   reload: () => Promise<void>;
-  /** The split is gone: deleted, or this person was removed from it */
-  onGone: () => void;
+  /**
+   * A save or reload failed in a way the page shows: the split gone (deleted, or this
+   * person removed), or no connection
+   */
+  loadFailed: (err: unknown) => void;
 }
 
 /**
@@ -62,7 +65,7 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
   // Everyone waiting in whenSaved, told once nothing is left to send
   const savedWaiters = useRef<(() => void)[]>([]);
 
-  const settled = useCallback(() => {
+  const notifySavedWaiters = useCallback(() => {
     for (const resolve of savedWaiters.current.splice(0)) resolve();
   }, []);
 
@@ -85,15 +88,15 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
    * retry should be scheduled (kept, and online); offline, it's kept for the 'online'
    * event or background sync instead, and this is false.
    */
-  const failed = useCallback(
+  const recoverFromFailure = useCallback(
     async (err: unknown, batch: Queued[]): Promise<boolean> => {
-      const { setStatus, reload, onGone } = latest.current;
+      const { setStatus, reload, loadFailed } = latest.current;
       const kind = classifySaveFailure(err);
       if (kind === 'gone') {
         pending.current = [];
         void withOutbox(splitId, syncOutbox);
-        onGone();
-        settled();
+        loadFailed(err);
+        notifySavedWaiters();
         return false;
       }
       if (kind === 'refused') {
@@ -102,13 +105,10 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
         pending.current = [];
         await withOutbox(splitId, syncOutbox);
         reloadAfterSave.current = false;
-        try {
-          await reload();
-          setStatus('saved');
-        } catch (loadErr) {
-          setStatus(isNetworkError(loadErr) ? 'offline' : 'error');
-        }
-        settled();
+        // Nothing is waiting now; the reload shows what the server has
+        setStatus('saved');
+        await reload().catch(loadFailed);
+        notifySavedWaiters();
         return false;
       }
       // Not the change's fault (no connection, busy, a problem on the server's side):
@@ -118,10 +118,10 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
       pending.current = [...batch, ...pending.current];
       setWaiting(pending.current.length);
       requestBackgroundSync();
-      setStatus(isNetworkError(err) ? 'offline' : 'error');
+      setStatus(isOfflineFailure(err) ? 'offline' : 'error');
       return !isOffline();
     },
-    [splitId, syncOutbox, settled],
+    [splitId, syncOutbox, notifySavedWaiters],
   );
 
   const save = useCallback(async (): Promise<void> => {
@@ -160,7 +160,8 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
     } catch (err) {
       inFlight.current = false;
       if (!sent) {
-        if (await failed(err, batch)) {
+        const retry = await recoverFromFailure(err, batch);
+        if (retry) {
           const delay = Math.min(MAX_RETRY_DELAY_MS, RETRY_DELAY_MS * 2 ** failures.current++);
           timer.current = setTimeout(() => void save(), delay);
         }
@@ -168,22 +169,23 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
       }
       // Saved; only crossing them off on the device failed, so that's tried again
       console.error(err);
+      // If that fails too, the next save crosses them off
       void withOutbox(splitId, syncOutbox).catch(() => undefined);
     }
     inFlight.current = false;
     failures.current = 0;
     if (pending.current.length > 0) return save();
     setStatus('saved');
-    settled();
+    notifySavedWaiters();
     // Totals and balances in the sidebar and My splits follow the change
     void reloadHomeData();
     // A new item name is suggested next time
     void queryClient.invalidateQueries({ queryKey: ITEM_NAMES_KEY });
     if (reloadAfterSave.current) {
       reloadAfterSave.current = false;
-      await latest.current.reload().catch((err: unknown) => console.error(err));
+      await latest.current.reload().catch(latest.current.loadFailed);
     }
-  }, [splitId, syncOutbox, settled, failed]);
+  }, [splitId, syncOutbox, notifySavedWaiters, recoverFromFailure]);
 
   const queue = useCallback(
     (change: Change) => {
@@ -217,6 +219,7 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
       ];
       for (const q of left) stored.current.add(q.cid);
       setWaiting(pending.current.length);
+      // Nothing could be read (no storage): there's nothing left over to send
     }).catch(() => undefined);
     if (pending.current.length > 0) void save();
   }, [splitId, save]);
@@ -232,7 +235,7 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const tooLong = new Promise<never>((_, reject) => {
       timeout = setTimeout(
-        () => reject(new Error('Still saving. Try again in a moment.')),
+        () => reject(new UserError('Still saving. Try again in a moment.')),
         WHEN_SAVED_TIMEOUT_MS,
       );
     });

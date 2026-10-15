@@ -41,7 +41,7 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
         files.map(async (file) => {
           try {
             const photo = await shrinkImage(file);
-            const added = await api.uploadPhoto(splitId, photo, itemId);
+            const added = await api.uploadAttachment(splitId, photo, itemId);
             addAttachment(added);
           } catch (err) {
             showError(err, 'Could not add that photo');
@@ -59,7 +59,7 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
       // Hide it straight away; put it back if the server says no
       removeAttachment(photo.id);
       try {
-        await api.deletePhoto(splitId, photo.id);
+        await api.deleteAttachment(splitId, photo.id);
       } catch (err) {
         addAttachment(photo);
         showError(err, 'Could not remove that photo');

@@ -28,6 +28,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 // Installable app: the service worker only keeps the built files for offline starts
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Without it, starting offline just doesn't work; the app runs the same otherwise
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }

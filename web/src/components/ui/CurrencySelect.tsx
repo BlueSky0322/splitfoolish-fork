@@ -16,21 +16,15 @@ type CurrencySelectProps = Omit<
 };
 
 /** "Japanese Yen" for JPY, from the browser */
-const namesByCode = () =>
-  new Map(listCurrencies().map((c) => [c.value, c.label.split(' · ')[1] ?? '']));
+const namesByCode = () => new Map(listCurrencies().map((c) => [c.value, c.name]));
 
 // A currency picked by its code: tapping selects the code so typing replaces it, typing
 // is upper case and letters only, and a search also matches names ("YEN" finds JPY)
 const CurrencySelect = ({ value, onChange, first = [], ...props }: CurrencySelectProps) => {
   const names = useMemo(namesByCode, []);
-  const data = useMemo(
-    () =>
-      [...new Set([...first, value, ...COMMON_CURRENCIES, ...names.keys()])].map((code) => ({
-        value: code,
-        label: code,
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [first.join(), value, names],
+  // About 170 codes: cheap enough to list afresh each time
+  const data = [...new Set([...first, value, ...COMMON_CURRENCIES, ...names.keys()])].map(
+    (code) => ({ value: code, label: code }),
   );
   const [search, setSearch] = useState(value);
   useEffect(() => setSearch(value), [value]);

@@ -59,15 +59,15 @@ const SplitSettings = ({
         });
     }
     if (values.picture instanceof File) {
-      uploadSplitPicture(splitId, values.picture, (v) => onSaved({ pictureVersion: v })).catch(
-        (err) => showError(err, 'Could not change the picture'),
+      void uploadSplitPicture(splitId, values.picture).then(
+        (version) => version != null && onSaved({ pictureVersion: version }),
       );
     } else if (values.picture === 'remove') {
       onSaved({ pictureVersion: null });
-      removeSplitPicture(splitId).catch((err) => {
-        onSaved({ pictureVersion });
-        showError(err, 'Could not remove the picture');
-      });
+      void removeSplitPicture(splitId).then(
+        // Put back after a failure (explained already)
+        (removed) => removed === undefined && onSaved({ pictureVersion }),
+      );
     }
   };
 

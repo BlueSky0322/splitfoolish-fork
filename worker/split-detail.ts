@@ -45,9 +45,7 @@ export const splitDetailStatements = (db: D1Database, splitId: string, email: st
  */
 export function assembleSplitDetail(
   splitId: string,
-  [[roleRows, splitRows, inviteRows], [attachments], members, content]: D1Result<
-    Record<string, unknown>
-  >[][],
+  [[roleRows, splitRows, inviteRows], [attachments], members, content]: D1Result[][],
 ): { detail: SplitDetail; convertingSince: number | null } | null {
   const { role, shareToken } =
     (roleRows.results[0] as { role: Role; shareToken: string | null } | undefined) ?? {};
@@ -63,7 +61,7 @@ export function assembleSplitDetail(
     | undefined;
   if (role == null || split == null) return null;
 
-  const invites = inviteRows.results as unknown as (Omit<SplitInvite, 'needsApproval'> & {
+  const invites = inviteRows.results as (Omit<SplitInvite, 'needsApproval'> & {
     needsApproval: number;
   })[];
   return {

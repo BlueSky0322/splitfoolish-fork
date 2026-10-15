@@ -5,9 +5,15 @@
 import { Hono } from 'hono';
 import type { InviteList, JoinResult } from '../../shared/api';
 import type { AppEnv } from '../app';
-import { ID, getRole } from '../app';
+import { ID_PARAM, getRole } from '../app';
 import { json, fail } from '../http';
-import { answerInvite, findShareLink, listInvites, openInvite } from '../sharing';
+import {
+  type InviteAction,
+  answerInvite,
+  findShareLink,
+  inviteFromShareLink,
+  listInvites,
+} from '../sharing';
 
 const invites = new Hono<AppEnv>();
 
@@ -17,12 +23,13 @@ invites.get('/invites', async (c) =>
 
 // Accept or decline an invite to you; withdraw a request you sent (decline); or, as the
 // owner, approve (accept) or decline a request to join your split
-invites.post(`/invites/:inviteId${ID}/:action{accept|decline}`, (c) =>
+invites.post(`/invites/:inviteId${ID_PARAM}/:action{accept|decline}`, (c) =>
   answerInvite(
     c.env.DB,
     c.req.param('inviteId'),
     c.var.email,
-    c.req.param('action') === 'accept',
+    // The path only matches these two
+    c.req.param('action') as InviteAction,
     // Each answer changes the owner's list of who's waiting, or who's in
     (splitId) => c.set('changedSplit', splitId),
   ),
@@ -30,7 +37,7 @@ invites.post(`/invites/:inviteId${ID}/:action{accept|decline}`, (c) =>
 
 // Opening a share link: the owner's gives you an invite to accept, a member's asks the
 // owner to let you in. Neither joins you by itself.
-invites.post(`/join/:token${ID}`, async (c) => {
+invites.post(`/join/:token${ID_PARAM}`, async (c) => {
   const db = c.env.DB;
   const email = c.var.email;
   const link = await findShareLink(db, c.req.param('token'));
@@ -41,7 +48,7 @@ invites.post(`/join/:token${ID}`, async (c) => {
     return json<JoinResult>({ status: 'member', id: link.id });
   }
 
-  const invite = await openInvite(db, link.id, email, link);
+  const invite = await inviteFromShareLink(db, link.id, email, link);
   // Shows up in the owner's list of who's waiting
   c.set('changedSplit', link.id);
   return json<JoinResult>({

@@ -1,7 +1,36 @@
-// The bill's rules that both sides check: the app before sending a change, so it can
-// explain a refusal straight away, and the Worker when the change arrives.
+// The bill's rules, and who may do what in a split, that both sides check: the app
+// before sending a change, so it can explain a refusal straight away (or not offer it),
+// and the Worker when the change arrives.
 
 import type { SplitMode } from './settle';
+import type { Role } from './types';
+
+/** Someone acting in a split: their account, and their role in it */
+export interface Actor {
+  email: string;
+  role: Role;
+}
+
+/** Who's in the bill (adding, renaming and removing people) is the owner's call */
+export const canChangePeople = (role: Role) => role === 'owner';
+
+/** The split's name, currency and picture are the owner's to change */
+export const canEditSplitSettings = (role: Role) => role === 'owner';
+
+/**
+ * Whether someone may link a person to `account`, or unlink them from it: the owner
+ * links anyone, others only say which person they are, or that they aren't
+ */
+export const canLinkPerson = (account: string | null, actor: Actor) =>
+  canChangePeople(actor.role) || account === actor.email;
+
+/** A photo is removed by whoever added it, or by the owner */
+export const canRemovePhoto = (uploadedBy: string, actor: Actor) =>
+  uploadedBy === actor.email || actor.role === 'owner';
+
+/** The owner removes members; anyone else can only remove themselves (leave) */
+export const canRemoveMember = (email: string, actor: Actor) =>
+  actor.role === 'owner' || email === actor.email;
 
 /** As much of an item as the removal rules look at */
 export interface RemovalItem {

@@ -1,5 +1,5 @@
 import { api } from '../api';
-import { isNetworkError, readPendingCreates } from '../offline/outbox';
+import { isOfflineFailure, readPendingCreates } from '../offline/outbox';
 import { queryClient } from '../query-client';
 import { readCache, writeCache } from '../offline/cache';
 import type { MyInvite, SplitSummary } from '../../../shared/api';
@@ -31,7 +31,7 @@ export const fetchHome = async (): Promise<Loaded> => {
   try {
     [{ splits: listed }, { invites }] = await Promise.all([api.listSplits(), api.listInvites()]);
   } catch (err) {
-    if (!isNetworkError(err)) throw err;
+    if (!isOfflineFailure(err)) throw err;
     // Offline: what was saved on this device, fetched again once back online
     const saved = await readCache<Loaded>(CACHE_KEY);
     return { splits: await withCreating(saved?.splits ?? []), invites: saved?.invites ?? [] };

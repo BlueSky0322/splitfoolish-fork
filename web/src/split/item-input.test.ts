@@ -6,7 +6,7 @@ const inputs = (over: Partial<RateInputs> = {}): RateInputs => ({
   foreign: true,
   entryCurrency: 'JPY',
   enteredCents: 100000,
-  useOwnRate: false,
+  ownRateChosen: false,
   ownRate: '',
   original: null,
   fetched: { rate: 0.03, source: 'wise' },
@@ -21,11 +21,11 @@ describe('chooseRate', () => {
   });
 
   test('uses a typed rate, and none until it is a valid one', () => {
-    expect(chooseRate(inputs({ useOwnRate: true, ownRate: 0.031 }))).toEqual({
+    expect(chooseRate(inputs({ ownRateChosen: true, ownRate: 0.031 }))).toEqual({
       rate: 0.031,
       source: 'manual',
     });
-    expect(chooseRate(inputs({ useOwnRate: true, ownRate: '' })).rate).toBeNull();
+    expect(chooseRate(inputs({ ownRateChosen: true, ownRate: '' })).rate).toBeNull();
   });
 
   test('keeps the saved rate while the amount and currency are unchanged', () => {
@@ -35,6 +35,13 @@ describe('chooseRate', () => {
     });
     // A new amount is converted at today's rate, as the server does
     expect(chooseRate(inputs({ original: saved, enteredCents: 200000 })).rate).toBe(0.03);
+  });
+
+  test('converts at today’s rate when the currency changed or the saved rate was typed', () => {
+    expect(chooseRate(inputs({ original: saved, entryCurrency: 'THB' })).rate).toBe(0.03);
+    expect(
+      chooseRate(inputs({ original: { ...saved, rate: 0.031, rateSource: 'manual' } })),
+    ).toEqual({ rate: 0.03, source: 'wise' });
   });
 
   test('has no rate until today’s is fetched', () => {
@@ -50,7 +57,7 @@ describe('buildItemInput', () => {
     rate: 0.03,
     foreign: true,
     entryCurrency: 'JPY',
-    useOwnRate: false,
+    ownRateChosen: false,
     ownRate: '' as const,
     payerId: 'a',
     participantIds: ['a', 'b'],
@@ -86,7 +93,7 @@ describe('buildItemInput', () => {
   });
 
   test('sends a typed rate with the item', () => {
-    const item = buildItemInput({ ...fields, useOwnRate: true, ownRate: 0.031 });
+    const item = buildItemInput({ ...fields, ownRateChosen: true, ownRate: 0.031 });
     expect(item.original).toMatchObject({ rate: 0.031, rateSource: 'manual' });
   });
 });

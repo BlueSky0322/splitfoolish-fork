@@ -3,13 +3,12 @@
 
 import { Hono } from 'hono';
 import type { RateQuote, UsedCurrencyRate, UsedCurrencyRates } from '../../shared/api';
-import { convertCents, toCents } from '../../shared/rates';
+import { CURRENCY, convertCents, toCents } from '../../shared/rates';
+import { MAX_COST } from '../../shared/types';
 import type { AppEnv } from '../app';
-import { CURRENCY, json, fail } from '../http';
+import { json, fail } from '../http';
 import { getRatePreference } from '../profiles';
 import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate } from '../rates';
-
-const MAX_AMOUNT = 1_000_000_000;
 
 const rates = new Hono<AppEnv>();
 
@@ -21,8 +20,8 @@ rates.get('/rates', async (c) => {
   }
   const rawAmount = c.req.query('amount');
   const amount = rawAmount == null ? null : Number(rawAmount);
-  if (amount != null && (!Number.isFinite(amount) || amount < 0 || amount > MAX_AMOUNT)) {
-    return fail('Amount must be a number of 0 or more', 400);
+  if (amount != null && (!Number.isFinite(amount) || amount < 0 || amount > MAX_COST)) {
+    return fail(`Amount must be between 0 and ${MAX_COST.toLocaleString('en-US')}`, 400);
   }
 
   try {

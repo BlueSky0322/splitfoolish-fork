@@ -1,3 +1,4 @@
+import { FALLBACK_CURRENCY } from '../../utils/money';
 import { ActionIcon, Button, Menu, SegmentedControl } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
@@ -39,10 +40,11 @@ import { type Dialog, type SplitPage, SplitPageContext } from './SplitPageContex
 import { type SelectionUi, type SplitPageParts, otherCurrencyCount } from './SplitPageParts';
 import type { Prefill } from './useConvertPrefill';
 import { useConvertPrefill } from './useConvertPrefill';
-import { useDeleteItems } from './items/useDeleteItems';
+import { makeDeleteItems } from './items/delete-items';
 import type { ViewPrefs } from './items/useItemViewPrefs';
 import { useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
+import { canRemovePhoto } from '../../../../shared/rules';
 
 // The split page: loads the split, works out what's shown from it, and builds the parts
 // both layouts place (the item list, the balances, the menu, the dialogs). The layouts
@@ -60,7 +62,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const openAdd = useCallback((prefill?: Prefill) => setDialog({ kind: 'add', prefill }), []);
   useConvertPrefill(splitId, meta != null, state.people.length > 0, openAdd);
 
-  const currency = meta?.currency ?? 'MYR';
+  // Only until the split has loaded
+  const currency = meta?.currency ?? FALLBACK_CURRENCY;
   // Shared by everyone in the split; ignored if that person was just removed
   const distributorId = state.people.some((p) => p.id === meta?.distributorId)
     ? meta?.distributorId ?? null
@@ -87,7 +90,10 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     pictureVersion: listed ? listed.pictureVersion : meta?.pictureVersion ?? null,
     photos,
     // People can remove photos they added; the owner can remove any
-    canRemovePhoto: (photo: Attachment) => photo.uploadedBy === myEmail || meta?.role === 'owner',
+    canRemovePhoto: (photo: Attachment) =>
+      myEmail != null &&
+      meta != null &&
+      canRemovePhoto(photo.uploadedBy, { email: myEmail, role: meta.role }),
     openDialog: setDialog,
   };
   const avatarVersions = useMemo(
@@ -116,7 +122,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const selection = useItemSelection(groups.flatMap((g) => g.items.map((i) => i.id)));
   const [moving, setMoving] = useState(false);
 
-  const deleteItems = useDeleteItems({
+  const deleteItems = makeDeleteItems({
     actions,
     photosOf: photos.photosOf,
     forgetItemAttachments: metaChanges.forgetItemAttachments,

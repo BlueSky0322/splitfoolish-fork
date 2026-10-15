@@ -16,7 +16,6 @@ export const json = <T = never>(body: NoInfer<T>, status = 200) =>
 
 export const ok = () => json<Ok>({ ok: true });
 
-/** Refuses a request, saying why */
 export const fail = (error: string, status: number) => json<ApiErrorBody>({ error }, status);
 
 export const notFound = () => fail('Not found', 404);
@@ -30,11 +29,6 @@ export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 /** An id the app made, shaped like newId's, for a row it can refer to before it's saved */
 export const isClientId = (v: unknown): v is string =>
   typeof v === 'string' && /^[0-9a-f]{16}$/.test(v);
-
-/** A currency code, like MYR */
-export const CURRENCY = /^[A-Z]{3}$/;
-
-export const isCurrency = (v: unknown): v is string => typeof v === 'string' && CURRENCY.test(v);
 
 /** A name as sent, trimmed; null when it's missing, empty or too long */
 export const readName = (value: unknown) => {
