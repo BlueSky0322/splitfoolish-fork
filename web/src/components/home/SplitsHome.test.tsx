@@ -15,6 +15,20 @@ describe('My splits', () => {
     expect(window.location.search).toBe('?s=trip');
   });
 
+  test('shows where you stand in each split', async () => {
+    renderApp(
+      fakeServer(
+        splitDetail('trip', [
+          item({ id: 'dinner', name: 'Dinner', cost: 90 }),
+          item({ id: 'taxi', name: 'Taxi', cost: 30, payerId: 'ann' }),
+        ]),
+      ),
+    );
+    // Ryan paid 90 and Ann 30, split evenly: Ryan is owed 30
+    expect(await screen.findByText("You're owed")).toBeTruthy();
+    expect((await screen.findAllByText(/RM\s?30\.00/)).length).toBeGreaterThan(0);
+  });
+
   test('makes a new split, and goes to it', async () => {
     const server = fakeServer();
     renderApp(server);

@@ -8,6 +8,8 @@ import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { MyInvite, Profile, SplitDetail, SplitSummary } from '../../../shared/api';
 import { DEFAULT_SETTINGS } from '../../../shared/api';
+import { toCents } from '../../../shared/rates';
+import { type SettleItem, balances } from '../../../shared/settle';
 import type { Change, Item } from '../../../shared/types';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
@@ -85,6 +87,8 @@ export interface FakeServer {
   health: 'up' | 'signedOut' | 'down' | 'unreachable';
   me: Profile;
   splits: Map<string, SplitDetail>;
+  /** Splits whose share link you can open, but that you're not in yet */
+  notJoined: SplitDetail[];
   invites: MyInvite[];
   /** 1 `from` is `rate` `to` */
   rates: Map<string, number>;
@@ -134,6 +138,25 @@ export function splitDetail(id: string, items: Item[] = []): SplitDetail {
   };
 }
 
+/** Where the signed-in account stands in a split, as the server works it out */
+function myBalance(s: SplitDetail) {
+  const me = s.people.find((p) => p.memberEmail === EMAIL);
+  if (me == null) return null;
+  const items = s.items.map(
+    (i): SettleItem => ({
+      costCents: toCents(i.cost),
+      payerId: i.payerId,
+      splitMode: i.splitMode,
+      participants: i.participantIds.map((personId) => ({
+        personId,
+        shares: i.shares?.[personId] ?? 1,
+        exactCents: i.exact?.[personId] == null ? null : toCents(i.exact[personId]),
+      })),
+    }),
+  );
+  return balances([me.id], items).get(me.id)!.balanceCents;
+}
+
 const summaryOf = (s: SplitDetail): SplitSummary => ({
   id: s.id,
   name: s.name,
@@ -141,8 +164,8 @@ const summaryOf = (s: SplitDetail): SplitSummary => ({
   role: s.role,
   memberCount: s.members.length,
   peopleCount: s.people.length,
-  totalCents: s.items.reduce((sum, i) => sum + Math.round(i.cost * 100), 0),
-  myBalanceCents: null,
+  totalCents: s.items.reduce((sum, i) => sum + toCents(i.cost), 0),
+  myBalanceCents: myBalance(s),
   pictureVersion: s.pictureVersion,
   updatedAt: 1,
 });
@@ -230,9 +253,33 @@ function serve(server: FakeServer) {
       const failure = failing('join');
       if (failure) return failure;
       const split = [...server.splits.values()].find((s) => s.shareToken === joinMatch[1]);
-      return split
-        ? json({ status: 'member', id: split.id })
-        : json({ error: 'This invite link is no longer valid' }, 404);
+      if (split) return json({ status: 'member', id: split.id });
+      const other = server.notJoined.find((s) => s.shareToken === joinMatch[1]);
+      if (other == null) return json({ error: 'This invite link is no longer valid' }, 404);
+      // An invite from the owner, waiting in Invites to be accepted
+      const invite: MyInvite = {
+        kind: 'invite',
+        id: `invite-${other.id}`,
+        splitId: other.id,
+        splitName: other.name,
+        invitedBy: 'ann@example.com',
+        invitedByName: 'Ann',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 7 * 86_400_000,
+      };
+      server.invites = [...server.invites.filter((i) => i.id !== invite.id), invite];
+      return json({ status: 'invited', id: other.id, inviteId: invite.id });
+    }
+    const answerMatch = path.match(/^\/api\/invites\/([^/]+)\/(accept|decline)$/);
+    if (answerMatch && method === 'POST') {
+      const invite = server.invites.find((i) => i.id === answerMatch[1]);
+      if (invite == null) return json({ error: 'That invite is no longer open' }, 404);
+      server.invites = server.invites.filter((i) => i !== invite);
+      const split = server.notJoined.find((s) => s.id === invite.splitId);
+      if (answerMatch[2] === 'decline' || split == null) return json({ ok: true });
+      server.notJoined = server.notJoined.filter((s) => s !== split);
+      server.splits.set(split.id, { ...split, role: 'editor' });
+      return json({ id: split.id });
     }
     if (path === '/api/item-names') return json({ names: [] });
     if (path === '/api/rates') {
@@ -285,6 +332,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
       settings: { ...DEFAULT_SETTINGS, lastCurrency: 'MYR' },
     },
     splits: new Map(splits.map((s) => [s.id, s])),
+    notJoined: [],
     invites: [],
     rates: new Map(),
     sent: [],

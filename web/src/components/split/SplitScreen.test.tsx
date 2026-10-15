@@ -204,6 +204,38 @@ describe('the split page', () => {
     expect(await screen.findByText(/doesn't exist, or you don't have access/)).toBeTruthy();
   });
 
+  test('the owner adds someone to the bill', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+
+    await user.click(screen.getByRole('button', { name: 'Edit people' }));
+    const sheet = await screen.findByRole('dialog');
+    await user.type(within(sheet).getByRole('textbox', { name: 'Add someone' }), 'Ben');
+    await user.click(within(sheet).getByRole('button', { name: 'Add' }));
+
+    expect(await within(sheet).findByText('Ben')).toBeTruthy();
+    await waitFor(() =>
+      expect(server.sent.flatMap((b) => b.changes)).toContainEqual(
+        expect.objectContaining({ op: 'addPerson', name: 'Ben' }),
+      ),
+    );
+  });
+
+  test('an editor sees the people, without changing who is in the bill', async () => {
+    const split = trip();
+    split.role = 'editor';
+    renderApp(fakeServer(split), '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+
+    await user.click(screen.getByRole('button', { name: 'See people' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(await within(sheet).findByText('Ann')).toBeTruthy();
+    expect(within(sheet).queryByRole('textbox', { name: 'Add someone' })).toBeNull();
+  });
+
   test('renames the split from its settings, here and in My splits', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');

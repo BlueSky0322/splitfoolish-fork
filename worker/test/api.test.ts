@@ -538,6 +538,72 @@ describe('live updates', () => {
   });
 });
 
+describe('My splits', () => {
+  it('adds up each split, and where the person asking stands in it', async () => {
+    const owner = person('owner');
+    const member = person('member');
+    const { id } = await splitWith(owner, member);
+    const me = hex();
+    const ben = hex();
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: me, name: 'Me' },
+      { op: 'linkPerson', id: me, memberEmail: owner },
+      { op: 'addPerson', id: ben, name: 'Ben' },
+    );
+    const them = await personOf(owner, id, member);
+    const res = await change(
+      owner,
+      id,
+      // 90 shared by three, paid by the member: 30 each
+      {
+        op: 'addItem',
+        item: {
+          id: hex(),
+          name: 'Dinner',
+          cost: 90,
+          payerId: them,
+          participantIds: [me, them, ben],
+        },
+      },
+      // 10 paid by the owner: 4 theirs, 6 the member's
+      {
+        op: 'addItem',
+        item: {
+          id: hex(),
+          name: 'Taxi',
+          cost: 10,
+          payerId: me,
+          participantIds: [me, them],
+          splitMode: 'exact',
+          exact: { [me]: 4, [them]: 6 },
+        },
+      },
+    );
+    expect(res.status).toBe(200);
+    const listed = async (who: string) =>
+      ((await api.call(who, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
+        (s) => s.id === id,
+      );
+
+    // The owner paid 10 and owes 30 + 4; the member paid 90 and owes 30 + 6
+    expect(await listed(owner)).toMatchObject({
+      totalCents: 10_000,
+      peopleCount: 3,
+      myBalanceCents: -2400,
+    });
+    expect(await listed(member)).toMatchObject({ myBalanceCents: 5400 });
+    // Nobody in the bill is this account yet
+    const empty = (await splitWith(owner)).id;
+    expect(
+      ((await api.call(owner, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
+        (s) => s.id === empty,
+      ),
+    ).toMatchObject({ totalCents: 0, peopleCount: 0, myBalanceCents: null });
+  });
+});
+
 describe('ordering my splits', () => {
   const myOrder = async (who: string) =>
     ((await api.call(who, 'GET', '/api/splits')).data.splits as { id: string }[]).map((s) => s.id);

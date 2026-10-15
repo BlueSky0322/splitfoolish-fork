@@ -50,6 +50,18 @@ describe('the app', () => {
     await waitFor(() => expect(window.location.search).toBe('?s=trip'));
   });
 
+  test('an invite link waits in Invites, and accepting it opens the split', async () => {
+    const server = fakeServer();
+    server.notJoined = [{ ...splitDetail('bali'), name: 'Bali', shareToken: 'bali-link' }];
+    renderApp(server, '/?join=bali-link');
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Accept Bali' }));
+    await waitFor(() => expect(window.location.search).toBe('?s=bali'));
+    expect(server.splits.has('bali')).toBe(true);
+    expect(server.invites).toEqual([]);
+  });
+
   test('says when an invite link no longer works', async () => {
     renderApp(fakeServer(), '/?join=old');
     expect(await screen.findByText('This invite link no longer works')).toBeTruthy();

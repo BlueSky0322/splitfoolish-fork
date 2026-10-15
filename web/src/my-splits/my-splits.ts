@@ -132,8 +132,11 @@ export function moveSplit(id: string, toId: string) {
   });
 }
 
-/** Fetches the latest splits and invites; concurrent calls share one request */
-export function reloadMySplits(): Promise<void> {
+/** Fetches the splits and invites again, so they include every change made before the call */
+export async function reloadMySplits(): Promise<void> {
+  // A first load under way may have been asked before the change this follows (it would
+  // be handed back rather than fetched again), so it's dropped for a fresh one
+  await queryClient.cancelQueries({ queryKey: MY_SPLITS_KEY });
   return queryClient.refetchQueries({ queryKey: MY_SPLITS_KEY, type: 'all' }).then(async () => {
     // Nothing has asked for it yet: fetch it now so it's there when they do
     if (queryClient.getQueryState(MY_SPLITS_KEY) == null) {
