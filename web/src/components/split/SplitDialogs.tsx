@@ -21,7 +21,7 @@ import { newId } from '../../utils/id';
 import { notifications } from '@mantine/notifications';
 import { type Dialog, useSplitPage } from './SplitPageContext';
 import type { DeleteItems } from './items/delete-items';
-import { canDeleteSplit, canEditSplitSettings } from '../../../../shared/rules';
+import { canDeleteSplit, canEditSplitSettings } from '@shared/rules';
 
 /** Under Settle up's title: how many transfers settle everyone */
 const settleNote = (totals: SplitTotals) => {

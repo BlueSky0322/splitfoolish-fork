@@ -1,13 +1,13 @@
-import type { RateSource } from '../../../shared/rates';
+import type { RateSource } from '@shared/rates';
 import {
   convertParts,
   isValidRate,
   keepsSavedConversion,
   savedRateSource,
   toCents,
-} from '../../../shared/rates';
-import type { SplitMode } from '../../../shared/settle';
-import type { ItemOriginal } from '../../../shared/types';
+} from '@shared/rates';
+import type { SplitMode } from '@shared/settle';
+import type { ItemOriginal } from '@shared/types';
 import type { ItemInput } from '../api';
 
 // What the item form works out from what's typed: which rate converts it, and the item

@@ -16,7 +16,7 @@ import {
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import type { Attachment } from '../../../../shared/api';
+import type { Attachment } from '@shared/api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useMySplitsSnapshot } from '../../my-splits/useMySplits';
 import { useItemSelection, useSelectionKeys } from './items/useItemSelection';
@@ -44,7 +44,7 @@ import { makeDeleteItems } from './items/delete-items';
 import type { ViewPrefs } from './items/useItemViewPrefs';
 import { useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
-import { canRemovePhoto } from '../../../../shared/rules';
+import { canRemovePhoto } from '@shared/rules';
 
 // The split page: loads the split, works out what's shown from it, and builds the parts
 // both layouts place (the item list, the balances, the menu, the dialogs). The layouts

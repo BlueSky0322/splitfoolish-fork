@@ -8,7 +8,7 @@ import {
   SortDescending,
   StackSimple,
 } from '@phosphor-icons/react';
-import type { Person } from '../../../../shared/types';
+import type { Person } from '@shared/types';
 import { navigate } from '../../hooks/useRoute';
 import type { SplitTotals } from '../../split/derive';
 import { GROUP_LABELS } from '../../split/grouping';

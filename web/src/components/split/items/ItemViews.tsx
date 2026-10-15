@@ -3,7 +3,7 @@ import { ActionIcon, UnstyledButton } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
 import type { SplitItem } from '../../../split/state';
-import type { Person } from '../../../../../shared/types';
+import type { Person } from '@shared/types';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { useSplitPage } from '../SplitPageContext';
 import { categoryIcon } from '../../../split/categories';
@@ -14,7 +14,7 @@ import { useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
 import PersonAvatar from '../PersonAvatar';
 import classes from '../Split.module.css';
-import { toCents } from '../../../../../shared/rates';
+import { toCents } from '@shared/rates';
 import { plural } from '../../../utils/text';
 
 interface ItemViewProps {

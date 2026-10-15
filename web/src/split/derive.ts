@@ -1,8 +1,8 @@
-import type { Balance, SettleItem, Transfer } from '../../../shared/settle';
-import { balances, itemShares, transfers } from '../../../shared/settle';
+import type { Balance, SettleItem, Transfer } from '@shared/settle';
+import { balances, itemShares, transfers } from '@shared/settle';
 import type { SplitItem } from './state';
-import type { Person } from '../../../shared/types';
-import { toCents } from '../../../shared/rates';
+import type { Person } from '@shared/types';
+import { toCents } from '@shared/rates';
 
 // Everything the split view shows that is worked out from its people and items. The
 // maths is the same code the server uses for My splits, so both always agree.

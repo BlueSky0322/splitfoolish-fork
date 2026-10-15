@@ -10,7 +10,7 @@ import {
   setupAppTests,
   splitDetail,
 } from '../../testing/app';
-import { LIVE_REMOVED_CODE } from '../../../../shared/api';
+import { LIVE_REMOVED_CODE } from '@shared/api';
 
 setupAppTests();
 

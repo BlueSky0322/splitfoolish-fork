@@ -2,7 +2,7 @@
 // receipt is perfectly readable at 1600px. Each kind aims a little under the server's
 // limit for it (shared/api.ts), so a picture that fits here is never turned away.
 
-import { MAX_AVATAR_BYTES, MAX_PHOTO_BYTES, MAX_QR_BYTES } from '../../../shared/api';
+import { MAX_AVATAR_BYTES, MAX_PHOTO_BYTES, MAX_QR_BYTES } from '@shared/api';
 import { UserError } from './notify';
 
 /** How far under the server's limit each picture aims */

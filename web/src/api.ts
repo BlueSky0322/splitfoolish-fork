@@ -1,4 +1,4 @@
-import { CLIENT_ID_HEADER } from '../../shared/api';
+import { CLIENT_ID_HEADER } from '@shared/api';
 import type {
   AcceptResult,
   ApiErrorBody,
@@ -25,9 +25,9 @@ import type {
   SplitPictureResult,
   UpdateSplitResult,
   UsedCurrencyRates,
-} from '../../shared/api';
-import type { PaymentMethod } from '../../shared/payments';
-import type { Change, Item as ApiItem } from '../../shared/types';
+} from '@shared/api';
+import type { PaymentMethod } from '@shared/payments';
+import type { Change, Item as ApiItem } from '@shared/types';
 import { newId } from './utils/id';
 
 /** The signed-in account, as this device holds it */

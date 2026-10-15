@@ -11,7 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { paymentQrUrl } from '../../api';
-import { BANK_TRANSFER, type PaymentMethod } from '../../../../shared/payments';
+import { BANK_TRANSFER, type PaymentMethod } from '@shared/payments';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import ResponsiveDialog from './ResponsiveDialog';

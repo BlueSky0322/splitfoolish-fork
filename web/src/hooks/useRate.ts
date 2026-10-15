@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { DEFAULT_SETTINGS } from '../../../shared/api';
+import { DEFAULT_SETTINGS } from '@shared/api';
 import { api } from '../api';
 import { useProfile } from '../profile/ProfileContext';
 import { queryClient } from '../query-client';

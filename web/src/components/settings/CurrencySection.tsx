@@ -9,7 +9,7 @@ import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
-import { DEFAULT_SETTINGS, type Settings } from '../../../../shared/api';
+import { DEFAULT_SETTINGS, type Settings } from '@shared/api';
 import { plural } from '../../utils/text';
 
 /** The Select value for "use the currency used last" */

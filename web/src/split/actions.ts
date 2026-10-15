@@ -1,9 +1,9 @@
 import type { Dispatch } from 'react';
 import type { ItemInput } from '../api';
-import type { Item as ApiItem, Change } from '../../../shared/types';
+import type { Item as ApiItem, Change } from '@shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
-import { atRate, removalBlocker } from './rules';
+import { atRate, removalMessage } from './rules';
 import { type SplitMeta } from './state';
 import type { MetaChanges, SplitAction, SplitState } from './state';
 
@@ -20,7 +20,7 @@ export interface SplitActions {
   renamePerson: (personId: string, name: string) => boolean;
   /** "This is me": links a person to an account, or unlinks with null */
   linkPerson: (personId: string, memberEmail: string | null) => boolean;
-  /** fromItems also takes them off items they share; see removalBlocker for what's allowed */
+  /** fromItems also takes them off items they share; see removalMessage for what's allowed */
   removePerson: (personId: string, fromItems?: boolean) => boolean;
   clearPeople: () => boolean;
   /**
@@ -121,7 +121,7 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
     removePerson: (personId, fromItems = false) => {
       const person = d.current().people.find((p) => p.id === personId);
       if (person == null) return false;
-      const blocker = removalBlocker(d.current(), personId, fromItems);
+      const blocker = removalMessage(d.current(), personId, fromItems);
       if (blocker) return refuse(blocker);
       d.dispatch({ type: 'REMOVE_PERSON', payload: personId });
       revokeAccessOf([person]);

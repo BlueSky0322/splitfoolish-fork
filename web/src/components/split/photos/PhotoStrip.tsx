@@ -5,7 +5,7 @@ import { attachmentUrl } from '../../../api';
 import type { ViewerPhoto } from '../../ui/PhotoViewer';
 import PhotoViewer from '../../ui/PhotoViewer';
 import classes from './Photos.module.css';
-import type { Attachment } from '../../../../../shared/api';
+import type { Attachment } from '@shared/api';
 
 interface PhotoStripProps {
   splitId: string;

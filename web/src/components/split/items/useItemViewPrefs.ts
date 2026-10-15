@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, ITEMS_GROUPS, type Settings } from '../../../../../shared/api';
+import { DEFAULT_SETTINGS, ITEMS_GROUPS, type Settings } from '@shared/api';
 import { useProfile } from '../../../profile/ProfileContext';
 import type { GroupBy, SortDir, SortKey } from '../../../split/grouping';
 import { MOBILE_SORTS } from '../../../split/grouping';

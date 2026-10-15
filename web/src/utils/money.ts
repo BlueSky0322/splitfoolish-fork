@@ -1,4 +1,4 @@
-import type { Settings } from '../../../shared/api';
+import type { Settings } from '@shared/api';
 // Money is stored in whole cents and shown with the split's currency, like "RM 248.00"
 
 const formatters = new Map<string, Intl.NumberFormat>();

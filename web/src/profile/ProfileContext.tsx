@@ -17,7 +17,7 @@ import {
   type ProfilePatch,
   type Settings,
   type ThemeSetting,
-} from '../../../shared/api';
+} from '@shared/api';
 import { showError } from '../utils/notify';
 import { quietly } from '../utils/quietly';
 

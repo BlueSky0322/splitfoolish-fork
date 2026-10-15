@@ -3,11 +3,11 @@ import { CheckCircle, Plus } from '@phosphor-icons/react';
 import type { CSSProperties } from 'react';
 import { useProfile } from '../../profile/ProfileContext';
 import { ACCENTS } from '../../theme/accents';
-import type { Accent } from '../../../../shared/api';
+import type { Accent } from '@shared/api';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
-import type { Settings, ThemeSetting } from '../../../../shared/api';
+import type { Settings, ThemeSetting } from '@shared/api';
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
   { value: 'dark', label: 'Dark' },

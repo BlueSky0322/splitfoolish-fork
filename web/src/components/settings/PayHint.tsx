@@ -5,7 +5,7 @@ import { formatMoney } from '../../utils/money';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import QrViewer from '../ui/QrViewer';
 import classes from './PaymentMethods.module.css';
-import type { PaymentMethod } from '../../../../shared/payments';
+import type { PaymentMethod } from '@shared/payments';
 
 interface PayHintProps {
   /** Who is being paid */

@@ -8,9 +8,9 @@ import type { SplitMeta } from '../../../split/state';
 import { nameFor } from '../../../profile/ProfileContext';
 import UserAvatar from '../../ui/UserAvatar';
 import classes from './SplitMembers.module.css';
-import type { SplitInvite } from '../../../../../shared/api';
+import type { SplitInvite } from '@shared/api';
 import { reloadMySplits } from '../../../my-splits/my-splits';
-import { canManageInvites, canRemoveMember } from '../../../../../shared/rules';
+import { canManageInvites, canRemoveMember } from '@shared/rules';
 
 interface SplitMembersProps {
   meta: SplitMeta;

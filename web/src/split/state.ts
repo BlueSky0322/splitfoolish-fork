@@ -3,8 +3,8 @@
 // refers to people by id.
 
 import type { ImmerReducer } from 'use-immer';
-import type { Item as ApiItem, Person } from '../../../shared/types';
-import type { Attachment, SplitDetail } from '../../../shared/api';
+import type { Item as ApiItem, Person } from '@shared/types';
+import type { Attachment, SplitDetail } from '@shared/api';
 
 /** Everything about the open split besides its bill: name, members, photos and so on */
 export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;

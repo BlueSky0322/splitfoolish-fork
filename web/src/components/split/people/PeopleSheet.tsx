@@ -2,18 +2,18 @@ import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
 import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { useSplitActions } from '../../../split/useSplit';
-import type { Person } from '../../../../../shared/types';
+import type { Person } from '@shared/types';
 import { nameFor } from '../../../profile/ProfileContext';
 import { formatMoney } from '../../../utils/money';
 import PersonAvatar from '../PersonAvatar';
 import TransferRow from '../balances/TransferRow';
 import classes from './PeopleSheet.module.css';
-import { MAX_NAME_LENGTH } from '../../../../../shared/types';
+import { MAX_NAME_LENGTH } from '@shared/types';
 import { useSplitPage } from '../SplitPageContext';
 import { showRefusal } from '../../../utils/notify';
-import { removalBlocker } from '../../../split/rules';
+import { removalMessage } from '../../../split/rules';
 import { useSplitState } from '../../../split/SplitStateContext';
-import { canChangePeople } from '../../../../../shared/rules';
+import { canChangePeople } from '@shared/rules';
 
 interface PeopleSheetProps {
   /** Opens on this person's page */
@@ -74,9 +74,9 @@ function PersonPage({
   const losesAccess = hasAccount && !isMe;
 
   const remove = () => {
-    const plain = removalBlocker(state, person.id, false);
+    const plain = removalMessage(state, person.id, false);
     // Can't go even from shared items (they paid, or it would empty an item): explain why
-    const blocker = plain == null ? null : removalBlocker(state, person.id, true);
+    const blocker = plain == null ? null : removalMessage(state, person.id, true);
     if (blocker != null) {
       showRefusal(blocker);
       return;

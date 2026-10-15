@@ -1,5 +1,5 @@
-import { convertCents, convertParts, toCents } from '../../../shared/rates';
-import { removalBlocker as blockerFor } from '../../../shared/rules';
+import { convertCents, convertParts, toCents } from '@shared/rates';
+import { removalBlocker } from '@shared/rules';
 import type { SplitItem, SplitState } from './state';
 
 // The bill's rules that the app checks before sending a change, so it can explain a
@@ -41,7 +41,7 @@ export function atRate(item: SplitItem, rate: number): SplitItem {
  * take them off those items too; the server, sent such a removal, adds "Edit or remove
  * those items first".
  */
-export function removalBlocker(
+export function removalMessage(
   state: SplitState,
   personId: string,
   fromItems: boolean,
@@ -53,5 +53,5 @@ export function removalBlocker(
     participantIds: i.participants.map((p) => p.id),
     splitMode: i.splitMode,
   }));
-  return blockerFor(person, items, fromItems)?.message ?? null;
+  return removalBlocker(person, items, fromItems)?.message ?? null;
 }

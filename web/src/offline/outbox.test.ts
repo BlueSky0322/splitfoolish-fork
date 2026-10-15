@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
-import { CLIENT_ID_HEADER } from '../../../shared/api';
+import { CLIENT_ID_HEADER } from '@shared/api';
 import { IMAGE_CACHE, SW_USER_KEY } from './cache';
 import { CREATE_PREFIX } from './pending-creates';
 import type { Queued } from './outbox';

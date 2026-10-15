@@ -3,7 +3,7 @@ import { isOfflineFailure } from '../offline/outbox';
 import { readPendingCreates, startCreate } from '../offline/pending-creates';
 import { queryClient } from '../query-client';
 import { readCache, removeCacheEntry, splitCacheKey, writeCache } from '../offline/cache';
-import type { MyInvite, Profile, SplitDetail, SplitSummary } from '../../../shared/api';
+import type { MyInvite, Profile, SplitDetail, SplitSummary } from '@shared/api';
 import { newId } from '../utils/id';
 import { showError } from '../utils/notify';
 

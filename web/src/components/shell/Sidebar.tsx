@@ -23,7 +23,7 @@ import { justDragged, useSortableSplit } from '../home/useSortableSplit';
 import { SortableSplits } from '../home/SortableSplits';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
-import type { SplitSummary } from '../../../../shared/api';
+import type { SplitSummary } from '@shared/api';
 import { moveSplit } from '../../my-splits/my-splits';
 
 interface SidebarProps {

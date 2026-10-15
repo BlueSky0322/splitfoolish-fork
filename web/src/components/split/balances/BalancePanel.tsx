@@ -8,15 +8,15 @@ import {
   ShareNetwork,
 } from '@phosphor-icons/react';
 import { useState } from 'react';
-import type { Person } from '../../../../../shared/types';
+import type { Person } from '@shared/types';
 import { formatMoney } from '../../../utils/money';
 import { isQr, methodName } from '../../../utils/payments';
 import QrViewer from '../../ui/QrViewer';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
 import classes from '../Split.module.css';
-import type { PaymentMethod } from '../../../../../shared/payments';
-import type { SplitMember } from '../../../../../shared/api';
+import type { PaymentMethod } from '@shared/payments';
+import type { SplitMember } from '@shared/api';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { useSplitActions } from '../../../split/useSplit';
 import { useSplitPage } from '../SplitPageContext';

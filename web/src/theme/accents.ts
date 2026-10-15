@@ -1,5 +1,5 @@
 import type { MantineColorsTuple } from '@mantine/core';
-import { ACCENTS as ACCENT_NAMES, type Accent } from '../../../shared/api';
+import { ACCENTS as ACCENT_NAMES, type Accent } from '@shared/api';
 
 // The accent colours someone can pick in Settings. Each ramp is in OKLCH on the same
 // lightness scale as the default blurple, so every accent reads the same. Shade 4 is

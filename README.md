@@ -14,7 +14,8 @@ offline.
 | `migrations/` | D1 (SQLite) schema changes, applied in order on deploy                       |
 | `docs/`       | The data model (`erd.md`)                                                    |
 
-`web/` and `worker/` never import each other; anything both need lives in `shared/`.
+`web/` and `worker/` never import each other; anything both need lives in `shared/`,
+which the app imports as `@shared/...`.
 Each has its own `tsconfig.json`, so the app gets browser types, the Worker gets Worker
 types and `shared/` gets neither. A rule both sides apply keeps one name across them:
 `shared/rates.ts` holds the arithmetic, `worker/rates.ts` and `web/src/utils/rates.ts`

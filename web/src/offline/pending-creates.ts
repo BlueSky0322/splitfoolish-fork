@@ -1,5 +1,5 @@
 import { ApiError, api } from '../api';
-import type { SplitSummary } from '../../../shared/api';
+import type { SplitSummary } from '@shared/api';
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
 import { isOffline, isRetryable, requestBackgroundSync, withOutbox } from './outbox';
 

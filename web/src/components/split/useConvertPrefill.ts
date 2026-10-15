@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../../hooks/useRoute';
-import { isCurrency } from '../../../../shared/rates';
+import { isCurrency } from '@shared/rates';
 
 export interface Prefill {
   amount: string;

@@ -19,7 +19,7 @@ import { otherCurrencyCount } from '../../split/derive';
 import { AvatarStack, SaveStatus, type SelectionUi, type SplitPageParts } from './SplitPageParts';
 import { GROUP_ORDER, useItemViewPrefs } from './items/useItemViewPrefs';
 import classes from './Split.module.css';
-import { canChangePeople } from '../../../../shared/rules';
+import { canChangePeople } from '@shared/rules';
 
 /** The split page on a computer: the items, with the balances alongside */
 const DesktopSplitLayout = ({

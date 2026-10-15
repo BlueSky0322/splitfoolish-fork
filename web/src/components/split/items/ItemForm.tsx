@@ -14,10 +14,10 @@ import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phos
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { convertCents, isValidRate, toCents } from '../../../../../shared/rates';
-import type { SplitMode } from '../../../../../shared/settle';
-import { itemShares, MAX_SHARES } from '../../../../../shared/settle';
-import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../../../../../shared/types';
+import { convertCents, isValidRate, toCents } from '@shared/rates';
+import type { SplitMode } from '@shared/settle';
+import { itemShares, MAX_SHARES } from '@shared/settle';
+import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '@shared/types';
 import type { ItemInput } from '../../../api';
 import { api } from '../../../api';
 import type { SplitItem } from '../../../split/state';

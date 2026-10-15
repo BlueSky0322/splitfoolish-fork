@@ -15,7 +15,7 @@ import { whenCreated } from '../offline/pending-creates';
 import { isOfflineFailure, isOffline } from '../offline/outbox';
 import { useSaveQueue } from './useSaveQueue';
 import { useSplitLive } from './useSplitLive';
-import type { SplitDetail } from '../../../shared/api';
+import type { SplitDetail } from '@shared/api';
 import { patchListedSplit, reloadMySplits } from '../my-splits/my-splits';
 import { showError } from '../utils/notify';
 import type { SplitActions } from './actions';

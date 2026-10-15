@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Change } from '../../../shared/types';
+import type { Change } from '@shared/types';
 import { reloadMySplits } from '../my-splits/my-splits';
 import { whenCreated } from '../offline/pending-creates';
 import type { Queued } from '../offline/outbox';

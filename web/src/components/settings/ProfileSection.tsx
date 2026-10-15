@@ -8,7 +8,7 @@ import UserAvatar from '../ui/UserAvatar';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
-import { MAX_DISPLAY_NAME } from '../../../../shared/api';
+import { MAX_DISPLAY_NAME } from '@shared/api';
 import { showError } from '../../utils/notify';
 
 // Profile: your picture, the name people see, and the email you sign in with

@@ -4,7 +4,7 @@ import PayHint from './PayHint';
 import PaymentMethods from './PaymentMethods';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
-import type { PaymentMethod } from '../../../../shared/payments';
+import type { PaymentMethod } from '@shared/payments';
 import { showError } from '../../utils/notify';
 import { homeCurrency } from '../../utils/money';
 

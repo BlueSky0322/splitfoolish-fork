@@ -1,5 +1,5 @@
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
-import type { Change } from '../../../shared/types';
+import type { Change } from '@shared/types';
 import { ApiError, NetworkError, api } from '../api';
 
 // Changes not yet saved, kept on the device (IndexedDB) so they survive the app being

@@ -12,7 +12,7 @@ import App from './App';
 import './index.css';
 import { ProfileProvider, readAppearance } from './profile/ProfileContext';
 import { queryClient } from './query-client';
-import type { Accent } from '../../shared/api';
+import type { Accent } from '@shared/api';
 import { buildTheme, cssVariablesResolver } from './theme/theme';
 import './theme/tokens.css';
 

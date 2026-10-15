@@ -18,7 +18,7 @@ import SplitAvatar from '../ui/SplitAvatar';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './SplitsHome.module.css';
 import { InstallCard } from '../ui/InstallApp';
-import type { MyInvite, SplitSummary } from '../../../../shared/api';
+import type { MyInvite, SplitSummary } from '@shared/api';
 import { moveSplit, removeListedInvite, sendMySplitsChange } from '../../my-splits/my-splits';
 import { plural } from '../../utils/text';
 

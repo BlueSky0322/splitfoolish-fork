@@ -1,6 +1,6 @@
 import { CloudCheck, CloudSlash } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
-import type { Person } from '../../../../shared/types';
+import type { Person } from '@shared/types';
 import { useSplitState } from '../../split/SplitStateContext';
 import { plural } from '../../utils/text';
 import type { SelectionBarProps } from './items/ItemSelection';

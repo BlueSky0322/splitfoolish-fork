@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { listCurrencies } from '../../utils/money';
 import SplitAvatar from '../ui/SplitAvatar';
 import classes from './SplitForm.module.css';
-import { MAX_NAME_LENGTH } from '../../../../shared/types';
+import { MAX_NAME_LENGTH } from '@shared/types';
 
 export interface SplitFormValues {
   name: string;

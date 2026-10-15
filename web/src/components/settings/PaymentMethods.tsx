@@ -15,7 +15,7 @@ import {
   needsDetail,
   MAX_METHODS,
   type PaymentMethod,
-} from '../../../../shared/payments';
+} from '@shared/payments';
 import { prepareQrCode } from '../../utils/image';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import classes from './PaymentMethods.module.css';

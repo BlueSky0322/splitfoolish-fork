@@ -1,6 +1,6 @@
 import { type ReactNode, createContext, useContext } from 'react';
-import type { Attachment } from '../../../../shared/api';
-import type { Person } from '../../../../shared/types';
+import type { Attachment } from '@shared/api';
+import type { Person } from '@shared/types';
 import type { SplitTotals } from '../../split/derive';
 import type { SplitItem, SplitMeta } from '../../split/state';
 import type { MetaChanges, SyncStatus } from '../../split/state';

@@ -1,7 +1,7 @@
-import type { Settings } from '../../../shared/api';
+import type { Settings } from '@shared/api';
 import type { SplitItem } from './state';
 import { categoryLabel } from './categories';
-import { toCents } from '../../../shared/rates';
+import { toCents } from '@shared/rates';
 
 export type GroupBy = Settings['itemsGroupBy'];
 export type SortKey = Settings['itemsSortKey'];

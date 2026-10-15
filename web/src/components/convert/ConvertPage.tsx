@@ -18,7 +18,7 @@ import {
   Plus,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { COMMON_CURRENCIES, convertCents, isCurrency, toCents } from '../../../../shared/rates';
+import { COMMON_CURRENCIES, convertCents, isCurrency, toCents } from '@shared/rates';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useMySplits } from '../../my-splits/useMySplits';
 import { navigate } from '../../hooks/useRoute';
@@ -30,7 +30,7 @@ import CurrencySelect from '../ui/CurrencySelect';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from '../ui/SplitAvatar';
 import classes from './Convert.module.css';
-import { type SplitSummary } from '../../../../shared/api';
+import { type SplitSummary } from '@shared/api';
 import { showError } from '../../utils/notify';
 import { useRate } from '../../hooks/useRate';
 import { quietly } from '../../utils/quietly';

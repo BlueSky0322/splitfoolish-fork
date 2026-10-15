@@ -1,6 +1,6 @@
 import { produce } from 'immer';
 import { describe, expect, test, vi } from 'vitest';
-import type { Change, Item, Person } from '../../../shared/types';
+import type { Change, Item, Person } from '@shared/types';
 import { makeSplitActions } from './actions';
 import type { SplitAction, SplitMeta, SplitState } from './state';
 import { splitReducer } from './state';

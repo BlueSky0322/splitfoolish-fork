@@ -1,7 +1,7 @@
 import { Button, NumberInput, Tooltip, UnstyledButton } from '@mantine/core';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { isValidRate } from '../../../../shared/rates';
+import { isValidRate } from '@shared/rates';
 import type { SplitItem } from '../../split/state';
 import type { UsedCurrency } from '../../split/currencies';
 import { usedCurrencies } from '../../split/currencies';

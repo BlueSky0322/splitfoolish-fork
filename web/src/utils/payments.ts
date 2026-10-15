@@ -1,4 +1,4 @@
-import { BANK_TRANSFER, QR_CODE, type PaymentMethod } from '../../../shared/payments';
+import { BANK_TRANSFER, QR_CODE, type PaymentMethod } from '@shared/payments';
 
 // How a payment method reads on screen
 

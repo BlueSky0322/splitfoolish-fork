@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { CLIENT_ID } from '../api';
 import { isOffline } from '../offline/outbox';
-import { LIVE_PING, LIVE_PONG, LIVE_REMOVED_CODE, type RoomMessage } from '../../../shared/api';
+import { LIVE_PING, LIVE_PONG, LIVE_REMOVED_CODE, type RoomMessage } from '@shared/api';
 
 const PING_MS = 30_000;
 const MAX_RETRY_MS = 30_000;

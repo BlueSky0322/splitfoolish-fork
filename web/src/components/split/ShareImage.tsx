@@ -3,12 +3,12 @@ import { Button, Loader } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { SplitItem } from '../../split/state';
-import type { Person } from '../../../../shared/types';
+import type { Person } from '@shared/types';
 import type { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
 import TransferRow from './balances/TransferRow';
 import classes from './ShareImage.module.css';
-import { toCents } from '../../../../shared/rates';
+import { toCents } from '@shared/rates';
 import { plural } from '../../utils/text';
 
 interface ShareImageProps {

@@ -1,6 +1,6 @@
 import { produce } from 'immer';
 import { describe, expect, test } from 'vitest';
-import type { Item, Person } from '../../../shared/types';
+import type { Item, Person } from '@shared/types';
 import type { SplitAction, SplitState } from './state';
 import { splitReducer, toApiItem } from './state';
 
