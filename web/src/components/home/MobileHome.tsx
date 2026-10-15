@@ -23,11 +23,12 @@ import Fab from '../ui/Fab';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import { InstallCard } from '../common/InstallApp';
 import HomeSearch from './HomeSearch';
+import { isSplitSort, SPLIT_SORT_LABELS, SPLIT_SORTS, type SplitSort } from './split-sorts';
 import { useOpenNewSplit } from './NewSplitDialog';
 import classes from './MobileHome.module.css';
 
 type Show = 'active' | 'settled' | 'archived' | 'all';
-type Sort = 'recent' | 'name' | 'balance';
+type Sort = SplitSort;
 
 const SHOW_LABELS: Record<Show, string> = {
   active: 'Active',
@@ -35,11 +36,7 @@ const SHOW_LABELS: Record<Show, string> = {
   archived: 'Archived',
   all: 'All',
 };
-const SORT_LABELS: Record<Sort, string> = {
-  recent: 'Recent activity',
-  name: 'Name',
-  balance: 'What you owe or are owed',
-};
+const SORT_LABELS = SPLIT_SORT_LABELS;
 const EMPTY: Record<Show, string> = {
   active: 'Nothing open. Start a split with New split.',
   settled: 'No settled splits yet.',
@@ -61,7 +58,7 @@ const readPrefs = (): { show: Show; sort: Sort } => {
   const sort = saved?.sort ?? '';
   return {
     show: Object.keys(SHOW_LABELS).includes(show) ? (show as Show) : 'active',
-    sort: Object.keys(SORT_LABELS).includes(sort) ? (sort as Sort) : 'recent',
+    sort: isSplitSort(sort) ? sort : 'recent',
   };
 };
 
@@ -72,11 +69,7 @@ const showsIn = (split: SplitSummary, show: Show) =>
     ? split.archived
     : !split.archived && (show === 'settled') === split.settled);
 
-const SORTS: Record<Sort, (a: SplitSummary, b: SplitSummary) => number> = {
-  recent: (a, b) => b.updatedAt - a.updatedAt,
-  name: (a, b) => a.name.localeCompare(b.name),
-  balance: (a, b) => Math.abs(b.myBalanceCents ?? 0) - Math.abs(a.myBalanceCents ?? 0),
-};
+const SORTS = SPLIT_SORTS;
 
 /** Width of the two actions a row shows when swiped left */
 const ACTIONS_PX = 168;

@@ -1,10 +1,26 @@
-import { ActionIcon, Button, Loader, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
-import { ArrowsLeftRight, Check, Plus, X } from '@phosphor-icons/react';
+import {
+  ActionIcon,
+  Button,
+  Loader,
+  Menu,
+  SegmentedControl,
+  Title,
+  UnstyledButton,
+} from '@mantine/core';
+import { ArrowsLeftRight, CaretDown, Check, Plus, SortAscending, X } from '@phosphor-icons/react';
+import { useState } from 'react';
 import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { countActionableInvites } from '../../api';
 import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import MobileHome from './MobileHome';
 import MobileInvites from './MobileInvites';
+import {
+  type DesktopSplitSort,
+  readDesktopSort,
+  saveDesktopSort,
+  SPLIT_SORT_LABELS,
+  SPLIT_SORTS,
+} from './split-sorts';
 import { useMySplits } from '../../my-splits/useMySplits';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
@@ -35,6 +51,8 @@ const EMPTY_MESSAGES: Record<Exclude<Filter, 'invites'>, string> = {
 };
 
 const INVITE_DAYS = 14;
+
+const sortLabels: Record<DesktopSplitSort, string> = { yours: 'Your order', ...SPLIT_SORT_LABELS };
 
 function Balance({ split }: { split: SplitSummary }) {
   const cents = split.myBalanceCents;
@@ -200,6 +218,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
   const openNewSplit = useOpenNewSplit();
   const isDesktop = useIsDesktop();
   const isMobile = useIsMobile();
+  const [sort, setSort] = useState<DesktopSplitSort>(readDesktopSort);
   const filter = isFilter(tab) ? tab : 'all';
   const setFilter = (next: string) =>
     navigate(next === 'all' ? '' : `?tab=${next}`, { replace: true });
@@ -307,13 +326,45 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
         )}
       </div>
 
-      <SegmentedControl
-        className={classes.filter}
-        data={filterOptions}
-        value={filter}
-        onChange={setFilter}
-        fullWidth={!isDesktop}
-      />
+      <div className={classes.filterRow}>
+        <SegmentedControl
+          className={classes.filter}
+          data={filterOptions}
+          value={filter}
+          onChange={setFilter}
+          fullWidth={!isDesktop}
+        />
+        {isDesktop && filter !== 'invites' && (
+          <Menu position="bottom-end">
+            <Menu.Target>
+              <Button
+                variant="subtle"
+                color="gray"
+                leftSection={<SortAscending size={16} />}
+                rightSection={<CaretDown size={12} />}
+                aria-label={`Sort: ${sortLabels[sort]}`}
+              >
+                {sortLabels[sort]}
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>Sort by</Menu.Label>
+              {(Object.keys(sortLabels) as DesktopSplitSort[]).map((key) => (
+                <Menu.Item
+                  key={key}
+                  color={key === sort ? 'accent' : undefined}
+                  onClick={() => {
+                    setSort(key);
+                    saveDesktopSort(key);
+                  }}
+                >
+                  {sortLabels[key]}
+                </Menu.Item>
+              ))}
+            </Menu.Dropdown>
+          </Menu>
+        )}
+      </div>
 
       <InstallCard />
 
@@ -348,9 +399,11 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
               ids={shown.map((s) => s.id)}
               strategy={rectSortingStrategy}
               layout="grid"
+              // Your own order is the one you drag; the others are worked out
+              disabled={sort !== 'yours'}
             >
               <div className={classes.grid}>
-                {shown.map((s) => (
+                {(sort === 'yours' ? shown : [...shown].sort(SPLIT_SORTS[sort])).map((s) => (
                   <SplitCard
                     key={s.id}
                     split={s}

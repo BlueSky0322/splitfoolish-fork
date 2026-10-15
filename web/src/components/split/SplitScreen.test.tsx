@@ -214,6 +214,19 @@ describe('the split page', () => {
     expect(within(menu).getByText('Split settings')).toBeTruthy();
   });
 
+  test('on a computer, sorts items from the toolbar, either way round', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Taxi');
+    const names = () => screen.getAllByText(/^(Dinner|Taxi)$/).map((el) => el.textContent);
+    await user.click(screen.getByRole('button', { name: /^Sort: / }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Amount' }));
+    await waitFor(() => expect(names()).toEqual(['Dinner', 'Taxi']));
+    await user.click(screen.getByRole('button', { name: 'Sort: Amount, Largest first' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Smallest first' }));
+    await waitFor(() => expect(names()).toEqual(['Taxi', 'Dinner']));
+  });
+
   test('on a phone, an item duplicates from its own sheet', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip', { size: 'phone' });
