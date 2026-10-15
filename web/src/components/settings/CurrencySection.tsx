@@ -5,12 +5,13 @@ import { useMemo } from 'react';
 import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
+import { showError } from '../../utils/notify';
 import { listCurrencies, homeCurrency } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
-import { DEFAULT_SETTINGS } from '../../../../shared/api';
+import { DEFAULT_SETTINGS, type Settings } from '../../../../shared/api';
 import { plural } from '../../utils/text';
 
 /** The Select value for "use the currency used last" */
@@ -35,6 +36,11 @@ const RATE_SOURCES = [
 // currencies in your splits
 const CurrencySection = ({ track }: { track: Track }) => {
   const { profile, updateSettings } = useProfile();
+  // Saving shows beside the title; a failure is undone and explained
+  const save = (settings: Partial<Settings>) =>
+    void track(updateSettings(settings)).catch((err: unknown) =>
+      showError(err, 'Could not save your settings'),
+    );
   const currencies = useMemo(listCurrencies, []);
   const settings = profile?.settings;
   const home = homeCurrency(settings);
@@ -71,9 +77,7 @@ const CurrencySection = ({ track }: { track: Track }) => {
             ...currencies.map((c) => ({ value: c.value, label: c.label })),
           ]}
           value={settings.defaultCurrency ?? LAST_USED}
-          onChange={(v) =>
-            v && track(updateSettings({ defaultCurrency: v === LAST_USED ? null : v }))
-          }
+          onChange={(v) => v && save({ defaultCurrency: v === LAST_USED ? null : v })}
           searchable
           allowDeselect={false}
           leftSection={<span className={classes.codeTag}>{chosen}</span>}
@@ -98,9 +102,7 @@ const CurrencySection = ({ track }: { track: Track }) => {
               aria-checked={source === s.value}
               className={classes.choiceTile}
               data-selected={source === s.value || undefined}
-              onClick={() =>
-                source !== s.value && track(updateSettings({ ratePreference: s.value }))
-              }
+              onClick={() => source !== s.value && save({ ratePreference: s.value })}
             >
               <span className={classes.choiceHead}>
                 <span

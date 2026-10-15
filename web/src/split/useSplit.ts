@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ApiError, api } from '../api';
+import { ApiError, NetworkError, api } from '../api';
 import { SplitState, toApiItem, type SplitMeta } from './state';
 import { readCache, removeCache, splitCacheKey, writeCache } from '../offline/cache';
 import { whenCreated } from '../offline/pending-creates';
@@ -80,12 +80,26 @@ export function useSplit(splitId: string) {
   const { saves, waiting } = useSaveQueue(splitId, {
     setStatus,
     reload: () => load(),
-    onGone: () => {
-      void removeCache(cacheKey);
-      void reloadHomeData();
-      setStatus('notfound');
-    },
+    onGone: () => markGone(),
   });
+
+  /** Deleted, or no longer shared with this person: the device's copy goes too */
+  const markGone = useCallback(() => {
+    void removeCache(cacheKey);
+    void reloadHomeData();
+    setStatus('notfound');
+  }, [cacheKey]);
+  const isGone = (err: unknown) => err instanceof ApiError && err.status === 404;
+
+  /** A load in the background failed: the split may be gone; otherwise it's tried later */
+  const backgroundLoadFailed = useCallback(
+    (err: unknown) => {
+      if (isGone(err)) markGone();
+      else if (isNetworkError(err)) setStatus('offline');
+      else console.error(err);
+    },
+    [markGone],
+  );
 
   const show = useCallback(
     ({ people, items, ...rest }: SplitDetail) => {
@@ -97,7 +111,7 @@ export function useSplit(splitId: string) {
 
   const load = useCallback(async () => {
     // Fails straight away offline (the cached copy stays), rather than waiting
-    if (isOffline()) throw new TypeError('Offline');
+    if (isOffline()) throw new NetworkError('Offline');
     // A split made a moment ago may still be on its way to the server
     await whenCreated(splitId);
     for (;;) {
@@ -137,18 +151,16 @@ export function useSplit(splitId: string) {
       })
       .catch((err) => {
         answered = true;
-        const gone = err instanceof ApiError && err.status === 404;
-        // Deleted, or no longer shared with this person: drop the local copy too
-        if (gone) void removeCache(cacheKey);
         if (cancelled) return;
+        if (isGone(err)) return markGone();
         console.error(err);
-        setStatus(gone ? 'notfound' : isNetworkError(err) ? 'offline' : 'error');
+        setStatus(isNetworkError(err) ? 'offline' : 'error');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [load, show, saves, cacheKey]);
+  }, [load, show, saves, cacheKey, markGone]);
 
   // Back online, or back to the app: send what's waiting and catch up straight away
   // rather than at the next retry
@@ -159,7 +171,7 @@ export function useSplit(splitId: string) {
       if (status === 'offline' || status === 'error') {
         load()
           .then(() => setStatus('saved'))
-          .catch((err) => console.error(err));
+          .catch(backgroundLoadFailed);
       }
     };
     const offline = () => {
@@ -175,7 +187,7 @@ export function useSplit(splitId: string) {
       window.removeEventListener('offline', offline);
       document.removeEventListener('visibilitychange', resume);
     };
-  }, [saves, load, status]);
+  }, [saves, load, status, backgroundLoadFailed]);
 
   // Keep the cached copy in step with what's on screen, unsaved changes included: they're
   // in the outbox too, so reopening shows them while they're sent
@@ -246,23 +258,21 @@ export function useSplit(splitId: string) {
   const converting = meta?.converting ?? false;
   useEffect(() => {
     if (!converting) return;
-    const timer = setInterval(() => {
-      load().catch((err) => console.error(err));
-    }, CONVERT_POLL_MS);
+    const timer = setInterval(() => void load().catch(backgroundLoadFailed), CONVERT_POLL_MS);
     return () => {
       clearInterval(timer);
       // Done (or left): the sidebar and My splits show the converted totals
       void reloadHomeData();
     };
-  }, [converting, load]);
+  }, [converting, load, backgroundLoadFailed]);
 
   // Someone else saved a change: fetch the split again. load() waits until this tab's
   // own unsaved changes are saved, so they're never overwritten.
   const onRemoteChange = useCallback(() => {
-    load().catch((err) => console.error(err));
+    load().catch(backgroundLoadFailed);
     // Totals in the sidebar and My splits follow
     void reloadHomeData();
-  }, [load]);
+  }, [load, backgroundLoadFailed]);
   useSplitLive(splitId, status !== 'notfound', onRemoteChange);
 
   /** Tries a failed save again now, rather than waiting for the automatic retry */

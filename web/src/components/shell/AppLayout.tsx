@@ -13,10 +13,10 @@ import classes from './AppLayout.module.css';
 // tablets get the page alone, each with its own top bar
 const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) => {
   const isDesktop = useIsDesktop();
-  const { profile, updateSettings } = useProfile();
+  const { profile, rememberSettings } = useProfile();
   // Saved with the account, so it's the same on every computer
   const open = profile?.settings.sidebarOpen ?? true;
-  const toggle = () => updateSettings({ sidebarOpen: !open });
+  const toggle = () => rememberSettings({ sidebarOpen: !open });
   useHotkeys([['[', toggle]]);
 
   if (!isDesktop) {

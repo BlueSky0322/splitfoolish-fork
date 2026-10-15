@@ -26,7 +26,9 @@ const ProfileSection = ({ track }: { track: Track }) => {
     const trimmed = name.trim();
     setDraft(null);
     if (trimmed === (profile.displayName ?? '')) return;
-    void track(update({ displayName: trimmed || null }));
+    track(update({ displayName: trimmed || null })).catch((err: unknown) =>
+      showError(err, 'Could not save your name'),
+    );
   };
 
   // The new picture shows from this device while it uploads

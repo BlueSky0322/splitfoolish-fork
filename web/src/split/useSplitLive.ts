@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { CLIENT_ID } from '../api';
+import { LIVE_PING, LIVE_PONG, type RoomMessage } from '../../../shared/api';
 
 const PING_MS = 30_000;
+/** The server's close when this person is removed from the split (worker/room.ts) */
+const REMOVED_CODE = 4403;
 const MAX_RETRY_MS = 30_000;
 
 /**
@@ -40,24 +43,30 @@ export function useSplitLive(splitId: string, enabled: boolean, onChange: () => 
         retry = 0;
         // Keeps proxies from closing a quiet connection; the room answers without waking
         ping = setInterval(
-          () => socket.readyState === WebSocket.OPEN && socket.send('ping'),
+          () => socket.readyState === WebSocket.OPEN && socket.send(LIVE_PING),
           PING_MS,
         );
       };
       socket.onmessage = (e: MessageEvent<string>) => {
-        if (e.data === 'pong') return;
+        if (e.data === LIVE_PONG) return;
         try {
-          const message = JSON.parse(e.data) as { type?: string; by?: string | null };
+          const message = JSON.parse(e.data) as Partial<RoomMessage>;
           if (message.type === 'changed' && message.by !== CLIENT_ID) latest.current();
         } catch {
           // Not something this app sent
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (e: CloseEvent) => {
         clearInterval(ping);
         // A socket let go of earlier, closing after a new one opened: nothing to do
         if (ws !== socket) return;
         ws = null;
+        if (e.code === REMOVED_CODE) {
+          // No longer in the split: don't reconnect. Fetching it shows that it's gone.
+          closed = true;
+          latest.current();
+          return;
+        }
         missed = true;
         if (closed || !wanted()) return;
         reconnect = setTimeout(connect, Math.min(MAX_RETRY_MS, 1000 * 2 ** retry++));

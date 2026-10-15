@@ -2,7 +2,7 @@ import { del, keys } from 'idb-keyval';
 import { readCache, writeCache } from './cache';
 import type { Change } from '../../../shared/types';
 import type { SplitSummary } from '../../../shared/api';
-import { ApiError } from '../api';
+import { ApiError, NetworkError } from '../api';
 
 // Changes not yet saved, kept on the device (IndexedDB) so they survive the app being
 // closed, killed or offline. The app sends them when it can; if it's closed, the
@@ -103,7 +103,7 @@ export function requestBackgroundSync() {
 export const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 
 /** A fetch that failed to reach the server at all, rather than an answer from it */
-export const isNetworkError = (err: unknown) => err instanceof TypeError || isOffline();
+export const isNetworkError = (err: unknown) => err instanceof NetworkError || isOffline();
 
 /**
  * What's still to send, given what this page queued, which of those it had written to

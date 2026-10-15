@@ -7,7 +7,7 @@ import { useProfile } from '../../profile/ProfileContext';
  * this picks the opposite of what's showing now.
  */
 const ThemeToggle = ({ size = 30 }: { size?: number }) => {
-  const { updateSettings } = useProfile();
+  const { rememberSettings } = useProfile();
   const scheme = useComputedColorScheme('dark', { getInitialValueInEffect: false });
   const next = scheme === 'dark' ? 'light' : 'dark';
   const label = next === 'light' ? 'Switch to light mode' : 'Switch to dark mode';
@@ -17,7 +17,7 @@ const ThemeToggle = ({ size = 30 }: { size?: number }) => {
         variant="subtle"
         color="gray"
         size={size}
-        onClick={() => void updateSettings({ theme: next })}
+        onClick={() => rememberSettings({ theme: next })}
         aria-label={label}
       >
         {next === 'light' ? <Sun size={18} /> : <Moon size={18} />}

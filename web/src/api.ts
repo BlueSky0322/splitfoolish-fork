@@ -1,3 +1,4 @@
+import { CLIENT_ID_HEADER } from '../../shared/api';
 import type {
   AcceptResult,
   ApiErrorBody,
@@ -52,6 +53,9 @@ export class ApiError extends Error {
   }
 }
 
+/** No answer at all: offline, or the connection dropped on the way */
+export class NetworkError extends Error {}
+
 /**
  * This tab, sent with every request so that when the server tells open splits about a
  * change, the tab that made it knows to ignore it
@@ -64,17 +68,22 @@ async function request<T>(
   body?: unknown,
   { headers, ...init }: RequestInit & { headers?: Record<string, string> } = {},
 ): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: {
-      'X-Client-Id': CLIENT_ID,
-      ...(body !== undefined && { 'Content-Type': 'application/json' }),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    // Lets a call send something other than JSON, such as a photo
-    ...init,
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: {
+        [CLIENT_ID_HEADER]: CLIENT_ID,
+        ...(body !== undefined && { 'Content-Type': 'application/json' }),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      // Lets a call send something other than JSON, such as a photo
+      ...init,
+    });
+  } catch (err) {
+    throw new NetworkError(`${method} ${path} got no answer (${String(err)})`);
+  }
   // Sent to the sign-in page: the session has run out
   if (res.redirected) throw new ApiError(401, `${method} ${path} was sent to sign in`);
   const data = (await res.json().catch(() => null)) as unknown;

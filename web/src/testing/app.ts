@@ -42,18 +42,39 @@ function stubBrowser() {
   );
   window.scrollTo = () => {};
   Element.prototype.scrollIntoView = () => {};
-  // Live updates: a socket that opens and never hears anything
-  vi.stubGlobal(
-    'WebSocket',
-    class {
-      readyState = 1;
-      send() {}
-      close() {}
-      addEventListener() {}
-      removeEventListener() {}
-    },
-  );
+  sockets.length = 0;
+  vi.stubGlobal('WebSocket', FakeSocket);
 }
+
+/** A live-updates socket: opens straight away, and hears what a test tells it */
+class FakeSocket {
+  static readonly OPEN = 1;
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((e: { data: string }) => void) | null = null;
+  onclose: ((e: { code: number }) => void) | null = null;
+  constructor(readonly url: string) {
+    sockets.push(this);
+    setTimeout(() => {
+      this.readyState = FakeSocket.OPEN;
+      this.onopen?.();
+    });
+  }
+  send() {}
+  close(code = 1000) {
+    this.readyState = 3;
+    this.onclose?.({ code });
+  }
+  /** As the server says someone saved a change */
+  hear(message: unknown) {
+    this.onmessage?.({ data: JSON.stringify(message) });
+  }
+}
+
+const sockets: FakeSocket[] = [];
+
+/** The live-updates sockets the app has opened, newest last */
+export const liveSockets = (): readonly FakeSocket[] => sockets;
 
 /** The data the stand-in server holds; tests set it up and read it back */
 export interface FakeServer {
@@ -66,6 +87,8 @@ export interface FakeServer {
   rates: Map<string, number>;
   /** Every batch of changes the app sent, by split */
   sent: { splitId: string; changes: Change[] }[];
+  /** The next save of the profile, or of a split's changes, answers with this status */
+  failNext: Partial<Record<'profile' | 'changes' | 'join', number>>;
 }
 
 export const person = (id: string, name: string, memberEmail: string | null = null) => ({
@@ -158,7 +181,20 @@ function serve(server: FakeServer) {
     if (server.health === 'signedOut') return json({ error: 'Signed out' }, 401);
     if (server.health === 'down') return json({ error: 'Internal error' }, 500);
     if (path === '/api/me' && method === 'GET') return json(server.me);
+    const failing = (kind: keyof FakeServer['failNext']) => {
+      const status = server.failNext[kind];
+      delete server.failNext[kind];
+      return (
+        status &&
+        json(
+          { error: status === 409 ? 'Refused' : 'Something went wrong. Try again in a moment.' },
+          status,
+        )
+      );
+    };
     if (path === '/api/me' && method === 'PATCH') {
+      const failure = failing('profile');
+      if (failure) return failure;
       const patch = body as Partial<Profile>;
       server.me = {
         ...server.me,
@@ -181,6 +217,15 @@ function serve(server: FakeServer) {
       return json({ id }, 201);
     }
     if (path === '/api/invites') return json({ invites: server.invites });
+    const joinMatch = path.match(/^\/api\/join\/([^/]+)$/);
+    if (joinMatch && method === 'POST') {
+      const failure = failing('join');
+      if (failure) return failure;
+      const split = [...server.splits.values()].find((s) => s.inviteToken === joinMatch[1]);
+      return split
+        ? json({ status: 'member', id: split.id })
+        : json({ error: 'This invite link is no longer valid' }, 404);
+    }
     if (path === '/api/item-names') return json({ names: [] });
     if (path === '/api/rates') {
       const [from, to] = [url.searchParams.get('from'), url.searchParams.get('to')];
@@ -193,6 +238,8 @@ function serve(server: FakeServer) {
       const split = server.splits.get(splitMatch[1]);
       if (split == null) return json({ error: 'Not found' }, 404);
       if (splitMatch[2] && method === 'POST') {
+        const failure = failing('changes');
+        if (failure) return failure;
         const { changes } = body as { changes: Change[] };
         server.sent.push({ splitId: split.id, changes });
         for (const change of changes) apply(split, change);
@@ -220,6 +267,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     invites: [],
     rates: new Map(),
     sent: [],
+    failNext: {},
   };
 }
 

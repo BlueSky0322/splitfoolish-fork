@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
-import { fakeServer, renderApp, setupAppTests } from './testing/app';
+import { fakeServer, renderApp, setupAppTests, splitDetail } from './testing/app';
 
 setupAppTests();
 
@@ -38,5 +38,20 @@ describe('the app', () => {
     server.health = 'up';
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByRole('heading', { name: 'My splits' })).toBeTruthy();
+  });
+
+  test("an invite link that can't be checked just now can be tried again", async () => {
+    const server = fakeServer(splitDetail('trip'));
+    server.failNext.join = 500;
+    renderApp(server, '/?join=token');
+    const user = userEvent.setup();
+    expect(await screen.findByText("Couldn't open the invite")).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(window.location.search).toBe('?s=trip'));
+  });
+
+  test('says when an invite link no longer works', async () => {
+    renderApp(fakeServer(), '/?join=old');
+    expect(await screen.findByText('This invite link no longer works')).toBeTruthy();
   });
 });

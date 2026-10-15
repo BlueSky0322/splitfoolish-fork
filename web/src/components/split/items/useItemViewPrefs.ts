@@ -23,7 +23,7 @@ const FIRST_DIR: Record<SortKey, SortDir> = {
 };
 
 export function useItemViewPrefs() {
-  const { profile, updateSettings } = useProfile();
+  const { profile, rememberSettings } = useProfile();
   const settings = profile?.settings;
   const prefs: ViewPrefs = {
     view: settings?.itemsView ?? DEFAULT_SETTINGS.itemsView,
@@ -33,7 +33,7 @@ export function useItemViewPrefs() {
   };
 
   const setPref = (patch: Partial<ViewPrefs>) =>
-    updateSettings({
+    rememberSettings({
       ...(patch.view && { itemsView: patch.view }),
       ...(patch.groupBy && { itemsGroupBy: patch.groupBy }),
       ...(patch.sortKey && { itemsSortKey: patch.sortKey }),

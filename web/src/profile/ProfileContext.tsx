@@ -52,10 +52,18 @@ interface ProfileContextValue {
   unreachable: boolean;
   /** Asks the server again */
   retry: () => void;
-  /** Saves profile fields or settings, showing the change straight away */
+  /**
+   * Saves profile fields or settings, showing the change straight away. Rejects if it
+   * isn't saved (the change is undone), for the caller to say so.
+   */
   update: (patch: ProfilePatch) => Promise<void>;
-  /** Saves some settings, showing the change straight away */
+  /** update() for settings alone */
   updateSettings: (settings: Partial<Settings>) => Promise<void>;
+  /**
+   * For quick preferences (the theme, how items are shown): shown at once, saved in the
+   * background, and a failure explained with a notification
+   */
+  rememberSettings: (settings: Partial<Settings>) => void;
   /** Replaces the profile with one the server returned */
   replace: (profile: Profile) => void;
   /** Changes the profile on screen from its latest value */
@@ -178,7 +186,7 @@ export function ProfileProvider({
         if (id === latest.current) replace(saved);
       } catch (err) {
         if (id === latest.current) replace(current);
-        showError(err, 'Could not save your settings');
+        throw err;
       }
     },
     [replace],
@@ -196,9 +204,27 @@ export function ProfileProvider({
     [update],
   );
 
+  const rememberSettings = useCallback(
+    (settings: Partial<Settings>) =>
+      void update({ settings }).catch((err: unknown) =>
+        showError(err, 'Could not save your settings'),
+      ),
+    [update],
+  );
+
   return (
     <ProfileContext.Provider
-      value={{ profile, signedOut, unreachable, retry, update, updateSettings, replace, patch }}
+      value={{
+        profile,
+        signedOut,
+        unreachable,
+        retry,
+        update,
+        updateSettings,
+        rememberSettings,
+        replace,
+        patch,
+      }}
     >
       {children}
     </ProfileContext.Provider>

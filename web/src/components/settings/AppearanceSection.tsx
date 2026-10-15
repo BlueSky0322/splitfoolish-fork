@@ -2,12 +2,13 @@ import { Button, UnstyledButton } from '@mantine/core';
 import { CheckCircle, Plus } from '@phosphor-icons/react';
 import { CSSProperties } from 'react';
 import { useProfile } from '../../profile/ProfileContext';
+import { showError } from '../../utils/notify';
 import { ACCENTS } from '../../theme/accents';
 import type { Accent } from '../../../../shared/api';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
-import type { ThemeSetting } from '../../../../shared/api';
+import type { Settings, ThemeSetting } from '../../../../shared/api';
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
   { value: 'dark', label: 'Dark' },
@@ -18,6 +19,11 @@ const THEMES: { value: ThemeSetting; label: string }[] = [
 // Appearance (9d): theme as small previews, and the accent colour with a sample of it
 const AppearanceSection = ({ track }: { track: Track }) => {
   const { profile, updateSettings } = useProfile();
+  // Saving shows beside the title; a failure is undone and explained
+  const save = (settings: Partial<Settings>) =>
+    void track(updateSettings(settings)).catch((err: unknown) =>
+      showError(err, 'Could not save your settings'),
+    );
   if (profile == null) return null;
   const theme = profile.settings.theme;
   const { accent } = profile.settings;
@@ -37,7 +43,7 @@ const AppearanceSection = ({ track }: { track: Track }) => {
               aria-checked={theme === t.value}
               className={classes.themeOption}
               data-selected={theme === t.value || undefined}
-              onClick={() => theme !== t.value && track(updateSettings({ theme: t.value }))}
+              onClick={() => theme !== t.value && save({ theme: t.value })}
             >
               {/* A sketch of the app in that theme */}
               <span
@@ -79,7 +85,7 @@ const AppearanceSection = ({ track }: { track: Track }) => {
               aria-checked={accent === key}
               className={classes.accentOption}
               data-selected={accent === key || undefined}
-              onClick={() => accent !== key && track(updateSettings({ accent: key }))}
+              onClick={() => accent !== key && save({ accent: key })}
             >
               <span
                 className={classes.accentSwatch}

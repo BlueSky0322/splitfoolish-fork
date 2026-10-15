@@ -1,15 +1,19 @@
 import { Button } from '@mantine/core';
-import { CircleNotch, LinkBreak } from '@phosphor-icons/react';
+import { CircleNotch, CloudSlash, LinkBreak } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import { navigate } from '../hooks/useRoute';
 import StateCard from './ui/StateCard';
 import { reloadHomeData } from '../home/home-data';
 
 const JoinSplit = ({ token }: { token: string }) => {
-  const [failed, setFailed] = useState(false);
+  // 'gone': the link isn't valid any more; 'failed': it couldn't be checked just now
+  const [problem, setProblem] = useState<'gone' | 'failed' | null>(null);
+  // Bumped to try again
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    setProblem(null);
     let cancelled = false;
     api
       .joinSplit(token)
@@ -24,13 +28,28 @@ const JoinSplit = ({ token }: { token: string }) => {
           { replace: true },
         );
       })
-      .catch(() => !cancelled && setFailed(true));
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setProblem(err instanceof ApiError && err.status === 404 ? 'gone' : 'failed');
+      });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, attempt]);
 
-  if (failed) {
+  if (problem === 'failed') {
+    return (
+      <StateCard
+        tag="Invite link"
+        icon={<CloudSlash size={36} />}
+        title="Couldn't open the invite"
+        body="Something went wrong, or there's no connection. The link may still work."
+        action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>}
+      />
+    );
+  }
+
+  if (problem === 'gone') {
     return (
       <StateCard
         tag="Invite link"

@@ -2,7 +2,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
-import { fakeServer, item, renderApp, splitDetail, setupAppTests } from '../../testing/app';
+import {
+  fakeServer,
+  item,
+  liveSockets,
+  renderApp,
+  setupAppTests,
+  splitDetail,
+} from '../../testing/app';
 
 setupAppTests();
 
@@ -54,6 +61,69 @@ describe('the split page', () => {
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
     expect(await screen.findByText('Taxi')).toBeTruthy();
     await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(2));
+  });
+
+  test('shows what someone else saves, as soon as the server says so', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    await screen.findByText('Dinner');
+    await waitFor(() => expect(liveSockets().at(-1)?.readyState).toBe(1));
+
+    server.splits.get('trip')!.items.push(item({ id: 'hotel', name: 'Hotel', cost: 200 }));
+    liveSockets().at(-1)!.hear({ type: 'changed', by: 'someone-else' });
+    expect(await screen.findByText('Hotel')).toBeTruthy();
+  });
+
+  test('says so when someone removes you from the split while it is open', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    await screen.findByText('Dinner');
+    await waitFor(() => expect(liveSockets().at(-1)?.readyState).toBe(1));
+
+    server.splits.delete('trip');
+    liveSockets().at(-1)!.close(4403);
+    expect(await screen.findByText(/doesn't exist, or you don't have access/)).toBeTruthy();
+    expect(liveSockets()).toHaveLength(1);
+  });
+
+  // What the app does when a save doesn't go through
+  const addSnacks = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getAllByRole('button', { name: /^Add item$/ })[0]);
+    const form = await screen.findByRole('dialog');
+    await user.type(within(form).getByRole('textbox', { name: 'What it was for' }), 'Snacks');
+    await user.type(within(form).getByRole('textbox', { name: 'Amount' }), '16');
+    await user.click(within(form).getByRole('button', { name: /^(Add|Add item)$/ }));
+  };
+
+  test('a change the server refuses is explained and undone', async () => {
+    const server = fakeServer(trip());
+    server.failNext.changes = 409;
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+    await addSnacks(user);
+
+    expect(await screen.findByText('Refused')).toBeTruthy();
+    // Reloaded to what the server has
+    await waitFor(() => expect(screen.queryByText('Snacks')).toBeNull());
+    expect(server.splits.get('trip')!.items).toHaveLength(2);
+  });
+
+  test("a change that doesn't reach the server is kept, and sent on Retry", async () => {
+    const server = fakeServer(trip());
+    server.failNext.changes = 500;
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+    await addSnacks(user);
+
+    expect(await screen.findByText(/Couldn't save your latest changes/)).toBeTruthy();
+    expect(screen.getByText('Snacks')).toBeTruthy();
+    await user.click(screen.getAllByRole('button', { name: 'Retry now' })[0]);
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.map((i) => i.name)).toContain('Snacks'),
+    );
+    await waitFor(() => expect(screen.queryByText(/Couldn't save your latest changes/)).toBeNull());
   });
 
   test('asks before deleting an item whose photos would go with it', async () => {

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
-import { ApiError } from '../api';
+import { ApiError, NetworkError } from '../api';
 import { SW_USER_KEY } from './cache';
 import {
   CREATE_PREFIX,
@@ -34,7 +34,7 @@ describe('stillToSend', () => {
 
 describe('what a failed send means', () => {
   test.each([
-    [new TypeError('Failed to fetch'), 'retry'],
+    [new NetworkError('No connection'), 'retry'],
     [new ApiError(503, 'Converting'), 'retry'],
     [new ApiError(500, 'Something went wrong'), 'retry'],
     [new ApiError(429, 'Too many changes'), 'retry'],
@@ -51,7 +51,9 @@ describe('what a failed send means', () => {
   test('the service worker and pending creates retry the same answers from the server', () => {
     expect([401, 429, 500, 503].every((s) => isRetryable(new ApiError(s, '')))).toBe(true);
     expect([400, 403, 404, 409].some((s) => isRetryable(new ApiError(s, '')))).toBe(false);
-    expect(isRetryable(new TypeError('Failed to fetch'))).toBe(true);
+    expect(isRetryable(new NetworkError('No connection'))).toBe(true);
+    // A mistake in the app is not a lost connection
+    expect(isRetryable(new TypeError('x is undefined'))).toBe(false);
   });
 });
 
