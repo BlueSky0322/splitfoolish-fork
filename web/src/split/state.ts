@@ -4,8 +4,12 @@
 
 import { ImmerReducer } from 'use-immer';
 import type { Item as ApiItem, Person } from '../../../shared/types';
+import type { SplitDetail } from '../../../shared/api';
 
 export type { Person };
+
+/** Everything about the open split besides its bill: name, members, photos and so on */
+export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
 
 /** An item with its payer and participants as person objects */
 export interface SplitItem extends Omit<ApiItem, 'payerId' | 'participantIds'> {

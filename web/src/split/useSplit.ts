@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { ApiError, api } from '../api';
 import type { Change } from '../../../shared/types';
-import { SplitState, toApiItem, type StoredItem } from './state';
+import { SplitState, toApiItem, type StoredItem, type SplitMeta } from './state';
 import { readCache, removeCache, writeCache } from '../offline/cache';
 import { whenCreated } from '../offline/pending-creates';
 import {
@@ -49,7 +49,7 @@ export type SyncStatus =
   | 'offline'
   | 'notfound';
 
-export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
+export type { SplitMeta };
 
 /** The ways the split page changes what it shows about the split besides its bill */
 export interface MetaChanges {

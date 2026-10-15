@@ -1,6 +1,6 @@
 import { Button, FileButton, TextInput } from '@mantine/core';
 import { LockSimple } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../../api';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { shrinkAvatar } from '../../utils/image';
@@ -14,19 +14,17 @@ import { showError } from '../../utils/notify';
 // Profile (9a): your picture, the name people see, and the email you sign in with
 const ProfileSection = ({ track }: { track: Track }) => {
   const { profile, update, patch } = useProfile();
-  const [name, setName] = useState(profile?.displayName ?? '');
+  // What's typed, until it's saved; the saved name otherwise
+  const [draft, setDraft] = useState<string | null>(null);
+  const name = draft ?? profile?.displayName ?? '';
   const [busy, setBusy] = useState(false);
-
-  // Fill the name in once the profile arrives
-  useEffect(() => {
-    setName(profile?.displayName ?? '');
-  }, [profile?.displayName]);
 
   if (profile == null) return null;
   const myName = nameFor(profile.email, profile.displayName);
 
   const saveName = () => {
     const trimmed = name.trim();
+    setDraft(null);
     if (trimmed === (profile.displayName ?? '')) return;
     void track(update({ displayName: trimmed || null }));
   };
@@ -121,7 +119,7 @@ const ProfileSection = ({ track }: { track: Track }) => {
           placeholder={profile.email.split('@')[0]}
           value={name}
           maxLength={MAX_DISPLAY_NAME}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => setDraft(e.target.value)}
           onBlur={saveName}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
         />

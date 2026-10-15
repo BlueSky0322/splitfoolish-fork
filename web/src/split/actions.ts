@@ -4,8 +4,7 @@ import type { Item as ApiItem, Change } from '../../../shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
 import { atRate, removeBlocker } from './rules';
-import { SplitAction, SplitState, toApiItem } from './state';
-import type { SplitMeta } from './useSplit';
+import { SplitAction, SplitState, toApiItem, type SplitMeta } from './state';
 
 // What can be done to an open split: each checks the change, shows it straight away
 // and queues it to be saved (see useSplit, which does the saving)

@@ -31,7 +31,14 @@ interface JwtPayload {
   email?: unknown;
 }
 
-const decodeJson = <T>(s: string) => JSON.parse(new TextDecoder().decode(decodeBase64Url(s))) as T;
+/** A token part as JSON, or null when it isn't valid base64url JSON */
+function decodeJson<T>(s: string): T | null {
+  try {
+    return JSON.parse(new TextDecoder().decode(decodeBase64Url(s))) as T;
+  } catch {
+    return null;
+  }
+}
 
 async function getSigningKey(certsUrl: string, kid: string): Promise<CryptoKey | undefined> {
   const fresh =
@@ -73,7 +80,7 @@ async function verifyAccessJwt(
 
   // A token that can't be read is simply not valid; failing to fetch the team's keys is
   // an outage, which reaches the error handler instead of looking like being signed out
-  const header = readable(() => decodeJson<JwtHeader>(rawHeader));
+  const header = decodeJson<JwtHeader>(rawHeader);
   // Always verified as RS256 with the team's key, whatever alg the token claims
   if (typeof header?.kid !== 'string') return null;
 
@@ -93,7 +100,7 @@ async function verifyAccessJwt(
     .catch(() => false);
   if (!valid) return null;
 
-  const payload = readable(() => decodeJson<JwtPayload>(rawPayload));
+  const payload = decodeJson<JwtPayload>(rawPayload);
   if (payload == null) return null;
   const audiences: unknown[] = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
   const nowSeconds = Date.now() / 1000;
