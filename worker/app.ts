@@ -22,16 +22,14 @@ import type { Role } from '../shared/types';
 import type { AuthEnv } from './auth';
 import { fail, notFound } from './http';
 import type { RatesEnv } from './exchange-rates';
-import type { SplitRoom } from './room';
+import type { RoomEnv } from './room';
 import { ROW_ID_CHARS } from '../shared/api';
 
-export interface Env extends AuthEnv, RatesEnv {
+export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   DB: D1Database;
   ASSETS: Fetcher;
   /** Changes per account per minute */
   API_LIMITER: RateLimit;
-  /** One room per split, for telling the apps that have it open when it changes */
-  SPLIT_ROOM: DurableObjectNamespace<SplitRoom>;
   /** How long a currency change may take before opening the split retries it; for tests */
   RECONVERT_RETRY_MS?: string;
 }

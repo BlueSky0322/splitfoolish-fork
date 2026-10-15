@@ -5,7 +5,6 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { LIVE_PING, LIVE_PONG, LIVE_REMOVED_CODE, type RoomMessage } from '../shared/api';
-import type { Env } from './app';
 
 /** Set by the Worker when it hands a member's socket to the room: whose it is */
 const MEMBER_HEADER = 'X-Split-Member';
@@ -13,14 +12,19 @@ const MEMBER_HEADER = 'X-Split-Member';
 type WaitUntil = { waitUntil: (p: Promise<unknown>) => void };
 
 /** The room for a split, where everyone with it open is listening */
-const splitRoom = (env: Env, splitId: string) =>
+/** What the rooms need from the Worker's bindings: one room per split */
+export interface RoomEnv {
+  SPLIT_ROOM: DurableObjectNamespace<SplitRoom>;
+}
+
+const splitRoom = (env: RoomEnv, splitId: string) =>
   env.SPLIT_ROOM.get(env.SPLIT_ROOM.idFromName(splitId));
 
 /**
  * Tells everyone with the split open that it changed, after the response is sent.
  * `by` is the tab that made the change (see clientId in http.ts), which ignores it.
  */
-export const notifySplit = (env: Env, ctx: WaitUntil, splitId: string, by: string | null) => {
+export const notifySplit = (env: RoomEnv, ctx: WaitUntil, splitId: string, by: string | null) => {
   const message: RoomMessage = { type: 'changed', by };
   ctx.waitUntil(
     splitRoom(env, splitId)
@@ -30,14 +34,14 @@ export const notifySplit = (env: Env, ctx: WaitUntil, splitId: string, by: strin
 };
 
 /** Opens a member's live-update socket in the split's room, tagged as theirs */
-export const joinRoom = (env: Env, splitId: string, req: Request, email: string) => {
+export const joinRoom = (env: RoomEnv, splitId: string, req: Request, email: string) => {
   const headers = new Headers(req.headers);
   headers.set(MEMBER_HEADER, email);
   return splitRoom(env, splitId).fetch(new Request(req, { headers }));
 };
 
 /** Closes the live-update sockets of people taken out of a split, after the response */
-export const evictFromRoom = (env: Env, ctx: WaitUntil, splitId: string, emails: string[]) => {
+export const evictFromRoom = (env: RoomEnv, ctx: WaitUntil, splitId: string, emails: string[]) => {
   if (emails.length === 0) return;
   const room = splitRoom(env, splitId);
   ctx.waitUntil(
