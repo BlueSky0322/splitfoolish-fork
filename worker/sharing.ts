@@ -155,6 +155,17 @@ export async function addEditor(db: D1Database, splitId: string, email: string) 
           )
           .bind(newId(), splitId, unique, email),
       );
+      // Someone else took that name meanwhile: a name nobody has, so they're still in it
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO people (id, split_id, name, member_email, position)
+             SELECT ?1, ?2, ?3, ?4,
+               (SELECT coalesce(max(position), -1) + 1 FROM people WHERE split_id = ?2)
+             WHERE NOT EXISTS (SELECT 1 FROM people WHERE split_id = ?2 AND member_email = ?4)`,
+          )
+          .bind(newId(), splitId, `${email} ${newId()}`, email),
+      );
     }
     statements.push(touchSplitStatement(db, splitId));
   }

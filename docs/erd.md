@@ -55,7 +55,7 @@ erDiagram
         text id PK
         text split_id FK
         text name UK "unique per split"
-        text member_email "the account this person is, if linked"
+        text member_email "the account this person is, if linked; unique per split"
         int position
     }
     items {
