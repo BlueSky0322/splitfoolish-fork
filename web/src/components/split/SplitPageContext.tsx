@@ -17,6 +17,8 @@ export type Dialog =
   /** prefill: an amount and currency from Convert */
   | { kind: 'add'; prefill?: Prefill }
   | { kind: 'edit'; item: SplitItem }
+  /** An item as it stands, on phones, with Edit to open the form */
+  | { kind: 'item'; itemId: string }
   | { kind: 'people'; personId?: string }
   | { kind: 'settle' }
   | { kind: 'share' }
@@ -25,6 +27,8 @@ export type Dialog =
   /** Opened from Split settings, where Cancel goes back to */
   | { kind: 'end' }
   | { kind: 'settings' }
+  /** The split's menu, as a sheet on phones (computers use a dropdown) */
+  | { kind: 'menu' }
   | { kind: 'photos' }
   | { kind: 'currencies' }
   /** Deleting items would delete their photos too */

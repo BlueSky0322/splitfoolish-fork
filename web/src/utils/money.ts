@@ -30,14 +30,18 @@ export function currencySymbol(currency: string) {
   );
 }
 
-/** "RM 248.00": always the symbol, a space, then the unsigned amount */
-export function formatMoney(cents: number, currency: string) {
-  const parts = formatter(currency).formatToParts(Math.abs(cents) / 100);
-  const number = parts
+/** The amount alone, as the currency writes it ("1,184.00", "3,000"): no symbol or sign */
+export function formatAmount(cents: number, currency: string) {
+  return formatter(currency)
+    .formatToParts(Math.abs(cents) / 100)
     .filter((p) => p.type !== 'currency' && p.type !== 'literal' && p.type !== 'minusSign')
     .map((p) => p.value)
     .join('');
-  return `${currencySymbol(currency)} ${number}`;
+}
+
+/** "RM 248.00": always the symbol, a space, then the unsigned amount */
+export function formatMoney(cents: number, currency: string) {
+  return `${currencySymbol(currency)} ${formatAmount(cents, currency)}`;
 }
 
 /** "+53.50" or "−102.50", for balances shown without a symbol */

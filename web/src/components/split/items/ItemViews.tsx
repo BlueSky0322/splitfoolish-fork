@@ -1,14 +1,22 @@
 import type { UnstyledButtonProps } from '@mantine/core';
 import { ActionIcon, UnstyledButton } from '@mantine/core';
 import type { ReactNode } from 'react';
-import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Note,
+  Paperclip,
+  PencilSimple,
+  Receipt,
+  Trash,
+} from '@phosphor-icons/react';
 import type { SplitItem } from '../../../split/state';
 import type { Person } from '@shared/types';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { useSplitPage } from '../SplitPageContext';
 import { categoryIcon } from '../../../split/categories';
 import type { ItemGroup, SortDir, SortKey } from '../../../split/grouping';
-import { currencySymbol, formatMoney } from '../../../utils/money';
+import { currencySymbol, formatAmount, formatMoney } from '../../../utils/money';
 import type { RowSelection } from './useItemSelection';
 import { useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
@@ -208,11 +216,18 @@ export function ItemCards({
                     item={item}
                     selection={selection}
                   />
-                  {Icon && !mobile && (
-                    <Icon
-                      size={18}
-                      className={classes.categoryIcon}
-                    />
+                  {mobile ? (
+                    // Phones: every item gets a tile, its category's icon or a receipt
+                    <span className={classes.iconTile}>
+                      {Icon ? <Icon size={18} /> : <Receipt size={18} />}
+                    </span>
+                  ) : (
+                    Icon && (
+                      <Icon
+                        size={18}
+                        className={classes.categoryIcon}
+                      />
+                    )
                   )}
                   {/* The whole row opens the item; edit and delete sit above it */}
                   <ItemButton
@@ -233,7 +248,7 @@ export function ItemCards({
                     )}
                     <div className={classes.itemMeta}>
                       {mobile
-                        ? `${item.payer.name} paid${share != null ? ` · yours ${formatMoney(share, currency)}` : ''}`
+                        ? `${item.payer.name} paid${share != null ? `, yours ${formatAmount(share, currency)}` : ''}`
                         : `${item.payer.name} paid · ${MODE_LABELS[item.splitMode]} between ${who(item, people)}`}
                     </div>
                   </ItemButton>
@@ -243,7 +258,10 @@ export function ItemCards({
                     </span>
                   )}
                   <span className={classes.itemAmount}>
-                    {formatMoney(toCents(item.cost), currency)}
+                    {/* Phones leave the split's own symbol off, as the day total carries it */}
+                    {mobile
+                      ? formatAmount(toCents(item.cost), currency)
+                      : formatMoney(toCents(item.cost), currency)}
                     <OriginalAmount item={item} />
                   </span>
                   {!mobile && !selection?.active && (

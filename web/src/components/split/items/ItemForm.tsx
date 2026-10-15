@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useContext, useId, useMemo, useState } from 'react';
+import { useContext, useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { type RateSource, convertCents, isValidRate, toCents } from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
@@ -27,11 +27,12 @@ import { CATEGORIES } from '../../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../../split/item-names';
 import { currencySymbol, formatMoney } from '../../../utils/money';
 import { evaluateSum } from '../../../utils/math';
-import { useIsDesktop } from '../../../hooks/useBreakpoints';
+import { useIsDesktop, useIsMobile } from '../../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../../ui/CurrencySelect';
 import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar from '../PersonAvatar';
+import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../../utils/rate-labels';
 import { plural } from '../../../utils/text';
@@ -50,6 +51,8 @@ interface ItemFormProps {
   /** Adds a copy of the item being edited, keeping its date or as of today */
   onDuplicate?: (keepDate: boolean) => void;
   onCancel: () => void;
+  /** What's been entered or changed that closing would lose, as a sentence; null when nothing */
+  onDirtyChange?: (unsaved: string | null) => void;
 }
 
 const MODES: { value: SplitMode; label: string }[] = [
@@ -67,6 +70,7 @@ const ItemForm = ({
   onDelete,
   onDuplicate,
   onCancel,
+  onDirtyChange,
 }: ItemFormProps) => {
   const { splitId, currency, me, photos: splitPhotos, canRemovePhoto } = useSplitPage();
   const { people } = useSplitState().state;
@@ -76,6 +80,7 @@ const ItemForm = ({
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   // Phones: the sheet's header takes Save and the menu (see DialogHeaderSlot)
   const headerSlot = useContext(DialogHeaderSlot);
   const formId = useId();
@@ -118,6 +123,33 @@ const ItemForm = ({
   });
   const suggestions = suggestNames(pastNames.data ?? [], name);
   const [tried, setTried] = useState(false);
+
+  // Closing a phone sheet with something entered asks first (see SplitDialogs)
+  const snapshot = JSON.stringify([
+    expression,
+    entryCurrency,
+    ownRateChosen,
+    ownRate,
+    name,
+    payerId,
+    mode,
+    [...included].sort(),
+    shares,
+    exact,
+    category,
+    notes,
+    newPhotos.length,
+  ]);
+  const [initialSnapshot] = useState(snapshot);
+  const unsaved =
+    snapshot === initialSnapshot
+      ? null
+      : item
+        ? 'Your changes to it will be lost.'
+        : describeEntered(expression.trim() !== '', name.trim() !== '');
+  useEffect(() => {
+    onDirtyChange?.(unsaved);
+  }, [onDirtyChange, unsaved]);
 
   /** The cost as typed: a number or a sum like "30*3"; null while it doesn't work out */
   const cost = useMemo(() => evaluateSum(expression), [expression]);
@@ -265,11 +297,25 @@ const ItemForm = ({
     </Menu>
   );
 
+  const categorySelect = (
+    <Select
+      label="Category"
+      placeholder="None"
+      data={CATEGORIES.map((c) => ({ value: c.key, label: c.label }))}
+      value={category}
+      onChange={setCategory}
+      clearable
+      // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
+      comboboxProps={{ withinPortal: false }}
+    />
+  );
+
   return (
     <form
       id={formId}
       onSubmit={submit}
       className={classes.form}
+      data-phone={isMobile || undefined}
     >
       <div className={classes.amount}>
         <CurrencySelect
@@ -291,7 +337,7 @@ const ItemForm = ({
           data-autofocus={item ? undefined : true}
           autoComplete="off"
         />
-        {cost != null && expression.trim() !== String(cost) && (
+        {cost != null && /[-+*/]/.test(expression.trim().replace(/^-/, '')) && (
           <span className={classes.evaluated}>= {(toCents(cost) / 100).toFixed(2)}</span>
         )}
       </div>
@@ -306,6 +352,7 @@ const ItemForm = ({
           rateError={tried ? problems.rate : null}
           costCents={costCents}
           note={conversionNote()}
+          compact={isMobile}
           rate={rate}
           rateSource={rateSource}
           onChooseOwn={() => {
@@ -318,6 +365,7 @@ const ItemForm = ({
 
       <Autocomplete
         aria-label="What it was for"
+        label={isMobile ? 'What for' : undefined}
         placeholder="What was it for?"
         value={name}
         onChange={setName}
@@ -336,16 +384,7 @@ const ItemForm = ({
         comboboxProps={{ withinPortal: false }}
       />
 
-      <Select
-        label="Category"
-        placeholder="None"
-        data={CATEGORIES.map((c) => ({ value: c.key, label: c.label }))}
-        value={category}
-        onChange={setCategory}
-        clearable
-        // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
-        comboboxProps={{ withinPortal: false }}
-      />
+      {!isMobile && categorySelect}
 
       <div className={classes.field}>
         <div className={classes.label}>Paid by</div>
@@ -375,53 +414,76 @@ const ItemForm = ({
         {tried && problems.payer && <div className={classes.error}>{problems.payer}</div>}
       </div>
 
-      <div className={classes.field}>
-        <div className={classes.label}>Split</div>
-        <SegmentedControl
-          fullWidth
-          data={MODES}
-          value={mode}
-          onChange={(v) => setMode(v as SplitMode)}
+      {isMobile ? (
+        <SplitBetween
+          people={people}
+          included={included}
+          mode={mode}
+          shares={shares}
+          exact={exact}
+          preview={preview}
+          costCents={costCents}
+          enteredCents={enteredCents}
+          leftCents={leftCents}
+          entryCurrency={entryCurrency}
+          currency={currency}
+          error={tried ? problems.people : null}
+          onMode={setMode}
+          onToggle={toggle}
+          onAll={() => setIncluded(new Set(people.map((p) => p.id)))}
+          onShares={(id, n) => setShares((s) => ({ ...s, [id]: n }))}
+          onExact={(id, v) => setExact((s) => ({ ...s, [id]: v }))}
         />
-        <div className={classes.people}>
-          {people.map((p) => (
-            <PersonPart
-              key={p.id}
-              person={p}
-              on={included.has(p.id)}
-              mode={mode}
-              shares={shares[p.id]}
-              exact={exact[p.id]}
-              partCents={preview.get(p.id)}
-              entryCurrency={entryCurrency}
-              currency={currency}
-              onToggle={() => toggle(p.id)}
-              onShares={(n) => setShares((s) => ({ ...s, [p.id]: n }))}
-              onExact={(v) => setExact((s) => ({ ...s, [p.id]: v }))}
-            />
-          ))}
-        </div>
-        {mode === 'exact' && (
-          <div className={classes.left}>
-            <span>Left to assign</span>
-            <span
-              className={leftCents === 0 ? classes.leftDone : leftCents < 0 ? 'sf-negative' : ''}
-            >
-              {leftCents < 0 ? '−' : ''}
-              {formatMoney(leftCents, entryCurrency)}
-              {leftCents === 0 && (
-                <Check
-                  size={14}
-                  weight="bold"
-                />
-              )}
-            </span>
+      ) : (
+        <div className={classes.field}>
+          <div className={classes.label}>Split</div>
+          <SegmentedControl
+            fullWidth
+            data={MODES}
+            value={mode}
+            onChange={(v) => setMode(v as SplitMode)}
+          />
+          <div className={classes.people}>
+            {people.map((p) => (
+              <PersonPart
+                key={p.id}
+                person={p}
+                on={included.has(p.id)}
+                mode={mode}
+                shares={shares[p.id]}
+                exact={exact[p.id]}
+                partCents={preview.get(p.id)}
+                entryCurrency={entryCurrency}
+                currency={currency}
+                onToggle={() => toggle(p.id)}
+                onShares={(n) => setShares((s) => ({ ...s, [p.id]: n }))}
+                onExact={(v) => setExact((s) => ({ ...s, [p.id]: v }))}
+              />
+            ))}
           </div>
-        )}
-        {tried && (problems.people || problems.exact) && (
-          <div className={classes.error}>{problems.people ?? problems.exact}</div>
-        )}
-      </div>
+          {mode === 'exact' && (
+            <div className={classes.left}>
+              <span>Left to assign</span>
+              <span
+                className={leftCents === 0 ? classes.leftDone : leftCents < 0 ? 'sf-negative' : ''}
+              >
+                {leftCents < 0 ? '−' : ''}
+                {formatMoney(leftCents, entryCurrency)}
+                {leftCents === 0 && (
+                  <Check
+                    size={14}
+                    weight="bold"
+                  />
+                )}
+              </span>
+            </div>
+          )}
+          {tried && (problems.people || problems.exact) && (
+            <div className={classes.error}>{problems.people ?? problems.exact}</div>
+          )}
+        </div>
+      )}
+      {isMobile && categorySelect}
 
       <Textarea
         label="Notes"
@@ -479,21 +541,19 @@ const ItemForm = ({
           </Button>
         </div>
       ) : headerSlot ? (
-        // Phones: Save and the menu sit in the sheet's header, clear of the keyboard
-        createPortal(
-          <>
-            {moreMenu}
-            <Button
-              type="submit"
-              form={formId}
-              size="compact-md"
-              disabled={tried && !valid}
-            >
-              {item ? 'Save' : 'Add'}
-            </Button>
-          </>,
-          headerSlot,
-        )
+        // Phones: the menu sits in the sheet's header, the main button at the bottom
+        <div className={classes.mainAction}>
+          {moreMenu && createPortal(moreMenu, headerSlot)}
+          <Button
+            type="submit"
+            size="lg"
+            fullWidth
+            // Exact amounts that don't add up yet can't be saved
+            disabled={(tried && !valid) || problems.exact != null}
+          >
+            {item ? 'Save' : 'Add item'}
+          </Button>
+        </div>
       ) : (
         <div className={classes.actions}>
           {moreMenu}
@@ -606,6 +666,14 @@ function PersonPart({
   );
 }
 
+/** A new item's unsaved entries, for the prompt before closing it */
+function describeEntered(amount: boolean, name: boolean) {
+  if (amount && name) return "You've entered an amount and a name.";
+  if (amount) return "You've entered an amount.";
+  if (name) return "You've entered a name.";
+  return "What you've entered will be lost.";
+}
+
 /** Paid in another currency: the rate it's converted at, today's or one typed */
 function ConversionRow({
   entryCurrency,
@@ -618,9 +686,12 @@ function ConversionRow({
   note,
   rate,
   rateSource,
+  compact,
   onChooseOwn,
   onUseLive,
 }: {
+  /** Phones: one line, "≈ RM 89.10 at 0.0297, Wise" */
+  compact?: boolean;
   entryCurrency: string;
   currency: string;
   ownRateChosen: boolean;
@@ -664,8 +735,17 @@ function ConversionRow({
         </>
       ) : (
         <>
-          <span className={classes.converted}>{note}</span>
-          {rate != null && rateSource != null && (
+          <span className={compact ? undefined : classes.converted}>
+            {note}
+            {compact && costCents != null && rate != null && rateSource != null && (
+              <>
+                {' '}
+                at {rate.toLocaleString(undefined, { maximumSignificantDigits: 4 })},{' '}
+                {SOURCE_LABELS[rateSource]}
+              </>
+            )}
+          </span>
+          {!compact && rate != null && rateSource != null && (
             <span>
               {describeRate(rate, entryCurrency, currency)} · {SOURCE_LABELS[rateSource]}
             </span>

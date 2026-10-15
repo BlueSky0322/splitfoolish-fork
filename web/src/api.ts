@@ -1,6 +1,7 @@
 import { CLIENT_ID_HEADER } from '@shared/api';
 import type {
   AcceptResult,
+  ArchiveBody,
   ApiErrorBody,
   Attachment,
   AvatarResult,
@@ -18,6 +19,7 @@ import type {
   Profile as ApiProfile,
   ProfilePatch,
   RateQuote,
+  SearchResult,
   SplitDetail,
   SplitList,
   SplitOrderBody,
@@ -130,6 +132,12 @@ export const api = {
   /** id is made by the app, so the new split can open before this finishes */
   createSplit: (id: string, name: string, currency: string) =>
     request<Created>('POST', '/api/splits', { id, name, currency } satisfies CreateSplitBody),
+  /** Archives a split for you (out of Active), or brings it back */
+  archiveSplit: (id: string, archived: boolean) =>
+    request<Ok>('PUT', '/api/archived', { id, archived } satisfies ArchiveBody),
+  /** Items in your splits by name */
+  searchItems: (text: string) =>
+    request<SearchResult>('GET', `/api/search?q=${encodeURIComponent(text)}`),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
   /** Sends queued changes; keepalive lets a save finish while the page is closing */
   applyChanges: (id: string, changes: Change[]) =>

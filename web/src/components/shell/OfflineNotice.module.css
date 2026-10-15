@@ -23,3 +23,19 @@
     bottom: calc(106px + var(--sf-safe-bottom));
   }
 }
+
+/* Phones: a strip at the top of the page, clear of the bottom tabs */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: calc(8px + env(safe-area-inset-top)) 16px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sf-text) 6%, transparent);
+  font-size: 13px;
+}
+
+.strip svg {
+  flex-shrink: 0;
+}

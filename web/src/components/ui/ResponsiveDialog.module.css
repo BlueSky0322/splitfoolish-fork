@@ -62,3 +62,15 @@
 .headerSlot:empty {
   display: none;
 }
+
+.floating {
+  width: calc(100% - 24px);
+  margin: 0 12px calc(12px + var(--sf-safe-bottom) + var(--sf-keyboard, 0px));
+  border-radius: 22px;
+  padding-bottom: 0;
+  border: 1px solid var(--sf-border);
+}
+
+.floating::before {
+  display: none;
+}

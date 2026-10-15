@@ -19,6 +19,51 @@ describe('the app', () => {
     expect(await screen.findByRole('heading', { name: 'My splits' })).toBeTruthy();
   });
 
+  test('on a phone, gets around with the bottom tabs, and Back never steps through them', async () => {
+    renderApp(fakeServer(splitDetail('trip')), '/', { size: 'phone' });
+    const user = userEvent.setup();
+    const tabs = await screen.findByRole('navigation', { name: 'Sections' });
+    const depth = window.history.length;
+
+    await user.click(within(tabs).getByRole('button', { name: 'Convert' }));
+    expect(window.location.search).toBe('?convert');
+    await user.click(within(tabs).getByRole('button', { name: /Invites/ }));
+    expect(window.location.search).toBe('?tab=invites');
+    // Tabs replace each other
+    expect(window.history.length).toBe(depth);
+
+    // Inside a split, Splits goes back to the list it was opened from
+    await user.click(within(tabs).getByRole('button', { name: 'Splits' }));
+    await user.click(await screen.findByText('Trip'));
+    await waitFor(() => expect(window.location.search).toBe('?s=trip'));
+    await user.click(within(tabs).getByRole('button', { name: 'Splits' }));
+    await waitFor(() => expect(window.location.search).toBe(''));
+  });
+
+  test('on a phone, Back closes a sheet before leaving the page', async () => {
+    renderApp(fakeServer(splitDetail('trip')), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    // Enabled once the split has loaded
+    const more = await screen.findByRole('button', { name: 'More' });
+    await waitFor(() => expect(more.hasAttribute('disabled')).toBe(false));
+    await user.click(more);
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.location.search).toBe('?s=trip');
+
+    // A sheet opened from another (People, from the menu) is the one Back closes
+    await user.click(more);
+    await user.click(
+      within(await screen.findByRole('dialog')).getByText('People', { exact: true }),
+    );
+    expect(await screen.findByText('Add someone')).toBeTruthy();
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.location.search).toBe('?s=trip');
+  });
+
   test('asks you to sign in again once signed out', async () => {
     const server = fakeServer();
     server.health = 'signedOut';

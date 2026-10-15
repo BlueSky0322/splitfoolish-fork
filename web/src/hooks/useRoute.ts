@@ -55,9 +55,58 @@ export function restoreLastPage() {
 
 export function navigate(search: string, { replace = false } = {}) {
   const url = `${window.location.pathname}${search}`;
-  if (replace) window.history.replaceState(null, '', url);
-  else window.history.pushState(null, '', url);
+  // A page opened from another remembers which, so going "up" can be Back
+  const from = replace ? cameFrom() : window.location.search;
+  if (replace) window.history.replaceState({ from }, '', url);
+  else window.history.pushState({ from }, '', url);
   window.dispatchEvent(new Event(ROUTE_CHANGE));
+}
+
+/** The address this page was opened from in the app, if it was */
+const cameFrom = (): string | null => {
+  const state: unknown = window.history.state;
+  const from =
+    typeof state === 'object' && state != null ? (state as { from?: unknown }).from : null;
+  return typeof from === 'string' ? from : null;
+};
+
+export type Tab = 'splits' | 'invites' | 'convert' | 'you';
+
+export const TAB_ADDRESS: Record<Tab, string> = {
+  splits: '',
+  invites: '?tab=invites',
+  convert: '?convert',
+  you: '?settings',
+};
+
+/** The bottom tab a page belongs to; a split is under Splits */
+export function tabOf(route: Route): Tab | null {
+  switch (route.view) {
+    case 'home':
+      return route.tab === 'invites' ? 'invites' : 'splits';
+    case 'split':
+      return 'splits';
+    case 'convert':
+      return 'convert';
+    case 'settings':
+      return 'you';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Switches bottom tab. Tabs replace each other, so Back never steps through them; a
+ * split opened from the list goes back to it, as the gesture would.
+ */
+export function goToTab(tab: Tab) {
+  const address = TAB_ADDRESS[tab];
+  if (window.location.search === address) return;
+  if (cameFrom() === address) {
+    window.history.back();
+    return;
+  }
+  navigate(address, { replace: true });
 }
 
 // Pages are picked from the query string: ?s=<id> is a split, ?join=<token> joins one,

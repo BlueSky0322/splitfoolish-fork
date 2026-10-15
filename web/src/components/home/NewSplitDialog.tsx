@@ -40,7 +40,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
         currency: homeCurrency(profile?.settings),
       }}
       submitLabel="Create split"
-      currencyHelp="Defaults to your last-used currency. You can change it later in split settings."
+      currencyHelp="Items in other currencies convert to this. You can change it later in split settings."
       onSubmit={submit}
       onCancel={onDone}
     />

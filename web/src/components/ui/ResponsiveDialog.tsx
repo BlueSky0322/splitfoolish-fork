@@ -2,6 +2,7 @@ import { Drawer, Modal } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { DialogHeaderSlot } from './dialog-header';
+import { useBackDismiss } from '../../hooks/useBackDismiss';
 import { useIsMobile } from '../../hooks/useBreakpoints';
 import classes from './ResponsiveDialog.module.css';
 
@@ -11,6 +12,10 @@ interface ResponsiveDialogProps {
   title: ReactNode;
   children: ReactNode;
   width?: number;
+  /** Back was pressed (phones): close, or return false to stay open (say, to confirm) */
+  onBack?: () => boolean | void;
+  /** Phones: a card clear of the screen's edges, for a short question */
+  floating?: boolean;
 }
 
 // One form, two shapes: a bottom sheet on phones and a centred dialog elsewhere
@@ -20,8 +25,12 @@ const ResponsiveDialog = ({
   title,
   children,
   width = 440,
+  onBack,
+  floating,
 }: ResponsiveDialogProps) => {
   const isMobile = useIsMobile();
+  // Back closes the sheet, rather than leaving the page under it
+  useBackDismiss(opened, onBack ?? onClose);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
 
   if (isMobile) {
@@ -31,6 +40,7 @@ const ResponsiveDialog = ({
         onClose={onClose}
         position="bottom"
         size="auto"
+        withCloseButton={!floating}
         title={
           <span className={classes.sheetTitleRow}>
             <span className="min-w-0 flex-1 truncate">{title}</span>
@@ -41,7 +51,7 @@ const ResponsiveDialog = ({
           </span>
         }
         classNames={{
-          content: classes.sheet,
+          content: floating ? `${classes.sheet} ${classes.floating}` : classes.sheet,
           header: classes.sheetHeader,
           title: classes.sheetTitle,
           body: classes.sheetBody,

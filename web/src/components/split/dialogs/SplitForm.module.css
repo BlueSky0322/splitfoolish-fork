@@ -16,3 +16,18 @@
 .quiet {
   color: var(--sf-text-muted);
 }
+
+/* Phones: the main button stays at the bottom of the sheet */
+.mainAction {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -20px -20px;
+  padding: 12px 20px 16px;
+  background: var(--sf-surface);
+  border-top: 1px solid var(--sf-divider);
+}
+
+.mainAction :global(.mantine-Button-root) {
+  height: 52px;
+}

@@ -53,6 +53,10 @@ export function computeTotals(
 export const findMe = (people: Person[], email: string | null | undefined) =>
   email == null ? null : people.find((p) => p.memberEmail === email) ?? null;
 
+/** The currencies besides the split's own that its items were paid in, A to Z */
+export const otherCurrencies = (items: { original?: { currency: string } | null }[]) =>
+  [...new Set(items.map((i) => i.original?.currency).filter((c): c is string => c != null))].sort();
+
 /** How many currencies besides the split's own its items were paid in */
 export const otherCurrencyCount = (items: { original?: { currency: string } | null }[]) =>
-  new Set(items.map((i) => i.original?.currency).filter((c): c is string => c != null)).size;
+  otherCurrencies(items).length;

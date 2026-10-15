@@ -1,0 +1,65 @@
+/* 64px of tabs over the phone's safe area, on the surface with a hairline above */
+.tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 160;
+  display: flex;
+  height: calc(64px + var(--sf-safe-bottom));
+  padding-bottom: var(--sf-safe-bottom);
+  background: var(--sf-surface);
+  border-top: 1px solid var(--sf-divider);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--sf-text) 62%, transparent);
+}
+
+.pill {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 30px;
+  border-radius: 999px;
+}
+
+.tab[data-active] {
+  color: var(--sf-text);
+}
+
+.tab[data-active] .pill {
+  background: color-mix(in srgb, var(--sf-accent) 18%, transparent);
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tab[data-active] .label {
+  font-weight: 600;
+}
+
+.badge {
+  position: absolute;
+  top: -2px;
+  left: 32px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--sf-badge);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}

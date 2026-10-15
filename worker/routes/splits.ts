@@ -6,12 +6,14 @@
 
 import { Hono } from 'hono';
 import type {
+  ArchiveBody,
   ChangesBody,
   CreateSplitBody,
   Created,
   ShareTokenResult,
   ItemNames,
   RatePreference,
+  SearchResult,
   SplitDetail,
   SplitList,
   SplitOrderBody,
@@ -73,7 +75,7 @@ import {
   planSplitSettings,
   startReconvert,
 } from '../split-lifecycle';
-import { listItemNames, listSplitSummaries } from '../summaries';
+import { listItemNames, listSplitSummaries, searchItems } from '../summaries';
 import { isRowId } from '../../shared/api';
 
 const splits = new Hono<AppEnv>();
@@ -108,6 +110,37 @@ splits.put('/splits/order', async (c) => {
   if (ids.length === 0) return ok();
   await db.batch(splitOrderStatements(db, c.var.email, ids as string[]));
   return ok();
+});
+
+// Archiving a split takes it out of your Active list; only your own row changes
+splits.put('/archived', async (c) => {
+  const body = await readJson<ArchiveBody>(c.req.raw);
+  if (body instanceof Response) return body;
+  if (
+    typeof body.id !== 'string' ||
+    !ID_PATTERN.test(body.id) ||
+    typeof body.archived !== 'boolean'
+  ) {
+    return fail('Send the split id and whether it is archived', 400);
+  }
+  const { meta } = await c.env.DB.prepare(
+    'UPDATE split_members SET archived_at = ? WHERE split_id = ? AND email = ?',
+  )
+    .bind(body.archived ? Date.now() : null, body.id, c.var.email)
+    .run();
+  return meta.changes === 0 ? notFound() : ok();
+});
+
+/** Searches need at least this much to go on, and at most this much */
+const SEARCH_LENGTH = { min: 2, max: 100 };
+
+// Items in your splits by name
+splits.get('/search', async (c) => {
+  const text = (c.req.query('q') ?? '').trim();
+  if (text.length < SEARCH_LENGTH.min || text.length > SEARCH_LENGTH.max) {
+    return fail(`Search for ${SEARCH_LENGTH.min}-${SEARCH_LENGTH.max} characters`, 400);
+  }
+  return json<SearchResult>({ items: await searchItems(c.env.DB, c.var.email, text) });
 });
 
 // Names of items in your splits, for suggesting as you type one
