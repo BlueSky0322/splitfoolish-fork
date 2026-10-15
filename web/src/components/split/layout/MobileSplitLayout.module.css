@@ -64,6 +64,7 @@
 
 /* Items, Settle up, Photos: 44px, with a 2px mark under the one showing */
 .tabs {
+  position: relative;
   display: flex;
   border-bottom: 1px solid var(--sf-divider);
 }
@@ -82,24 +83,71 @@
   font-weight: 500;
 }
 
-.tab[data-active]::after {
-  content: '';
+/* One underline under the tabs, sliding to the one chosen and following a swipe */
+.indicator {
   position: absolute;
-  left: 50%;
   bottom: -1px;
+  left: calc((100% / 3) * var(--tab-at, 0) + (100% / 3 - 44px) / 2);
   width: 44px;
   height: 2px;
   border-radius: 2px;
   background: var(--sf-accent);
-  transform: translateX(-50%);
+  transition: left 220ms ease-out;
 }
 
+.indicator[data-dragging] {
+  transition: none;
+}
+
+/* Clipped sideways, so a tab sliding in never widens the page */
 .content {
+  min-height: 60vh;
+  padding: 12px 0 110px;
+  overflow-x: clip;
+  touch-action: pan-y;
+}
+
+.pane {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 60vh;
-  padding: 12px 0 110px;
+  transition: transform 200ms ease-out;
+}
+
+.pane[data-dragging] {
+  transition: none;
+}
+
+.pane[data-enter='right'] {
+  animation: enterFromRight 240ms ease-out;
+}
+
+.pane[data-enter='left'] {
+  animation: enterFromLeft 240ms ease-out;
+}
+
+@keyframes enterFromRight {
+  from {
+    transform: translateX(40%);
+    opacity: 0.3;
+  }
+}
+
+@keyframes enterFromLeft {
+  from {
+    transform: translateX(-40%);
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indicator,
+  .pane {
+    transition: none;
+  }
+  .pane[data-enter] {
+    animation: none;
+  }
 }
 
 .settle {

@@ -8,7 +8,7 @@ import {
   SortDescending,
   StackSimple,
 } from '@phosphor-icons/react';
-import { type TouchEvent, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type TouchEvent, useEffect, useRef, useState } from 'react';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
 import { navigate } from '../../../hooks/useRoute';
 import { otherCurrencyCount } from '../../../split/derive';
@@ -90,7 +90,13 @@ const MobileSplitLayout = ({
   const { prefs, shownSort, cycleMobileSort, cycleGroup } = useItemViewPrefs();
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<SplitTab>('items');
-  const touch = useRef<{ x: number; y: number } | null>(null);
+  const at = TABS.findIndex((x) => x.key === tab);
+  // A swipe in progress: how far the finger has moved sideways, once it's clearly sideways
+  const touch = useRef<{ x: number; y: number; sideways: boolean | null } | null>(null);
+  const [dragX, setDragX] = useState<number | null>(null);
+  // Which side the tab now showing came in from, so it slides in from there
+  const [enter, setEnter] = useState<'left' | 'right' | null>(null);
+
   const loaded = meta != null;
   const noPeople = loaded && state.people.length === 0;
   const others = otherCurrencyCount(state.items);
@@ -102,20 +108,48 @@ const MobileSplitLayout = ({
     return () => setTabsHidden(false);
   }, [selection.active]);
 
+  const goTo = (next: SplitTab) => {
+    const to = TABS.findIndex((x) => x.key === next);
+    if (to === at) return;
+    setEnter(to > at ? 'right' : 'left');
+    setTab(next);
+  };
+
   const swipeStart = (e: TouchEvent) => {
     const t = e.touches[0];
-    touch.current = { x: t.clientX, y: t.clientY };
+    touch.current = { x: t.clientX, y: t.clientY, sideways: null };
+  };
+  const swipeMove = (e: TouchEvent) => {
+    const start = touch.current;
+    if (start == null || selection.active) return;
+    const t = e.touches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    // Decided once, by the first few pixels: scrolling the page, or swiping between tabs
+    if (start.sideways == null && Math.abs(dx) + Math.abs(dy) > 10) {
+      start.sideways = Math.abs(dx) > 1.5 * Math.abs(dy);
+    }
+    if (!start.sideways) return;
+    // Past the first or last tab it drags, but only a little
+    const edge = (dx > 0 && at === 0) || (dx < 0 && at === TABS.length - 1);
+    setDragX(edge ? dx * 0.25 : dx);
   };
   const swipeEnd = (e: TouchEvent) => {
     const start = touch.current;
     touch.current = null;
-    if (start == null || selection.active) return;
+    setDragX(null);
+    if (start == null || selection.active || start.sideways === false) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - start.x;
     if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < 2 * Math.abs(t.clientY - start.y)) return;
-    const at = TABS.findIndex((x) => x.key === tab) + (dx < 0 ? 1 : -1);
-    if (at >= 0 && at < TABS.length) setTab(TABS[at].key);
+    const next = TABS[at + (dx < 0 ? 1 : -1)];
+    if (next) goTo(next.key);
   };
+
+  // How far along the tabs the underline sits, following a swipe as it happens
+  const width = window.innerWidth || 1;
+  const indicatorAt =
+    dragX == null ? at : Math.min(TABS.length - 1, Math.max(0, at - dragX / width));
 
   return (
     <>
@@ -192,9 +226,7 @@ const MobileSplitLayout = ({
               />
             </ActionIcon>
           </header>
-          {tab === 'items' && !selection.active && (
-            <BalanceCard onSettle={() => setTab('settle')} />
-          )}
+          {tab === 'items' && !selection.active && <BalanceCard onSettle={() => goTo('settle')} />}
           <div
             className={classes.tabs}
             role="tablist"
@@ -207,11 +239,17 @@ const MobileSplitLayout = ({
                 aria-selected={tab === t.key}
                 className={classes.tab}
                 data-active={tab === t.key || undefined}
-                onClick={() => setTab(t.key)}
+                onClick={() => goTo(t.key)}
               >
                 {t.label}
               </UnstyledButton>
             ))}
+            <span
+              className={classes.indicator}
+              aria-hidden
+              data-dragging={dragX != null || undefined}
+              style={{ '--tab-at': indicatorAt } as CSSProperties}
+            />
           </div>
         </div>
         <SplitNotices />
@@ -219,38 +257,49 @@ const MobileSplitLayout = ({
         <div
           className={classes.content}
           onTouchStart={swipeStart}
+          onTouchMove={swipeMove}
           onTouchEnd={swipeEnd}
+          onTouchCancel={swipeEnd}
         >
-          {tab === 'items' && (
-            <>
-              {!noPeople && state.items.length > 0 && (
-                <div className={page.toolbar}>
-                  <UnstyledButton
-                    className={page.pill}
-                    onClick={cycleGroup}
-                  >
-                    <StackSimple size={14} />
-                    {GROUP_LABELS[prefs.groupBy]}
-                  </UnstyledButton>
-                  <UnstyledButton
-                    className={page.pill}
-                    onClick={cycleMobileSort}
-                  >
-                    <SortDescending size={14} />
-                    {shownSort.label}
-                  </UnstyledButton>
-                  <span className={page.toolbarSpacer} />
-                  {parts.viewToggle}
-                </div>
-              )}
-              {parts.filterChip}
-              <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
-                {parts.list}
-              </ErrorBoundary>
-            </>
-          )}
-          {tab === 'settle' && <SettleTab panel={parts.panel} />}
-          {tab === 'photos' && <PhotosTab />}
+          <div
+            // A new tab is a new pane, which slides in from the side it came from
+            key={tab}
+            className={classes.pane}
+            data-enter={enter ?? undefined}
+            data-dragging={dragX != null || undefined}
+            style={dragX == null ? undefined : { transform: `translateX(${dragX}px)` }}
+          >
+            {tab === 'items' && (
+              <>
+                {!noPeople && state.items.length > 0 && (
+                  <div className={page.toolbar}>
+                    <UnstyledButton
+                      className={page.pill}
+                      onClick={cycleGroup}
+                    >
+                      <StackSimple size={14} />
+                      {GROUP_LABELS[prefs.groupBy]}
+                    </UnstyledButton>
+                    <UnstyledButton
+                      className={page.pill}
+                      onClick={cycleMobileSort}
+                    >
+                      <SortDescending size={14} />
+                      {shownSort.label}
+                    </UnstyledButton>
+                    <span className={page.toolbarSpacer} />
+                    {parts.viewToggle}
+                  </div>
+                )}
+                {parts.filterChip}
+                <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
+                  {parts.list}
+                </ErrorBoundary>
+              </>
+            )}
+            {tab === 'settle' && <SettleTab panel={parts.panel} />}
+            {tab === 'photos' && <PhotosTab />}
+          </div>
         </div>
       </div>
       {tab === 'items' && !noPeople && loaded && !selection.active && (
