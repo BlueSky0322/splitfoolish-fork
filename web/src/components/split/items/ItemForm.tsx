@@ -13,7 +13,6 @@ import {
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useEffect, useId, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { type RateSource, convertCents, isValidRate, toCents } from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
 import { itemShares, MAX_SHARES } from '@shared/settle';
@@ -541,9 +540,8 @@ const ItemForm = ({
           </Button>
         </div>
       ) : headerSlot ? (
-        // Phones: the menu sits in the sheet's header, the main button at the bottom
+        // Phones: the main button at the bottom; Duplicate and Delete are on the item's own sheet
         <div className={classes.mainAction}>
-          {moreMenu && createPortal(moreMenu, headerSlot)}
           <Button
             type="submit"
             size="lg"

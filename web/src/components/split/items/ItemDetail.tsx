@@ -1,5 +1,5 @@
-import { ActionIcon, UnstyledButton } from '@mantine/core';
-import { PencilSimple, Trash } from '@phosphor-icons/react';
+import { ActionIcon, Menu, UnstyledButton } from '@mantine/core';
+import { CalendarBlank, Copy, PencilSimple, Trash } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { toCents } from '@shared/rates';
 import { attachmentUrl } from '../../../api';
@@ -18,16 +18,20 @@ const shortDate = (at: number) =>
 
 /**
  * Phones: an item as it stands (10l). The amount and how it was converted, its category,
- * date and payer, what each person's part comes to, and its receipts; Edit opens the form.
+ * date and payer, what each person's part comes to, and its receipts. Duplicate, Delete
+ * and Edit sit at the bottom; Edit opens the form.
  */
 const ItemDetail = ({
   item,
   onEdit,
   onDelete,
+  onDuplicate,
 }: {
   item: SplitItem;
   onEdit: () => void;
   onDelete: () => void;
+  /** Adds a copy, keeping its date or as of today */
+  onDuplicate: (keepDate: boolean) => void;
 }) => {
   const { splitId, currency, totals, photos } = useSplitPage();
   const [viewing, setViewing] = useState<number | null>(null);
@@ -100,6 +104,36 @@ const ItemDetail = ({
         </div>
       )}
       <div className={classes.footer}>
+        <Menu
+          position="top-end"
+          withinPortal={false}
+        >
+          <Menu.Target>
+            <ActionIcon
+              variant="default"
+              size={48}
+              radius={12}
+              aria-label="Duplicate item"
+            >
+              <Copy size={20} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Label>Duplicate</Menu.Label>
+            <Menu.Item
+              leftSection={<Copy size={16} />}
+              onClick={() => onDuplicate(true)}
+            >
+              Keep its date
+            </Menu.Item>
+            <Menu.Item
+              leftSection={<CalendarBlank size={16} />}
+              onClick={() => onDuplicate(false)}
+            >
+              Dated today
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
         <ActionIcon
           variant="default"
           size={48}

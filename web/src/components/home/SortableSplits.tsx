@@ -24,6 +24,7 @@ export function SortableSplits({
   strategy = verticalListSortingStrategy,
   layout = 'list',
   onMove,
+  disabled = false,
   children,
 }: {
   ids: string[];
@@ -32,6 +33,8 @@ export function SortableSplits({
   strategy?: SortingStrategy;
   /** list: one column, so up and down only. grid: rows and columns */
   layout?: 'list' | 'grid';
+  /** Shown in another order, so they can't be dragged */
+  disabled?: boolean;
   children: ReactNode;
 }) {
   const sensors = useSensors(
@@ -56,6 +59,7 @@ export function SortableSplits({
       <SortableContext
         items={ids}
         strategy={strategy}
+        disabled={disabled}
       >
         {children}
       </SortableContext>
