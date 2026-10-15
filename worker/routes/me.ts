@@ -3,8 +3,8 @@
 
 import { Hono } from 'hono';
 import type { PaymentMethodsBody, Profile, ProfilePatch } from '../../shared/api';
-import { AppEnv, readJson } from '../app';
-import { json } from '../http';
+import { AppEnv } from '../app';
+import { json, readJson } from '../http';
 import { deleteAvatar, putAvatar, putPaymentQr, serveAvatar, servePaymentQr } from '../photos';
 import { getProfile, patchProfile, putPaymentMethods } from '../profiles';
 

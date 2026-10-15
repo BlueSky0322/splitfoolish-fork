@@ -1,8 +1,9 @@
 // Who has access to a split: its members, the share links that bring new ones in, and
 // the invites those links give out. Routes check who may act; this does the work.
 
-import { touchSplit } from './app';
-import { newId } from './http';
+import type { AcceptResult, MyInvite } from '../shared/api';
+import { touchSplitStatement } from './app';
+import { fail, json, newId, ok } from './http';
 
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -26,6 +27,12 @@ export const removeAccessStatements = (db: D1Database, splitId: string, email: s
     .prepare('UPDATE people SET member_email = NULL WHERE split_id = ? AND member_email = ?')
     .bind(splitId, email),
   db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(newInviteToken(), splitId),
+];
+
+/** Everyone's access to a split, for deleting it: its invites, then its members */
+export const deleteAccessStatements = (db: D1Database, splitId: string) => [
+  db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(splitId),
+  db.prepare('DELETE FROM split_members WHERE split_id = ?').bind(splitId),
 ];
 
 /** Someone leaving by choice: only their membership (and their own link) goes */
@@ -149,7 +156,139 @@ export async function addEditor(db: D1Database, splitId: string, email: string) 
           .bind(newId(), splitId, unique, email),
       );
     }
-    statements.push(touchSplit(db, splitId));
+    statements.push(touchSplitStatement(db, splitId));
   }
   await db.batch(statements);
 }
+
+/** Whether two people are in a split together, so each can see the other's pictures */
+export async function sharesSplit(db: D1Database, viewer: string, email: string) {
+  if (viewer === email) return true;
+  const shared = await db
+    .prepare(
+      `SELECT 1 FROM split_members a JOIN split_members b ON a.split_id = b.split_id
+       WHERE a.email = ? AND b.email = ? LIMIT 1`,
+    )
+    .bind(viewer, email)
+    .first();
+  return shared != null;
+}
+
+/**
+ * Someone's invites: to them, to accept (or, when they asked through a member's link,
+ * waiting for the owner); and to splits they own, people asking to join. Requests first.
+ */
+export async function listInvites(db: D1Database, email: string): Promise<MyInvite[]> {
+  const now = Date.now();
+  const [mine, requests] = await db.batch<Record<string, unknown>>([
+    // To me: invites to accept, and my requests waiting for the owner
+    db
+      .prepare(
+        `SELECT i.id, i.split_id AS splitId, s.name AS splitName, i.invited_by AS invitedBy,
+           p.display_name AS invitedByName, i.needs_approval AS needsApproval,
+           o.email AS owner, op.display_name AS ownerName,
+           i.created_at AS createdAt, i.expires_at AS expiresAt
+         FROM split_invites i JOIN splits s ON s.id = i.split_id
+         JOIN split_members o ON o.split_id = i.split_id AND o.role = 'owner'
+         LEFT JOIN profiles p ON p.email = i.invited_by
+         LEFT JOIN profiles op ON op.email = o.email
+         WHERE i.email = ?1 AND i.expires_at > ?2
+           AND NOT EXISTS (SELECT 1 FROM split_members m
+                           WHERE m.split_id = i.split_id AND m.email = ?1)
+         ORDER BY i.created_at DESC`,
+      )
+      .bind(email, now),
+    // To splits I own: people asking to join through someone's link
+    db
+      .prepare(
+        `SELECT i.id, i.split_id AS splitId, s.name AS splitName, i.email,
+           jp.display_name AS name, i.invited_by AS invitedBy,
+           p.display_name AS invitedByName, i.created_at AS createdAt,
+           i.expires_at AS expiresAt
+         FROM split_invites i JOIN splits s ON s.id = i.split_id
+         JOIN split_members o ON o.split_id = i.split_id AND o.role = 'owner' AND o.email = ?1
+         LEFT JOIN profiles jp ON jp.email = i.email
+         LEFT JOIN profiles p ON p.email = i.invited_by
+         WHERE i.needs_approval = 1 AND i.expires_at > ?2
+           AND NOT EXISTS (SELECT 1 FROM split_members m
+                           WHERE m.split_id = i.split_id AND m.email = i.email)
+         ORDER BY i.created_at DESC`,
+      )
+      .bind(email, now),
+  ]);
+  type Base = Omit<MyInvite, 'kind'>;
+  type Mine = Base & { needsApproval: number; owner: string; ownerName: string | null };
+  type Request = Base & { email: string; name: string | null };
+  return [
+    ...(requests.results as unknown as Request[]).map((r): MyInvite => ({ ...r, kind: 'request' })),
+    ...(mine.results as unknown as Mine[]).map(
+      ({ needsApproval, owner, ownerName, ...r }): MyInvite =>
+        needsApproval ? { ...r, kind: 'sent', owner, ownerName } : { ...r, kind: 'invite' },
+    ),
+  ];
+}
+
+const GONE = 'This invite has expired or was withdrawn. Ask for the link again.';
+
+/**
+ * Accepts or declines an invite. The person it's for accepts (joins) or declines it, or
+ * withdraws their request; for a request, the split's owner approves (accepts) or
+ * declines it. Anyone else gets the same answer as for an invite that doesn't exist.
+ * onChanged hears which split's list of who's waiting, or who's in, it changes.
+ */
+export async function answerInvite(
+  db: D1Database,
+  inviteId: string,
+  email: string,
+  accept: boolean,
+  onChanged: (splitId: string) => void,
+) {
+  const invite = await db
+    .prepare(
+      `SELECT i.split_id AS splitId, i.email, i.needs_approval AS needsApproval,
+         o.email AS owner
+       FROM split_invites i
+       JOIN split_members o ON o.split_id = i.split_id AND o.role = 'owner'
+       WHERE i.id = ? AND i.expires_at > ?`,
+    )
+    .bind(inviteId, Date.now())
+    .first<{ splitId: string; email: string; needsApproval: number; owner: string }>();
+  const isInvitee = invite?.email === email;
+  const isApprover = invite?.needsApproval === 1 && invite.owner === email;
+  if (invite == null || (!isInvitee && !isApprover)) return fail(GONE, 404);
+  onChanged(invite.splitId);
+
+  if (!accept) {
+    await db.prepare('DELETE FROM split_invites WHERE id = ?').bind(inviteId).run();
+    return ok();
+  }
+  if (isApprover) {
+    // Approving joins them; they asked, so there's nothing more for them to accept
+    await addEditor(db, invite.splitId, invite.email);
+    return json<AcceptResult>({ id: invite.splitId });
+  }
+  if (invite.needsApproval === 1) {
+    return fail('The owner needs to approve this first', 403);
+  }
+  // Joining also clears the invite, so accepting twice lands in the split either way
+  await addEditor(db, invite.splitId, email);
+  return json<AcceptResult>({ id: invite.splitId });
+}
+
+/**
+ * The split a share link opens, its owner, and whose link it is: null (sharer) for the
+ * owner's own, else the member who shared it. Null when no link has that token.
+ */
+export const findShareLink = (db: D1Database, token: string) =>
+  db
+    .prepare(
+      `SELECT s.id, o.email AS owner, NULL AS sharer FROM splits s
+         JOIN split_members o ON o.split_id = s.id AND o.role = 'owner'
+         WHERE s.invite_token = ?1
+       UNION ALL
+       SELECT m.split_id, o.email, m.email FROM split_members m
+         JOIN split_members o ON o.split_id = m.split_id AND o.role = 'owner'
+         WHERE m.share_token = ?1`,
+    )
+    .bind(token)
+    .first<{ id: string; owner: string; sharer: string | null }>();

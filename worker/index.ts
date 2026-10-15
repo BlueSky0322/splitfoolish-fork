@@ -2,23 +2,16 @@
 // API request passes the cross-site check and sign-in before reaching a route.
 
 import { Hono } from 'hono';
-import { AppEnv, Env, clientId, notifySplit, isCrossSite } from './app';
-import { fail, notFound } from './http';
+import { AppEnv, Env } from './app';
+import { clientId, fail, isCrossSiteWrite, notFound } from './http';
 import { getUserEmail } from './auth';
 import invites from './routes/invites';
 import me from './routes/me';
 import rates from './routes/rates';
 import splits from './routes/splits';
+import { notifySplit } from './room';
 
 export { SplitRoom } from './room';
-
-/**
- * True for a change (not a read) started by another site. The sign-in cookie rides
- * along with such requests, so without this a page elsewhere could, say, open a share
- * link or post changes on someone's behalf.
- */
-export const isCrossSiteWrite = (req: Request, url: URL) =>
-  req.method !== 'GET' && req.method !== 'HEAD' && isCrossSite(req, url);
 
 const api = new Hono<AppEnv>().basePath('/api');
 

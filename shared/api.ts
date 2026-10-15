@@ -213,6 +213,31 @@ export interface UsedCurrencyRates {
   currencies: UsedCurrencyRate[];
 }
 
+// ---------- Photos ----------
+// The largest upload the server stores; the app shrinks photos to fit before sending.
+// D1 allows up to 2 MB per value, and shrunk photos are usually a few hundred KB.
+
+export const MAX_PHOTO_BYTES = 1_500_000;
+/** Profile and split pictures */
+export const MAX_AVATAR_BYTES = 256_000;
+/** A QR code is shrunk to about 1000px, sharp enough to scan from another phone */
+export const MAX_QR_BYTES = 512_000;
+
+// ---------- Live updates ----------
+
+/** The header a request names its tab in, so the tab can skip news of its own change */
+export const CLIENT_ID_HEADER = 'X-Client-Id';
+
+/** Sent by the app to keep a quiet live-update socket open, and the room's answer */
+export const LIVE_PING = 'ping';
+export const LIVE_PONG = 'pong';
+
+/** What a split's room sends: it changed, and which tab changed it (that tab ignores it) */
+export interface RoomMessage {
+  type: 'changed';
+  by: string | null;
+}
+
 // ---------- Writes ----------
 
 /** What a change that returns nothing else sends back */

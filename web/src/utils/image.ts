@@ -1,11 +1,16 @@
 // Photos are shrunk in the browser before upload: phone photos are several MB, and a
-// receipt is perfectly readable at 1600px. The server stores up to 1.5 MB per photo.
+// receipt is perfectly readable at 1600px. Each kind aims a little under the server's
+// limit for it (shared/api.ts), so a picture that fits here is never turned away.
 
+import { MAX_AVATAR_BYTES, MAX_PHOTO_BYTES, MAX_QR_BYTES } from '../../../shared/api';
 import { UserError } from './notify';
 
-const MAX_BYTES = 1_400_000;
-/** Profile pictures are small and square-ish; the server takes up to 256 KB */
-export const AVATAR = { maxSide: 512, maxBytes: 240_000 };
+/** How far under the server's limit each picture aims */
+const HEADROOM = 0.94;
+
+const MAX_BYTES = Math.floor(MAX_PHOTO_BYTES * HEADROOM);
+/** Profile pictures are small and square-ish */
+export const AVATAR = { maxSide: 512, maxBytes: Math.floor(MAX_AVATAR_BYTES * HEADROOM) };
 
 async function decode(file: Blob): Promise<ImageBitmap | HTMLImageElement> {
   if ('createImageBitmap' in window) {
@@ -160,7 +165,7 @@ async function findQrCode(image: ImageBitmap | HTMLImageElement) {
 
 /** The longest side a QR code is kept at: sharp to scan, small to send */
 const QR_MAX_SIDE = 1000;
-const QR_MAX_BYTES = 480_000;
+const QR_MAX_BYTES = Math.floor(MAX_QR_BYTES * HEADROOM);
 
 /**
  * A QR code ready to upload: cropped to the code when the browser can find it, shrunk,

@@ -2,7 +2,6 @@
 // (private preferences that follow the account between devices). A profile row is
 // made the first time someone saves anything; until then everything has its default.
 
-import type { Unchecked } from './app';
 import type { PaymentMethodsBody, ProfilePatch } from '../shared/api';
 import {
   BANK_TRANSFER,
@@ -31,7 +30,7 @@ import {
   THEMES,
 } from '../shared/api';
 import type { Role } from '../shared/types';
-import { CURRENCY, json, fail, isConstraintError } from './http';
+import { type Unchecked, json, fail, isClientId, isConstraintError, isCurrency } from './http';
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {
@@ -39,7 +38,7 @@ const SETTINGS = {
   accent: { column: 'accent', values: ACCENTS },
   lastCurrency: { column: 'last_currency', values: null },
   defaultCurrency: { column: 'default_currency', values: null },
-  ratePreference: { column: 'rate_source', values: RATE_PREFERENCES },
+  ratePreference: { column: 'rate_preference', values: RATE_PREFERENCES },
   sidebarOpen: { column: 'sidebar_open', values: [true, false] },
   itemsView: { column: 'items_view', values: ITEMS_VIEWS },
   itemsGroupBy: { column: 'items_group_by', values: ITEMS_GROUPS },
@@ -54,7 +53,7 @@ type SettingChanges = Partial<Record<SettingKey, string | boolean | null>>;
 // own column defaults), so the defaults can change in shared/api.ts alone.
 
 /** Makes the profile row if there isn't one, so rows that belong to it can be added */
-export const ensureProfile = (db: D1Database, email: string) =>
+export const ensureProfileStatement = (db: D1Database, email: string) =>
   db
     .prepare('INSERT OR IGNORE INTO profiles (email, created_at, updated_at) VALUES (?1, ?2, ?2)')
     .bind(email, Date.now());
@@ -65,7 +64,7 @@ export async function getProfile(db: D1Database, email: string): Promise<Profile
     db
       .prepare(
         `SELECT theme, accent, last_currency AS lastCurrency,
-           default_currency AS defaultCurrency, rate_source AS ratePreference,
+           default_currency AS defaultCurrency, rate_preference AS ratePreference,
            sidebar_open AS sidebarOpen,
            items_view AS itemsView, items_group_by AS itemsGroupBy,
            items_sort_key AS itemsSortKey, items_sort_dir AS itemsSortDir
@@ -119,7 +118,7 @@ export function settingsStatements(db: D1Database, email: string, changes: Setti
   };
   const changed = keys.map((k) => SETTINGS[k].column);
   return [
-    ensureProfile(db, email),
+    ensureProfileStatement(db, email),
     db
       .prepare(
         `INSERT INTO user_settings (email, ${all.map((k) => SETTINGS[k].column).join(', ')}, updated_at)
@@ -142,7 +141,7 @@ function readSettings(raw: unknown): SettingChanges | Response {
     if (!Object.hasOwn(SETTINGS, key)) return fail(`Unknown setting ${key}`, 400);
     const spec = SETTINGS[key as SettingKey];
     if (spec.values == null) {
-      if (value !== null && (typeof value !== 'string' || !CURRENCY.test(value))) {
+      if (value !== null && !isCurrency(value)) {
         return fail('Invalid currency', 400);
       }
     } else if (!(spec.values as readonly unknown[]).includes(value)) {
@@ -165,7 +164,7 @@ export async function patchProfile(db: D1Database, email: string, body: Unchecke
       return fail(`Display name can be up to ${MAX_DISPLAY_NAME} characters`, 400);
     }
     statements.push(
-      ensureProfile(db, email),
+      ensureProfileStatement(db, email),
       db
         .prepare('UPDATE profiles SET display_name = ?, updated_at = ? WHERE email = ?')
         .bind(name || null, Date.now(), email),
@@ -192,9 +191,9 @@ export async function putPaymentMethods(
   if (!Array.isArray(methods) || methods.length > MAX_METHODS) {
     return fail(`You can save up to ${MAX_METHODS} payment methods`, 400);
   }
-  const clean: PaymentMethod[] = [];
+  const clean: (PaymentMethod & { bank: string | null; accountName: string | null })[] = [];
   for (const m of methods as Record<string, unknown>[]) {
-    const id = typeof m?.id === 'string' && /^[0-9a-f]{16}$/.test(m.id) ? m.id : null;
+    const id = isClientId(m?.id) ? m.id : null;
     const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
     const type = text(m?.type);
     const detail = text(m?.detail);
@@ -241,7 +240,7 @@ export async function putPaymentMethods(
 
   try {
     await db.batch([
-      ensureProfile(db, email),
+      ensureProfileStatement(db, email),
       db.prepare('DELETE FROM payment_methods WHERE email = ?').bind(email),
       ...clean.map((m, position) =>
         db
@@ -255,8 +254,8 @@ export async function putPaymentMethods(
             email,
             m.type,
             m.detail,
-            m.bank ?? null,
-            m.accountName ?? null,
+            m.bank,
+            m.accountName,
             position,
             m.id === preferred ? 1 : 0,
           ),
@@ -340,8 +339,23 @@ export function assembleMembers([members, methods]: D1Result<
 /** Where someone's exchange rates come from: Wise unless they picked the ECB */
 export async function getRatePreference(db: D1Database, email: string): Promise<RatePreference> {
   const row = await db
-    .prepare('SELECT rate_source AS ratePreference FROM user_settings WHERE email = ?')
+    .prepare('SELECT rate_preference AS ratePreference FROM user_settings WHERE email = ?')
     .bind(email)
     .first<{ ratePreference: RatePreference }>();
   return row?.ratePreference ?? DEFAULT_SETTINGS.ratePreference;
+}
+
+/**
+ * Whose a payment method id is: the account that saved the method, or that uploaded a
+ * QR code for it before saving it. Null when it's no one's yet.
+ */
+export async function paymentMethodOwner(db: D1Database, id: string) {
+  const row = await db
+    .prepare(
+      `SELECT email FROM payment_methods WHERE id = ?1
+       UNION SELECT email FROM payment_qr_codes WHERE method_id = ?1`,
+    )
+    .bind(id)
+    .first<{ email: string }>();
+  return row?.email ?? null;
 }

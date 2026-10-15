@@ -7,9 +7,18 @@ import { RateSource, convertCents, convertParts, isValidRate, toCents } from '..
 import { MAX_SHARES, SplitMode, isSplitMode } from '../shared/settle';
 import type { Change, Item, ItemOriginal, Person } from '../shared/types';
 import { MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../shared/types';
-import { CURRENCY, fail, ok, readName, isConstraintError } from './http';
-import { type Actor, type Unchecked, touchSplit } from './app';
+import {
+  type Unchecked,
+  fail,
+  ok,
+  readName,
+  isClientId,
+  isConstraintError,
+  isCurrency,
+} from './http';
+import { type Actor, touchSplitStatement } from './app';
 import type { ChangesBody } from '../shared/api';
+import { removalBlocker } from '../shared/rules';
 import { type Rate, RatesUnavailable } from './rates';
 import { removeAccessStatements } from './sharing';
 
@@ -122,10 +131,11 @@ export function assembleContent([people, items, participants]: D1Result<
 }
 
 const MAX_CHANGES = 200;
-// Ids are made by the client so its changes can refer to people and items it just added
-const CLIENT_ID = /^[0-9a-f]{16}$/;
 
+/** A change that can't be applied to the split as it is now */
 class Refused extends Error {}
+/** A change the person's role doesn't allow */
+class Forbidden extends Refused {}
 
 const OWNER_ONLY_PEOPLE = 'Only the owner can change who is in this split';
 
@@ -293,9 +303,6 @@ function readCost(value: unknown) {
   }
   return value;
 }
-
-const isCurrency = (value: unknown): value is string =>
-  typeof value === 'string' && CURRENCY.test(value);
 
 /** What was typed for an item in another currency; null when it's in the split's own */
 function readOriginal(model: Model, raw: unknown): OriginalInput | null {
@@ -489,9 +496,77 @@ function readCreatedAt(raw: unknown) {
   return isItemDate(at) ? at : Date.now();
 }
 
+/** Someone on an item, and their part of it, as saved */
+interface Participant {
+  personId: string;
+  shares: number;
+  exactCents: number | null;
+  originalExactCents: number | null;
+}
+
+/**
+ * Each person's part of an item, checked: their shares, or their exact amount. Exact
+ * amounts typed in another currency are converted at the item's rate, so they still
+ * add up to its cost.
+ */
+function readParticipants(
+  item: Record<string, unknown>,
+  participantIds: string[],
+  splitMode: SplitMode,
+  costCents: number,
+  original: OriginalInput | null,
+  converted: ModelItem['converted'],
+): Participant[] {
+  const participants = participantIds.map(
+    (personId): Participant => ({
+      personId,
+      shares: 1,
+      exactCents: null,
+      originalExactCents: null,
+    }),
+  );
+  if (splitMode === 'shares') {
+    const shares = (item.shares ?? {}) as Record<string, unknown>;
+    for (const p of participants) {
+      const n = shares[p.personId];
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_SHARES) {
+        throw new Refused(`Shares must be whole numbers from 1 to ${MAX_SHARES}`);
+      }
+      p.shares = n;
+    }
+  }
+  if (splitMode === 'exact') {
+    const exact = original?.exact ?? ((item.exact ?? {}) as Record<string, unknown>);
+    for (const p of participants) {
+      const amount = exact[p.personId];
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
+        throw new Refused('Exact amounts must be numbers of 0 or more');
+      }
+      p.exactCents = toCents(amount);
+    }
+    const assigned = participants.reduce((a, p) => a + (p.exactCents ?? 0), 0);
+    if (assigned !== (original?.cents ?? costCents)) {
+      throw new Refused('The exact amounts must add up to the cost');
+    }
+    if (converted != null) {
+      const parts = convertParts(
+        participants.map((p) => [p.personId, p.exactCents ?? 0]),
+        converted.rate,
+        costCents,
+      );
+      for (const p of participants) {
+        p.originalExactCents = p.exactCents;
+        p.exactCents = parts.get(p.personId) ?? 0;
+      }
+    }
+  }
+  return participants;
+}
+
 function readItem(model: Model, raw: unknown, rates: FetchedRates) {
   const item = (raw ?? {}) as Record<string, unknown>;
-  if (typeof item.id !== 'string' || !CLIENT_ID.test(item.id)) throw new Refused('Invalid item');
+  // Ids are made by the app so its changes can refer to people and items it just added
+  if (!isClientId(item.id)) throw new Refused('Invalid item');
   const name = readName(item.name);
   if (name == null) throw new Refused(`Item name must be 1-${MAX_NAME_LENGTH} characters`);
 
@@ -525,48 +600,14 @@ function readItem(model: Model, raw: unknown, rates: FetchedRates) {
   const splitMode: unknown = item.splitMode ?? 'equal';
   if (!isSplitMode(splitMode)) throw new Refused('Invalid split');
 
-  const participants = participantIds.map((personId) => ({
-    personId,
-    shares: 1,
-    exactCents: null as number | null,
-    originalExactCents: null as number | null,
-  }));
-  if (splitMode === 'shares') {
-    const shares = (item.shares ?? {}) as Record<string, unknown>;
-    for (const p of participants) {
-      const n = shares[p.personId];
-      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_SHARES) {
-        throw new Refused(`Shares must be whole numbers from 1 to ${MAX_SHARES}`);
-      }
-      p.shares = n;
-    }
-  }
-  if (splitMode === 'exact') {
-    // In another currency, amounts are typed in it and converted so they still add up
-    const exact = original?.exact ?? ((item.exact ?? {}) as Record<string, unknown>);
-    for (const p of participants) {
-      const amount = exact[p.personId];
-      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
-        throw new Refused('Exact amounts must be numbers of 0 or more');
-      }
-      p.exactCents = toCents(amount);
-    }
-    const assigned = participants.reduce((a, p) => a + (p.exactCents ?? 0), 0);
-    if (assigned !== (original?.cents ?? costCents)) {
-      throw new Refused('The exact amounts must add up to the cost');
-    }
-    if (original != null && converted != null) {
-      const parts = convertParts(
-        participants.map((p) => [p.personId, p.exactCents ?? 0]),
-        converted.rate,
-        costCents,
-      );
-      for (const p of participants) {
-        p.originalExactCents = p.exactCents;
-        p.exactCents = parts.get(p.personId) ?? 0;
-      }
-    }
-  }
+  const participants = readParticipants(
+    item,
+    participantIds,
+    splitMode,
+    costCents,
+    original,
+    converted,
+  );
 
   let category: string | null = null;
   if (item.category != null && item.category !== '') {
@@ -600,15 +641,10 @@ function readItem(model: Model, raw: unknown, rates: FetchedRates) {
   };
 }
 
-const insertParticipants = (
+const insertParticipantsStatements = (
   db: D1Database,
   itemId: string,
-  participants: {
-    personId: string;
-    shares: number;
-    exactCents: number | null;
-    originalExactCents: number | null;
-  }[],
+  participants: Participant[],
 ) =>
   participants.map((p) =>
     db
@@ -620,7 +656,6 @@ const insertParticipants = (
       .bind(itemId, p.personId, p.shares, p.exactCents, p.originalExactCents),
   );
 
-/** The original-currency columns for an item, in the order the queries list them */
 /**
  * Deletes the items `where` picks, and what hangs off them, children first: their
  * photos' bytes, the photos, who's on them, then the items
@@ -640,6 +675,7 @@ const deleteItemsStatements = (db: D1Database, where: 'id = ?' | 'split_id = ?',
   ];
 };
 
+/** The original-currency columns for an item, in the order the queries list them */
 const conversionValues = (c: ModelItem['converted']) => [
   c?.currency ?? null,
   c?.cents ?? null,
@@ -654,6 +690,43 @@ const readId = (value: unknown) => {
   return value;
 };
 
+/**
+ * Takes a person out of the bill, and with fromItems off the items they share, if the
+ * rules in shared/rules.ts allow it. Someone with an account loses their access too.
+ */
+function removePersonStatements(
+  db: D1Database,
+  splitId: string,
+  model: Model,
+  id: string,
+  fromItems: boolean,
+): D1PreparedStatement[] {
+  const person = model.people.get(id);
+  // Already removed (by someone else) is fine: the result is the same
+  if (person == null) return [];
+  const blocker = removalBlocker({ id, name: person.name }, [...model.items.values()], fromItems);
+  if (blocker != null) {
+    throw new Refused(
+      blocker.onItems ? `${blocker.message} Edit or remove those items first.` : blocker.message,
+    );
+  }
+  for (const item of model.items.values()) {
+    item.participantIds = item.participantIds.filter((p) => p !== id);
+  }
+  model.people.delete(id);
+  const statements = [
+    db.prepare('DELETE FROM item_participants WHERE person_id = ?').bind(id),
+    db.prepare('DELETE FROM people WHERE id = ?').bind(id),
+  ];
+  // Taking someone with an account out of the split takes away their access too
+  const email = person.memberEmail;
+  if (email != null && email !== model.owner && model.members.has(email)) {
+    model.members.delete(email);
+    statements.push(...removeAccessStatements(db, splitId, email));
+  }
+  return statements;
+}
+
 /** Checks one change against the model, updates the model, and returns its statements */
 function changeStatements(
   db: D1Database,
@@ -665,15 +738,11 @@ function changeStatements(
 ): D1PreparedStatement[] {
   // Who's in the split is the owner's call; anyone can add and edit items
   if (change != null && PEOPLE_OPS.has(change.op) && actor.role !== 'owner') {
-    throw new Refused(OWNER_ONLY_PEOPLE);
+    throw new Forbidden(OWNER_ONLY_PEOPLE);
   }
   switch (change?.op) {
     case 'addPerson': {
-      if (
-        typeof change.id !== 'string' ||
-        !CLIENT_ID.test(change.id) ||
-        model.people.has(change.id)
-      ) {
+      if (!isClientId(change.id) || model.people.has(change.id)) {
         throw new Refused('Invalid person');
       }
       const name = readName(change.name);
@@ -712,7 +781,7 @@ function changeStatements(
       const memberEmail = readMemberEmail(model, change.memberEmail, id);
       // Others can only say which person they are, or that they aren't
       if (actor.role !== 'owner' && (memberEmail ?? person.memberEmail) !== actor.email) {
-        throw new Refused(OWNER_ONLY_PEOPLE);
+        throw new Forbidden(OWNER_ONLY_PEOPLE);
       }
       // Someone else's link has to be removed first, so no one takes over another person
       if (memberEmail != null && person.memberEmail != null && person.memberEmail !== memberEmail) {
@@ -722,51 +791,8 @@ function changeStatements(
       return [db.prepare('UPDATE people SET member_email = ? WHERE id = ?').bind(memberEmail, id)];
     }
 
-    case 'removePerson': {
-      const id = readId(change.id);
-      const person = model.people.get(id);
-      // Already removed (by someone else) is fine: the result is the same
-      if (person == null) return [];
-      const paid = [...model.items.values()].filter((i) => i.payerId === id).length;
-      const shared = [...model.items].filter(
-        ([, i]) => i.payerId !== id && i.participantIds.includes(id),
-      );
-      if (paid > 0) {
-        const items = paid === 1 ? '1 item' : `${paid} items`;
-        throw new Refused(`${person.name} paid for ${items}. Edit or remove those items first.`);
-      }
-      if (shared.length > 0 && !change.fromItems) {
-        const items = shared.length === 1 ? '1 item' : `${shared.length} items`;
-        throw new Refused(`${person.name} is on ${items}. Edit or remove those items first.`);
-      }
-      const emptied = shared.filter(([, i]) => i.participantIds.length === 1);
-      if (emptied.length > 0) {
-        throw new Refused(
-          `${person.name} is the only person on ${emptied.length === 1 ? 'an item' : 'some items'}. Edit or remove ${emptied.length === 1 ? 'it' : 'them'} first.`,
-        );
-      }
-      // Exact amounts would no longer add up to the cost without them
-      if (shared.some(([, i]) => i.splitMode === 'exact')) {
-        throw new Refused(
-          `${person.name} is on an item split by exact amounts. Edit that item first.`,
-        );
-      }
-      for (const [, i] of shared) {
-        i.participantIds = i.participantIds.filter((p) => p !== id);
-      }
-      model.people.delete(id);
-      const statements = [
-        db.prepare('DELETE FROM item_participants WHERE person_id = ?').bind(id),
-        db.prepare('DELETE FROM people WHERE id = ?').bind(id),
-      ];
-      // Taking someone with an account out of the split takes away their access too
-      const email = person.memberEmail;
-      if (email != null && email !== model.owner && model.members.has(email)) {
-        model.members.delete(email);
-        statements.push(...removeAccessStatements(db, splitId, email));
-      }
-      return statements;
-    }
+    case 'removePerson':
+      return removePersonStatements(db, splitId, model, readId(change.id), !!change.fromItems);
 
     case 'setDistributor': {
       const personId = change.personId == null ? null : readId(change.personId);
@@ -819,7 +845,7 @@ function changeStatements(
             readCreatedAt(change.item),
             ...conversionValues(item.converted),
           ),
-        ...insertParticipants(db, item.id, item.participants),
+        ...insertParticipantsStatements(db, item.id, item.participants),
       ];
     }
 
@@ -845,7 +871,7 @@ function changeStatements(
             item.id,
           ),
         db.prepare('DELETE FROM item_participants WHERE item_id = ?').bind(item.id),
-        ...insertParticipants(db, item.id, item.participants),
+        ...insertParticipantsStatements(db, item.id, item.participants),
       ];
     }
 
@@ -952,14 +978,14 @@ export async function applyChanges(
     try {
       statements.push(...changeStatements(db, splitId, model, change, actor, rates));
     } catch (err) {
-      if (err instanceof Refused) return fail(err.message, 409);
+      if (err instanceof Refused) return fail(err.message, err instanceof Forbidden ? 403 : 409);
       throw err;
     }
   }
   if (statements.length === 0) return ok();
 
   try {
-    await db.batch([...statements, touchSplit(db, splitId)]);
+    await db.batch([...statements, touchSplitStatement(db, splitId)]);
   } catch (err) {
     // Someone else's change landed between our read and write (e.g. a person we
     // referenced was just removed); the database's constraints caught it

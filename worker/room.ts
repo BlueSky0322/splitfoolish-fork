@@ -1,24 +1,57 @@
 // One room per split, holding the WebSocket of everyone who has it open. It keeps no
 // data: when a change is saved, the Worker asks the room to tell everyone, and each app
 // fetches the split again. Sockets hibernate between messages, so an idle room costs
-// nothing.
+// nothing. The functions below are how the Worker's routes reach a split's room.
 
 import { DurableObject } from 'cloudflare:workers';
+import { LIVE_PING, LIVE_PONG, type RoomMessage } from '../shared/api';
+import type { Env } from './app';
 
 /** Set by the Worker when it hands a member's socket to the room: whose it is */
-export const MEMBER_HEADER = 'X-Split-Member';
+const MEMBER_HEADER = 'X-Split-Member';
 
-/** What the room sends: a split changed, and which tab changed it (it ignores its own) */
-export interface RoomMessage {
-  type: 'changed';
-  by: string | null;
-}
+type WaitUntil = { waitUntil: (p: Promise<unknown>) => void };
+
+/** The room for a split, where everyone with it open is listening */
+const splitRoom = (env: Env, splitId: string) =>
+  env.SPLIT_ROOM.get(env.SPLIT_ROOM.idFromName(splitId));
+
+/**
+ * Tells everyone with the split open that it changed, after the response is sent.
+ * `by` is the tab that made the change (see clientId in http.ts), which ignores it.
+ */
+export const notifySplit = (env: Env, ctx: WaitUntil, splitId: string, by: string | null) => {
+  const message: RoomMessage = { type: 'changed', by };
+  ctx.waitUntil(
+    splitRoom(env, splitId)
+      .broadcast(JSON.stringify(message))
+      .catch((err: unknown) => console.error(err)),
+  );
+};
+
+/** Opens a member's live-update socket in the split's room, tagged as theirs */
+export const joinRoom = (env: Env, splitId: string, req: Request, email: string) => {
+  const headers = new Headers(req.headers);
+  headers.set(MEMBER_HEADER, email);
+  return splitRoom(env, splitId).fetch(new Request(req, { headers }));
+};
+
+/** Closes the live-update sockets of people taken out of a split, after the response */
+export const evictFromRoom = (env: Env, ctx: WaitUntil, splitId: string, emails: string[]) => {
+  if (emails.length === 0) return;
+  const room = splitRoom(env, splitId);
+  ctx.waitUntil(
+    Promise.all(emails.map((email) => room.evict(email))).catch((err: unknown) =>
+      console.error(err),
+    ),
+  );
+};
 
 export class SplitRoom extends DurableObject<unknown> {
   constructor(ctx: DurableObjectState, env: unknown) {
     super(ctx, env);
     // Apps ping to keep the connection alive; answered without waking the room
-    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(LIVE_PING, LIVE_PONG));
   }
 
   fetch(req: Request): Response {

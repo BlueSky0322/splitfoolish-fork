@@ -113,7 +113,7 @@ erDiagram
         text accent
         text last_currency "the currency the last new split used"
         text default_currency "null: use last_currency"
-        text rate_source "wise or ecb (Frankfurter)"
+        text rate_preference "wise or ecb (Frankfurter)"
         int sidebar_open
         text items_view "card or table"
         text items_group_by "none, day, payer or category"

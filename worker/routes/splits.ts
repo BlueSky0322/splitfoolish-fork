@@ -25,16 +25,23 @@ import {
   SPLIT,
   VALID_ID,
   batchGroups,
-  evictFromRoom,
   getRole,
-  isCrossSite,
-  joinRoom,
   membersOnly,
   ownerOnly,
-  readJson,
-  touchSplit,
+  touchSplitStatement,
 } from '../app';
-import { CURRENCY, json, newId, notFound, readName, fail, ok, isConstraintError } from '../http';
+import {
+  json,
+  notFound,
+  readName,
+  fail,
+  ok,
+  isClientId,
+  isConstraintError,
+  isCrossSite,
+  isCurrency,
+  readJson,
+} from '../http';
 import {
   deleteAttachment,
   deleteSplitPicture,
@@ -46,7 +53,9 @@ import {
 import { getRatePreference, settingsStatements } from '../profiles';
 import { REFRESH_MAX_AGE_MS, getRate } from '../rates';
 import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
+import { evictFromRoom, joinRoom } from '../room';
 import {
+  deleteAccessStatements,
   leaveStatement,
   newInviteToken,
   removeAccessStatements,
@@ -142,13 +151,10 @@ splits.post('/splits', async (c) => {
   if (body instanceof Response) return body;
   const name = readName(body.name);
   if (name == null) return fail(`Name must be 1-${MAX_NAME_LENGTH} characters`, 400);
-  const currency = body.currency ?? 'MYR';
-  if (typeof currency !== 'string' || !CURRENCY.test(currency)) {
-    return fail('Invalid currency', 400);
-  }
-
-  // The app may pick the id, so it can open the new split before this finishes
-  const id = typeof body.id === 'string' && /^[0-9a-f]{16}$/.test(body.id) ? body.id : newId();
+  const { id, currency } = body;
+  if (!isCurrency(currency)) return fail('Invalid currency', 400);
+  // The app picks the id, so it can open the new split before this finishes
+  if (!isClientId(id)) return fail('Invalid split id', 400);
   const now = Date.now();
   const created = await db
     .batch([
@@ -222,9 +228,7 @@ splits.patch(
     }
     let converting = false;
     if ('currency' in body) {
-      if (typeof body.currency !== 'string' || !CURRENCY.test(body.currency)) {
-        return fail('Invalid currency', 400);
-      }
+      if (!isCurrency(body.currency)) return fail('Invalid currency', 400);
       // Items are converted afterwards, in the background. Until that's done, plain items
       // are still in the currency the split had before this conversion started.
       const changed = await db
@@ -244,7 +248,7 @@ splits.patch(
       }
     }
     if (statements.length > 0) {
-      await db.batch([...statements, touchSplit(db, id)]);
+      await db.batch([...statements, touchSplitStatement(db, id)]);
     }
     if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email);
     return json<UpdateSplitResult>({ ok: true, converting });
@@ -256,8 +260,7 @@ splits.delete(SPLIT, membersOnly, ownerOnly('Only the owner can delete this spli
   const id = c.req.param('id');
   await db.batch([
     ...deleteContentStatements(db, id),
-    db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
-    db.prepare('DELETE FROM split_members WHERE split_id = ?').bind(id),
+    ...deleteAccessStatements(db, id),
     db.prepare('DELETE FROM splits WHERE id = ?').bind(id),
   ]);
   return ok();

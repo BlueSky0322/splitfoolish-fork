@@ -1,19 +1,24 @@
 // Photos: receipts on items, photos of a whole split, and profile pictures. They are
 // stored in D1 next to the rest of the data, so they are private by default (served
 // only through the Worker, with the same membership checks) and are deleted together
-// with their item or split. Photos are shrunk in the browser before upload.
+// with their item or split. Photos are shrunk in the browser before upload, to the
+// sizes in shared/api.ts. Who may see someone's pictures is decided in sharing.ts.
 
-// D1 allows up to 2 MB per value; browser-shrunk photos are usually a few hundred KB
-const MAX_PHOTO_BYTES = 1_500_000;
-const MAX_AVATAR_BYTES = 256_000;
-/** A QR code is shrunk to about 1000px, sharp enough to scan from another phone */
-const MAX_QR_BYTES = 512_000;
-const MAX_PHOTOS_PER_SPLIT = 300;
-
-import type { Attachment, AvatarResult, PaymentQrResult, SplitPictureResult } from '../shared/api';
+import {
+  type Attachment,
+  type AvatarResult,
+  MAX_AVATAR_BYTES,
+  MAX_PHOTO_BYTES,
+  MAX_QR_BYTES,
+  type PaymentQrResult,
+  type SplitPictureResult,
+} from '../shared/api';
 import { json, newId, fail, notFound, ok, isConstraintError } from './http';
-import { ensureProfile } from './profiles';
+import { ensureProfileStatement, paymentMethodOwner } from './profiles';
+import { sharesSplit } from './sharing';
 import type { Actor } from './app';
+
+const MAX_PHOTOS_PER_SPLIT = 300;
 
 /** The image type from the file's first bytes, so a mislabelled upload can't pass as an image */
 function detectImageType(bytes: Uint8Array): string | null {
@@ -159,7 +164,7 @@ export async function putAvatar(db: D1Database, email: string, req: Request) {
 
   const version = Date.now();
   await db.batch([
-    ensureProfile(db, email),
+    ensureProfileStatement(db, email),
     db
       .prepare(
         `INSERT INTO avatars (email, content_type, version, data) VALUES (?1, ?2, ?3, ?4)
@@ -170,41 +175,20 @@ export async function putAvatar(db: D1Database, email: string, req: Request) {
   return json<AvatarResult>({ avatarVersion: version });
 }
 
-/** Whether two people are in a split together, so each can see the other's pictures */
-async function sharesSplit(db: D1Database, viewer: string, email: string) {
-  if (viewer === email) return true;
-  const shared = await db
-    .prepare(
-      `SELECT 1 FROM split_members a JOIN split_members b ON a.split_id = b.split_id
-       WHERE a.email = ? AND b.email = ? LIMIT 1`,
-    )
-    .bind(viewer, email)
-    .first();
-  return shared != null;
-}
-
 /**
  * Stores the QR code for one of your payment methods. Sent before the method itself
- * is saved (so a new method's id may not exist yet); an id that's someone else's is
- * refused.
+ * is saved (so a new method's id may not exist yet); an id that's someone else's gets
+ * the same 404 as their code would, so ids can't be probed.
  */
 export async function putPaymentQr(db: D1Database, id: string, email: string, req: Request) {
-  const owner = await db
-    .prepare(
-      `SELECT email FROM payment_methods WHERE id = ?1
-       UNION SELECT email FROM payment_qr_codes WHERE method_id = ?1`,
-    )
-    .bind(id)
-    .first<{ email: string }>();
-  if (owner != null && owner.email !== email) {
-    return fail('Invalid payment method', 400);
-  }
+  const owner = await paymentMethodOwner(db, id);
+  if (owner != null && owner !== email) return notFound();
   const image = await readImage(req, MAX_QR_BYTES);
   if (image instanceof Response) return image;
 
   const version = Date.now();
   await db.batch([
-    ensureProfile(db, email),
+    ensureProfileStatement(db, email),
     db
       .prepare(
         `INSERT INTO payment_qr_codes (method_id, email, content_type, version, data)

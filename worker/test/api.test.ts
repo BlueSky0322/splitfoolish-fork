@@ -24,7 +24,11 @@ afterAll(() => api?.stop());
 
 /** A split owned by `owner`, with `members` already in it through the share link */
 async function splitWith(owner: string, ...members: string[]) {
-  const { data } = await api.call(owner, 'POST', '/api/splits', { name: 'Trip', currency: 'MYR' });
+  const { data } = await api.call(owner, 'POST', '/api/splits', {
+    id: hex(),
+    name: 'Trip',
+    currency: 'MYR',
+  });
   const id: string = data.id;
   const token: string = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.inviteToken;
   for (const m of members) {
@@ -85,7 +89,7 @@ describe('changing a split', () => {
     const editor = person('editor');
     const { id } = await splitWith(owner, editor);
     expect((await change(editor, id, { op: 'addPerson', id: hex(), name: 'Guest' })).status).toBe(
-      409,
+      403,
     );
 
     const guest = hex();
@@ -179,7 +183,7 @@ describe('changing a split', () => {
     const link = (who: string, personId: string, memberEmail: string | null) =>
       change(who, id, { op: 'linkPerson', id: personId, memberEmail });
 
-    expect((await link(editor, guest, owner)).status).toBe(409);
+    expect((await link(editor, guest, owner)).status).toBe(403);
     const editorPerson = await personOf(owner, id, editor);
     expect((await link(owner, editorPerson, owner)).status).toBe(409);
     // Moving their own link from the person they joined as to the guest
@@ -659,6 +663,16 @@ describe('safeguards', () => {
     expect((await splitWith(person('calm'))).id).toBeTruthy();
   });
 
+  it('creates a split only with the id and currency the app sends', async () => {
+    const owner = person('owner');
+    const create = (body: object) => api.call(owner, 'POST', '/api/splits', body);
+    expect((await create({ name: 'Trip', currency: 'MYR' })).status).toBe(400);
+    expect((await create({ id: 'not-hex', name: 'Trip', currency: 'MYR' })).status).toBe(400);
+    expect((await create({ id: hex(), name: 'Trip' })).status).toBe(400);
+    const id = hex();
+    expect((await create({ id, name: 'Trip', currency: 'MYR' })).data).toEqual({ id });
+  });
+
   it('turns away request bodies that are too large', async () => {
     const res = await api.call(person('owner'), 'POST', '/api/splits', {
       name: 'x'.repeat(300_000),
@@ -773,7 +787,7 @@ describe('profile, pictures and photos', () => {
     expect(saved.data.paymentMethods[0].qrVersion).toBe(uploaded.data.qrVersion);
 
     // Someone else can't put their code on your method
-    expect((await upload(other, 'PUT', `/api/me/payment-qr/${id}`)).status).toBe(400);
+    expect((await upload(other, 'PUT', `/api/me/payment-qr/${id}`)).status).toBe(404);
 
     const path = `/api/payment-qr/${id}`;
     expect((await api.call(me, 'GET', path)).status).toBe(200);
@@ -846,8 +860,9 @@ describe('exchange rates', () => {
     api.rates.set('JPY', 'MYR', 0.03);
     api.rates.set('SGD', 'MYR', 3.4);
     api.rates.set('SGD', 'JPY', 113);
-    await api.call(me, 'POST', '/api/splits', { name: 'Home', currency: 'MYR' });
+    await api.call(me, 'POST', '/api/splits', { id: hex(), name: 'Home', currency: 'MYR' });
     const { data: tokyo } = await api.call(me, 'POST', '/api/splits', {
+      id: hex(),
       name: 'Tokyo',
       currency: 'JPY',
     });

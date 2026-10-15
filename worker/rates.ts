@@ -61,9 +61,7 @@ export interface RateOptions {
 }
 
 const cacheKey = (from: string, to: string, prefer: RatePreference) =>
-  prefer === 'wise'
-    ? `https://rates.internal/v1/${from}/${to}`
-    : `https://rates.internal/v1/${prefer}/${from}/${to}`;
+  `https://rates.internal/v1/${prefer}/${from}/${to}`;
 
 async function fromWise(env: RatesEnv, from: string, to: string, deps: Deps) {
   if (!env.WISE_TOKEN) return null;

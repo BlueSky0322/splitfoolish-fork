@@ -1,10 +1,11 @@
 import { convertCents, convertParts, toCents } from '../../../shared/rates';
+import { removalBlocker as blockerFor } from '../../../shared/rules';
 import type { SplitItem, SplitState } from './state';
-import { plural } from '../utils/text';
 
 // The bill's rules that the app checks before sending a change, so it can explain a
-// refusal straight away. The server checks the same rules (worker/split-content.ts);
-// rules.test.ts holds both to the same cases.
+// refusal straight away. The server checks the same rules (worker/split-content.ts),
+// some of them through the same code (shared/rules.ts); rules.test.ts holds both to the
+// same cases.
 
 /** An item paid in another currency, converted again at a typed rate, as the server does it */
 export function atRate(item: SplitItem, rate: number): SplitItem {
@@ -31,9 +32,10 @@ export function atRate(item: SplitItem, rate: number): SplitItem {
 }
 
 /**
- * Why a person can't be removed, or null if they can. Mirrors the server: someone who
- * paid for anything stays; with fromItems they come off items they share, unless that
- * would leave an item with nobody or break an exact split.
+ * Why a person can't be removed, or null if they can (the rules are in shared/rules.ts).
+ * Without fromItems, someone on items is told only that, before being asked whether to
+ * take them off those items too; the server, sent such a removal, adds "Edit or remove
+ * those items first".
  */
 export function removalBlocker(
   state: SplitState,
@@ -42,22 +44,10 @@ export function removalBlocker(
 ): string | null {
   const person = state.people.find((p) => p.id === personId);
   if (person == null) return null;
-  const paid = state.items.filter((i) => i.payer.id === personId).length;
-  if (paid > 0)
-    return `${person.name} paid for ${plural(paid, 'item')}. Edit or remove those items first.`;
-  const shared = state.items.filter((i) => i.participants.some((p) => p.id === personId));
-  if (shared.length === 0) return null;
-  // Said before asking whether to take them off those items too (the server, sent a
-  // removal without that, adds "Edit or remove those items first")
-  if (!fromItems) return `${person.name} is on ${plural(shared.length, 'item')}.`;
-  const emptied = shared.filter((i) => i.participants.length === 1).length;
-  if (emptied > 0) {
-    return emptied === 1
-      ? `${person.name} is the only person on an item. Edit or remove it first.`
-      : `${person.name} is the only person on some items. Edit or remove them first.`;
-  }
-  if (shared.some((i) => i.splitMode === 'exact')) {
-    return `${person.name} is on an item split by exact amounts. Edit that item first.`;
-  }
-  return null;
+  const items = state.items.map((i) => ({
+    payerId: i.payer.id,
+    participantIds: i.participants.map((p) => p.id),
+    splitMode: i.splitMode,
+  }));
+  return blockerFor(person, items, fromItems)?.message ?? null;
 }
