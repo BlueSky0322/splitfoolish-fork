@@ -10,14 +10,13 @@ import type { SplitDetail, SplitSummary } from '../../../shared/api';
 import { reloadHomeData, updateHomeData } from '../home-data';
 import { showError } from '../utils/notify';
 import { newId } from '../utils/id';
+import { homeCurrency } from '../utils/money';
 
 // The one "New split" form, opened from the sidebar, My splits and the phone's FAB
 
 const NewSplitContext = createContext<() => void>(() => {});
 
 export const useOpenNewSplit = () => useContext(NewSplitContext);
-
-const DEFAULT_CURRENCY = 'MYR';
 
 function NewSplitForm({ onDone }: { onDone: () => void }) {
   const { profile, replace } = useProfile();
@@ -88,8 +87,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
     <SplitForm
       initial={{
         name: '',
-        currency:
-          profile?.settings.defaultCurrency ?? profile?.settings.lastCurrency ?? DEFAULT_CURRENCY,
+        currency: homeCurrency(profile?.settings),
       }}
       submitLabel="Create split"
       currencyHelp="Defaults to your last-used currency. You can change it later in split settings."

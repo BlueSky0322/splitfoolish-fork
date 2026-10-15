@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
-import { listCurrencies } from '../../utils/money';
+import { listCurrencies, homeCurrency } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
@@ -37,7 +37,7 @@ const CurrencySection = ({ track }: { track: Track }) => {
   const { profile, updateSettings } = useProfile();
   const currencies = useMemo(listCurrencies, []);
   const settings = profile?.settings;
-  const home = settings?.defaultCurrency ?? settings?.lastCurrency ?? 'MYR';
+  const home = homeCurrency(settings);
   const source = settings?.rateSource ?? DEFAULT_SETTINGS.rateSource;
 
   const rates = useQuery({

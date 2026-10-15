@@ -6,6 +6,7 @@ import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import type { PaymentMethod } from '../../../../shared/payments';
 import { showError } from '../../utils/notify';
+import { homeCurrency } from '../../utils/money';
 
 // Getting paid (9b): how people who owe you can pay, and how that looks to them
 const PaymentsSection = ({ track }: { track: Track }) => {
@@ -55,7 +56,7 @@ const PaymentsSection = ({ track }: { track: Track }) => {
           <PayHint
             name={nameFor(profile.email, profile.displayName)}
             amountCents={10250}
-            currency={profile.settings.defaultCurrency ?? profile.settings.lastCurrency ?? 'MYR'}
+            currency={homeCurrency(profile.settings)}
             methods={ordered}
             email={profile.email}
             avatarVersion={profile.avatarVersion}

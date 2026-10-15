@@ -17,23 +17,21 @@ import {
   MagnifyingGlass,
   Plus,
 } from '@phosphor-icons/react';
-import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, toCents } from '../../../../shared/rates';
-import { api } from '../../api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeData } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
-import { queryClient } from '../../query-client';
-import { formatMoney, listCurrencies } from '../../utils/money';
+import { formatMoney, listCurrencies, homeCurrency } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import CurrencySelect from '../ui/CurrencySelect';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from '../split/SplitAvatar';
 import classes from './Convert.module.css';
-import { DEFAULT_SETTINGS, type SplitSummary } from '../../../../shared/api';
+import { type SplitSummary } from '../../../../shared/api';
 import { showError } from '../../utils/notify';
+import { useRate } from '../../hooks/useRate';
 
 const RECENT_KEY = 'sf-convert-recent';
 const MAX_RECENT = 5;
@@ -196,7 +194,7 @@ const ConvertPage = () => {
   const { profile } = useProfile();
   const { splits } = useHomeData();
 
-  const home = profile?.settings.defaultCurrency ?? profile?.settings.lastCurrency ?? 'MYR';
+  const home = homeCurrency(profile?.settings);
   const [recent, setRecent] = useState(readRecent);
   const [from, setFrom] = useState(() => recent[0]?.[0] ?? (home === 'USD' ? 'MYR' : 'USD'));
   const [to, setTo] = useState(() => recent[0]?.[1] ?? home);
@@ -204,14 +202,7 @@ const ConvertPage = () => {
   const [splitId, setSplitId] = useState<string | null>(null);
   const amount = readAmount(amountText);
 
-  const rateKey = ['rate', from, to, profile?.settings.rateSource ?? DEFAULT_SETTINGS.rateSource];
-  const rate = useQuery({
-    queryKey: rateKey,
-    queryFn: () => api.getRate(from, to),
-    enabled: from !== to,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-  });
+  const rate = useRate(from, to);
 
   // A pair that converted is worth offering again, whether its rate was fetched just
   // now or was already on hand
@@ -233,7 +224,7 @@ const ConvertPage = () => {
   const refresh = async () => {
     setRefreshing(true);
     try {
-      queryClient.setQueryData(rateKey, await api.getRate(from, to, { fresh: true }));
+      await rate.refresh();
     } catch (err) {
       showError(err, "Couldn't get a rate right now");
     } finally {

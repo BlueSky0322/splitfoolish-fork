@@ -1,3 +1,4 @@
+import type { Settings } from '../../../shared/api';
 // Money is stored in whole cents and shown with the split's currency, like "RM 248.00"
 
 const formatters = new Map<string, Intl.NumberFormat>();
@@ -86,3 +87,10 @@ export function listCurrencies(): CurrencyOption[] {
   });
   return currencyOptions;
 }
+
+/** Before anyone has made a split or picked a default */
+const FALLBACK_CURRENCY = 'MYR';
+
+/** The currency someone works in: their default for new splits, else the one used last */
+export const homeCurrency = (settings: Settings | null | undefined) =>
+  settings?.defaultCurrency ?? settings?.lastCurrency ?? FALLBACK_CURRENCY;

@@ -32,7 +32,6 @@
     "html2canvas": "^1.4.1",
     "idb-keyval": "^6.3.0",
     "immer": "^10.1.1",
-    "mathjs": "^12.4.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "use-immer": "^0.9.0"

@@ -12,9 +12,9 @@ import {
 } from '@mantine/core';
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useContext, useEffect, useId, useMemo, useState } from 'react';
+import { useContext, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { convertCents, convertParts, isValidRate, toCents } from '../../../../shared/rates';
+import { convertCents, isValidRate, toCents } from '../../../../shared/rates';
 import { SplitMode, itemShares, MAX_SHARES } from '../../../../shared/settle';
 import { MAX_NOTES_LENGTH, MAX_NAME_LENGTH } from '../../../../shared/types';
 import { ItemInput, api } from '../../api';
@@ -22,8 +22,7 @@ import { SplitItem, Person } from '../../split/state';
 import { CATEGORIES } from '../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../split/item-names';
 import { currencySymbol, formatMoney } from '../../utils/money';
-import { loadMath } from '../../utils/math';
-import { useProfile } from '../../profile/ProfileContext';
+import { evaluateSum } from '../../utils/math';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../ui/CurrencySelect';
@@ -31,8 +30,10 @@ import { DialogHeaderSlot } from '../ui/dialog-header';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../utils/rates';
-import { DEFAULT_SETTINGS, type Attachment } from '../../../../shared/api';
+import { type Attachment } from '../../../../shared/api';
 import { plural } from '../../utils/text';
+import { useRate } from '../../hooks/useRate';
+import { buildItemInput, chooseRate, exactCents } from '../../split/item-input';
 
 interface ItemFormProps {
   splitId: string;
@@ -64,41 +65,6 @@ const MODES: { value: SplitMode; label: string }[] = [
   { value: 'shares', label: 'By shares' },
   { value: 'exact', label: 'Exact' },
 ];
-
-const RATE_FRESH_MS = 5 * 60 * 1000;
-
-/** The cost as typed: a number or a sum like "30*3"; null while it doesn't work out */
-function useEvaluated(expression: string) {
-  const [value, setValue] = useState<number | null>(null);
-  useEffect(() => {
-    let current = true;
-    const text = expression.trim();
-    if (text === '') {
-      setValue(null);
-      return;
-    }
-    const plain = Number(text);
-    if (Number.isFinite(plain)) {
-      setValue(plain);
-      return;
-    }
-    loadMath()
-      .then(({ evaluate }) => {
-        if (!current) return;
-        try {
-          const result = Number(evaluate(text));
-          setValue(Number.isFinite(result) ? result : null);
-        } catch {
-          setValue(null);
-        }
-      })
-      .catch((err) => console.error(err));
-    return () => {
-      current = false;
-    };
-  }, [expression]);
-  return value;
-}
 
 // Add item (F5) and Edit item (F6): amount first, who paid, then how it's split
 const ItemForm = ({
@@ -165,51 +131,33 @@ const ItemForm = ({
   const suggestions = suggestNames(pastNames.data ?? [], name);
   const [tried, setTried] = useState(false);
 
-  useEffect(() => {
-    loadMath().catch((err) => console.error(err));
-  }, []);
-
-  const cost = useEvaluated(expression);
+  /** The cost as typed: a number or a sum like "30*3"; null while it doesn't work out */
+  const cost = useMemo(() => evaluateSum(expression), [expression]);
   /** The amount as typed, in the currency it was paid in */
   const enteredCents = cost == null || cost < 0 ? null : toCents(cost);
   const chosen = people.filter((p) => included.has(p.id));
 
   // The rate for the preview. The server converts again when saving, except that an
   // edit leaving the amount alone keeps the rate the item was saved with.
-  const preferredSource = useProfile().profile?.settings.rateSource ?? DEFAULT_SETTINGS.rateSource;
-  const fetchedRate = useQuery({
-    // The server picks the source from Settings; a change there is a different rate
-    queryKey: ['rate', entryCurrency, currency, preferredSource],
-    queryFn: () => api.getRate(entryCurrency, currency),
-    enabled: foreign && !useOwnRate,
-    staleTime: RATE_FRESH_MS,
-    retry: 1,
+  const fetchedRate = useRate(entryCurrency, currency, { enabled: foreign && !useOwnRate });
+  const { rate, source: rateSource } = chooseRate({
+    foreign,
+    entryCurrency,
+    enteredCents,
+    useOwnRate,
+    ownRate,
+    original,
+    fetched: fetchedRate.data,
   });
-  const keepsSavedRate =
-    original != null &&
-    original.currency === entryCurrency &&
-    enteredCents === toCents(original.amount) &&
-    original.rate != null &&
-    (useOwnRate
-      ? original.rateSource === 'manual' && ownRate === original.rate
-      : original.rateSource !== 'manual');
-  const rate = !foreign
-    ? 1
-    : useOwnRate
-      ? isValidRate(ownRate)
-        ? ownRate
-        : null
-      : keepsSavedRate
-        ? original.rate!
-        : fetchedRate.data?.rate ?? null;
-  const rateSource = useOwnRate
-    ? 'manual'
-    : keepsSavedRate
-      ? original.rateSource ?? 'wise'
-      : fetchedRate.data?.source ?? null;
   /** The amount in the split's currency; unknown in another currency until there's a rate */
-  const costCents =
-    enteredCents == null ? null : rate == null ? null : convertCents(enteredCents, rate);
+  const costCents = enteredCents == null || rate == null ? null : convertCents(enteredCents, rate);
+
+  /** Under the amount in another currency: what it comes to, or why that isn't known yet */
+  const conversionNote = () => {
+    if (costCents != null) return `≈ ${formatMoney(costCents, currency)}`;
+    if (fetchedRate.isError) return 'Converted when saved';
+    return enteredCents == null ? '' : 'Getting the rate…';
+  };
 
   // What each person's part comes to, shown next to them
   const preview = useMemo(() => {
@@ -221,15 +169,12 @@ const ItemForm = ({
       participants: chosen.map((p) => ({
         personId: p.id,
         shares: shares[p.id] ?? 1,
-        exactCents: exact[p.id] === '' ? 0 : toCents(Number(exact[p.id])),
+        exactCents: exactCents(exact[p.id]),
       })),
     });
   }, [costCents, chosen, payerId, mode, shares, exact]);
 
-  const assignedCents = chosen.reduce(
-    (sum, p) => sum + (exact[p.id] === '' ? 0 : toCents(Number(exact[p.id]))),
-    0,
-  );
+  const assignedCents = chosen.reduce((sum, p) => sum + exactCents(exact[p.id]), 0);
   // Exact amounts are typed in the currency it was paid in
   const leftCents = (enteredCents ?? 0) - assignedCents;
 
@@ -255,51 +200,24 @@ const ItemForm = ({
     e.preventDefault();
     setTried(true);
     if (!valid || enteredCents == null || payerId == null) return;
-    const ids = chosen.map((p) => p.id);
-    const typedExact = Object.fromEntries(
-      ids.map((id) => [id, exact[id] === '' ? 0 : Number(exact[id])]),
-    );
-    // Shown until the server's converted numbers arrive; without a rate yet (offline),
-    // the amounts as typed stand in
-    const shownCents = costCents ?? enteredCents;
-    const shownExact =
-      foreign && rate != null
-        ? Object.fromEntries(
-            convertParts(
-              ids.map((id) => [id, toCents(typedExact[id])]),
-              rate,
-              shownCents,
-            ),
-          )
-        : null;
     onSave(
-      {
-        name: name.trim(),
-        cost: shownCents / 100,
+      buildItemInput({
+        name,
+        enteredCents,
+        costCents,
+        rate,
+        foreign,
+        entryCurrency,
+        useOwnRate,
+        ownRate,
         payerId,
-        participantIds: ids,
-        splitMode: mode,
-        shares:
-          mode === 'shares' ? Object.fromEntries(ids.map((id) => [id, shares[id]])) : undefined,
-        exact:
-          mode === 'exact'
-            ? shownExact
-              ? Object.fromEntries(ids.map((id) => [id, (shownExact[id] ?? 0) / 100]))
-              : typedExact
-            : undefined,
+        participantIds: chosen.map((p) => p.id),
+        mode,
+        shares,
+        exact,
         category,
-        notes: notes.trim() === '' ? null : notes.trim(),
-        original: foreign
-          ? {
-              currency: entryCurrency,
-              amount: enteredCents / 100,
-              exact: mode === 'exact' ? typedExact : undefined,
-              ...(useOwnRate && isValidRate(ownRate)
-                ? { rate: ownRate, rateSource: 'manual' as const }
-                : {}),
-            }
-          : null,
-      },
+        notes,
+      }),
       newPhotos,
     );
   };
@@ -414,15 +332,7 @@ const ItemForm = ({
             </>
           ) : (
             <>
-              <span className={classes.converted}>
-                {costCents != null
-                  ? `≈ ${formatMoney(costCents, currency)}`
-                  : fetchedRate.isError
-                    ? 'Converted when saved'
-                    : enteredCents == null
-                      ? ''
-                      : 'Getting the rate…'}
-              </span>
+              <span className={classes.converted}>{conversionNote()}</span>
               {rate != null && rateSource != null && (
                 <span>
                   {describeRate(rate, entryCurrency, currency)} · {SOURCE_LABELS[rateSource]}
