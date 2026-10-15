@@ -1,31 +1,27 @@
-import { ReactNode, createContext } from 'react';
-import { ImmerReducer, useImmerReducer } from 'use-immer';
-import { SplitAction, SplitState } from './state';
+import { ReactNode, createContext, useContext } from 'react';
+import { useImmerReducer } from 'use-immer';
+import { SplitAction, SplitState, splitReducer } from './state';
 
-interface AppContextValue {
+interface SplitStateContextValue {
   state: SplitState;
   dispatch: React.Dispatch<SplitAction>;
 }
 
-export const SplitStateContext = createContext<AppContextValue>({
-  state: { items: [], people: [] },
-  dispatch: () => {},
-});
+const SplitStateContext = createContext<SplitStateContextValue | null>(null);
 
-interface AppProviderProps {
-  children: ReactNode;
-  reducer: ImmerReducer<SplitState, SplitAction>;
-  initialState: SplitState;
-}
+const EMPTY: SplitState = { people: [], items: [] };
 
-export const SplitStateProvider: React.FC<AppProviderProps> = ({
-  children,
-  initialState,
-  reducer,
-}) => {
-  const [state, dispatch] = useImmerReducer(reducer, initialState);
-
+/** The open split's bill; mounted with its page (keyed by the split), so each starts empty */
+export const SplitStateProvider = ({ children }: { children: ReactNode }) => {
+  const [state, dispatch] = useImmerReducer(splitReducer, EMPTY);
   return (
     <SplitStateContext.Provider value={{ state, dispatch }}>{children}</SplitStateContext.Provider>
   );
 };
+
+/** The open split's bill and how to change it, inside SplitStateProvider */
+export function useSplitState(): SplitStateContextValue {
+  const value = useContext(SplitStateContext);
+  if (value == null) throw new Error('useSplitState is only for inside SplitStateProvider');
+  return value;
+}

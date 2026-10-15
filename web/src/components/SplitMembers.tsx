@@ -3,7 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { ArrowClockwise, Check, Copy, LinkSimple, ShareNetwork } from '@phosphor-icons/react';
 import { api, inviteUrl } from '../api';
 import { useIsMobile } from '../hooks/useBreakpoints';
-import { SplitMeta } from '../split/useSplit';
+import { MetaChanges, SplitMeta } from '../split/useSplit';
 import { nameFor } from '../profile/ProfileContext';
 import UserAvatar from './ui/UserAvatar';
 import classes from './SplitMembers.module.css';
@@ -16,7 +16,7 @@ interface SplitMembersProps {
   /** Reloads members and invites after a change */
   onChange: () => Promise<void>;
   /** Shows a change straight away, before the server confirms it */
-  setMeta: (update: (meta: SplitMeta | null) => SplitMeta | null) => void;
+  changeSharing: MetaChanges['changeSharing'];
   /** Swaps this for the reset-link confirm (3b) */
   onReset: () => void;
 }
@@ -29,12 +29,6 @@ const shortDate = (time: number) =>
 // The link without its scheme, so more of it fits
 const shortUrl = (url: string) => url.replace(/^https?:\/\//, '');
 
-const showError = (err: unknown) =>
-  notifications.show({
-    color: 'red',
-    message: err instanceof Error ? err.message : 'Something went wrong',
-  });
-
 /** "Share split" with the split's name under it, kept short so it never crowds the close button */
 export const ShareTitle = ({ name }: { name: string }) => (
   <span className={classes.titleBlock}>
@@ -45,7 +39,7 @@ export const ShareTitle = ({ name }: { name: string }) => (
 
 // Sharing (3a desktop, 3c phone): the share link, who's in the split, who's yet to
 // accept, and deleting or leaving the split
-const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMembersProps) => {
+const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: SplitMembersProps) => {
   const isMobile = useIsMobile();
   const isOwner = meta.role === 'owner';
   const link = meta.inviteToken ? inviteUrl(meta.inviteToken) : null;
@@ -53,15 +47,6 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
   const requests = (meta.invites ?? []).filter((i) => i.needsApproval);
   const owner = meta.members.find((m) => m.role === 'owner');
   const ownerName = owner ? nameFor(owner.email, owner.displayName) : 'the owner';
-
-  // Shown straight away; reloaded from the server if it says no
-  const optimistic = (show: (m: SplitMeta) => SplitMeta, request: () => Promise<unknown>) => {
-    setMeta((m) => (m ? show(m) : m));
-    request().catch((err) => {
-      showError(err);
-      onChange().catch((e) => console.error(e));
-    });
-  };
 
   // The phone's share sheet where there is one; otherwise copy it
   const shareLink = async (url: string) => {
@@ -86,7 +71,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
   );
 
   const answerRequest = (invite: SplitInvite, approve: boolean) =>
-    optimistic(
+    changeSharing(
       (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== invite.id) }),
       async () => {
         await (approve ? api.acceptInvite(invite.id) : api.declineInvite(invite.id));
@@ -214,7 +199,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
                   className={classes.textAction}
                   aria-label={`Remove ${nameFor(m.email, m.displayName)}`}
                   onClick={() =>
-                    optimistic(
+                    changeSharing(
                       (x) => ({ ...x, members: x.members.filter((y) => y.email !== m.email) }),
                       // The share link changes too, so fetch the new one
                       () => api.removeMember(meta.id, m.email).then(onChange),
@@ -291,7 +276,7 @@ const SplitMembers = ({ meta, myEmail, onChange, setMeta, onReset }: SplitMember
                   className={classes.textAction}
                   aria-label={`Withdraw invite for ${i.email}`}
                   onClick={() =>
-                    optimistic(
+                    changeSharing(
                       (x) => ({ ...x, invites: x.invites?.filter((y) => y.id !== i.id) }),
                       () => api.revokeInvite(meta.id, i.id),
                     )

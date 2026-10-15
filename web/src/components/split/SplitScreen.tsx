@@ -33,14 +33,13 @@ import {
   UsersThree,
   X,
 } from '@phosphor-icons/react';
-import { ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemInput } from '../../api';
-import { SplitStateContext } from '../../split/SplitStateContext';
 import { toApiItem } from '../../split/state';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeDataSnapshot } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
-import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../split/useSplit';
+import { SplitActionsContext, SyncStatus, useSplit } from '../../split/useSplit';
 import { SplitItem, Person } from '../../split/state';
 import { SplitTotals, computeTotals, findMe } from '../../split/derive';
 import {
@@ -76,6 +75,8 @@ import SplitSettings from './SplitSettings';
 import { DEFAULT_SETTINGS, type Attachment } from '../../../../shared/api';
 import classes from './Split.module.css';
 import { updateHomeData } from '../../home-data';
+import { newId } from '../../utils/id';
+import { useSplitState } from '../../split/SplitStateContext';
 
 interface ViewPrefs {
   view: 'card' | 'table';
@@ -208,13 +209,13 @@ function oweLine(people: Person[], summary: SplitTotals, me: Person | null) {
 }
 
 const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | null }) => {
-  const { status, waiting, meta, setMeta, refreshMeta, actions, retry, whenSaved } =
+  const { status, waiting, meta, metaChanges, refreshMeta, actions, retry, whenSaved } =
     useSplit(splitId);
-  const photos = usePhotos({ splitId, meta, setMeta, whenSaved });
+  const photos = usePhotos({ splitId, meta, metaChanges, whenSaved });
   // People can remove photos they added; the owner can remove any
   const canRemovePhoto = (photo: Attachment) =>
     photo.uploadedBy === myEmail || meta?.role === 'owner';
-  const { state } = useContext(SplitStateContext);
+  const { state } = useSplitState();
   const isDesktop = useIsDesktop();
   // How items are shown, saved with the account
   const { profile, updateSettings } = useProfile();
@@ -792,7 +793,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       >
         {dialog?.kind === 'people' && (
           <PeopleSheet
-            state={state}
             summary={summary}
             currency={currency}
             myEmail={myEmail}
@@ -856,7 +856,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             meta={meta}
             myEmail={myEmail}
             onChange={refreshMeta}
-            setMeta={setMeta}
+            changeSharing={metaChanges.changeSharing}
             onReset={() => setDialog({ kind: 'reset' })}
           />
         )}
@@ -948,7 +948,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
             canEdit={meta.role === 'owner'}
             onEnd={() => setDialog({ kind: 'end' })}
             onSaved={(changes) => {
-              setMeta((m) => (m ? { ...m, ...changes } : m));
+              metaChanges.patchSettings(changes);
               updateHomeData((data) => ({
                 splits: data.splits?.map((x) => (x.id === splitId ? { ...x, ...changes } : x)),
               }));

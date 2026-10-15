@@ -1,5 +1,4 @@
 import { useMantineColorScheme } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { Profile, api } from '../api';
@@ -15,6 +14,7 @@ import {
   type ThemeSetting,
 } from '../../../shared/api';
 import { reloadHomeData } from '../home-data';
+import { showError } from '../utils/notify';
 
 // The signed-in user's profile. Theme and accent are also kept in localStorage so
 // the app paints in the right colours before /api/me answers.
@@ -180,10 +180,7 @@ export function ProfileProvider({
         if (id === latest.current) replace(saved);
       } catch (err) {
         if (id === latest.current) replace(current);
-        notifications.show({
-          color: 'red',
-          message: err instanceof Error ? err.message : 'Could not save your settings',
-        });
+        showError(err, 'Could not save your settings');
       }
     },
     [replace],

@@ -1,7 +1,7 @@
 import { Button } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { api } from '../api';
+import { showError } from '../utils/notify';
 
 interface ResetLinkProps {
   splitId: string;
@@ -20,10 +20,7 @@ const ResetLink = ({ splitId, onDone, onCancel }: ResetLinkProps) => {
       await api.resetInvite(splitId);
       onDone();
     } catch (err) {
-      notifications.show({
-        color: 'red',
-        message: err instanceof Error ? err.message : 'Could not reset the link',
-      });
+      showError(err, 'Could not reset the link');
       setBusy(false);
     }
   };

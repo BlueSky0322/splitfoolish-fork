@@ -1,10 +1,10 @@
 import { Button } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
 import { removeSplitPicture, uploadSplitPicture } from '../../split/pictures';
 import SplitForm, { SplitFormValues } from './SplitForm';
 import { reloadHomeData } from '../../home-data';
+import { showError } from '../../utils/notify';
 
 interface SplitSettingsProps {
   splitId: string;
@@ -22,9 +22,6 @@ interface SplitSettingsProps {
   }) => void;
   onClose: () => void;
 }
-
-const fail = (err: unknown, fallback: string) =>
-  notifications.show({ color: 'red', message: err instanceof Error ? err.message : fallback });
 
 // Rename a split, change its currency or picture. A new currency converts every item
 // on the server, in the background.
@@ -57,18 +54,18 @@ const SplitSettings = ({
         })
         .catch((err) => {
           onSaved({ name, currency });
-          fail(err, 'Could not save the split settings');
+          showError(err, 'Could not save the split settings');
         });
     }
     if (values.picture instanceof File) {
       uploadSplitPicture(splitId, values.picture, (v) => onSaved({ pictureVersion: v })).catch(
-        (err) => fail(err, 'Could not change the picture'),
+        (err) => showError(err, 'Could not change the picture'),
       );
     } else if (values.picture === 'remove') {
       onSaved({ pictureVersion: null });
       removeSplitPicture(splitId).catch((err) => {
         onSaved({ pictureVersion });
-        fail(err, 'Could not remove the picture');
+        showError(err, 'Could not remove the picture');
       });
     }
   };

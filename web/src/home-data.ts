@@ -1,9 +1,9 @@
-import { notifications } from '@mantine/notifications';
 import { api } from './api';
 import { isNetworkError, readPendingCreates } from './offline/outbox';
 import { queryClient } from './query-client';
 import { readCache, writeCache } from './offline/cache';
 import type { MyInvite, SplitSummary } from '../../shared/api';
+import { showError } from './utils/notify';
 
 // My splits and pending invites, shared by the sidebar, My splits and Invites pages so
 // they load once and always agree. The last-seen copy shows while a fresh one loads.
@@ -87,10 +87,7 @@ export function moveSplit(id: string, toId: string) {
   });
   if (ids == null) return;
   api.reorderSplits(ids).catch((err: unknown) => {
-    notifications.show({
-      color: 'red',
-      message: err instanceof Error ? err.message : 'Could not save the new order',
-    });
+    showError(err, 'Could not save the new order');
     void reloadHomeData();
   });
 }

@@ -1,5 +1,4 @@
 import { Button, FileButton, TextInput } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { LockSimple } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api';
@@ -10,9 +9,7 @@ import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
 import { MAX_DISPLAY_NAME } from '../../../../shared/api';
-
-const fail = (err: unknown, fallback: string) =>
-  notifications.show({ color: 'red', message: err instanceof Error ? err.message : fallback });
+import { showError } from '../../utils/notify';
 
 // Profile (9a): your picture, the name people see, and the email you sign in with
 const ProfileSection = ({ track }: { track: Track }) => {
@@ -47,7 +44,7 @@ const ProfileSection = ({ track }: { track: Track }) => {
       const { avatarVersion } = await track(api.setAvatar(photo));
       patch((p) => ({ ...p, avatarVersion }));
     } catch (err) {
-      fail(err, 'Could not change your picture');
+      showError(err, 'Could not change your picture');
     } finally {
       // Keep showing the local copy until the uploaded one has loaded
       const shown = preview;
@@ -66,7 +63,7 @@ const ProfileSection = ({ track }: { track: Track }) => {
     patch((p) => ({ ...p, avatarVersion: null, avatarPreview: null }));
     track(api.removeAvatar()).catch((err) => {
       patch((p) => ({ ...p, avatarVersion: before }));
-      fail(err, 'Could not remove your picture');
+      showError(err, 'Could not remove your picture');
     });
   };
 

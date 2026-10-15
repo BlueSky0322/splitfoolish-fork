@@ -1,4 +1,3 @@
-import { notifications } from '@mantine/notifications';
 import { api } from '../../api';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import PayHint from './PayHint';
@@ -6,6 +5,7 @@ import PaymentMethods from './PaymentMethods';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import type { PaymentMethod } from '../../../../shared/payments';
+import { showError } from '../../utils/notify';
 
 // Getting paid (9b): how people who owe you can pay, and how that looks to them
 const PaymentsSection = ({ track }: { track: Track }) => {
@@ -21,10 +21,7 @@ const PaymentsSection = ({ track }: { track: Track }) => {
     patch((p) => ({ ...p, paymentMethods: methods, preferredPaymentMethodId: preferredId }));
     track(api.setPaymentMethods(methods, preferredId)).catch((err: unknown) => {
       patch((p) => ({ ...p, ...before }));
-      notifications.show({
-        color: 'red',
-        message: err instanceof Error ? err.message : 'Could not save your payment methods',
-      });
+      showError(err, 'Could not save your payment methods');
     });
     return Promise.resolve(true);
   };

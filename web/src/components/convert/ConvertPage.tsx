@@ -17,7 +17,6 @@ import {
   MagnifyingGlass,
   Plus,
 } from '@phosphor-icons/react';
-import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, toCents } from '../../../../shared/rates';
@@ -34,6 +33,7 @@ import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from '../ui/SplitAvatar';
 import classes from './Convert.module.css';
 import { DEFAULT_SETTINGS, type SplitSummary } from '../../../../shared/api';
+import { showError } from '../../utils/notify';
 
 const RECENT_KEY = 'sf-convert-recent';
 const MAX_RECENT = 5;
@@ -235,10 +235,7 @@ const ConvertPage = () => {
     try {
       queryClient.setQueryData(rateKey, await api.getRate(from, to, { fresh: true }));
     } catch (err) {
-      notifications.show({
-        color: 'red',
-        message: err instanceof Error ? err.message : "Couldn't get a rate right now",
-      });
+      showError(err, "Couldn't get a rate right now");
     } finally {
       setRefreshing(false);
     }

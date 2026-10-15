@@ -1,6 +1,4 @@
 import { ReactNode, createContext, useCallback, useContext, useState } from 'react';
-import { notifications } from '@mantine/notifications';
-import { newId } from '../split/useSplit';
 import { startCreate } from '../offline/pending-creates';
 import { removeCache, writeCache } from '../offline/cache';
 import { navigate } from '../hooks/useRoute';
@@ -10,6 +8,8 @@ import SplitForm, { SplitFormValues } from './split/SplitForm';
 import ResponsiveDialog from './ui/ResponsiveDialog';
 import type { SplitDetail, SplitSummary } from '../../../shared/api';
 import { reloadHomeData, updateHomeData } from '../home-data';
+import { showError } from '../utils/notify';
+import { newId } from '../utils/id';
 
 // The one "New split" form, opened from the sidebar, My splits and the phone's FAB
 
@@ -68,22 +68,14 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
     startCreate({ id, name: trimmed, currency, summary })
       .then(() => reloadHomeData())
       .catch((err) => {
-        notifications.show({
-          color: 'red',
-          message: err instanceof Error ? err.message : 'Could not create the split',
-        });
+        showError(err, 'Could not create the split');
         updateHomeData((data) => ({ splits: (data.splits ?? []).filter((x) => x.id !== id) }));
         void removeCache(`split:${id}`);
         if (new URLSearchParams(window.location.search).get('s') === id) navigate('');
       });
     // The picture shows from this device while it uploads after the split is created
     if (picture instanceof File) {
-      uploadSplitPicture(id, picture).catch((err) =>
-        notifications.show({
-          color: 'red',
-          message: err instanceof Error ? err.message : 'Could not add the picture',
-        }),
-      );
+      uploadSplitPicture(id, picture).catch((err) => showError(err, 'Could not add the picture'));
     }
     // Shown from this copy until the server answers
     void writeCache(`split:${id}`, detail).finally(() => {

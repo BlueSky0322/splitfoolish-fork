@@ -20,6 +20,7 @@ import classes from './SplitsHome.module.css';
 import { InstallCard } from './ui/InstallApp';
 import type { MyInvite, SplitSummary } from '../../../shared/api';
 import { reloadHomeData, updateHomeData } from '../home-data';
+import { showError } from '../utils/notify';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -121,10 +122,7 @@ function InviteList({ invites, size }: { invites: MyInvite[]; size: number }) {
       }
       await api.declineInvite(invite.id);
     } catch (err) {
-      notifications.show({
-        color: 'red',
-        message: err instanceof Error ? err.message : 'Could not answer the invite',
-      });
+      showError(err, 'Could not answer the invite');
       void reloadHomeData();
     } finally {
       setBusy(null);

@@ -52,6 +52,7 @@ export default tseslint.config(
       'web/src/components/settings/SettingsPage.tsx',
       'web/src/components/split/ShareImage.tsx',
       'web/src/profile/ProfileContext.tsx',
+      'web/src/split/SplitStateContext.tsx',
       'web/src/main.tsx',
     ],
     rules: { 'react-refresh/only-export-components': 'off' },

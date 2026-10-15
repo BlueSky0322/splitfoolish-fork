@@ -1,8 +1,8 @@
 import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
 import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { removeBlocker, useSplitActions } from '../../split/useSplit';
-import { SplitState, Person } from '../../split/state';
+import { useSplitActions } from '../../split/useSplit';
+import { Person } from '../../split/state';
 import { nameFor } from '../../profile/ProfileContext';
 import { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
@@ -11,9 +11,11 @@ import TransferRow from './TransferRow';
 import classes from './PeopleSheet.module.css';
 import { MAX_NAME_LENGTH } from '../../../../shared/types';
 import type { SplitInvite, SplitMember } from '../../../../shared/api';
+import { showRefusal } from '../../utils/notify';
+import { removeBlocker } from '../../split/rules';
+import { useSplitState } from '../../split/SplitStateContext';
 
 interface PeopleSheetProps {
-  state: SplitState;
   summary: SplitTotals;
   currency: string;
   myEmail: string | null;
@@ -50,7 +52,6 @@ function BalanceText({
 
 function PersonPage({
   person,
-  state,
   summary,
   currency,
   myEmail,
@@ -60,7 +61,6 @@ function PersonPage({
   onShowItems,
 }: {
   person: Person;
-  state: SplitState;
   summary: SplitTotals;
   currency: string;
   myEmail: string | null;
@@ -70,6 +70,7 @@ function PersonPage({
   onShowItems: (personId: string) => void;
 }) {
   const actions = useSplitActions()!;
+  const { state } = useSplitState();
   const [name, setName] = useState(person.name);
   // What removing them would do, while waiting for a yes
   const [confirming, setConfirming] = useState<{ text: string; fromItems: boolean } | null>(null);
@@ -88,8 +89,9 @@ function PersonPage({
   const remove = () => {
     const plain = removeBlocker(state, person.id, false);
     // Can't go even from shared items (they paid, or it would empty an item): explain why
-    if (plain != null && removeBlocker(state, person.id, true) != null) {
-      actions.removePerson(person.id, true);
+    const blocker = plain == null ? null : removeBlocker(state, person.id, true);
+    if (blocker != null) {
+      showRefusal(blocker);
       return;
     }
     if (plain == null && !losesAccess) {
@@ -260,7 +262,6 @@ function PersonPage({
 // Everyone in the bill. People with an account go by their own name and picture;
 // guests (no account) are named by whoever adds them. Tap someone for their page.
 const PeopleSheet = ({
-  state,
   summary,
   currency,
   myEmail,
@@ -271,6 +272,7 @@ const PeopleSheet = ({
   onShowItems,
 }: PeopleSheetProps) => {
   const actions = useSplitActions()!;
+  const { state } = useSplitState();
   const [openId, setOpenId] = useState<string | null>(initialPersonId ?? null);
   const [newName, setNewName] = useState('');
   const meId = state.people.find((p) => myEmail != null && p.memberEmail === myEmail)?.id ?? null;
@@ -281,7 +283,6 @@ const PeopleSheet = ({
       <PersonPage
         key={open.id}
         person={open}
-        state={state}
         summary={summary}
         currency={currency}
         myEmail={myEmail}

@@ -10,6 +10,7 @@ import SplitsHome from './components/SplitsHome';
 import AppLayout from './components/shell/AppLayout';
 import { useRoute } from './hooks/useRoute';
 import { useProfile } from './profile/ProfileContext';
+import { SplitStateProvider } from './split/SplitStateContext';
 
 // Signing in happens in front of the app (Cloudflare Access), so by the time this
 // runs the user is known; /api/me just tells us who. Pages load alongside it.
@@ -36,11 +37,12 @@ function App() {
         {route.view === 'settings' && <SettingsPage />}
         {route.view === 'convert' && <ConvertPage />}
         {route.view === 'split' && (
-          <SplitScreen
-            key={route.id}
-            splitId={route.id}
-            myEmail={profile?.email ?? null}
-          />
+          <SplitStateProvider key={route.id}>
+            <SplitScreen
+              splitId={route.id}
+              myEmail={profile?.email ?? null}
+            />
+          </SplitStateProvider>
         )}
       </AppLayout>
     </NewSplitProvider>

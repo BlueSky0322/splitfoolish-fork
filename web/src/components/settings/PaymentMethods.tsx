@@ -1,5 +1,4 @@
 import { Autocomplete, Button, Loader, Select, TextInput, UnstyledButton } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { Camera, Image, PencilSimple, Plus, QrCode, UploadSimple } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { api, paymentQrUrl } from '../../api';
@@ -16,10 +15,11 @@ import {
   MAX_METHODS,
   type PaymentMethod,
 } from '../../../../shared/payments';
-import { newId } from '../../split/useSplit';
 import { prepareQrCode } from '../../utils/image';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import classes from './Settings.module.css';
+import { showError } from '../../utils/notify';
+import { newId } from '../../utils/id';
 
 const OTHER = 'Other';
 
@@ -223,10 +223,7 @@ function MethodForm({
       const { blob, cropped } = await prepareQrCode(file);
       setPicked({ blob, url: URL.createObjectURL(blob), fileName: file.name, cropped });
     } catch (err) {
-      notifications.show({
-        color: 'red',
-        message: err instanceof Error ? err.message : 'Could not read that picture',
-      });
+      showError(err, 'Could not read that picture');
     } finally {
       setBusy(false);
     }
@@ -252,10 +249,7 @@ function MethodForm({
             qrVersion,
           });
         } catch (err) {
-          notifications.show({
-            color: 'red',
-            message: err instanceof Error ? err.message : 'Could not save the QR code',
-          });
+          showError(err, 'Could not save the QR code');
         } finally {
           setBusy(false);
         }
