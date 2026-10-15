@@ -14,17 +14,29 @@ interface Layer {
 
 const LAYER_KEY = 'sfLayer';
 const layers: Layer[] = [];
+/** The layers with an entry in history, in the order they were added */
+let entries: number[] = [];
 let nextId = 1;
 // Set while this code itself goes back, so that popstate isn't taken as the user's
 let selfBack = 0;
 // Entries to add once those goes-back land: Back is asynchronous, and an entry pushed
 // before it lands is the one it would take off (a sheet opening as another closes)
 let waiting: number[] = [];
+// Layers closed by code whose entries are still in history, under a layer still open
+const closing = new Set<number>();
 
-const push = (id: number) => window.history.pushState({ [LAYER_KEY]: id }, '');
+const push = (id: number) => {
+  window.history.pushState({ [LAYER_KEY]: id }, '');
+  entries.push(id);
+};
 
 const layerOf = (state: unknown) =>
   typeof state === 'object' && state != null ? (state as Record<string, unknown>)[LAYER_KEY] : null;
+
+function goBack(steps: number) {
+  selfBack++;
+  window.history.go(-steps);
+}
 
 function onPopState() {
   if (selfBack > 0) {
@@ -35,15 +47,33 @@ function onPopState() {
     }
     return;
   }
+  const now = layerOf(window.history.state);
+  // Whatever was added above the entry now showing is gone
+  const at = typeof now === 'number' ? entries.indexOf(now) + 1 : 0;
+  const gone = entries.slice(at);
+  entries = entries.slice(0, at);
   const top = layers.at(-1);
-  // The entry now showing is the top layer's own: Back wasn't about it
-  if (top == null || layerOf(window.history.state) === top.id) return;
-  if (top.onBack() === false) {
-    // Kept open (say, to ask about unsaved changes): it needs its entry back
-    push(top.id);
-    return;
+  if (top != null && gone.includes(top.id)) {
+    if (top.onBack() === false) {
+      // Kept open (say, to ask about unsaved changes): it needs its entry back
+      push(top.id);
+      return;
+    }
+    layers.pop();
   }
-  layers.pop();
+  // Landed on the entry of a layer that closed under another: step over it
+  const steps = popClosed();
+  if (steps > 0) goBack(steps);
+}
+
+/** Takes closed layers' entries off the top of the list; how many came off */
+function popClosed() {
+  let steps = 0;
+  while (entries.length > 0 && closing.has(entries.at(-1)!)) {
+    closing.delete(entries.pop()!);
+    steps++;
+  }
+  return steps;
 }
 
 if (typeof window !== 'undefined') window.addEventListener('popstate', onPopState);
@@ -73,14 +103,13 @@ export function useBackDismiss(opened: boolean, onBack: () => boolean | void) {
         waiting = waiting.filter((id) => id !== layer.id);
         return;
       }
-      // Closed some other way: its entry comes off too, unless the page moved on since
-      if (layerOf(window.history.state) === layer.id) {
-        selfBack++;
-        window.history.back();
-      }
+      if (!entries.includes(layer.id)) return;
+      closing.add(layer.id);
+      // Closed some other way: its entry comes off too, with those of any layers closed
+      // under it (a prompt and the sheet it asked about), unless the page moved on since
+      if (layerOf(window.history.state) !== entries.at(-1)) return;
+      const steps = popClosed();
+      if (steps > 0) goBack(steps);
     };
   }, [opened, isMobile]);
 }
-
-/** Whether a layer is open over the page; the page's own Back handling waits for it */
-export const hasOpenLayer = () => layers.length > 0;

@@ -14,6 +14,8 @@ interface ResponsiveDialogProps {
   width?: number;
   /** Back was pressed (phones): close, or return false to stay open (say, to confirm) */
   onBack?: () => boolean | void;
+  /** Phones: a card clear of the screen's edges, for a short question */
+  floating?: boolean;
 }
 
 // One form, two shapes: a bottom sheet on phones and a centred dialog elsewhere
@@ -24,6 +26,7 @@ const ResponsiveDialog = ({
   children,
   width = 440,
   onBack,
+  floating,
 }: ResponsiveDialogProps) => {
   const isMobile = useIsMobile();
   // Back closes the sheet, rather than leaving the page under it
@@ -37,6 +40,7 @@ const ResponsiveDialog = ({
         onClose={onClose}
         position="bottom"
         size="auto"
+        withCloseButton={!floating}
         title={
           <span className={classes.sheetTitleRow}>
             <span className="min-w-0 flex-1 truncate">{title}</span>
@@ -47,7 +51,7 @@ const ResponsiveDialog = ({
           </span>
         }
         classNames={{
-          content: classes.sheet,
+          content: floating ? `${classes.sheet} ${classes.floating}` : classes.sheet,
           header: classes.sheetHeader,
           title: classes.sheetTitle,
           body: classes.sheetBody,

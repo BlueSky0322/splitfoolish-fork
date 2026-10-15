@@ -17,6 +17,8 @@ export type Dialog =
   /** prefill: an amount and currency from Convert */
   | { kind: 'add'; prefill?: Prefill }
   | { kind: 'edit'; item: SplitItem }
+  /** An item as it stands, on phones, with Edit to open the form */
+  | { kind: 'item'; itemId: string }
   | { kind: 'people'; personId?: string }
   | { kind: 'settle' }
   | { kind: 'share' }
