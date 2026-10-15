@@ -13,9 +13,9 @@ import { useEffect, useState } from 'react';
 import { paymentQrUrl } from '../../api';
 import { BANK_TRANSFER, type PaymentMethod } from '@shared/payments';
 import { formatMoney } from '../../utils/money';
-import { isQr, methodLine, methodName } from '../../utils/payments';
-import ResponsiveDialog from './ResponsiveDialog';
-import UserAvatar from './UserAvatar';
+import { isQr, methodLine, methodName } from '../../utils/payment-labels';
+import ResponsiveDialog from '../ui/ResponsiveDialog';
+import UserAvatar from '../ui/UserAvatar';
 import classes from './QrViewer.module.css';
 
 interface QrViewerProps {

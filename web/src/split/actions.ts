@@ -3,7 +3,7 @@ import type { ItemInput } from '../api';
 import type { Item as ApiItem, Change } from '@shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
-import { atRate, removalMessage } from './rules';
+import { atRate, removalMessage } from './bill-rules';
 import { type SplitMeta } from './state';
 import type { MetaChanges, SplitAction, SplitState } from './state';
 

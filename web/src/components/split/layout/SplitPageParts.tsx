@@ -1,12 +1,12 @@
 import { CloudCheck, CloudSlash } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import type { Person } from '@shared/types';
-import { useSplitState } from '../../split/SplitStateContext';
-import { plural } from '../../utils/text';
-import type { SelectionBarProps } from './items/ItemSelection';
-import PersonAvatar from './PersonAvatar';
-import { useSplitPage } from './SplitPageContext';
-import classes from './Split.module.css';
+import { useSplitState } from '../../../split/SplitStateContext';
+import { plural } from '../../../utils/text';
+import type { SelectionBarProps } from '../items/ItemSelection';
+import PersonAvatar from '../PersonAvatar';
+import { useSplitPage } from '../SplitPageContext';
+import classes from '../Split.module.css';
 
 // What the split page's desktop and phone layouts share: the pieces SplitScreen builds
 // once, and the small parts both show

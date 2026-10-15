@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
-import { api } from '../../../api';
-import type { MetaChanges } from '../../../split/state';
-import type { SplitMeta } from '../../../split/state';
-import { shrinkImage } from '../../../utils/image';
+import { api } from '../api';
+import type { MetaChanges } from './state';
+import type { SplitMeta } from './state';
+import { shrinkImage } from '../utils/image';
 import type { Attachment } from '@shared/api';
-import { showError } from '../../../utils/notify';
+import { showError } from '../utils/notify';
 
 interface UsePhotosOptions {
   splitId: string;

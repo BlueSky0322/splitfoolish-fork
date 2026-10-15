@@ -1,7 +1,7 @@
 import type { Balance } from '@shared/settle';
 import type { Person } from '@shared/types';
 import { formatSigned } from '../../../utils/money';
-import classes from '../Split.module.css';
+import classes from './Balances.module.css';
 
 // Each person's balance as a bar from the middle: right and green when they're owed,
 // left and red when they owe

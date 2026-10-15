@@ -2,12 +2,12 @@ import { Button, NumberInput, Tooltip, UnstyledButton } from '@mantine/core';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { isValidRate } from '@shared/rates';
-import type { SplitItem } from '../../split/state';
-import type { UsedCurrency } from '../../split/currencies';
-import { usedCurrencies } from '../../split/currencies';
-import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
+import type { SplitItem } from '../../../split/state';
+import type { UsedCurrency } from '../../../split/currencies';
+import { usedCurrencies } from '../../../split/currencies';
+import { SOURCE_LABELS, describeRate, describeWhen } from '../../../utils/rate-labels';
 import classes from './CurrenciesSheet.module.css';
-import { plural } from '../../utils/text';
+import { plural } from '../../../utils/text';
 
 interface CurrenciesSheetProps {
   currency: string;

@@ -5,7 +5,7 @@ import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import { FALLBACK_CURRENCY, homeCurrency, listCurrencies } from '../../utils/money';
-import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
+import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rate-labels';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';

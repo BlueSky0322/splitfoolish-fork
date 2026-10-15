@@ -21,7 +21,7 @@ import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
 import type { AuthEnv } from './auth';
 import { fail, notFound } from './http';
-import type { RatesEnv } from './rates';
+import type { RatesEnv } from './exchange-rates';
 import type { SplitRoom } from './room';
 import { ROW_ID_CHARS } from '../shared/api';
 

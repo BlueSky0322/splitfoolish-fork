@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, signOut, useProfile } from '../../profile/ProfileContext';
-import { InstallField } from '../ui/InstallApp';
+import { InstallField } from '../common/InstallApp';
 import UserAvatar from '../ui/UserAvatar';
 import AppearanceSection from './AppearanceSection';
 import CurrencySection from './CurrencySection';

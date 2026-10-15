@@ -1,7 +1,7 @@
 import { Avatar, Button, FileButton, Select, TextInput, UnstyledButton } from '@mantine/core';
 import { useEffect, useMemo, useState } from 'react';
-import { listCurrencies } from '../../utils/money';
-import SplitAvatar from '../ui/SplitAvatar';
+import { listCurrencies } from '../../../utils/money';
+import SplitAvatar from '../../common/SplitAvatar';
 import classes from './SplitForm.module.css';
 import { MAX_NAME_LENGTH } from '@shared/types';
 

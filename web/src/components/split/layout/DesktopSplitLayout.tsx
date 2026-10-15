@@ -8,17 +8,17 @@ import {
   ShareNetwork,
   StackSimple,
 } from '@phosphor-icons/react';
-import { GROUP_LABELS } from '../../split/grouping';
-import { useSplitState } from '../../split/SplitStateContext';
-import { currencySymbol } from '../../utils/money';
-import ErrorBoundary from '../ui/ErrorBoundary';
-import { DesktopSelectionBar } from './items/ItemSelection';
-import SplitAvatar from '../ui/SplitAvatar';
-import { useSplitPage } from './SplitPageContext';
-import { otherCurrencyCount } from '../../split/derive';
+import { GROUP_LABELS } from '../../../split/grouping';
+import { useSplitState } from '../../../split/SplitStateContext';
+import { currencySymbol } from '../../../utils/money';
+import ErrorBoundary from '../../ui/ErrorBoundary';
+import { DesktopSelectionBar } from '../items/ItemSelection';
+import SplitAvatar from '../../common/SplitAvatar';
+import { useSplitPage } from '../SplitPageContext';
+import { otherCurrencyCount } from '../../../split/derive';
 import { AvatarStack, SaveStatus, type SelectionUi, type SplitPageParts } from './SplitPageParts';
-import { GROUP_ORDER, useItemViewPrefs } from './items/useItemViewPrefs';
-import classes from './Split.module.css';
+import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
+import classes from '../Split.module.css';
 import { canChangePeople } from '@shared/rules';
 
 /** The split page on a computer: the items, with the balances alongside */

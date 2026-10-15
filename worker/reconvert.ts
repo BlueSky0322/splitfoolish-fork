@@ -6,7 +6,7 @@
 import type { RateSource } from '../shared/rates';
 import { convertCents, convertParts } from '../shared/rates';
 import type { SplitMode } from '../shared/settle';
-import type { Rate } from './rates';
+import type { Rate } from './exchange-rates';
 
 /** Started (and its time recorded) when the change is made; retried when this old */
 export const RETRY_AFTER_MS = 30_000;

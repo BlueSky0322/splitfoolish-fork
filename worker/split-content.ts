@@ -22,7 +22,7 @@ import type { Actor } from '../shared/rules';
 import { touchSplitStatement } from './app';
 import type { ChangesBody } from '../shared/api';
 import { canChangePeople, canLinkPerson, removalBlocker } from '../shared/rules';
-import { type Rate, RatesUnavailable } from './rates';
+import { type Rate, RatesUnavailable } from './exchange-rates';
 import { revokeMemberStatements } from './sharing';
 import { isRowId } from '../shared/api';
 

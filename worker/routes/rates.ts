@@ -8,7 +8,7 @@ import { MAX_COST } from '../../shared/types';
 import type { AppEnv } from '../app';
 import { json, fail } from '../http';
 import { getRatePreference } from '../profiles';
-import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate, rateOrNull } from '../rates';
+import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate, rateOrNull } from '../exchange-rates';
 import { listUsedCurrencies } from '../summaries';
 
 const rates = new Hono<AppEnv>();

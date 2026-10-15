@@ -2,8 +2,8 @@ import { Button, CopyButton } from '@mantine/core';
 import { Check, Copy, QrCode } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { formatMoney } from '../../utils/money';
-import { isQr, methodLine, methodName } from '../../utils/payments';
-import QrViewer from '../ui/QrViewer';
+import { isQr, methodLine, methodName } from '../../utils/payment-labels';
+import QrViewer from '../common/QrViewer';
 import classes from './PaymentMethods.module.css';
 import type { PaymentMethod } from '@shared/payments';
 

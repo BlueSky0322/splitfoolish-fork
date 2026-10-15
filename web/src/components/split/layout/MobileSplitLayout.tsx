@@ -9,21 +9,21 @@ import {
   StackSimple,
 } from '@phosphor-icons/react';
 import type { Person } from '@shared/types';
-import { navigate } from '../../hooks/useRoute';
-import type { SplitTotals } from '../../split/derive';
-import { GROUP_LABELS } from '../../split/grouping';
-import { useSplitState } from '../../split/SplitStateContext';
-import { plural } from '../../utils/text';
-import ErrorBoundary from '../ui/ErrorBoundary';
-import Fab from '../ui/Fab';
-import { BalanceHero, BalanceLine } from './balances/BalancePanel';
-import { MobileSelectionBar } from './items/ItemSelection';
-import SplitAvatar from '../ui/SplitAvatar';
-import { useSplitPage } from './SplitPageContext';
+import { navigate } from '../../../hooks/useRoute';
+import type { SplitTotals } from '../../../split/derive';
+import { GROUP_LABELS } from '../../../split/grouping';
+import { useSplitState } from '../../../split/SplitStateContext';
+import { plural } from '../../../utils/text';
+import ErrorBoundary from '../../ui/ErrorBoundary';
+import Fab from '../../ui/Fab';
+import { BalanceHero, BalanceLine } from '../balances/BalancePanel';
+import { MobileSelectionBar } from '../items/ItemSelection';
+import SplitAvatar from '../../common/SplitAvatar';
+import { useSplitPage } from '../SplitPageContext';
 import { AvatarStack, SaveStatus, type SelectionUi, type SplitPageParts } from './SplitPageParts';
 import { useHeroHidden } from './useHeroHidden';
-import { useItemViewPrefs } from './items/useItemViewPrefs';
-import classes from './Split.module.css';
+import { useItemViewPrefs } from '../items/useItemViewPrefs';
+import classes from '../Split.module.css';
 
 const MAX_AVATARS = 4;
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { atRate, removalMessage } from './rules';
+import { atRate, removalMessage } from './bill-rules';
 import type { SplitItem, SplitState } from './state';
 import type { Person } from '@shared/types';
 

@@ -17,7 +17,7 @@ import {
   type PaymentMethod,
 } from '@shared/payments';
 import { prepareQrCode } from '../../utils/image';
-import { isQr, methodLine, methodName } from '../../utils/payments';
+import { isQr, methodLine, methodName } from '../../utils/payment-labels';
 import classes from './PaymentMethods.module.css';
 import { showError } from '../../utils/notify';
 import { newId } from '../../utils/id';

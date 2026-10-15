@@ -5,7 +5,7 @@
 import type { Env } from './app';
 import { touchSplitStatement } from './app';
 import { getRatePreference, settingsStatements } from './profiles';
-import { getRate } from './rates';
+import { getRate } from './exchange-rates';
 import { RETRY_AFTER_MS, reconvertSplit } from './reconvert';
 import { deleteAllAccessStatements, newShareToken } from './sharing';
 import { deleteContentStatements } from './split-content';

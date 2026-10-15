@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Person } from '@shared/types';
 import { formatMoney } from '../../../utils/money';
 import PersonAvatar from '../PersonAvatar';
-import classes from '../Split.module.css';
+import classes from './Balances.module.css';
 
 interface TransferRowProps {
   from: Person;

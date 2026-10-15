@@ -13,7 +13,7 @@ import type { RowSelection } from './useItemSelection';
 import { useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
 import PersonAvatar from '../PersonAvatar';
-import classes from '../Split.module.css';
+import classes from './ItemViews.module.css';
 import { toCents } from '@shared/rates';
 import { plural } from '../../../utils/text';
 
@@ -179,7 +179,8 @@ export function ItemCards({
   const myShare = useMyShare();
   return (
     <div
-      className={classes.groups}
+      // On phones the items take the phone's styles (ItemViews.module.css)
+      className={`${classes.groups} ${mobile ? classes.mobile : ''}`}
       data-selecting={selection?.active || undefined}
     >
       {groups.map((group) => (
@@ -326,7 +327,7 @@ export function ItemTable({
 
   return (
     <div
-      className={classes.table}
+      className={`${classes.table} ${mobile ? classes.mobile : ''}`}
       role="table"
       data-selecting={selection?.active || undefined}
     >

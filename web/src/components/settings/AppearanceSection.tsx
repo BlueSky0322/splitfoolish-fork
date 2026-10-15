@@ -2,7 +2,7 @@ import { Button, UnstyledButton } from '@mantine/core';
 import { CheckCircle, Plus } from '@phosphor-icons/react';
 import type { CSSProperties } from 'react';
 import { useProfile } from '../../profile/ProfileContext';
-import { ACCENTS } from '../../theme/accents';
+import { ACCENT_RAMPS } from '../../theme/accents';
 import type { Accent } from '@shared/api';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
@@ -74,7 +74,7 @@ const AppearanceSection = ({ track }: { track: Track }) => {
           role="radiogroup"
           aria-label="Accent colour"
         >
-          {(Object.keys(ACCENTS) as Accent[]).map((key) => (
+          {(Object.keys(ACCENT_RAMPS) as Accent[]).map((key) => (
             <UnstyledButton
               key={key}
               role="radio"
@@ -85,9 +85,9 @@ const AppearanceSection = ({ track }: { track: Track }) => {
             >
               <span
                 className={classes.accentSwatch}
-                style={{ '--swatch': ACCENTS[key].ramp[4] } as CSSProperties}
+                style={{ '--swatch': ACCENT_RAMPS[key].ramp[4] } as CSSProperties}
               />
-              <span className={classes.accentName}>{ACCENTS[key].label}</span>
+              <span className={classes.accentName}>{ACCENT_RAMPS[key].label}</span>
             </UnstyledButton>
           ))}
         </div>

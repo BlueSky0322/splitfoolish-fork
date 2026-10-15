@@ -3,7 +3,7 @@ import { CloudSlash, SignIn } from '@phosphor-icons/react';
 import ConvertPage from './components/convert/ConvertPage';
 import JoinSplit from './components/split/JoinSplit';
 import StateCard from './components/ui/StateCard';
-import { NewSplitProvider } from './components/split/NewSplitDialog';
+import { NewSplitProvider } from './components/home/NewSplitDialog';
 import SettingsPage from './components/settings/SettingsPage';
 import SplitScreen from './components/split/SplitScreen';
 import SplitsHome from './components/home/SplitsHome';

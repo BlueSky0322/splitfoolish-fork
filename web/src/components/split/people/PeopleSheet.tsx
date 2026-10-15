@@ -11,7 +11,7 @@ import classes from './PeopleSheet.module.css';
 import { MAX_NAME_LENGTH } from '@shared/types';
 import { useSplitPage } from '../SplitPageContext';
 import { showRefusal } from '../../../utils/notify';
-import { removalMessage } from '../../../split/rules';
+import { removalMessage } from '../../../split/bill-rules';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { canChangePeople } from '@shared/rules';
 

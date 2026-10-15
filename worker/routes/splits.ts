@@ -55,7 +55,7 @@ import {
   uploadAttachment,
 } from '../photos';
 import { getRatePreference } from '../profiles';
-import { REFRESH_MAX_AGE_MS, getRate } from '../rates';
+import { REFRESH_MAX_AGE_MS, getRate } from '../exchange-rates';
 import { evictFromRoom, joinRoom } from '../room';
 import {
   leaveStatement,
@@ -72,7 +72,7 @@ import {
   splitOrderStatements,
   planSplitSettings,
   startReconvert,
-} from '../splits';
+} from '../split-lifecycle';
 import { listItemNames, listSplitSummaries } from '../summaries';
 import { isRowId } from '../../shared/api';
 

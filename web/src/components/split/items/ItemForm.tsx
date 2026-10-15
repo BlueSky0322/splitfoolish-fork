@@ -33,7 +33,7 @@ import CurrencySelect from '../../ui/CurrencySelect';
 import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar from '../PersonAvatar';
 import classes from './ItemForm.module.css';
-import { SOURCE_LABELS, describeRate } from '../../../utils/rates';
+import { SOURCE_LABELS, describeRate } from '../../../utils/rate-labels';
 import { plural } from '../../../utils/text';
 import { useRate } from '../../../hooks/useRate';
 import { buildItemInput, chooseRate, exactCents } from '../../../split/item-input';

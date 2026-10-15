@@ -1,9 +1,9 @@
 import { Button } from '@mantine/core';
 import { SignOut, Trash } from '@phosphor-icons/react';
-import { api } from '../../api';
-import { navigate } from '../../hooks/useRoute';
-import classes from './Split.module.css';
-import { removeListedSplit, sendMySplitsChange } from '../../my-splits/my-splits';
+import { api } from '../../../api';
+import { navigate } from '../../../hooks/useRoute';
+import classes from '../Split.module.css';
+import { removeListedSplit, sendMySplitsChange } from '../../../my-splits/my-splits';
 
 interface EndSplitProps {
   splitId: string;

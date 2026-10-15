@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RatesUnavailable, getRate } from './rates';
+import { RatesUnavailable, getRate } from './exchange-rates';
 
 // A cache that behaves like Cloudflare's for these tests
 const memoryCache = () => {

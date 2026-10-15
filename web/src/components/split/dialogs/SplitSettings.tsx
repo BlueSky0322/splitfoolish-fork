@@ -1,11 +1,11 @@
 import { Button } from '@mantine/core';
 import { SignOut, Trash } from '@phosphor-icons/react';
-import { api } from '../../api';
-import { uploadSplitPicture } from '../../split/pictures';
-import type { MetaChanges } from '../../split/state';
+import { api } from '../../../api';
+import { uploadSplitPicture } from '../../../split/pictures';
+import type { MetaChanges } from '../../../split/state';
 import type { SplitFormValues } from './SplitForm';
 import SplitForm from './SplitForm';
-import { reloadMySplits } from '../../my-splits/my-splits';
+import { reloadMySplits } from '../../../my-splits/my-splits';
 
 interface SplitSettingsProps {
   splitId: string;

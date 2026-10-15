@@ -10,11 +10,12 @@ import {
 import { useState } from 'react';
 import type { Person } from '@shared/types';
 import { formatMoney } from '../../../utils/money';
-import { isQr, methodName } from '../../../utils/payments';
-import QrViewer from '../../ui/QrViewer';
+import { isQr, methodName } from '../../../utils/payment-labels';
+import QrViewer from '../../common/QrViewer';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
-import classes from '../Split.module.css';
+import classes from './Balances.module.css';
+import page from '../Split.module.css';
 import type { PaymentMethod } from '@shared/payments';
 import type { SplitMember } from '@shared/api';
 import { useSplitState } from '../../../split/SplitStateContext';
@@ -36,7 +37,7 @@ export function BalanceHero({ size, prefix }: { size: number; prefix?: string })
         </div>
         <button
           type="button"
-          className={classes.linkButton}
+          className={page.linkButton}
           onClick={() => openDialog({ kind: 'people' })}
         >
           Which one is you? Pick yourself to see your balance
