@@ -16,6 +16,7 @@ import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { clearCache } from '../../offline/cache';
+import { forgetOfflineCreates } from '../../offline/pending-creates';
 import { InstallField } from '../ui/InstallApp';
 import UserAvatar from '../ui/UserAvatar';
 import AppearanceSection from './AppearanceSection';
@@ -28,6 +29,7 @@ import { useSaveIndicator } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
 
 async function signOut() {
+  forgetOfflineCreates();
   await clearCache();
   window.location.href = '/cdn-cgi/access/logout';
 }

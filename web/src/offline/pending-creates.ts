@@ -23,6 +23,12 @@ const creating = new Map<string, Promise<void>>();
 const failed = new Map<string, unknown>();
 const MAX_RETRY_MS = 60_000;
 
+/** Lets go of creates under way on this page: on signing out, and between tests */
+export function forgetOfflineCreates() {
+  creating.clear();
+  failed.clear();
+}
+
 const onceOnline = () =>
   new Promise<void>((resolve) =>
     window.addEventListener('online', () => resolve(), { once: true }),

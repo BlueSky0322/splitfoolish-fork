@@ -63,7 +63,7 @@ export const toHomeData = (data: Loaded | undefined, failed: boolean): HomeData 
 });
 
 /** Changes what's shown straight away, before the server has confirmed it */
-export function updateHomeData(change: (data: HomeData) => Partial<HomeData>) {
+export function updateHomeData(change: (data: HomeData) => Partial<Loaded>) {
   queryClient.setQueryData<Loaded>(HOME_KEY, (old) => {
     const next = change(toHomeData(old, false));
     return {

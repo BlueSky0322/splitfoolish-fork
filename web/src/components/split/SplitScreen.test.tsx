@@ -110,6 +110,39 @@ describe('the split page', () => {
     expect(server.splits.get('trip')!.items).toHaveLength(2);
   });
 
+  test('a change made without a connection waits, and goes once it is back', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+    server.health = 'unreachable';
+    await addSnacks(user);
+
+    expect(await screen.findByText(/Offline · 1 change waiting/)).toBeTruthy();
+    expect(screen.getByText('Snacks')).toBeTruthy();
+    expect(server.sent).toEqual([]);
+
+    server.health = 'up';
+    window.dispatchEvent(new Event('online'));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.map((i) => i.name)).toContain('Snacks'),
+    );
+  });
+
+  test('a dropped live connection reconnects and catches up', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    await screen.findByText('Dinner');
+    await waitFor(() => expect(liveSockets().at(-1)?.readyState).toBe(1));
+
+    liveSockets().at(-1)!.close(1006);
+    // Missed while disconnected
+    server.splits.get('trip')!.items.push(item({ id: 'hotel', name: 'Hotel', cost: 200 }));
+    // The first retry waits a second
+    await waitFor(() => expect(liveSockets()).toHaveLength(2), { timeout: 3000 });
+    expect(await screen.findByText('Hotel')).toBeTruthy();
+  });
+
   test("a change that doesn't reach the server is kept, and sent on Retry", async () => {
     const server = fakeServer(trip());
     server.failNext.changes = 500;

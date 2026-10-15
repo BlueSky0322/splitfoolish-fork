@@ -12,6 +12,7 @@ import type { Change, Item } from '../../../shared/types';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
 import { clearCache } from '../offline/cache';
+import { forgetOfflineCreates } from '../offline/pending-creates';
 
 // The whole app renders in each test, which takes a while when every test file runs at
 // once: wait longer than the default second for things to appear
@@ -78,8 +79,11 @@ export const liveSockets = (): readonly FakeSocket[] => sockets;
 
 /** The data the stand-in server holds; tests set it up and read it back */
 export interface FakeServer {
-  /** Signed out (the sign-in expired) or down: every request is turned away */
-  health: 'up' | 'signedOut' | 'down';
+  /**
+   * Signed out (the sign-in expired) or down: every request is turned away. Unreachable:
+   * no request gets there at all, as with no connection.
+   */
+  health: 'up' | 'signedOut' | 'down' | 'unreachable';
   me: Profile;
   splits: Map<string, SplitDetail>;
   invites: MyInvite[];
@@ -168,7 +172,8 @@ function apply(split: SplitDetail, change: Change) {
       split.people.push(person(change.id, change.name, change.memberEmail ?? null));
       break;
     default:
-      break;
+      // So a test that needs another change says so, rather than passing by accident
+      throw new Error(`No stand-in for the change ${change.op}`);
   }
 }
 
@@ -180,6 +185,7 @@ function serve(server: FakeServer) {
     const path = url.pathname;
     const splitMatch = path.match(/^\/api\/splits\/([^/]+)(\/changes)?$/);
 
+    if (server.health === 'unreachable') return Promise.reject(new TypeError('Failed to fetch'));
     if (server.health === 'signedOut') return json({ error: 'Signed out' }, 401);
     if (server.health === 'down') return json({ error: 'Internal error' }, 500);
     if (path === '/api/me' && method === 'GET') return json(server.me);
@@ -302,6 +308,7 @@ export function setupAppTests() {
     cleanup();
     queryClient.clear();
     // The device's cache, and whose it is, start empty for the next test
+    forgetOfflineCreates();
     await clearCache();
     vi.unstubAllGlobals();
   });
