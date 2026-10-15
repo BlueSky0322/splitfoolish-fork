@@ -27,7 +27,7 @@ export interface SplitActions {
    * id lets the caller refer to the new item straight away, say to attach photos.
    * createdAt dates it in the past (a duplicate keeping its date); now when absent.
    */
-  addItem: (item: ItemInput, id?: string, createdAt?: number) => boolean;
+  addItem: (item: ItemInput, options?: { id?: string; createdAt?: number }) => boolean;
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
   /** Moves items to another day, each keeping its time of day (never later than now) */
@@ -137,7 +137,7 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
       d.queue({ op: 'clearPeople' });
       return true;
     },
-    addItem: (input, id = newId(), createdAt = Date.now()) => {
+    addItem: (input, { id = newId(), createdAt = Date.now() } = {}) => {
       const item = { id, createdAt, ...input };
       d.dispatch({ type: 'ADD_ITEM', payload: item });
       // In another currency the server works out the amounts; show its numbers after

@@ -20,7 +20,14 @@ import { BalanceHero, BalanceLine } from '../balances/BalancePanel';
 import { MobileSelectionBar } from '../items/ItemSelection';
 import SplitAvatar from '../../common/SplitAvatar';
 import { useSplitPage } from '../SplitPageContext';
-import { AvatarStack, SaveStatus, type SelectionUi, type SplitPageParts } from './SplitPageParts';
+import {
+  AvatarStack,
+  SaveStatus,
+  type SelectionUi,
+  type SplitPageParts,
+  SplitMoreMenu,
+  SplitNotices,
+} from './SplitPageParts';
 import { useHeroHidden } from './useHeroHidden';
 import { useItemViewPrefs } from '../items/useItemViewPrefs';
 import classes from '../Split.module.css';
@@ -128,16 +135,18 @@ const MobileSplitLayout = ({
                 >
                   <ShareNetwork size={20} />
                 </ActionIcon>
-                {parts.moreMenu(
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    size={44}
-                    aria-label="More"
-                  >
-                    <DotsThreeOutline size={20} />
-                  </ActionIcon>,
-                )}
+                <SplitMoreMenu
+                  target={
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size={44}
+                      aria-label="More"
+                    >
+                      <DotsThreeOutline size={20} />
+                    </ActionIcon>
+                  }
+                />
               </div>
             </>
           )}
@@ -197,7 +206,7 @@ const MobileSplitLayout = ({
           </UnstyledButton>
         )}
 
-        {parts.notices}
+        <SplitNotices />
 
         {!noPeople && state.items.length > 0 && (
           <div className={classes.toolbar}>

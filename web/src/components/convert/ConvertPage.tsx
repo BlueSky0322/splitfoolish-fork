@@ -280,79 +280,6 @@ const ConvertPage = () => {
     </div>
   );
 
-  const fields = (
-    <div className={classes.fields}>
-      <TextInput
-        label="Amount"
-        className={classes.amount}
-        classNames={{ input: classes.amountInput }}
-        inputMode="decimal"
-        value={amountText}
-        onChange={(e) => setAmountText(e.target.value)}
-        error={amount == null && amountText.trim() !== '' ? 'Enter a number' : undefined}
-      />
-      <div className={classes.pair}>
-        <CurrencySelect
-          label="From"
-          first={suggested}
-          value={from}
-          onChange={setFrom}
-          className={classes.currency}
-          classNames={{ input: classes.currencyInput }}
-          comboboxProps={{ width: 240, position: 'bottom-start' }}
-        />
-        <Tooltip label="Swap">
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size={40}
-            className={classes.swap}
-            aria-label="Swap currencies"
-            onClick={() => {
-              setFrom(to);
-              setTo(from);
-            }}
-          >
-            <ArrowsLeftRight size={18} />
-          </ActionIcon>
-        </Tooltip>
-        <CurrencySelect
-          label="To"
-          first={suggested}
-          value={to}
-          onChange={setTo}
-          className={classes.currency}
-          classNames={{ input: classes.currencyInput }}
-          comboboxProps={{ width: 240, position: 'bottom-start' }}
-        />
-      </div>
-    </div>
-  );
-
-  const addToSplitRow = (
-    <div className={classes.addRow}>
-      <Select
-        label="Add to a split"
-        placeholder={splitOptions.length === 0 ? 'No splits yet' : undefined}
-        data={splitOptions}
-        value={chosenSplit}
-        onChange={setSplitId}
-        allowDeselect={false}
-        disabled={splitOptions.length === 0}
-        className="min-w-0 flex-1"
-        size={isDesktop ? 'sm' : 'md'}
-      />
-      <Button
-        leftSection={<Plus size={16} />}
-        onClick={addAsItem}
-        disabled={chosenSplit == null || amount == null || amount === 0}
-        size={isDesktop ? 'sm' : 'md'}
-      >
-        Add as item
-      </Button>
-    </div>
-  );
-
   const recentChips = recent.length > 0 && (
     <div className={classes.recent}>
       <h2 className="sf-label">Recent</h2>
@@ -370,15 +297,6 @@ const ConvertPage = () => {
           </UnstyledButton>
         ))}
       </div>
-    </div>
-  );
-
-  const resultPanel = (
-    <div>
-      <div className={classes.result}>
-        {convertedCents == null ? '—' : formatMoney(convertedCents, to)}
-      </div>
-      {rateLine}
     </div>
   );
 
@@ -487,6 +405,89 @@ const ConvertPage = () => {
       </div>
     );
   }
+
+  // The computer layout: the fields beside the result, and adding it to a split
+  const fields = (
+    <div className={classes.fields}>
+      <TextInput
+        label="Amount"
+        className={classes.amount}
+        classNames={{ input: classes.amountInput }}
+        inputMode="decimal"
+        value={amountText}
+        onChange={(e) => setAmountText(e.target.value)}
+        error={amount == null && amountText.trim() !== '' ? 'Enter a number' : undefined}
+      />
+      <div className={classes.pair}>
+        <CurrencySelect
+          label="From"
+          first={suggested}
+          value={from}
+          onChange={setFrom}
+          className={classes.currency}
+          classNames={{ input: classes.currencyInput }}
+          comboboxProps={{ width: 240, position: 'bottom-start' }}
+        />
+        <Tooltip label="Swap">
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size={40}
+            className={classes.swap}
+            aria-label="Swap currencies"
+            onClick={() => {
+              setFrom(to);
+              setTo(from);
+            }}
+          >
+            <ArrowsLeftRight size={18} />
+          </ActionIcon>
+        </Tooltip>
+        <CurrencySelect
+          label="To"
+          first={suggested}
+          value={to}
+          onChange={setTo}
+          className={classes.currency}
+          classNames={{ input: classes.currencyInput }}
+          comboboxProps={{ width: 240, position: 'bottom-start' }}
+        />
+      </div>
+    </div>
+  );
+
+  const addToSplitRow = (
+    <div className={classes.addRow}>
+      <Select
+        label="Add to a split"
+        placeholder={splitOptions.length === 0 ? 'No splits yet' : undefined}
+        data={splitOptions}
+        value={chosenSplit}
+        onChange={setSplitId}
+        allowDeselect={false}
+        disabled={splitOptions.length === 0}
+        className="min-w-0 flex-1"
+        size={isDesktop ? 'sm' : 'md'}
+      />
+      <Button
+        leftSection={<Plus size={16} />}
+        onClick={addAsItem}
+        disabled={chosenSplit == null || amount == null || amount === 0}
+        size={isDesktop ? 'sm' : 'md'}
+      >
+        Add as item
+      </Button>
+    </div>
+  );
+
+  const resultPanel = (
+    <div>
+      <div className={classes.result}>
+        {convertedCents == null ? '—' : formatMoney(convertedCents, to)}
+      </div>
+      {rateLine}
+    </div>
+  );
 
   return (
     <div className={classes.page}>

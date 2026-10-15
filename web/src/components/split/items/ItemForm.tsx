@@ -14,10 +14,10 @@ import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phos
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { convertCents, isValidRate, toCents } from '@shared/rates';
+import { type RateSource, convertCents, isValidRate, toCents } from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
 import { itemShares, MAX_SHARES } from '@shared/settle';
-import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '@shared/types';
+import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH, type Person } from '@shared/types';
 import type { ItemInput } from '../../../api';
 import { api } from '../../../api';
 import type { SplitItem } from '../../../split/state';
@@ -297,53 +297,23 @@ const ItemForm = ({
       </div>
       {tried && problems.cost && <div className={classes.error}>{problems.cost}</div>}
       {foreign && (
-        <div className={classes.conversion}>
-          {ownRateChosen ? (
-            <>
-              <span>1 {entryCurrency} =</span>
-              <NumberInput
-                aria-label={`How much 1 ${entryCurrency} is in ${currency}`}
-                className={classes.rateInput}
-                value={ownRate}
-                onChange={(v) => setOwnRate(v === '' ? '' : Number(v))}
-                min={0}
-                decimalScale={6}
-                hideControls
-                size="xs"
-                placeholder="0.00"
-                error={tried && problems.rate}
-              />
-              <span>{currency}</span>
-              {costCents != null && (
-                <span className={classes.converted}>≈ {formatMoney(costCents, currency)}</span>
-              )}
-              <UnstyledButton
-                className={classes.rateToggle}
-                onClick={() => setOwnRateChosen(false)}
-              >
-                Use the live rate
-              </UnstyledButton>
-            </>
-          ) : (
-            <>
-              <span className={classes.converted}>{conversionNote()}</span>
-              {rate != null && rateSource != null && (
-                <span>
-                  {describeRate(rate, entryCurrency, currency)} · {SOURCE_LABELS[rateSource]}
-                </span>
-              )}
-              <UnstyledButton
-                className={classes.rateToggle}
-                onClick={() => {
-                  setOwnRateChosen(true);
-                  if (ownRate === '' && rate != null) setOwnRate(rate);
-                }}
-              >
-                Use my own rate
-              </UnstyledButton>
-            </>
-          )}
-        </div>
+        <ConversionRow
+          entryCurrency={entryCurrency}
+          currency={currency}
+          ownRateChosen={ownRateChosen}
+          ownRate={ownRate}
+          onOwnRate={setOwnRate}
+          rateError={tried ? problems.rate : null}
+          costCents={costCents}
+          note={conversionNote()}
+          rate={rate}
+          rateSource={rateSource}
+          onChooseOwn={() => {
+            setOwnRateChosen(true);
+            if (ownRate === '' && rate != null) setOwnRate(rate);
+          }}
+          onUseLive={() => setOwnRateChosen(false)}
+        />
       )}
 
       <Autocomplete
@@ -414,69 +384,22 @@ const ItemForm = ({
           onChange={(v) => setMode(v as SplitMode)}
         />
         <div className={classes.people}>
-          {people.map((p) => {
-            const on = included.has(p.id);
-            return (
-              <div
-                key={p.id}
-                className={classes.personRow}
-                data-off={!on || undefined}
-              >
-                <Checkbox
-                  checked={on}
-                  onChange={() => toggle(p.id)}
-                  label={p.name}
-                  radius={6}
-                  size="md"
-                  classNames={{ root: classes.check, label: classes.checkLabel }}
-                />
-                {mode === 'shares' && on && (
-                  <div className={classes.stepper}>
-                    <ActionIcon
-                      variant="default"
-                      size={36}
-                      aria-label={`Fewer shares for ${p.name}`}
-                      disabled={shares[p.id] <= 1}
-                      onClick={() => setShares((s) => ({ ...s, [p.id]: Math.max(1, s[p.id] - 1) }))}
-                    >
-                      <Minus size={16} />
-                    </ActionIcon>
-                    <span className={classes.stepCount}>{shares[p.id]}</span>
-                    <ActionIcon
-                      variant="default"
-                      size={36}
-                      aria-label={`More shares for ${p.name}`}
-                      disabled={shares[p.id] >= MAX_SHARES}
-                      onClick={() =>
-                        setShares((s) => ({ ...s, [p.id]: Math.min(MAX_SHARES, s[p.id] + 1) }))
-                      }
-                    >
-                      <Plus size={16} />
-                    </ActionIcon>
-                  </div>
-                )}
-                {mode === 'exact' && on ? (
-                  <NumberInput
-                    className={classes.exactInput}
-                    aria-label={`${p.name}'s amount`}
-                    value={exact[p.id]}
-                    onChange={(v) => setExact((s) => ({ ...s, [p.id]: v === '' ? '' : Number(v) }))}
-                    min={0}
-                    decimalScale={2}
-                    hideControls
-                    placeholder="0.00"
-                    leftSection={
-                      <span className="sf-muted text-xs">{currencySymbol(entryCurrency)}</span>
-                    }
-                  />
-                ) : (
-                  <span className={classes.part}>
-                    {on && preview.has(p.id) ? formatMoney(preview.get(p.id)!, currency) : ''}
-                  </span>
-                )}
-              </div>
-            );
-          })}
+          {people.map((p) => (
+            <PersonPart
+              key={p.id}
+              person={p}
+              on={included.has(p.id)}
+              mode={mode}
+              shares={shares[p.id]}
+              exact={exact[p.id]}
+              partCents={preview.get(p.id)}
+              entryCurrency={entryCurrency}
+              currency={currency}
+              onToggle={() => toggle(p.id)}
+              onShares={(n) => setShares((s) => ({ ...s, [p.id]: n }))}
+              onExact={(v) => setExact((s) => ({ ...s, [p.id]: v }))}
+            />
+          ))}
         </div>
         {mode === 'exact' && (
           <div className={classes.left}>
@@ -598,3 +521,163 @@ const ItemForm = ({
 };
 
 export default ItemForm;
+
+/** Someone on the item: whether they're in, and their shares, amount or part */
+function PersonPart({
+  person,
+  on,
+  mode,
+  shares,
+  exact,
+  partCents,
+  entryCurrency,
+  currency,
+  onToggle,
+  onShares,
+  onExact,
+}: {
+  person: Person;
+  on: boolean;
+  mode: SplitMode;
+  shares: number;
+  exact: number | '';
+  /** Their part in the split's currency, as it stands */
+  partCents: number | undefined;
+  entryCurrency: string;
+  currency: string;
+  onToggle: () => void;
+  onShares: (shares: number) => void;
+  onExact: (amount: number | '') => void;
+}) {
+  return (
+    <div
+      className={classes.personRow}
+      data-off={!on || undefined}
+    >
+      <Checkbox
+        checked={on}
+        onChange={onToggle}
+        label={person.name}
+        radius={6}
+        size="md"
+        classNames={{ root: classes.check, label: classes.checkLabel }}
+      />
+      {mode === 'shares' && on && (
+        <div className={classes.stepper}>
+          <ActionIcon
+            variant="default"
+            size={36}
+            aria-label={`Fewer shares for ${person.name}`}
+            disabled={shares <= 1}
+            onClick={() => onShares(Math.max(1, shares - 1))}
+          >
+            <Minus size={16} />
+          </ActionIcon>
+          <span className={classes.stepCount}>{shares}</span>
+          <ActionIcon
+            variant="default"
+            size={36}
+            aria-label={`More shares for ${person.name}`}
+            disabled={shares >= MAX_SHARES}
+            onClick={() => onShares(Math.min(MAX_SHARES, shares + 1))}
+          >
+            <Plus size={16} />
+          </ActionIcon>
+        </div>
+      )}
+      {mode === 'exact' && on ? (
+        <NumberInput
+          className={classes.exactInput}
+          aria-label={`${person.name}'s amount`}
+          value={exact}
+          onChange={(v) => onExact(v === '' ? '' : Number(v))}
+          min={0}
+          decimalScale={2}
+          hideControls
+          placeholder="0.00"
+          leftSection={<span className="sf-muted text-xs">{currencySymbol(entryCurrency)}</span>}
+        />
+      ) : (
+        <span className={classes.part}>
+          {on && partCents != null ? formatMoney(partCents, currency) : ''}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Paid in another currency: the rate it's converted at, today's or one typed */
+function ConversionRow({
+  entryCurrency,
+  currency,
+  ownRateChosen,
+  ownRate,
+  onOwnRate,
+  rateError,
+  costCents,
+  note,
+  rate,
+  rateSource,
+  onChooseOwn,
+  onUseLive,
+}: {
+  entryCurrency: string;
+  currency: string;
+  ownRateChosen: boolean;
+  ownRate: number | '';
+  onOwnRate: (rate: number | '') => void;
+  rateError: string | null | undefined;
+  costCents: number | null;
+  note: string;
+  rate: number | null;
+  rateSource: RateSource | null;
+  onChooseOwn: () => void;
+  onUseLive: () => void;
+}) {
+  return (
+    <div className={classes.conversion}>
+      {ownRateChosen ? (
+        <>
+          <span>1 {entryCurrency} =</span>
+          <NumberInput
+            aria-label={`How much 1 ${entryCurrency} is in ${currency}`}
+            className={classes.rateInput}
+            value={ownRate}
+            onChange={(v) => onOwnRate(v === '' ? '' : Number(v))}
+            min={0}
+            decimalScale={6}
+            hideControls
+            size="xs"
+            placeholder="0.00"
+            error={rateError}
+          />
+          <span>{currency}</span>
+          {costCents != null && (
+            <span className={classes.converted}>≈ {formatMoney(costCents, currency)}</span>
+          )}
+          <UnstyledButton
+            className={classes.rateToggle}
+            onClick={onUseLive}
+          >
+            Use the live rate
+          </UnstyledButton>
+        </>
+      ) : (
+        <>
+          <span className={classes.converted}>{note}</span>
+          {rate != null && rateSource != null && (
+            <span>
+              {describeRate(rate, entryCurrency, currency)} · {SOURCE_LABELS[rateSource]}
+            </span>
+          )}
+          <UnstyledButton
+            className={classes.rateToggle}
+            onClick={onChooseOwn}
+          >
+            Use my own rate
+          </UnstyledButton>
+        </>
+      )}
+    </div>
+  );
+}

@@ -29,8 +29,17 @@ export const removePendingCreate = (id: string) => removeCacheEntry(createKey(id
 /** Splits created on this device that the server hasn't confirmed yet */
 export async function readPendingCreates(): Promise<PendingCreate[]> {
   const ids = await listCacheIds(CREATE_PREFIX);
-  const found = await Promise.all(ids.map((id) => readCache<PendingCreate>(createKey(id))));
-  return found.filter((c): c is PendingCreate => c != null);
+  const found = await Promise.all(ids.map((id) => readCache<unknown>(createKey(id))));
+  // Kept from whichever build made it: only what still has what a create needs
+  return found.filter(
+    (c): c is PendingCreate =>
+      typeof c === 'object' &&
+      c != null &&
+      typeof (c as PendingCreate).id === 'string' &&
+      typeof (c as PendingCreate).name === 'string' &&
+      typeof (c as PendingCreate).currency === 'string' &&
+      (c as PendingCreate).summary != null,
+  );
 }
 
 const creating = new Map<string, Promise<void>>();

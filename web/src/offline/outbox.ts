@@ -46,8 +46,20 @@ export const sendQueued = (splitId: string, queued: Queued[]) =>
       )
     : Promise.resolve();
 
-export const readOutbox = async (splitId: string) =>
-  (await readCache<Queued[]>(outboxKey(splitId))) ?? [];
+/**
+ * Kept from whichever build queued it, so read as unknown and kept only if it's still a
+ * change; the server checks each one again anyway
+ */
+const isQueued = (q: unknown): q is Queued =>
+  typeof q === 'object' &&
+  q != null &&
+  typeof (q as Queued).cid === 'string' &&
+  typeof (q as Queued).change?.op === 'string';
+
+export async function readOutbox(splitId: string): Promise<Queued[]> {
+  const kept = await readCache<unknown>(outboxKey(splitId));
+  return Array.isArray(kept) ? kept.filter(isQueued) : [];
+}
 
 export const writeOutbox = (splitId: string, queued: Queued[]) =>
   queued.length > 0 ? writeCache(outboxKey(splitId), queued) : removeCacheEntry(outboxKey(splitId));

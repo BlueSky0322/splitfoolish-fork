@@ -1,4 +1,4 @@
-import { clear, del, get, keys, set } from 'idb-keyval';
+import { clear, del, delMany, get, keys, set } from 'idb-keyval';
 import { quietly } from '../utils/quietly';
 
 // Last-seen copies of API responses (My splits, the profile, each split, and the
@@ -67,7 +67,24 @@ export const listCacheIds = async (prefix: string): Promise<string[]> =>
  */
 export const splitCacheKey = (id: string) => `split-v2:${id}`;
 
-/** Call once the signed-in email is known; someone else's cache is dropped. */
+// What older builds kept in a shape no longer read; versioned keys replaced them
+const RETIRED_KEYS = ['me'];
+const RETIRED_PREFIXES = ['split:'];
+
+async function dropRetiredCopies() {
+  const all = (await quietlyAsync(() => keys())) ?? [];
+  const retired = all.filter(
+    (k): k is string =>
+      typeof k === 'string' &&
+      (RETIRED_KEYS.includes(k) || RETIRED_PREFIXES.some((p) => k.startsWith(p))),
+  );
+  if (retired.length > 0) await quietlyAsync(() => delMany(retired));
+}
+
+/**
+ * Call once the signed-in email is known; someone else's cache is dropped, and copies
+ * older builds kept
+ */
 export async function setCacheUser(email: string): Promise<void> {
   if (lastEmail() !== email) {
     // The page open now is this person's own: keep it when nobody was signed in before
@@ -79,6 +96,7 @@ export async function setCacheUser(email: string): Promise<void> {
     });
   }
   await quietlyAsync(() => set(SW_USER_KEY, email));
+  await dropRetiredCopies();
   confirmCacheUser(email);
 }
 

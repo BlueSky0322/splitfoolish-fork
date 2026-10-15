@@ -1,27 +1,14 @@
 import { FALLBACK_CURRENCY } from '../../utils/money';
-import { ActionIcon, Button, Menu, SegmentedControl } from '@mantine/core';
+import { ActionIcon, Button, SegmentedControl } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import {
-  ArrowsClockwise,
-  ArrowsLeftRight,
-  CloudSlash,
-  GearSix,
-  Images,
-  LockSimple,
-  Rows,
-  Table,
-  UserPlus,
-  UsersThree,
-  X,
-} from '@phosphor-icons/react';
-import type { ReactNode } from 'react';
+import { LockSimple, Rows, Table, UsersThree, X } from '@phosphor-icons/react';
 import { useCallback, useMemo, useState } from 'react';
 import type { Attachment } from '@shared/api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useMySplitsSnapshot } from '../../my-splits/useMySplits';
 import { useItemSelection, useSelectionKeys } from './items/useItemSelection';
 import { navigate } from '../../hooks/useRoute';
-import { computeTotals, findMe, otherCurrencyCount } from '../../split/derive';
+import { computeTotals, findMe } from '../../split/derive';
 import { groupItems } from '../../split/grouping';
 import type { SplitItem } from '../../split/state';
 import { useSplitState } from '../../split/SplitStateContext';
@@ -105,8 +92,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   for (const a of meta?.attachments ?? []) {
     if (a.itemId) photoCounts.set(a.itemId, (photoCounts.get(a.itemId) ?? 0) + 1);
   }
-  const splitPhotoCount = meta?.attachments.filter((a) => a.itemId == null).length ?? 0;
-  const otherCurrencies = otherCurrencyCount(state.items);
 
   const filterPerson = state.people.find((p) => p.id === personFilter) ?? null;
   const shownItems = filterPerson
@@ -186,51 +171,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const loaded = meta != null;
   const noPeople = loaded && state.people.length === 0;
 
-  const moreMenu = (target: ReactNode) => (
-    <Menu
-      position="bottom-end"
-      withinPortal
-    >
-      <Menu.Target>{target}</Menu.Target>
-      <Menu.Dropdown>
-        <Menu.Item
-          leftSection={<UsersThree size={16} />}
-          onClick={() => setDialog({ kind: 'people' })}
-        >
-          People
-        </Menu.Item>
-        <Menu.Item
-          leftSection={<UserPlus size={16} />}
-          onClick={() => setDialog({ kind: 'members' })}
-        >
-          Share split
-        </Menu.Item>
-        <Menu.Item
-          leftSection={<Images size={16} />}
-          onClick={() => setDialog({ kind: 'photos' })}
-        >
-          Photos
-          {splitPhotoCount > 0 && <span className="sf-muted"> ({splitPhotoCount})</span>}
-        </Menu.Item>
-        {otherCurrencies > 0 && (
-          <Menu.Item
-            leftSection={<ArrowsLeftRight size={16} />}
-            rightSection={<span className="sf-tag">{otherCurrencies}</span>}
-            onClick={() => setDialog({ kind: 'currencies' })}
-          >
-            Currencies
-          </Menu.Item>
-        )}
-        <Menu.Item
-          leftSection={<GearSix size={16} />}
-          onClick={() => setDialog({ kind: 'settings' })}
-        >
-          Split settings
-        </Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
-  );
-
   const viewToggle = (
     <SegmentedControl
       size="xs"
@@ -272,40 +212,6 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
         <X size={12} />
       </ActionIcon>
     </div>
-  );
-
-  const notices = (
-    <>
-      {meta?.converting && (
-        <div
-          className={classes.banner}
-          role="status"
-        >
-          <ArrowsClockwise
-            size={18}
-            className="animate-spin"
-          />
-          <span className="flex-1">
-            Converting amounts to {currency}. Items keep what was originally paid.
-          </span>
-        </div>
-      )}
-      {status === 'error' && (
-        <div className={classes.banner}>
-          <CloudSlash size={18} />
-          <span className="flex-1">
-            Couldn't save your latest changes. They're kept here and we keep retrying.
-          </span>
-          <Button
-            variant="default"
-            size="compact-sm"
-            onClick={retry}
-          >
-            Retry now
-          </Button>
-        </div>
-      )}
-    </>
   );
 
   const itemViewProps = {
@@ -352,10 +258,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const parts: SplitPageParts = {
     list,
     panel,
-    moreMenu,
     viewToggle,
     filterChip,
-    notices,
     dialogs: (
       <SplitDialogs
         dialog={dialog}

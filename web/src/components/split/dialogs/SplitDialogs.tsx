@@ -69,7 +69,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
       return ok;
     }
     const id = newId();
-    const ok = actions.addItem(input, id);
+    const ok = actions.addItem(input, { id });
     if (ok) {
       close();
       if (newPhotos.length > 0) void photos.upload(newPhotos, id);
@@ -82,7 +82,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
   const duplicateItem = (item: SplitItem, keepDate: boolean) => {
     const { id, createdAt, ...input } = toApiItem(item);
     close();
-    if (actions.addItem(input, newId(), keepDate ? createdAt : undefined)) {
+    if (actions.addItem(input, keepDate ? { createdAt } : {})) {
       notifications.show({ message: `Duplicated ${item.name}` });
     }
   };

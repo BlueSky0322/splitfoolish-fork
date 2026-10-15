@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { get } from 'idb-keyval';
+import { get, set } from 'idb-keyval';
 import { beforeEach, describe, expect, test } from 'vitest';
 import {
   LAST_PAGE_KEY,
@@ -30,6 +30,18 @@ describe('the device cache', () => {
     expect(await readCache('split-v2:trip')).toBeUndefined();
     // The service worker sends only Ben's kept changes now
     expect(await get(SW_USER_KEY)).toBe('ben@example.com');
+  });
+
+  test('copies kept by older builds, in shapes no longer read, are dropped', async () => {
+    await setCacheUser('ann@example.com');
+    await set('me', { email: 'ann@example.com', value: {} });
+    await set('split:trip', { email: 'ann@example.com', value: {} });
+    await writeCache('split-v2:trip', { name: 'Trip' });
+
+    await setCacheUser('ann@example.com');
+    expect(await get('me')).toBeUndefined();
+    expect(await get('split:trip')).toBeUndefined();
+    expect(await readCache('split-v2:trip')).toEqual({ name: 'Trip' });
   });
 
   test('the same person signing in again keeps what was kept', async () => {

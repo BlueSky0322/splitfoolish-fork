@@ -16,7 +16,14 @@ import { DesktopSelectionBar } from '../items/ItemSelection';
 import SplitAvatar from '../../common/SplitAvatar';
 import { useSplitPage } from '../SplitPageContext';
 import { otherCurrencyCount } from '../../../split/derive';
-import { AvatarStack, SaveStatus, type SelectionUi, type SplitPageParts } from './SplitPageParts';
+import {
+  AvatarStack,
+  SaveStatus,
+  type SelectionUi,
+  type SplitPageParts,
+  SplitMoreMenu,
+  SplitNotices,
+} from './SplitPageParts';
 import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
 import classes from '../Split.module.css';
 import { canChangePeople } from '@shared/rules';
@@ -80,15 +87,17 @@ const DesktopSplitLayout = ({
               >
                 Share
               </Button>
-              {parts.moreMenu(
-                <ActionIcon
-                  variant="default"
-                  size={36}
-                  aria-label="More"
-                >
-                  <DotsThreeOutline size={16} />
-                </ActionIcon>,
-              )}
+              <SplitMoreMenu
+                target={
+                  <ActionIcon
+                    variant="default"
+                    size={36}
+                    aria-label="More"
+                  >
+                    <DotsThreeOutline size={16} />
+                  </ActionIcon>
+                }
+              />
               <Button
                 leftSection={<Plus size={16} />}
                 onClick={() => openDialog({ kind: 'add' })}
@@ -119,7 +128,7 @@ const DesktopSplitLayout = ({
             </div>
           )}
 
-          {parts.notices}
+          <SplitNotices />
 
           {hasPeople && state.items.length > 0 && (
             <div className={classes.toolbar}>
