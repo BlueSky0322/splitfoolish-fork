@@ -9,7 +9,6 @@ import {
 } from '@phosphor-icons/react';
 import { useState } from 'react';
 import type { Person } from '../../../../shared/types';
-import { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodName } from '../../utils/payments';
 import QrViewer from '../settings/QrViewer';
@@ -18,37 +17,13 @@ import TransferRow from './TransferRow';
 import classes from './Split.module.css';
 import type { PaymentMethod } from '../../../../shared/payments';
 import type { SplitMember } from '../../../../shared/api';
+import { useSplitState } from '../../split/SplitStateContext';
+import { useSplitActions } from '../../split/useSplit';
+import { useSplitPage } from './SplitPageContext';
 
-interface BalancePanelProps {
-  people: Person[];
-  totals: SplitTotals;
-  currency: string;
-  me: Person | null;
-  distributorId: string | null;
-  onDistributorChange: (id: string | null) => void;
-  onShareImage: () => void;
-  onLinkMe: () => void;
-  /** The split's accounts, for showing how to pay someone you owe */
-  members: SplitMember[];
-  /** Settle up sheet on phones: larger rows and no outer card */
-  variant?: 'panel' | 'sheet';
-}
-
-export function BalanceHero({
-  totals,
-  currency,
-  me,
-  onLinkMe,
-  size,
-  prefix,
-}: {
-  totals: SplitTotals;
-  currency: string;
-  me: Person | null;
-  onLinkMe: () => void;
-  size: number;
-  prefix?: string;
-}) {
+/** Where you stand, in large type; until you've picked yourself, the total */
+export function BalanceHero({ size, prefix }: { size: number; prefix?: string }) {
+  const { totals, currency, me, openDialog } = useSplitPage();
   if (me == null) {
     return (
       <div className="flex flex-col gap-1">
@@ -62,7 +37,7 @@ export function BalanceHero({
         <button
           type="button"
           className={classes.linkButton}
-          onClick={onLinkMe}
+          onClick={() => openDialog({ kind: 'people' })}
         >
           Which one is you? Pick yourself to see your balance
         </button>
@@ -93,15 +68,8 @@ export function BalanceHero({
 }
 
 /** Where you stand in one line, for the phone's bar once the big figure scrolls away */
-export function BalanceLine({
-  totals,
-  currency,
-  me,
-}: {
-  totals: SplitTotals;
-  currency: string;
-  me: Person | null;
-}) {
+export function BalanceLine() {
+  const { totals, currency, me } = useSplitPage();
   if (me == null) {
     return (
       <span className={classes.balanceLine}>
@@ -203,19 +171,18 @@ function PayLine({
 const ROUTE_HELP =
   'Pick someone to collect and pay out for the group. Everyone then pays, or is paid by, just that person.';
 
-const BalancePanel = ({
-  people,
-  totals,
-  currency,
-  me,
-  distributorId,
-  onDistributorChange,
-  onShareImage,
-  onLinkMe,
-  members,
-  variant = 'panel',
-}: BalancePanelProps) => {
-  // When you owe someone linked to an account, show how they like to be paid
+/**
+ * The balances and who pays whom. variant 'sheet' is Settle up on phones: larger rows
+ * and no outer card.
+ */
+const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) => {
+  const { totals, currency, me, distributorId, meta, openDialog } = useSplitPage();
+  const { people } = useSplitState().state;
+  const actions = useSplitActions();
+  const onDistributorChange = (id: string | null) => actions.setDistributor(id);
+  const onShareImage = () => openDialog({ kind: 'share' });
+  // The split's accounts: when you owe someone linked to one, show how they like to be paid
+  const members = meta?.members ?? [];
   const memberFor = (person: Person) => members.find((m) => m.email === person.memberEmail);
   const methodsFor = (person: Person) => memberFor(person)?.paymentMethods ?? [];
   const byId = new Map(people.map((p) => [p.id, p]));
@@ -277,13 +244,7 @@ const BalancePanel = ({
     <div className={variant === 'panel' ? classes.panel : classes.sheetPanel}>
       {variant === 'panel' && (
         <>
-          <BalanceHero
-            totals={totals}
-            currency={currency}
-            me={me}
-            onLinkMe={onLinkMe}
-            size={42}
-          />
+          <BalanceHero size={42} />
           {mine && totals.hasItems && (
             <div className={classes.stats}>
               <div>

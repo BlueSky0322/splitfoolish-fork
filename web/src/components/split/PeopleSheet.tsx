@@ -4,25 +4,17 @@ import { useState } from 'react';
 import { useSplitActions } from '../../split/useSplit';
 import type { Person } from '../../../../shared/types';
 import { nameFor } from '../../profile/ProfileContext';
-import { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
 import PersonAvatar from './PersonAvatar';
 import TransferRow from './TransferRow';
 import classes from './PeopleSheet.module.css';
 import { MAX_NAME_LENGTH } from '../../../../shared/types';
-import type { SplitInvite, SplitMember } from '../../../../shared/api';
+import { useSplitPage } from './SplitPageContext';
 import { showRefusal } from '../../utils/notify';
 import { removalBlocker } from '../../split/rules';
 import { useSplitState } from '../../split/SplitStateContext';
 
 interface PeopleSheetProps {
-  totals: SplitTotals;
-  currency: string;
-  myEmail: string | null;
-  members: SplitMember[];
-  invites: SplitInvite[];
-  /** Only the owner adds, renames and removes people */
-  isOwner: boolean;
   /** Opens on this person's page */
   initialPersonId?: string | null;
   onShowItems: (personId: string) => void;
@@ -52,23 +44,17 @@ function BalanceText({
 
 function PersonPage({
   person,
-  totals,
-  currency,
-  myEmail,
   meId,
-  isOwner,
   onBack,
   onShowItems,
 }: {
   person: Person;
-  totals: SplitTotals;
-  currency: string;
-  myEmail: string | null;
   meId: string | null;
-  isOwner: boolean;
   onBack: () => void;
   onShowItems: (personId: string) => void;
 }) {
+  const { totals, currency, myEmail, meta } = useSplitPage();
+  const isOwner = meta?.role === 'owner';
   const actions = useSplitActions();
   const { state } = useSplitState();
   const [name, setName] = useState(person.name);
@@ -261,16 +247,12 @@ function PersonPage({
 
 // Everyone in the bill. People with an account go by their own name and picture;
 // guests (no account) are named by whoever adds them. Tap someone for their page.
-const PeopleSheet = ({
-  totals,
-  currency,
-  myEmail,
-  members,
-  invites,
-  isOwner,
-  initialPersonId,
-  onShowItems,
-}: PeopleSheetProps) => {
+const PeopleSheet = ({ initialPersonId, onShowItems }: PeopleSheetProps) => {
+  const { totals, currency, myEmail, meta } = useSplitPage();
+  const members = meta?.members ?? [];
+  const invites = meta?.invites ?? [];
+  // Only the owner adds, renames and removes people
+  const isOwner = meta?.role === 'owner';
   const actions = useSplitActions();
   const { state } = useSplitState();
   const [openId, setOpenId] = useState<string | null>(initialPersonId ?? null);
@@ -283,11 +265,7 @@ const PeopleSheet = ({
       <PersonPage
         key={open.id}
         person={open}
-        totals={totals}
-        currency={currency}
-        myEmail={myEmail}
         meId={meId}
-        isOwner={isOwner}
         onBack={() => setOpenId(null)}
         onShowItems={onShowItems}
       />

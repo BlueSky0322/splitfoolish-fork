@@ -8,40 +8,18 @@ import ShareImage from './ShareImage';
 import SplitMembers, { ShareTitle } from './SplitMembers';
 import SplitSettings from './SplitSettings';
 import PhotoStrip from '../photos/PhotoStrip';
-import { usePhotos } from '../photos/usePhotos';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import { ReactNode } from 'react';
-import type { Attachment } from '../../../../shared/api';
 import { ItemInput } from '../../api';
 import { updateHomeData } from '../../home-data';
-import { SplitTotals } from '../../split/derive';
+import type { SplitTotals } from '../../split/derive';
 import { SplitItem, toApiItem } from '../../split/state';
-import type { Person } from '../../../../shared/types';
 import { useSplitState } from '../../split/SplitStateContext';
-import { MetaChanges, useSplitActions } from '../../split/useSplit';
-import type { SplitMeta } from '../../split/state';
+import { useSplitActions } from '../../split/useSplit';
 import { newId } from '../../utils/id';
 import { notifications } from '@mantine/notifications';
-import type { Prefill } from './useConvertPrefill';
+import { type Dialog, useSplitPage } from './SplitPageContext';
 import type { useDeleteItems } from './useDeleteItems';
-
-// Everything the split page opens over itself: one dialog at a time, each a sheet on
-// phones
-
-export type Dialog =
-  /** prefill: an amount and currency from Convert */
-  | { kind: 'add'; prefill?: Prefill }
-  | { kind: 'edit'; item: SplitItem }
-  | { kind: 'people'; personId?: string }
-  | { kind: 'settle' }
-  | { kind: 'share' }
-  | { kind: 'members' }
-  | { kind: 'reset' }
-  /** Opened from Split settings, where Cancel goes back to */
-  | { kind: 'end' }
-  | { kind: 'settings' }
-  | { kind: 'photos' }
-  | { kind: 'currencies' };
 
 /** Under Settle up's title: how many transfers settle everyone */
 const settleNote = (totals: SplitTotals) => {
@@ -51,49 +29,32 @@ const settleNote = (totals: SplitTotals) => {
 };
 
 interface SplitDialogsProps {
+  /** The one open, if any */
   dialog: Dialog | null;
-  setDialog: (dialog: Dialog | null) => void;
-  splitId: string;
-  myEmail: string | null;
-  meta: SplitMeta | null;
-  metaChanges: MetaChanges;
-  refreshMeta: () => Promise<void>;
-  totals: SplitTotals;
-  currency: string;
-  me: Person | null;
-  photos: ReturnType<typeof usePhotos>;
-  canRemovePhoto: (photo: Attachment) => boolean;
-  /** Changes are being saved */
-  saving: boolean;
-  pictureVersion: number | null;
   /** The balances and transfers, shown in Settle up */
   panel: ReactNode;
   deleteItems: ReturnType<typeof useDeleteItems>;
   /** Shows only this person's items */
   onShowItems: (personId: string) => void;
-  onLinkMe: () => void;
 }
 
-const SplitDialogs = ({
-  dialog,
-  setDialog,
-  splitId,
-  myEmail,
-  meta,
-  metaChanges,
-  refreshMeta,
-  totals,
-  currency,
-  me,
-  photos,
-  canRemovePhoto,
-  saving,
-  pictureVersion,
-  panel,
-  deleteItems,
-  onShowItems,
-  onLinkMe,
-}: SplitDialogsProps) => {
+// Everything the split page opens over itself
+const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsProps) => {
+  const {
+    splitId,
+    myEmail,
+    meta,
+    metaChanges,
+    refreshMeta,
+    status,
+    totals,
+    currency,
+    me,
+    pictureVersion,
+    photos,
+    canRemovePhoto,
+    openDialog: setDialog,
+  } = useSplitPage();
   const { state } = useSplitState();
   const actions = useSplitActions();
   const close = () => setDialog(null);
@@ -174,12 +135,6 @@ const SplitDialogs = ({
       >
         {dialog?.kind === 'people' && (
           <PeopleSheet
-            totals={totals}
-            currency={currency}
-            myEmail={myEmail}
-            members={meta?.members ?? []}
-            invites={meta?.invites ?? []}
-            isOwner={meta?.role === 'owner'}
             initialPersonId={dialog.personId}
             onShowItems={(personId) => {
               onShowItems(personId);
@@ -193,10 +148,6 @@ const SplitDialogs = ({
         onClose={close}
         title={
           <BalanceHero
-            totals={totals}
-            currency={currency}
-            me={me}
-            onLinkMe={onLinkMe}
             size={36}
             prefix="Settle up"
           />
@@ -304,7 +255,7 @@ const SplitDialogs = ({
           <CurrenciesSheet
             currency={currency}
             items={state.items}
-            saving={saving}
+            saving={status === 'saving'}
             onRefresh={actions.refreshRates}
             onSetRate={actions.setRate}
           />

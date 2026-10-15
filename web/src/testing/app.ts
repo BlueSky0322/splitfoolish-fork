@@ -13,11 +13,13 @@ import { Root } from '../Root';
 import { queryClient } from '../query-client';
 import { clearCache } from '../offline/cache';
 
+/** The screen tests run at: a computer, or a phone */
+let screenSize: 'desktop' | 'phone' = 'desktop';
+
 // What jsdom doesn't have, and the app (or Mantine) uses
 function stubBrowser() {
-  // Wide enough for the desktop layout
   window.matchMedia = (query: string) => ({
-    matches: query.includes('min-width'),
+    matches: query.includes(screenSize === 'desktop' ? 'min-width' : 'max-width'),
     media: query,
     onchange: null,
     addListener: () => {},
@@ -218,7 +220,13 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
 }
 
 /** Renders the app at `path` (say "/?s=trip"), talking to `server` */
-export function renderApp(server: FakeServer, path = '/') {
+export function renderApp(
+  server: FakeServer,
+  path = '/',
+  { size = 'desktop' }: { size?: typeof screenSize } = {},
+) {
+  screenSize = size;
+  vi.stubGlobal('innerWidth', size === 'desktop' ? 1280 : 390);
   vi.stubGlobal('fetch', vi.fn(serve(server)));
   window.history.replaceState(null, '', path);
   return render(createElement(Root));

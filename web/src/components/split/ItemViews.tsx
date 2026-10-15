@@ -3,7 +3,8 @@ import { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
 import { SplitItem } from '../../split/state';
 import type { Person } from '../../../../shared/types';
-import { SplitTotals } from '../../split/derive';
+import { useSplitState } from '../../split/SplitStateContext';
+import { useSplitPage } from './SplitPageContext';
 import { categoryIcon } from '../../split/categories';
 import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
 import { currencySymbol, formatMoney } from '../../utils/money';
@@ -18,10 +19,6 @@ interface ItemViewProps {
   groups: ItemGroup[];
   /** Hide group headers when there's only the one "all items" group */
   grouped: boolean;
-  totals: SplitTotals;
-  me: Person | null;
-  people: Person[];
-  currency: string;
   mobile: boolean;
   onEdit: (item: SplitItem) => void;
   onDelete: (item: SplitItem) => void;
@@ -125,7 +122,8 @@ const who = (item: SplitItem, people: Person[]) =>
     ? 'everyone'
     : item.participants.map((p) => p.name).join(', ');
 
-function useMyShare(totals: SplitTotals, me: Person | null) {
+function useMyShare() {
+  const { totals, me } = useSplitPage();
   return (item: SplitItem) =>
     me == null ? null : totals.sharesByItem.get(item.id)?.get(me.id) ?? 0;
 }
@@ -169,16 +167,14 @@ export function ItemCards({
   photoCounts,
   groups,
   grouped,
-  totals,
-  me,
-  people,
-  currency,
   mobile,
   onEdit,
   onDelete,
   selection,
 }: ItemViewProps) {
-  const myShare = useMyShare(totals, me);
+  const { currency } = useSplitPage();
+  const { people } = useSplitState().state;
+  const myShare = useMyShare();
   return (
     <div
       className={classes.groups}
@@ -312,10 +308,6 @@ export function ItemTable({
   photoCounts,
   groups,
   grouped,
-  totals,
-  me,
-  people,
-  currency,
   mobile,
   onEdit,
   onDelete,
@@ -325,7 +317,9 @@ export function ItemTable({
   totalCents,
   selection,
 }: ItemTableProps) {
-  const myShare = useMyShare(totals, me);
+  const { totals, me, currency } = useSplitPage();
+  const { people } = useSplitState().state;
+  const myShare = useMyShare();
   const sort = { sortKey, sortDir, onSort };
 
   return (

@@ -43,7 +43,7 @@ export function RowCheck({
   );
 }
 
-interface SelectionBarProps {
+export interface SelectionBarProps {
   count: number;
   total: number;
   onSelectAll: () => void;

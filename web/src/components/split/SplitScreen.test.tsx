@@ -56,6 +56,19 @@ describe('the split page', () => {
     await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(2));
   });
 
+  test('on a phone, leads with where you stand and who owes whom', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    expect(await screen.findByText('Dinner')).toBeTruthy();
+    // Ryan paid 90 and Ann 30 of 120 split evenly: Ann owes Ryan 30
+    expect(screen.getByText("You're owed")).toBeTruthy();
+    expect(screen.getByText('Ann owes you')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Settle up' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText('1 transfer clears every balance')).toBeTruthy();
+  });
+
   test("explains that a split isn't there, or isn't shared with you", async () => {
     renderApp(fakeServer(), '/?s=missing');
     expect(await screen.findByText(/doesn't exist, or you don't have access/)).toBeTruthy();
