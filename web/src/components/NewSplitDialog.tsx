@@ -1,5 +1,4 @@
 import { ReactNode, createContext, useCallback, useContext, useState } from 'react';
-import { SplitDetail, SplitSummary } from '../api';
 import { notifications } from '@mantine/notifications';
 import { newId } from '../hooks/useSplit';
 import { reloadHomeData, updateHomeData } from '../hooks/useHomeData';
@@ -10,6 +9,7 @@ import { useProfile } from '../profile/ProfileContext';
 import { uploadSplitPicture } from '../split-pictures';
 import SplitForm, { SplitFormValues } from './split/SplitForm';
 import ResponsiveDialog from './ui/ResponsiveDialog';
+import type { SplitDetail, SplitSummary } from '../../../shared/api';
 
 // The one "New split" form, opened from the sidebar, My splits and the phone's FAB
 

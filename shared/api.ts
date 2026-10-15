@@ -10,7 +10,7 @@ import type { Item, Person, Role } from './types';
 
 export const THEMES = ['dark', 'light', 'auto'] as const;
 export const ACCENTS = ['blurple', 'blue', 'teal', 'green', 'amber', 'rose'] as const;
-/** Where an account's exchange rates come from first; 'ecb' is Frankfurter */
+/** Where an account's exchange rates come from first (see RATE_PROVIDERS) */
 export const RATE_PREFERENCES = ['wise', 'ecb'] as const;
 export const ITEMS_VIEWS = ['card', 'table'] as const;
 export const ITEMS_GROUPS = ['none', 'day', 'payer', 'category'] as const;
@@ -21,10 +21,13 @@ export type ThemeSetting = (typeof THEMES)[number];
 export type Accent = (typeof ACCENTS)[number];
 export type RatePreference = (typeof RATE_PREFERENCES)[number];
 
+/** The longest display name an account can have */
+export const MAX_DISPLAY_NAME = 32;
+
 /** Private preferences that follow the account between devices */
 export interface Settings {
   theme: ThemeSetting;
-  accent: string;
+  accent: Accent;
   /** The currency the last new split used */
   lastCurrency: string | null;
   /** A fixed currency for new splits; null to use the last one */
@@ -177,6 +180,12 @@ export type JoinResult =
 /** A fetched rate (never a typed one) */
 export type FetchedRateSource = Exclude<RateSource, 'manual'>;
 
+/** The service each rate preference stands for: the ECB's rates come from Frankfurter */
+export const RATE_PROVIDERS: Record<RatePreference, FetchedRateSource> = {
+  wise: 'wise',
+  ecb: 'frankfurter',
+};
+
 /** GET /api/rates: one currency into another */
 export interface RateQuote {
   from: string;
@@ -204,7 +213,47 @@ export interface UsedCurrencyRates {
   currencies: UsedCurrencyRate[];
 }
 
+// ---------- Writes ----------
+
 /** What a change that returns nothing else sends back */
 export interface Ok {
   ok: true;
+}
+
+/** What every refused or failed request sends back */
+export interface ApiErrorBody {
+  error: string;
+  /** For a batch of changes: which one was refused */
+  index?: number;
+}
+
+/** POST /splits: the new split's id */
+export interface Created {
+  id: string;
+}
+
+/** Accepting an invite, or approving a request to join: the split it's for */
+export interface AcceptResult {
+  id: string;
+}
+
+/** PATCH /splits/:id. converting: its items are being converted to a new currency */
+export interface UpdateSplitResult extends Ok {
+  converting: boolean;
+}
+
+/** A new share link */
+export interface InviteTokenResult {
+  inviteToken: string;
+}
+
+/** A new picture's version, for its address */
+export interface AvatarResult {
+  avatarVersion: number;
+}
+export interface SplitPictureResult {
+  pictureVersion: number;
+}
+export interface PaymentQrResult {
+  qrVersion: number;
 }

@@ -1,12 +1,12 @@
 import { Button, UnstyledButton } from '@mantine/core';
 import { CheckCircle, Plus } from '@phosphor-icons/react';
 import { CSSProperties } from 'react';
-import { ThemeSetting } from '../../api';
 import { useProfile } from '../../profile/ProfileContext';
-import { ACCENTS, Accent, isAccent } from '../../theme/accents';
+import { ACCENTS, Accent } from '../../theme/accents';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
+import type { ThemeSetting } from '../../../../shared/api';
 
 const THEMES: { value: ThemeSetting; label: string }[] = [
   { value: 'dark', label: 'Dark' },
@@ -19,7 +19,7 @@ const AppearanceSection = ({ track }: { track: Track }) => {
   const { profile, updateSettings } = useProfile();
   if (profile == null) return null;
   const theme = profile.settings.theme;
-  const accent: Accent = isAccent(profile.settings.accent) ? profile.settings.accent : 'blurple';
+  const { accent } = profile.settings;
 
   return (
     <>

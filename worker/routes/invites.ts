@@ -3,9 +3,9 @@
 // request waits in the owner's Invites to be approved or declined, and you can withdraw it.
 
 import { Hono } from 'hono';
-import type { JoinResult, MyInvite } from '../../shared/api';
+import type { AcceptResult, JoinResult, MyInvite } from '../../shared/api';
 import { AppEnv, ID, INVITE_TTL_MS, clientId, getRole, notifySplit } from '../app';
-import { json, newId } from '../http';
+import { json, newId, fail, ok } from '../http';
 import { newInviteToken } from '../split-content';
 
 const invites = new Hono<AppEnv>();
@@ -142,27 +142,27 @@ invites.post(`/invites/:inviteId${ID}/:action{accept|decline}`, async (c) => {
     .first<{ splitId: string; email: string; needsApproval: number; owner: string }>();
   const isInvitee = invite?.email === email;
   const isApprover = invite?.needsApproval === 1 && invite.owner === email;
-  if (invite == null || (!isInvitee && !isApprover)) return json({ error: GONE }, 404);
+  if (invite == null || (!isInvitee && !isApprover)) return fail(GONE, 404);
 
   if (!accept) {
     await db.prepare('DELETE FROM split_invites WHERE id = ?').bind(inviteId).run();
     // The owner's list of who's waiting changes
     notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
-    return json({ ok: true });
+    return ok();
   }
   if (isApprover) {
     // Approving joins them; they asked, so there's nothing more for them to accept
     await addEditor(db, invite.splitId, invite.email);
     notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
-    return json({ ok: true });
+    return json<AcceptResult>({ id: invite.splitId });
   }
   if (invite.needsApproval === 1) {
-    return json({ error: 'The owner needs to approve this first' }, 403);
+    return fail('The owner needs to approve this first', 403);
   }
   // Joining also clears the invite, so accepting twice lands in the split either way
   await addEditor(db, invite.splitId, email);
   notifySplit(c.env, c.executionCtx, invite.splitId, clientId(c.req.raw));
-  return json({ id: invite.splitId });
+  return json<AcceptResult>({ id: invite.splitId });
 });
 
 // Opening a share link: the owner's gives you an invite to accept, a member's asks the
@@ -183,7 +183,7 @@ invites.post(`/join/:token${ID}`, async (c) => {
     )
     .bind(token)
     .first<{ id: string; owner: string; sharer: string | null }>();
-  if (split == null) return json({ error: 'This invite link is no longer valid' }, 404);
+  if (split == null) return fail('This invite link is no longer valid', 404);
 
   // Already in it (the owner included): nothing to accept
   if ((await getRole(db, split.id, email)) != null) {

@@ -9,9 +9,12 @@ import type {
   SplitDetail,
   SplitInvite,
   SplitSummary,
+  Created,
+  InviteTokenResult,
+  UpdateSplitResult,
 } from '../../shared/api';
 import { AppEnv, Env, ID, Role, SPLIT, member, ownerOnly, readJson, splitRoom } from '../app';
-import { MAX_NAME_LENGTH, json, newId, notFound, readName } from '../http';
+import { MAX_NAME_LENGTH, json, newId, notFound, readName, fail, ok } from '../http';
 import {
   deleteAttachment,
   deleteSplitPicture,
@@ -59,9 +62,7 @@ const startReconvert = (
   ctx.waitUntil(
     getRateSource(env.DB, email)
       .then((prefer) =>
-        reconvertSplit(env.DB, splitId, (from, to) =>
-          getRate(env, from, to, undefined, { prefer }),
-        ),
+        reconvertSplit(env.DB, splitId, (from, to) => getRate(env, from, to, { prefer })),
       )
       .catch((err) => console.error(err)),
   );
@@ -81,9 +82,9 @@ splits.put('/splits/order', async (c) => {
     ids.length > MAX_ORDERED ||
     !ids.every((id) => typeof id === 'string' && SPLIT_ID.test(id))
   ) {
-    return json({ error: 'Send the split ids in order' }, 400);
+    return fail('Send the split ids in order', 400);
   }
-  if (ids.length === 0) return json({ ok: true });
+  if (ids.length === 0) return ok();
   // Splits you're not in are skipped: the update only touches your own rows
   await db.batch(
     [...new Set(ids as string[])].map((id, position) =>
@@ -92,7 +93,7 @@ splits.put('/splits/order', async (c) => {
         .bind(position, id, c.var.email),
     ),
   );
-  return json({ ok: true });
+  return ok();
 });
 
 // Names of items in your splits, most recent first, for suggesting as you type one.
@@ -116,10 +117,10 @@ splits.post('/splits', async (c) => {
   const body = await readJson(c.req.raw);
   if (body instanceof Response) return body;
   const name = readName(body.name);
-  if (name == null) return json({ error: `Name must be 1-${MAX_NAME_LENGTH} characters` }, 400);
+  if (name == null) return fail(`Name must be 1-${MAX_NAME_LENGTH} characters`, 400);
   const currency = body.currency ?? 'MYR';
   if (typeof currency !== 'string' || !CURRENCY.test(currency)) {
-    return json({ error: 'Invalid currency' }, 400);
+    return fail('Invalid currency', 400);
   }
 
   // The app may pick the id, so it can open the new split before this finishes
@@ -149,8 +150,8 @@ splits.post('/splits', async (c) => {
         throw err;
       },
     );
-  if (!created) return json({ error: 'That split already exists' }, 409);
-  return json({ id }, 201);
+  if (!created) return fail('That split already exists', 409);
+  return json<Created>({ id }, 201);
 });
 
 splits.get(SPLIT, async (c) => {
@@ -237,7 +238,7 @@ splits.get(SPLIT, async (c) => {
 splits.get(`${SPLIT}/ws`, member, (c) => {
   const origin = c.req.header('Origin');
   if (origin != null && origin !== new URL(c.req.url).origin) {
-    return json({ error: 'Not allowed from another site' }, 403);
+    return fail('Not allowed from another site', 403);
   }
   return splitRoom(c.env, c.req.param('id')).fetch(c.req.raw);
 });
@@ -251,13 +252,13 @@ splits.patch(SPLIT, member, ownerOnly('Only the owner can change split settings'
   const statements: D1PreparedStatement[] = [];
   if ('name' in body) {
     const name = readName(body.name);
-    if (name == null) return json({ error: `Name must be 1-${MAX_NAME_LENGTH} characters` }, 400);
+    if (name == null) return fail(`Name must be 1-${MAX_NAME_LENGTH} characters`, 400);
     statements.push(db.prepare('UPDATE splits SET name = ? WHERE id = ?').bind(name, id));
   }
   let converting = false;
   if ('currency' in body) {
     if (typeof body.currency !== 'string' || !CURRENCY.test(body.currency)) {
-      return json({ error: 'Invalid currency' }, 400);
+      return fail('Invalid currency', 400);
     }
     // Items are converted afterwards, in the background. Until that's done, plain items
     // are still in the currency the split had before this conversion started.
@@ -284,7 +285,7 @@ splits.patch(SPLIT, member, ownerOnly('Only the owner can change split settings'
     ]);
   }
   if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email);
-  return json({ ok: true, converting });
+  return json<UpdateSplitResult>({ ok: true, converting });
 });
 
 splits.delete(SPLIT, member, ownerOnly('Only the owner can delete this split'), async (c) => {
@@ -302,7 +303,7 @@ splits.delete(SPLIT, member, ownerOnly('Only the owner can delete this split'), 
     db.prepare('DELETE FROM split_members WHERE split_id = ?').bind(id),
     db.prepare('DELETE FROM splits WHERE id = ?').bind(id),
   ]);
-  return json({ ok: true });
+  return ok();
 });
 
 // The bill (people and items); applyChanges decides what each role may change
@@ -317,7 +318,7 @@ splits.post(`${SPLIT}/changes`, member, async (c) => {
     body,
     { email: c.var.email, role: c.var.role },
     async (from, to, recent) =>
-      getRate(c.env, from, to, undefined, {
+      getRate(c.env, from, to, {
         prefer: await (prefer ??= getRateSource(c.env.DB, c.var.email)),
         maxAgeMs: recent ? REFRESH_MAX_AGE_MS : undefined,
       }),
@@ -369,7 +370,7 @@ splits.post(
         .bind(id),
       db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(id),
     ]);
-    return json({ inviteToken });
+    return json<InviteTokenResult>({ inviteToken });
   },
 );
 
@@ -383,7 +384,7 @@ splits.delete(
     )
       .bind(c.req.param('inviteId'), c.req.param('id'))
       .run();
-    return meta.changes > 0 ? json({ ok: true }) : notFound();
+    return meta.changes > 0 ? ok() : notFound();
   },
 );
 
@@ -399,9 +400,9 @@ splits.delete(`${SPLIT}/members/:email`, member, async (c) => {
     .bind(id, target)
     .first<{ role: Role }>();
   if (targetRow == null) return notFound();
-  if (targetRow.role === 'owner') return json({ error: 'The owner cannot be removed' }, 400);
+  if (targetRow.role === 'owner') return fail('The owner cannot be removed', 400);
   if (c.var.role !== 'owner' && target !== email) {
-    return json({ error: 'Only the owner can remove members' }, 403);
+    return fail('Only the owner can remove members', 403);
   }
 
   // Leaving is a choice and the link still works; being removed shuts the door
@@ -413,7 +414,7 @@ splits.delete(`${SPLIT}/members/:email`, member, async (c) => {
   } else {
     await db.batch(removeAccessStatements(db, id, target));
   }
-  return json({ ok: true });
+  return ok();
 });
 
 export default splits;

@@ -2,7 +2,7 @@ import { Autocomplete, Button, Loader, Select, TextInput, UnstyledButton } from 
 import { notifications } from '@mantine/notifications';
 import { Camera, Image, PencilSimple, Plus, QrCode, UploadSimple } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
-import { PaymentMethod, api, paymentQrUrl } from '../../api';
+import { api, paymentQrUrl } from '../../api';
 import {
   BANK_TRANSFER,
   COMMON_BANKS,
@@ -13,6 +13,8 @@ import {
   PAYMENT_TYPES,
   QR_CODE,
   needsDetail,
+  MAX_METHODS,
+  type PaymentMethod,
 } from '../../../../shared/payments';
 import { newId } from '../../hooks/useSplit';
 import { prepareQrCode } from '../../utils/image';
@@ -20,7 +22,6 @@ import { isQr, methodLine, methodName } from '../../utils/payments';
 import classes from './Settings.module.css';
 
 const OTHER = 'Other';
-const MAX_METHODS = 10;
 
 /** What the details field asks for, by type */
 const DETAIL_LABELS: Record<string, { label: string; placeholder: string }> = {

@@ -10,8 +10,8 @@ const MAX_AVATAR_BYTES = 256_000;
 const MAX_QR_BYTES = 512_000;
 const MAX_PHOTOS_PER_SPLIT = 300;
 
-import type { Attachment } from '../shared/api';
-import { json, newId } from './http';
+import type { Attachment, AvatarResult, PaymentQrResult, SplitPictureResult } from '../shared/api';
+import { json, newId, fail, ok } from './http';
 import { ensureProfile } from './profiles';
 
 /** The image type from the file's first bytes, so a mislabelled upload can't pass as an image */
@@ -27,13 +27,13 @@ function detectImageType(bytes: Uint8Array): string | null {
 
 async function readImage(req: Request, maxBytes: number) {
   const declared = Number(req.headers.get('Content-Length') ?? 0);
-  if (declared > maxBytes) return json({ error: 'That photo is too large' }, 413);
+  if (declared > maxBytes) return fail('That photo is too large', 413);
   const bytes = new Uint8Array(await req.arrayBuffer());
-  if (bytes.length > maxBytes) return json({ error: 'That photo is too large' }, 413);
-  if (bytes.length === 0) return json({ error: 'No photo was sent' }, 400);
+  if (bytes.length > maxBytes) return fail('That photo is too large', 413);
+  if (bytes.length === 0) return fail('No photo was sent', 400);
   const contentType = detectImageType(bytes);
   if (contentType == null) {
-    return json({ error: 'Only JPEG, PNG and WebP photos are supported' }, 415);
+    return fail('Only JPEG, PNG and WebP photos are supported', 415);
   }
   return { bytes, contentType };
 }
@@ -74,10 +74,10 @@ export async function uploadAttachment(
     db.prepare('SELECT id FROM items WHERE id = ? AND split_id = ?').bind(itemId ?? '', splitId),
   ]);
   if ((count.results[0]?.n ?? 0) >= MAX_PHOTOS_PER_SPLIT) {
-    return json({ error: `A split can have up to ${MAX_PHOTOS_PER_SPLIT} photos` }, 409);
+    return fail(`A split can have up to ${MAX_PHOTOS_PER_SPLIT} photos`, 409);
   }
   if (itemId != null && item.results.length === 0) {
-    return json({ error: 'That item no longer exists' }, 404);
+    return fail('That item no longer exists', 404);
   }
 
   const image = await readImage(req, MAX_PHOTO_BYTES);
@@ -114,11 +114,11 @@ export async function uploadAttachment(
   } catch (err) {
     // The item was removed between the check above and now
     if (String(err).includes('CONSTRAINT')) {
-      return json({ error: 'That item no longer exists' }, 404);
+      return fail('That item no longer exists', 404);
     }
     throw err;
   }
-  return json(attachment, 201);
+  return json<Attachment>(attachment, 201);
 }
 
 export async function getAttachment(db: D1Database, splitId: string, id: string) {
@@ -129,7 +129,7 @@ export async function getAttachment(db: D1Database, splitId: string, id: string)
     )
     .bind(id, splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return json({ error: 'Not found' }, 404);
+  if (row == null) return fail('Not found', 404);
   return imageResponse(row.data, row.contentType);
 }
 
@@ -144,15 +144,15 @@ export async function deleteAttachment(
     .prepare('SELECT uploaded_by AS uploadedBy FROM attachments WHERE id = ? AND split_id = ?')
     .bind(id, splitId)
     .first<{ uploadedBy: string }>();
-  if (row == null) return json({ ok: true });
+  if (row == null) return ok();
   if (row.uploadedBy !== email && !isOwner) {
-    return json({ error: 'Only the person who added a photo, or the owner, can remove it' }, 403);
+    return fail('Only the person who added a photo, or the owner, can remove it', 403);
   }
   await db.batch([
     db.prepare('DELETE FROM attachment_data WHERE id = ?').bind(id),
     db.prepare('DELETE FROM attachments WHERE id = ?').bind(id),
   ]);
-  return json({ ok: true });
+  return ok();
 }
 
 export async function putAvatar(req: Request, db: D1Database, email: string) {
@@ -169,7 +169,7 @@ export async function putAvatar(req: Request, db: D1Database, email: string) {
       )
       .bind(email, image.contentType, version, image.bytes),
   ]);
-  return json({ avatarVersion: version });
+  return json<AvatarResult>({ avatarVersion: version });
 }
 
 /** Whether two people are in a split together, so each can see the other's pictures */
@@ -191,7 +191,7 @@ async function sharesSplit(db: D1Database, viewer: string, email: string) {
  * refused.
  */
 export async function putPaymentQr(req: Request, db: D1Database, email: string, id: string) {
-  if (!/^[0-9a-f]{16}$/.test(id)) return json({ error: 'Invalid payment method' }, 400);
+  if (!/^[0-9a-f]{16}$/.test(id)) return fail('Invalid payment method', 400);
   const owner = await db
     .prepare(
       `SELECT email FROM payment_methods WHERE id = ?1
@@ -200,7 +200,7 @@ export async function putPaymentQr(req: Request, db: D1Database, email: string, 
     .bind(id)
     .first<{ email: string }>();
   if (owner != null && owner.email !== email) {
-    return json({ error: 'Invalid payment method' }, 400);
+    return fail('Invalid payment method', 400);
   }
   const image = await readImage(req, MAX_QR_BYTES);
   if (image instanceof Response) return image;
@@ -216,7 +216,7 @@ export async function putPaymentQr(req: Request, db: D1Database, email: string, 
       )
       .bind(id, email, image.contentType, version, image.bytes),
   ]);
-  return json({ qrVersion: version });
+  return json<PaymentQrResult>({ qrVersion: version });
 }
 
 /** A payment method's QR code, seen by its owner and the people they share a split with */
@@ -228,24 +228,24 @@ export async function getPaymentQr(db: D1Database, viewer: string, id: string) {
     .bind(id)
     .first<{ email: string; contentType: string; data: ArrayBuffer | number[] }>();
   if (row == null || !(await sharesSplit(db, viewer, row.email))) {
-    return json({ error: 'Not found' }, 404);
+    return fail('Not found', 404);
   }
   return imageResponse(row.data, row.contentType);
 }
 
 export async function deleteAvatar(db: D1Database, email: string) {
   await db.prepare('DELETE FROM avatars WHERE email = ?').bind(email).run();
-  return json({ ok: true });
+  return ok();
 }
 
 /** Profile pictures are visible to their owner and to people they share a split with */
 export async function getAvatar(db: D1Database, viewer: string, email: string) {
-  if (!(await sharesSplit(db, viewer, email))) return json({ error: 'Not found' }, 404);
+  if (!(await sharesSplit(db, viewer, email))) return fail('Not found', 404);
   const row = await db
     .prepare('SELECT content_type AS contentType, data FROM avatars WHERE email = ?')
     .bind(email)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return json({ error: 'Not found' }, 404);
+  if (row == null) return fail('Not found', 404);
   return imageResponse(row.data, row.contentType);
 }
 
@@ -261,12 +261,12 @@ export async function putSplitPicture(req: Request, db: D1Database, splitId: str
     )
     .bind(splitId, image.contentType, version, image.bytes)
     .run();
-  return json({ pictureVersion: version });
+  return json<SplitPictureResult>({ pictureVersion: version });
 }
 
 export async function deleteSplitPicture(db: D1Database, splitId: string) {
   await db.prepare('DELETE FROM split_pictures WHERE split_id = ?').bind(splitId).run();
-  return json({ ok: true });
+  return ok();
 }
 
 export async function getSplitPicture(db: D1Database, splitId: string) {
@@ -274,6 +274,6 @@ export async function getSplitPicture(db: D1Database, splitId: string) {
     .prepare('SELECT content_type AS contentType, data FROM split_pictures WHERE split_id = ?')
     .bind(splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null) return json({ error: 'Not found' }, 404);
+  if (row == null) return fail('Not found', 404);
   return imageResponse(row.data, row.contentType);
 }

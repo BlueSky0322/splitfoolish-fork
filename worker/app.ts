@@ -4,7 +4,7 @@
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
 import { AuthEnv } from './auth';
-import { json, notFound } from './http';
+import { fail, notFound } from './http';
 import { RatesEnv } from './rates';
 import type { RoomMessage, SplitRoom } from './room';
 
@@ -63,16 +63,16 @@ export async function readJson(req: Request): Promise<Record<string, unknown> | 
   // Turned away before reading when it says it's too big; checked again after, as the
   // header can be missing or wrong
   if (Number(req.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) {
-    return json({ error: 'Too large' }, 413);
+    return fail('Too large', 413);
   }
   const text = await req.text();
-  if (text.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
+  if (text.length > MAX_BODY_BYTES) return fail('Too large', 413);
   try {
     const body: unknown = JSON.parse(text);
     if (body == null || typeof body !== 'object') throw new Error();
     return body as Record<string, unknown>;
   } catch {
-    return json({ error: 'Invalid JSON' }, 400);
+    return fail('Invalid JSON', 400);
   }
 }
 
@@ -102,6 +102,6 @@ export const member = createMiddleware<AppEnv>(async (c, next) => {
 /** After `member`: only the split's owner gets past */
 export const ownerOnly = (error: string) =>
   createMiddleware<AppEnv>(async (c, next) => {
-    if (c.var.role !== 'owner') return json({ error }, 403);
+    if (c.var.role !== 'owner') return fail(error, 403);
     await next();
   });

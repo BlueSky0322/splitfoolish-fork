@@ -1,19 +1,31 @@
 // Small helpers every part of the API uses to answer and to read what it was sent
 
-/** Responds with JSON. Pass the response's type (json<SplitDetail>(…)) to check it. */
-export const json = <T>(body: T, status = 200) =>
+import type { ApiErrorBody, Ok } from '../shared/api';
+import { MAX_NAME_LENGTH } from '../shared/types';
+
+/**
+ * Responds with JSON. Every call names the response's type from shared/api.ts
+ * (json<SplitDetail>(…)), which the app reads with the same type: without one, the
+ * body is `never` and nothing compiles.
+ */
+export const json = <T = never>(body: NoInfer<T>, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' },
   });
 
-export const notFound = () => json({ error: 'Not found' }, 404);
+export const ok = () => json<Ok>({ ok: true });
+
+/** Refuses a request, saying why */
+export const fail = (error: string, status: number, extra?: Omit<ApiErrorBody, 'error'>) =>
+  json<ApiErrorBody>({ error, ...extra }, status);
+
+export const notFound = () => fail('Not found', 404);
 
 /** A new id for a row: 16 hex characters */
 export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 
-/** The longest name a split, person or item can have */
-export const MAX_NAME_LENGTH = 80;
+export { MAX_NAME_LENGTH };
 
 /** A name as sent, trimmed; null when it's missing, empty or too long */
 export const readName = (value: unknown) => {

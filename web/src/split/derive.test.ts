@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { SplitItem, Person } from './state';
-import { findMe, summarise } from './derive';
+import { findMe, computeTotals } from './derive';
 
 const ann: Person = { id: 'a', name: 'Ann', memberEmail: 'ann@example.com' };
 const ben: Person = { id: 'b', name: 'Ben', memberEmail: null };
@@ -41,7 +41,7 @@ describe('summarising a split', () => {
         exact: { b: 2.25, c: 3.25 },
       },
     ];
-    const s = summarise([ann, ben, cat], items);
+    const s = computeTotals([ann, ben, cat], items);
     expect(s.totalCents).toBe(4550);
     expect(s.sharesByItem.get('1')?.get('a')).toBe(334);
     expect(s.sharesByItem.get('2')?.get('c')).toBe(2000);
@@ -64,7 +64,7 @@ describe('summarising a split', () => {
         splitMode: 'equal',
       },
     ];
-    const s = summarise([ann, ben, cat], items, 'b');
+    const s = computeTotals([ann, ben, cat], items, 'b');
     expect(s.transfers).toEqual([
       { fromId: 'b', toId: 'a', amountCents: 600 },
       { fromId: 'c', toId: 'b', amountCents: 300 },

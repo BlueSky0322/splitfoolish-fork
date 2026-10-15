@@ -1,11 +1,12 @@
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { MyInvite, SplitSummary, api } from '../api';
+import { api } from '../api';
 import { isNetworkError } from '../offline/outbox';
 import { pendingCreates } from '../pending-creates';
 import { queryClient } from '../query-client';
 import { readCache, writeCache } from '../split-cache';
+import type { MyInvite, SplitSummary } from '../../../shared/api';
 
 // My splits and pending invites, shared by the sidebar, My splits and Invites pages so
 // they load once and always agree. The last-seen copy shows while a fresh one loads.

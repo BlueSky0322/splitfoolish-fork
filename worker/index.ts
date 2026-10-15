@@ -3,7 +3,7 @@
 
 import { Hono } from 'hono';
 import { AppEnv, Env, clientId, notifySplit } from './app';
-import { json, notFound } from './http';
+import { fail, notFound } from './http';
 import { getUserEmail } from './auth';
 import invites from './routes/invites';
 import me from './routes/me';
@@ -33,10 +33,10 @@ const api = new Hono<AppEnv>().basePath('/api');
 
 api.use('*', async (c, next) => {
   if (isCrossSiteWrite(c.req.raw, new URL(c.req.url))) {
-    return json({ error: 'Not allowed from another site' }, 403);
+    return fail('Not allowed from another site', 403);
   }
   const email = await getUserEmail(c.req.raw, c.env);
-  if (email == null) return json({ error: 'Not signed in' }, 401);
+  if (email == null) return fail('Not signed in', 401);
   c.set('email', email);
   await next();
 });
@@ -45,7 +45,7 @@ api.use('*', async (c, next) => {
 api.use('*', async (c, next) => {
   if (c.req.method === 'GET' || c.req.method === 'HEAD') return next();
   const { success } = await c.env.API_LIMITER.limit({ key: c.var.email });
-  if (!success) return json({ error: 'Too many changes, slow down a moment.' }, 429);
+  if (!success) return fail('Too many changes, slow down a moment.', 429);
   await next();
 });
 
@@ -69,7 +69,7 @@ api.notFound(() => notFound());
 // Cloudflare's error page
 api.onError((err) => {
   console.error(err);
-  return json({ error: 'Something went wrong. Try again in a moment.' }, 500);
+  return fail('Something went wrong. Try again in a moment.', 500);
 });
 
 export default {

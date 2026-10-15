@@ -3,9 +3,9 @@
 
 import { Hono } from 'hono';
 import type { RateQuote, UsedCurrencyRate, UsedCurrencyRates } from '../../shared/api';
-import { convertCents } from '../../shared/rates';
+import { convertCents, toCents } from '../../shared/rates';
 import { AppEnv } from '../app';
-import { json } from '../http';
+import { json, fail } from '../http';
 import { CURRENCY, getRateSource } from '../profiles';
 import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate } from '../rates';
 
@@ -17,19 +17,19 @@ rates.get('/rates', async (c) => {
   const from = c.req.query('from')?.toUpperCase() ?? '';
   const to = c.req.query('to')?.toUpperCase() ?? '';
   if (!CURRENCY.test(from) || !CURRENCY.test(to)) {
-    return json({ error: 'Give from and to as currency codes, like USD' }, 400);
+    return fail('Give from and to as currency codes, like USD', 400);
   }
   const rawAmount = c.req.query('amount');
   const amount = rawAmount == null ? null : Number(rawAmount);
   if (amount != null && (!Number.isFinite(amount) || amount < 0 || amount > MAX_AMOUNT)) {
-    return json({ error: 'Amount must be a number of 0 or more' }, 400);
+    return fail('Amount must be a number of 0 or more', 400);
   }
 
   try {
     const prefer = await getRateSource(c.env.DB, c.var.email);
     // Refresh asks for a recent rate rather than one from hours ago
     const maxAgeMs = c.req.query('fresh') != null ? REFRESH_MAX_AGE_MS : undefined;
-    const { rate, source, fetchedAt } = await getRate(c.env, from, to, undefined, {
+    const { rate, source, fetchedAt } = await getRate(c.env, from, to, {
       prefer,
       maxAgeMs,
     });
@@ -39,10 +39,10 @@ rates.get('/rates', async (c) => {
       rate,
       source,
       fetchedAt,
-      ...(amount != null && { convertedCents: convertCents(Math.round(amount * 100), rate) }),
+      ...(amount != null && { convertedCents: convertCents(toCents(amount), rate) }),
     });
   } catch (err) {
-    if (err instanceof RatesUnavailable) return json({ error: err.message }, 503);
+    if (err instanceof RatesUnavailable) return fail(err.message, 503);
     throw err;
   }
 });
@@ -54,7 +54,7 @@ const MAX_USED = 12;
 // splits each is in, and today's rate into `to`, all in one go for Settings
 rates.get('/me/rates', async (c) => {
   const to = c.req.query('to')?.toUpperCase() ?? '';
-  if (!CURRENCY.test(to)) return json({ error: 'Give to as a currency code, like MYR' }, 400);
+  if (!CURRENCY.test(to)) return fail('Give to as a currency code, like MYR', 400);
   const used = await c.env.DB.prepare(
     `SELECT cur AS currency, count(DISTINCT split_id) AS splits FROM (
        SELECT s.currency AS cur, s.id AS split_id
@@ -72,7 +72,7 @@ rates.get('/me/rates', async (c) => {
   const currencies = await Promise.all(
     used.results.map(async ({ currency, splits }) => {
       try {
-        const { rate, source, fetchedAt } = await getRate(c.env, currency, to, undefined, {
+        const { rate, source, fetchedAt } = await getRate(c.env, currency, to, {
           prefer,
         });
         return { currency, splits, rate, source, fetchedAt } satisfies UsedCurrencyRate;

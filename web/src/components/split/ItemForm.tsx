@@ -14,10 +14,10 @@ import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phos
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { convertCents, convertParts, isValidRate } from '../../../../shared/rates';
-import { SplitMode, itemShares } from '../../../../shared/settle';
-import { MAX_NOTES_LENGTH } from '../../../../shared/types';
-import { Attachment, ItemInput, api } from '../../api';
+import { convertCents, convertParts, isValidRate, toCents } from '../../../../shared/rates';
+import { SplitMode, itemShares, MAX_SHARES } from '../../../../shared/settle';
+import { MAX_NOTES_LENGTH, MAX_NAME_LENGTH } from '../../../../shared/types';
+import { ItemInput, api } from '../../api';
 import { SplitItem, Person } from '../../split/state';
 import { CATEGORIES } from '../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../split/itemNames';
@@ -31,6 +31,7 @@ import { DialogHeaderSlot } from '../ui/dialogHeader';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../utils/rates';
+import { DEFAULT_SETTINGS, type Attachment } from '../../../../shared/api';
 
 interface ItemFormProps {
   splitId: string;
@@ -63,8 +64,6 @@ const MODES: { value: SplitMode; label: string }[] = [
   { value: 'exact', label: 'Exact' },
 ];
 
-const MAX_SHARES = 999;
-const toCents = (amount: number) => Math.round(amount * 100);
 const RATE_FRESH_MS = 5 * 60 * 1000;
 
 /** The cost as typed: a number or a sum like "30*3"; null while it doesn't work out */
@@ -176,7 +175,7 @@ const ItemForm = ({
 
   // The rate for the preview. The server converts again when saving, except that an
   // edit leaving the amount alone keeps the rate the item was saved with.
-  const preferredSource = useProfile().profile?.settings.rateSource ?? 'wise';
+  const preferredSource = useProfile().profile?.settings.rateSource ?? DEFAULT_SETTINGS.rateSource;
   const fetchedRate = useQuery({
     // The server picks the source from Settings; a change there is a different rate
     queryKey: ['rate', entryCurrency, currency, preferredSource],
@@ -456,7 +455,7 @@ const ItemForm = ({
           const known = CATEGORIES.some((c) => c.key === past?.category);
           if (past?.category && known && category == null) setCategory(past.category);
         }}
-        maxLength={80}
+        maxLength={MAX_NAME_LENGTH}
         size="md"
         error={tried && problems.name}
         comboboxProps={{ withinPortal: false }}

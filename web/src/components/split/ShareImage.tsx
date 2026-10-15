@@ -2,19 +2,21 @@ import { Button, Loader, useComputedColorScheme } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SplitItem, Person } from '../../split/state';
-import { SplitSummary } from '../../split/derive';
+import { SplitTotals } from '../../split/derive';
 import { useProfile } from '../../profile/ProfileContext';
-import { ACCENTS, Accent, isAccent } from '../../theme/accents';
+import { ACCENTS, Accent } from '../../theme/accents';
 import { formatMoney } from '../../utils/money';
 import TransferRow from './TransferRow';
 import classes from './ShareImage.module.css';
+import { toCents } from '../../../../shared/rates';
+import { DEFAULT_SETTINGS } from '../../../../shared/api';
 
 interface ShareImageProps {
   name: string;
   currency: string;
   people: Person[];
   items: SplitItem[];
-  summary: SplitSummary;
+  summary: SplitTotals;
 }
 
 /** a mixed into b by amount (0-1), as plain hex */
@@ -65,7 +67,7 @@ function dateRange(items: SplitItem[]) {
 const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps) => {
   const scheme = useComputedColorScheme('dark');
   const { profile } = useProfile();
-  const accent = isAccent(profile?.settings.accent) ? profile.settings.accent : 'blurple';
+  const accent = profile?.settings.accent ?? DEFAULT_SETTINGS.accent;
   const palette = shareImagePalette(scheme, accent);
   const cardRef = useRef<HTMLDivElement>(null);
   const [showItems, setShowItems] = useState(true);
@@ -226,10 +228,10 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
                     <span className={classes.itemName}>{i.name}</span>
                     <span className={classes.itemPayer}>{i.payer.name} paid</span>
                     <span className={classes.itemAmount}>
-                      {formatMoney(Math.round(i.cost * 100), currency)}
+                      {formatMoney(toCents(i.cost), currency)}
                       {i.original && (
                         <span className={classes.itemOriginal}>
-                          {formatMoney(Math.round(i.original.amount * 100), i.original.currency)}
+                          {formatMoney(toCents(i.original.amount), i.original.currency)}
                         </span>
                       )}
                     </span>

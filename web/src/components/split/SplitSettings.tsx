@@ -50,7 +50,11 @@ const SplitSettings = ({
       });
       api
         .updateSplit(splitId, { name: values.name, currency: values.currency })
-        .then(() => reloadHomeData())
+        .then(({ converting }) => {
+          // The server knows whether there was anything to convert
+          onSaved({ converting });
+          return reloadHomeData();
+        })
         .catch((err) => {
           onSaved({ name, currency });
           fail(err, 'Could not save the split settings');

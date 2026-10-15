@@ -1,19 +1,20 @@
 import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
 import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { SplitInvite, SplitMember } from '../../api';
 import { removeBlocker, useSplitActions } from '../../hooks/useSplit';
 import { SplitState, Person } from '../../split/state';
 import { nameFor } from '../../profile/ProfileContext';
-import { SplitSummary } from '../../split/derive';
+import { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
 import PersonAvatar from './PersonAvatar';
 import TransferRow from './TransferRow';
 import classes from './PeopleSheet.module.css';
+import { MAX_NAME_LENGTH } from '../../../../shared/types';
+import type { SplitInvite, SplitMember } from '../../../../shared/api';
 
 interface PeopleSheetProps {
   state: SplitState;
-  summary: SplitSummary;
+  summary: SplitTotals;
   currency: string;
   myEmail: string | null;
   members: SplitMember[];
@@ -60,7 +61,7 @@ function PersonPage({
 }: {
   person: Person;
   state: SplitState;
-  summary: SplitSummary;
+  summary: SplitTotals;
   currency: string;
   myEmail: string | null;
   meId: string | null;
@@ -178,7 +179,7 @@ function PersonPage({
         <TextInput
           label="Name"
           value={name}
-          maxLength={80}
+          maxLength={MAX_NAME_LENGTH}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => {
             if (!actions.renamePerson(person.id, name)) setName(person.name);
@@ -332,7 +333,7 @@ const PeopleSheet = ({
             onChange={setNewName}
             onOptionSubmit={add}
             data={suggestions.map((s) => s.label)}
-            maxLength={80}
+            maxLength={MAX_NAME_LENGTH}
             // Inside a dialog, so screen readers can reach the options
             comboboxProps={{ withinPortal: false }}
           />

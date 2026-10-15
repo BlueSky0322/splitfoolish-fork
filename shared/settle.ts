@@ -1,7 +1,15 @@
 // Who owes what. Shared by the Worker (balances on My Splits) and the app (the split
 // view and Settle up). Everything is in whole cents so totals always add up exactly.
 
-export type SplitMode = 'equal' | 'shares' | 'exact';
+/** How an item is shared: evenly, by shares, or by exact amounts */
+export const SPLIT_MODES = ['equal', 'shares', 'exact'] as const;
+export type SplitMode = (typeof SPLIT_MODES)[number];
+
+export const isSplitMode = (value: unknown): value is SplitMode =>
+  (SPLIT_MODES as readonly unknown[]).includes(value);
+
+/** The most shares one person can have in an item */
+export const MAX_SHARES = 999;
 
 export interface SettleParticipant {
   personId: string;

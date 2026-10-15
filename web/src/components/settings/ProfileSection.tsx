@@ -9,8 +9,7 @@ import UserAvatar from '../ui/UserAvatar';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
-
-const MAX_DISPLAY_NAME = 32;
+import { MAX_DISPLAY_NAME } from '../../../../shared/api';
 
 const fail = (err: unknown, fallback: string) =>
   notifications.show({ color: 'red', message: err instanceof Error ? err.message : fallback });

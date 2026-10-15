@@ -2,7 +2,7 @@ import { ActionIcon, UnstyledButton, UnstyledButtonProps } from '@mantine/core';
 import { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
 import { SplitItem, Person } from '../../split/state';
-import { SplitSummary } from '../../split/derive';
+import { SplitTotals } from '../../split/derive';
 import { categoryIcon } from '../../split/categories';
 import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
 import { currencySymbol, formatMoney } from '../../utils/money';
@@ -10,12 +10,13 @@ import { RowSelection, useLongPress } from '../../hooks/useItemSelection';
 import { RowCheck } from './ItemSelection';
 import PersonAvatar from './PersonAvatar';
 import classes from './Split.module.css';
+import { toCents } from '../../../../shared/rates';
 
 interface ItemViewProps {
   groups: ItemGroup[];
   /** Hide group headers when there's only the one "all items" group */
   grouped: boolean;
-  summary: SplitSummary;
+  summary: SplitTotals;
   me: Person | null;
   people: Person[];
   currency: string;
@@ -112,19 +113,17 @@ function OriginalAmount({ item }: { item: SplitItem }) {
   if (item.original == null) return null;
   return (
     <span className={classes.originalAmount}>
-      {formatMoney(Math.round(item.original.amount * 100), item.original.currency)}
+      {formatMoney(toCents(item.original.amount), item.original.currency)}
     </span>
   );
 }
-
-const cents = (amount: number) => Math.round(amount * 100);
 
 const who = (item: SplitItem, people: Person[]) =>
   item.participants.length === people.length && people.length > 1
     ? 'everyone'
     : item.participants.map((p) => p.name).join(', ');
 
-function useMyShare(summary: SplitSummary, me: Person | null) {
+function useMyShare(summary: SplitTotals, me: Person | null) {
   return (item: SplitItem) =>
     me == null ? null : summary.sharesByItem.get(item.id)?.get(me.id) ?? 0;
 }
@@ -243,7 +242,7 @@ export function ItemCards({
                     </span>
                   )}
                   <span className={classes.itemAmount}>
-                    {formatMoney(cents(item.cost), currency)}
+                    {formatMoney(toCents(item.cost), currency)}
                     <OriginalAmount item={item} />
                   </span>
                   {!mobile && !selection?.active && (
@@ -468,7 +467,7 @@ export function ItemTable({
                 </span>
                 <span className={`${classes.num} sf-muted`}>{shareText}</span>
                 <span className={classes.num}>
-                  {formatMoney(cents(item.cost), currency)}
+                  {formatMoney(toCents(item.cost), currency)}
                   <OriginalAmount item={item} />
                 </span>
                 {!selection?.active && (

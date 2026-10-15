@@ -1,11 +1,11 @@
 import { Button, CopyButton } from '@mantine/core';
 import { Check, Copy, QrCode } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { PaymentMethod } from '../../api';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import QrViewer from './QrViewer';
 import classes from './Settings.module.css';
+import type { PaymentMethod } from '../../../../shared/payments';
 
 interface PayHintProps {
   /** Who is being paid */

@@ -4,8 +4,14 @@
 // services a few requests per pair, and a day-old rate still serves if both are down.
 // Refresh in the Currencies sheet asks for one no older than 10 minutes.
 
-import type { RatePreference } from '../shared/api';
-import { RateSource, isValidRate } from '../shared/rates';
+import {
+  DEFAULT_SETTINGS,
+  type FetchedRateSource,
+  RATE_PREFERENCES,
+  RATE_PROVIDERS,
+  type RatePreference,
+} from '../shared/api';
+import { isValidRate } from '../shared/rates';
 
 export interface RatesEnv {
   /** Wise personal API token (a Worker secret); without it Wise is skipped */
@@ -17,7 +23,7 @@ export interface RatesEnv {
 
 export interface Rate {
   rate: number;
-  source: Exclude<RateSource, 'manual'>;
+  source: FetchedRateSource;
   /** When the rate was fetched from the service, in ms */
   fetchedAt: number;
 }
@@ -32,7 +38,7 @@ export const REFRESH_MAX_AGE_MS = 10 * 60 * 1000;
 const KEEP_SECONDS = 24 * 60 * 60;
 const TIMEOUT_MS = 4000;
 
-interface Deps {
+export interface Deps {
   fetch: typeof fetch;
   /** Null where there's no cache, as in unit tests */
   cache: Cache | null;
@@ -52,12 +58,14 @@ export interface RateOptions {
   /** Use a cached rate younger than this rather than fetching */
   maxAgeMs?: number;
   prefer?: RatePreference;
+  /** The network, cache and clock; tests stand in for them */
+  deps?: Deps;
 }
 
 const cacheKey = (from: string, to: string, prefer: RatePreference) =>
   prefer === 'wise'
     ? `https://rates.internal/v1/${from}/${to}`
-    : `https://rates.internal/v1/ecb/${from}/${to}`;
+    : `https://rates.internal/v1/${prefer}/${from}/${to}`;
 
 async function fromWise(env: RatesEnv, from: string, to: string, deps: Deps) {
   if (!env.WISE_TOKEN) return null;
@@ -84,15 +92,23 @@ async function fromFrankfurter(env: RatesEnv, from: string, to: string, deps: De
   return isValidRate(rate) ? rate : null;
 }
 
+const FETCHERS: Record<FetchedRateSource, typeof fromWise> = {
+  wise: fromWise,
+  frankfurter: fromFrankfurter,
+};
+
 /** The rate to convert `from` into `to`: 1 unit of `from` is `rate` units of `to` */
 export async function getRate(
   env: RatesEnv,
   from: string,
   to: string,
-  deps: Deps = defaultDeps(),
-  { maxAgeMs = FRESH_MS, prefer = 'wise' }: RateOptions = {},
+  {
+    maxAgeMs = FRESH_MS,
+    prefer = DEFAULT_SETTINGS.rateSource,
+    deps = defaultDeps(),
+  }: RateOptions = {},
 ): Promise<Rate> {
-  if (from === to) return { rate: 1, source: 'frankfurter', fetchedAt: deps.now() };
+  if (from === to) return { rate: 1, source: RATE_PROVIDERS.ecb, fetchedAt: deps.now() };
 
   const key = cacheKey(from, to, prefer);
   const cached = deps.cache ? await deps.cache.match(key) : undefined;
@@ -100,24 +116,28 @@ export async function getRate(
   if (saved && deps.now() - saved.fetchedAt < maxAgeMs) return saved;
 
   // The ECB doesn't publish every currency, so the other service is always the fallback
-  const wise: [Rate['source'], typeof fromWise] = ['wise', fromWise];
-  const ecb: [Rate['source'], typeof fromWise] = ['frankfurter', fromFrankfurter];
-  const sources = prefer === 'wise' ? [wise, ecb] : [ecb, wise];
-  for (const [source, fetchRate] of sources) {
+  const order = [prefer, ...RATE_PREFERENCES.filter((p) => p !== prefer)];
+  for (const preference of order) {
+    const source = RATE_PROVIDERS[preference];
+    let rate: number | null;
     try {
-      const rate = await fetchRate(env, from, to, deps);
-      if (rate == null) continue;
-      const fresh: Rate = { rate, source, fetchedAt: deps.now() };
-      await deps.cache?.put(
+      rate = await FETCHERS[source](env, from, to, deps);
+    } catch (err) {
+      console.error(err);
+      continue;
+    }
+    if (rate == null) continue;
+    const fresh: Rate = { rate, source, fetchedAt: deps.now() };
+    // Keeping a copy is a bonus: a rate that can't be cached is still the rate
+    await deps.cache
+      ?.put(
         key,
         new Response(JSON.stringify(fresh), {
           headers: { 'Cache-Control': `max-age=${KEEP_SECONDS}` },
         }),
-      );
-      return fresh;
-    } catch (err) {
-      console.error(err);
-    }
+      )
+      .catch((err: unknown) => console.error(err));
+    return fresh;
   }
 
   // Both down: an older rate beats none

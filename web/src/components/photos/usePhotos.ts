@@ -1,8 +1,9 @@
 import { notifications } from '@mantine/notifications';
 import { useCallback, useState } from 'react';
-import { Attachment, api } from '../../api';
+import { api } from '../../api';
 import { SplitMeta } from '../../hooks/useSplit';
 import { shrinkImage } from '../../utils/image';
+import type { Attachment } from '../../../../shared/api';
 
 interface UsePhotosOptions {
   splitId: string;

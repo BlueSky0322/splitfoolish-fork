@@ -25,6 +25,9 @@ export const COMMON_CURRENCIES = [
   'EUR',
 ] as const;
 
+/** An amount in the currency's main unit (12.34), in whole cents (1234) */
+export const toCents = (amount: number) => Math.round(amount * 100);
+
 /** `cents` in one currency, at `rate` units of the other per unit, in the other's cents */
 export const convertCents = (cents: number, rate: number) => Math.round(cents * rate);
 

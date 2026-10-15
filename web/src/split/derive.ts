@@ -7,11 +7,10 @@ import {
   transfers,
 } from '../../../shared/settle';
 import { SplitItem, Person } from './state';
+import { toCents } from '../../../shared/rates';
 
 // Everything the split view shows that is worked out from its people and items. The
 // maths is the same code the server uses for My splits, so both always agree.
-
-const toCents = (amount: number) => Math.round(amount * 100);
 
 export function toSettleItem(item: SplitItem): SettleItem {
   return {
@@ -26,7 +25,7 @@ export function toSettleItem(item: SplitItem): SettleItem {
   };
 }
 
-export interface SplitSummary {
+export interface SplitTotals {
   totalCents: number;
   /** False until something has been added; nothing is "settled" before then */
   hasItems: boolean;
@@ -36,14 +35,12 @@ export interface SplitSummary {
   sharesByItem: Map<string, Map<string, number>>;
 }
 
-export function summarise(
+export function computeTotals(
   people: Person[],
   items: SplitItem[],
   distributorId?: string | null,
-): SplitSummary {
-  // An item whose payer was just removed by someone else is skipped until it reloads
-  const valid = items.filter((i) => i.payer != null);
-  const settleItems = valid.map(toSettleItem);
+): SplitTotals {
+  const settleItems = items.map(toSettleItem);
   const all = balances(
     people.map((p) => p.id),
     settleItems,
@@ -53,7 +50,7 @@ export function summarise(
     hasItems: settleItems.length > 0,
     balances: all,
     transfers: transfers(all, distributorId),
-    sharesByItem: new Map(valid.map((item, ix) => [item.id, itemShares(settleItems[ix])])),
+    sharesByItem: new Map(items.map((item, ix) => [item.id, itemShares(settleItems[ix])])),
   };
 }
 

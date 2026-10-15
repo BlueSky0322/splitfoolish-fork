@@ -1,13 +1,14 @@
 import { ActionIcon, Button, CopyButton, Tooltip, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ArrowClockwise, Check, Copy, LinkSimple, ShareNetwork } from '@phosphor-icons/react';
-import { SplitInvite, api, inviteUrl } from '../api';
+import { api, inviteUrl } from '../api';
 import { reloadHomeData } from '../hooks/useHomeData';
 import { useIsMobile } from '../hooks/useBreakpoints';
 import { SplitMeta } from '../hooks/useSplit';
 import { nameFor } from '../profile/ProfileContext';
 import UserAvatar from './ui/UserAvatar';
 import classes from './SplitMembers.module.css';
+import type { SplitInvite } from '../../../shared/api';
 
 interface SplitMembersProps {
   meta: SplitMeta;

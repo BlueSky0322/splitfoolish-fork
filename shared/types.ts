@@ -14,6 +14,9 @@ export interface Person {
   memberEmail: string | null;
 }
 
+/** The longest name a split, person or item can have */
+export const MAX_NAME_LENGTH = 80;
+
 /** The longest notes an item can have */
 export const MAX_NOTES_LENGTH = 2000;
 

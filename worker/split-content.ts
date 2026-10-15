@@ -3,22 +3,19 @@
 // current contents and applied all-or-nothing, touching only the rows involved, so
 // people editing the same split don't overwrite each other.
 
-import { RateSource, convertCents, convertParts, isValidRate } from '../shared/rates';
-import { SplitMode } from '../shared/settle';
+import { RateSource, convertCents, convertParts, isValidRate, toCents } from '../shared/rates';
+import { MAX_SHARES, SplitMode, isSplitMode } from '../shared/settle';
 import type { Change, Item, ItemOriginal, Person } from '../shared/types';
 import { MAX_NOTES_LENGTH } from '../shared/types';
-import { MAX_NAME_LENGTH, json, readName } from './http';
+import { MAX_NAME_LENGTH, fail, ok, readName } from './http';
 
 export type { Change, Item, Person };
 
 const MAX_CATEGORY_LENGTH = 32;
 const MAX_COST = 1_000_000_000;
-const MAX_SHARES = 999;
 
 const touchSplit = (db: D1Database, splitId: string) =>
   db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), splitId);
-
-const toCents = (amount: number) => Math.round(amount * 100);
 
 /** Reads a split's people and items; run as part of a larger batch, then pass to assembleContent */
 export const contentStatements = (db: D1Database, splitId: string) => [
@@ -531,8 +528,8 @@ function readItem(model: Model, raw: unknown, rates: FetchedRates) {
   }
   const participantIds = [...new Set(raws as string[])];
 
-  const splitMode = (item.splitMode ?? 'equal') as SplitMode;
-  if (!['equal', 'shares', 'exact'].includes(splitMode)) throw new Refused('Invalid split');
+  const splitMode: unknown = item.splitMode ?? 'equal';
+  if (!isSplitMode(splitMode)) throw new Refused('Invalid split');
 
   const participants = participantIds.map((personId) => ({
     personId,
@@ -928,7 +925,7 @@ export async function applyChanges(
 ) {
   const changes = body.changes;
   if (!Array.isArray(changes) || changes.length === 0 || changes.length > MAX_CHANGES) {
-    return json({ error: `Send 1-${MAX_CHANGES} changes` }, 400);
+    return fail(`Send 1-${MAX_CHANGES} changes`, 400);
   }
 
   const model = await loadModel(db, splitId);
@@ -936,7 +933,7 @@ export async function applyChanges(
   // Items can't be added or edited while they're being converted into a new currency;
   // the app keeps the change and sends it again shortly
   if (model.converting && (changes as Change[]).some((c) => CONVERTING_OPS.has(c?.op))) {
-    return json({ error: 'Converting amounts to the new currency. Saving in a moment.' }, 503);
+    return fail('Converting amounts to the new currency. Saving in a moment.', 503);
   }
 
   // Rates for items in other currencies, fetched before anything is checked or saved
@@ -953,7 +950,7 @@ export async function applyChanges(
   } catch (err) {
     // Not the change's fault: the app keeps it and tries again
     console.error(err);
-    return json({ error: "Couldn't get an exchange rate. We'll keep trying." }, 503);
+    return fail("Couldn't get an exchange rate. We'll keep trying.", 503);
   }
 
   const statements: D1PreparedStatement[] = [];
@@ -961,11 +958,11 @@ export async function applyChanges(
     try {
       statements.push(...plan(db, splitId, model, change, actor, rates));
     } catch (err) {
-      if (err instanceof Refused) return json({ error: err.message, index }, 409);
+      if (err instanceof Refused) return fail(err.message, 409, { index });
       throw err;
     }
   }
-  if (statements.length === 0) return json({ ok: true });
+  if (statements.length === 0) return ok();
 
   try {
     await db.batch([...statements, touchSplit(db, splitId)]);
@@ -973,11 +970,11 @@ export async function applyChanges(
     // Someone else's change landed between our read and write (e.g. a person we
     // referenced was just removed); the database's constraints caught it
     if (String(err).includes('CONSTRAINT')) {
-      return json({ error: 'Someone else changed this split at the same time.' }, 409);
+      return fail('Someone else changed this split at the same time.', 409);
     }
     throw err;
   }
-  return json({ ok: true });
+  return ok();
 }
 
 /** Rows to delete, children first, when a whole split is deleted */

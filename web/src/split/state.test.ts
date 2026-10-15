@@ -71,4 +71,12 @@ describe('splitReducer', () => {
     );
     expect(state.items[0].participants).toEqual([ann]);
   });
+
+  test('leaves out an item whose payer is not in the bill, until it reloads', () => {
+    const state = run(
+      { people: [], items: [] },
+      { type: 'LOAD_STATE', payload: { people: [ben], items: [apiItem()] } },
+    );
+    expect(state.items).toEqual([]);
+  });
 });

@@ -20,8 +20,8 @@ import {
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { COMMON_CURRENCIES, convertCents } from '../../../../shared/rates';
-import { SplitSummary, api } from '../../api';
+import { COMMON_CURRENCIES, convertCents, toCents } from '../../../../shared/rates';
+import { api } from '../../api';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { useHomeData } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
@@ -33,6 +33,7 @@ import CurrencySelect from '../ui/CurrencySelect';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from '../ui/SplitAvatar';
 import classes from './Convert.module.css';
+import { DEFAULT_SETTINGS, type SplitSummary } from '../../../../shared/api';
 
 const RECENT_KEY = 'sf-convert-recent';
 const MAX_RECENT = 5;
@@ -203,7 +204,7 @@ const ConvertPage = () => {
   const [splitId, setSplitId] = useState<string | null>(null);
   const amount = readAmount(amountText);
 
-  const rateKey = ['rate', from, to, profile?.settings.rateSource ?? 'wise'];
+  const rateKey = ['rate', from, to, profile?.settings.rateSource ?? DEFAULT_SETTINGS.rateSource];
   const rate = useQuery({
     queryKey: rateKey,
     queryFn: () => api.getRate(from, to),
@@ -247,9 +248,9 @@ const ConvertPage = () => {
     amount == null
       ? null
       : from === to
-        ? Math.round(amount * 100)
+        ? toCents(amount)
         : rate.data
-          ? convertCents(Math.round(amount * 100), rate.data.rate)
+          ? convertCents(toCents(amount), rate.data.rate)
           : null;
 
   const splitOptions = (splits ?? []).map((s) => ({ value: s.id, label: s.name }));
@@ -482,9 +483,7 @@ const ConvertPage = () => {
             disabled={!canAdd}
             onClick={() => setPicking('split')}
           >
-            {canAdd
-              ? `Add ${formatMoney(Math.round(amount * 100), from)} to a split`
-              : 'Add to a split'}
+            {canAdd ? `Add ${formatMoney(toCents(amount), from)} to a split` : 'Add to a split'}
           </Button>
         </div>
 
@@ -499,7 +498,7 @@ const ConvertPage = () => {
         <SplitSheet
           opened={picking === 'split'}
           splits={splits ?? []}
-          label={canAdd ? `Add ${formatMoney(Math.round(amount * 100), from)} to` : 'Add to'}
+          label={canAdd ? `Add ${formatMoney(toCents(amount), from)} to` : 'Add to'}
           onPick={(id) => {
             setPicking(null);
             addTo(id);

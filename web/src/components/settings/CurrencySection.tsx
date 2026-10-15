@@ -10,6 +10,7 @@ import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
+import { DEFAULT_SETTINGS } from '../../../../shared/api';
 
 /** The Select value for "use the currency used last" */
 const LAST_USED = 'last';
@@ -38,7 +39,7 @@ const CurrencySection = ({ track }: { track: Track }) => {
   const currencies = useMemo(listCurrencies, []);
   const settings = profile?.settings;
   const home = settings?.defaultCurrency ?? settings?.lastCurrency ?? 'MYR';
-  const source = settings?.rateSource ?? 'wise';
+  const source = settings?.rateSource ?? DEFAULT_SETTINGS.rateSource;
 
   const rates = useQuery({
     queryKey: ['used-currency-rates', home, source],

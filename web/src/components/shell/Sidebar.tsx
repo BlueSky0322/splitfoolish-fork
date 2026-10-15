@@ -11,7 +11,6 @@ import {
 } from '@phosphor-icons/react';
 import { ReactNode } from 'react';
 import { actionableInvites } from '../../api';
-import { SplitSummary } from '../../api';
 import { useHomeData } from '../../hooks/useHomeData';
 import { Route, navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
@@ -23,6 +22,7 @@ import { justDragged, useSortableSplit } from '../../hooks/useSortableSplit';
 import { SortableSplits } from '../ui/SortableSplits';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
+import type { SplitSummary } from '../../../../shared/api';
 
 interface SidebarProps {
   route: Route;

@@ -41,6 +41,8 @@ export const COMMON_BANKS = [
   'POSB',
 ] as const;
 
+/** How many payment methods an account can have */
+export const MAX_METHODS = 10;
 export const MAX_METHOD_TYPE = 32;
 export const MAX_METHOD_DETAIL = 120;
 export const MAX_BANK = 40;

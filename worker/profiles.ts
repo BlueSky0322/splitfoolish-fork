@@ -6,6 +6,7 @@ import {
   BANK_TRANSFER,
   MAX_ACCOUNT_NAME,
   MAX_BANK,
+  MAX_METHODS,
   MAX_METHOD_DETAIL,
   MAX_METHOD_TYPE,
   type PaymentMethod,
@@ -16,6 +17,7 @@ import {
   ACCENTS,
   DEFAULT_SETTINGS,
   ITEMS_GROUPS,
+  MAX_DISPLAY_NAME,
   ITEMS_SORT_KEYS,
   ITEMS_VIEWS,
   type Profile,
@@ -27,12 +29,9 @@ import {
   THEMES,
 } from '../shared/api';
 import type { Role } from '../shared/types';
-import { json } from './http';
+import { json, fail } from './http';
 
 export const CURRENCY = /^[A-Z]{3}$/;
-
-const MAX_DISPLAY_NAME = 32;
-const MAX_METHODS = 10;
 
 export type { PaymentMethod };
 
@@ -160,10 +159,10 @@ export async function patchProfile(db: D1Database, email: string, body: Record<s
 
   if ('displayName' in body) {
     const raw = body.displayName;
-    if (raw != null && typeof raw !== 'string') return json({ error: 'Invalid name' }, 400);
+    if (raw != null && typeof raw !== 'string') return fail('Invalid name', 400);
     const name = typeof raw === 'string' ? raw.trim() : '';
     if (name.length > MAX_DISPLAY_NAME) {
-      return json({ error: `Display name can be up to ${MAX_DISPLAY_NAME} characters` }, 400);
+      return fail(`Display name can be up to ${MAX_DISPLAY_NAME} characters`, 400);
     }
     statements.push(
       ensureProfile(db, email),
@@ -175,12 +174,12 @@ export async function patchProfile(db: D1Database, email: string, body: Record<s
 
   if ('settings' in body) {
     const changes = readSettings(body.settings);
-    if (typeof changes === 'string') return json({ error: changes }, 400);
+    if (typeof changes === 'string') return fail(changes, 400);
     statements.push(...settingsStatements(db, email, changes));
   }
 
   if (statements.length > 0) await db.batch(statements);
-  return json(await getProfile(db, email));
+  return json<Profile>(await getProfile(db, email));
 }
 
 /** Replaces the whole list of payment methods, and which one is preferred */
@@ -191,7 +190,7 @@ export async function putPaymentMethods(
 ) {
   const methods = body.methods;
   if (!Array.isArray(methods) || methods.length > MAX_METHODS) {
-    return json({ error: `You can save up to ${MAX_METHODS} payment methods` }, 400);
+    return fail(`You can save up to ${MAX_METHODS} payment methods`, 400);
   }
   const clean: PaymentMethod[] = [];
   for (const m of methods as Record<string, unknown>[]) {
@@ -200,7 +199,7 @@ export async function putPaymentMethods(
     const type = text(m?.type);
     const detail = text(m?.detail);
     if (id == null || clean.some((c) => c.id === id)) {
-      return json({ error: 'Invalid payment method' }, 400);
+      return fail('Invalid payment method', 400);
     }
     if (
       !type ||
@@ -208,14 +207,14 @@ export async function putPaymentMethods(
       (!detail && needsDetail(type)) ||
       detail.length > MAX_METHOD_DETAIL
     ) {
-      return json({ error: 'Each payment method needs a type and details' }, 400);
+      return fail('Each payment method needs a type and details', 400);
     }
     // Only bank transfers name a bank and an account holder
     const isBank = type === BANK_TRANSFER;
     const bank = isBank ? text(m?.bank) : '';
     const accountName = isBank ? text(m?.accountName) : '';
     if (bank.length > MAX_BANK || accountName.length > MAX_ACCOUNT_NAME) {
-      return json({ error: 'The bank or account name is too long' }, 400);
+      return fail('The bank or account name is too long', 400);
     }
     clean.push({ id, type, detail, bank: bank || null, accountName: accountName || null });
   }
@@ -231,7 +230,7 @@ export async function putPaymentMethods(
       .bind(email, ...qrIds)
       .first<{ n: number }>();
     if ((found?.n ?? 0) !== qrIds.length) {
-      return json({ error: 'Add the QR code image first' }, 400);
+      return fail('Add the QR code image first', 400);
     }
   }
 
@@ -272,10 +271,10 @@ export async function putPaymentMethods(
     ]);
   } catch (err) {
     // An id already used by someone else's method
-    if (String(err).includes('CONSTRAINT')) return json({ error: 'Invalid payment method' }, 400);
+    if (String(err).includes('CONSTRAINT')) return fail('Invalid payment method', 400);
     throw err;
   }
-  return json(await getProfile(db, email));
+  return json<Profile>(await getProfile(db, email));
 }
 
 /**
@@ -344,5 +343,5 @@ export async function getRateSource(db: D1Database, email: string): Promise<Rate
     .prepare('SELECT rate_source AS rateSource FROM user_settings WHERE email = ?')
     .bind(email)
     .first<{ rateSource: RatePreference }>();
-  return row?.rateSource ?? 'wise';
+  return row?.rateSource ?? DEFAULT_SETTINGS.rateSource;
 }

@@ -8,11 +8,11 @@ import {
   useRef,
   useState,
 } from 'react';
-import { ApiError, Change, ItemInput, SplitDetail, api } from '../api';
+import { ApiError, ItemInput, api } from '../api';
 import { SplitStateContext } from '../split/SplitStateContext';
-import { convertCents, convertParts } from '../../../shared/rates';
-import type { Item as ApiItem } from '../../../shared/types';
-import { SplitItem, SplitState, toApiItem } from '../split/state';
+import { convertCents, convertParts, toCents } from '../../../shared/rates';
+import type { Item as ApiItem, Change } from '../../../shared/types';
+import { SplitItem, SplitState, toApiItem, type StoredItem } from '../split/state';
 import { readCache, removeCache, writeCache } from '../split-cache';
 import { whenCreated } from '../pending-creates';
 import {
@@ -28,6 +28,10 @@ import { queryClient } from '../query-client';
 import { ITEM_NAMES_KEY } from '../split/itemNames';
 import { reloadHomeData } from './useHomeData';
 import { useSplitLive } from './useSplitLive';
+import type { SplitDetail } from '../../../shared/api';
+
+/** A split as this device keeps it: an older copy's items may predate some fields */
+type CachedSplit = Omit<SplitDetail, 'items'> & { items: StoredItem[] };
 
 /**
  * 'refreshing' means a cached copy is showing while the latest loads; 'offline' that
@@ -98,13 +102,13 @@ const refuse = (message: string) => {
 /** An item paid in another currency, converted again at a typed rate, as the server does it */
 function atRate(item: SplitItem, rate: number): SplitItem {
   const original = item.original!;
-  const costCents = convertCents(Math.round(original.amount * 100), rate);
+  const costCents = convertCents(toCents(original.amount), rate);
   const exact =
     item.splitMode === 'exact' && original.exact
       ? Object.fromEntries(
           [
             ...convertParts(
-              Object.entries(original.exact).map(([id, amount]) => [id, Math.round(amount * 100)]),
+              Object.entries(original.exact).map(([id, amount]) => [id, toCents(amount)]),
               rate,
               costCents,
             ),
@@ -177,7 +181,7 @@ export function useSplit(splitId: string) {
   const reloadAfterSave = useRef(false);
 
   const show = useCallback(
-    ({ people, items, ...rest }: SplitDetail) => {
+    ({ people, items, ...rest }: CachedSplit) => {
       setMeta(rest);
       dispatch({ type: 'LOAD_STATE', payload: { people, items } });
     },
@@ -328,7 +332,7 @@ export function useSplit(splitId: string) {
     dispatch({ type: 'LOAD_STATE', payload: { people: [], items: [] } });
 
     // Show the last-seen copy straight away, unless the server has already answered
-    void readCache<SplitDetail>(cacheKey).then((cached) => {
+    void readCache<CachedSplit>(cacheKey).then((cached) => {
       if (cached == null || cancelled || answered) return;
       show(cached);
       setStatus('refreshing');

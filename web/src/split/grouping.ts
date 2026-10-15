@@ -1,6 +1,7 @@
 import type { Settings } from '../../../shared/api';
 import { SplitItem } from './state';
 import { categoryLabel } from './categories';
+import { toCents } from '../../../shared/rates';
 
 export type GroupBy = Settings['itemsGroupBy'];
 export type SortKey = Settings['itemsSortKey'];
@@ -55,8 +56,6 @@ export function sortItems(items: SplitItem[], key: SortKey, dir: SortDir): Split
   );
 }
 
-const cents = (amount: number) => Math.round(amount * 100);
-
 /** Items in groups, each sorted; groups follow the order of their first item */
 export function groupItems(
   items: SplitItem[],
@@ -71,7 +70,7 @@ export function groupItems(
         key: 'all',
         label: 'All items',
         items: sorted,
-        subtotalCents: sorted.reduce((sum, i) => sum + cents(i.cost), 0),
+        subtotalCents: sorted.reduce((sum, i) => sum + toCents(i.cost), 0),
       },
     ];
   }
@@ -90,7 +89,7 @@ export function groupItems(
       groups.set(groupKey, group);
     }
     group.items.push(item);
-    group.subtotalCents += cents(item.cost);
+    group.subtotalCents += toCents(item.cost);
   }
   return [...groups.values()];
 }

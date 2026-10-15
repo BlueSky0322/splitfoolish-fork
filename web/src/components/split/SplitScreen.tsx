@@ -34,7 +34,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Attachment, ItemInput } from '../../api';
+import { ItemInput } from '../../api';
 import { SplitStateContext } from '../../split/SplitStateContext';
 import { toApiItem } from '../../split/state';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
@@ -42,7 +42,7 @@ import { updateHomeData, useHomeDataSnapshot } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../hooks/useSplit';
 import { SplitItem, Person } from '../../split/state';
-import { findMe, summarise } from '../../split/derive';
+import { SplitTotals, computeTotals, findMe } from '../../split/derive';
 import {
   GROUP_LABELS,
   GroupBy,
@@ -73,7 +73,7 @@ import { useItemSelection } from '../../hooks/useItemSelection';
 import PeopleSheet from './PeopleSheet';
 import ShareImage from './ShareImage';
 import SplitSettings from './SplitSettings';
-import { DEFAULT_SETTINGS } from '../../../../shared/api';
+import { DEFAULT_SETTINGS, type Attachment } from '../../../../shared/api';
 import classes from './Split.module.css';
 
 interface ViewPrefs {
@@ -190,7 +190,7 @@ function SaveStatus({
 }
 
 /** "Chen and Dev owe you", for the phone's people summary */
-function oweLine(people: Person[], summary: ReturnType<typeof summarise>, me: Person | null) {
+function oweLine(people: Person[], summary: SplitTotals, me: Person | null) {
   if (!summary.hasItems) return 'No items yet';
   if (me == null) return 'Tap to edit or pick yourself';
   const owe = summary.transfers.filter((t) => t.toId === me.id).map((t) => t.fromId);
@@ -259,7 +259,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     ? meta?.distributorId ?? null
     : null;
   const summary = useMemo(
-    () => summarise(state.people, state.items, distributorId),
+    () => computeTotals(state.people, state.items, distributorId),
     [state.people, state.items, distributorId],
   );
   const me = findMe(state.people, myEmail);

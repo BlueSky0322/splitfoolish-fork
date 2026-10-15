@@ -3,35 +3,27 @@
 // refers to people by id.
 
 import { ImmerReducer } from 'use-immer';
-import type { SplitMode } from '../../../shared/settle';
-import type { Item as ApiItem, ItemOriginal, Person } from '../../../shared/types';
+import type { Item as ApiItem, Person } from '../../../shared/types';
 
 export type { Person };
 
 /** An item with its payer and participants as person objects */
-export interface SplitItem {
-  id: string;
-  name: string;
-  /** In currency units */
-  cost: number;
+export interface SplitItem extends Omit<ApiItem, 'payerId' | 'participantIds'> {
   payer: Person;
   participants: Person[];
-  splitMode: SplitMode;
-  /** Shares per person id, when split by shares */
-  shares?: Record<string, number>;
-  /** Amount per person id in currency units, when split by exact amounts */
-  exact?: Record<string, number>;
-  category: string | null;
-  notes?: string | null;
-  createdAt: number;
-  /** Entered in another currency: what was typed and the rate it was converted at */
-  original?: ItemOriginal | null;
 }
 
 export interface SplitState {
   people: Person[];
   items: SplitItem[];
 }
+
+/**
+ * An item as this device may have it: copies cached before split modes, categories and
+ * dates existed lack them
+ */
+export type StoredItem = Omit<ApiItem, 'splitMode' | 'category' | 'createdAt'> &
+  Partial<Pick<ApiItem, 'splitMode' | 'category' | 'createdAt'>>;
 
 // Every action is a change made on this device. Items arrive as the API shapes them.
 export type SplitAction =
@@ -43,17 +35,24 @@ export type SplitAction =
   | { type: 'UPDATE_ITEM'; payload: ApiItem }
   | { type: 'REMOVE_ITEM'; payload: string }
   | { type: 'CLEAR_ITEMS'; payload: null }
-  | { type: 'LOAD_STATE'; payload: { people?: Person[]; items?: ApiItem[] } };
+  | { type: 'LOAD_STATE'; payload: { people?: Person[]; items?: StoredItem[] } };
 
-export const toClientItem = (item: ApiItem, people: Person[]): SplitItem => {
+/**
+ * The item with its people looked up. Null when its payer isn't in the bill, which only
+ * a copy out of step with the server can have; it comes back with the next load.
+ */
+export const toClientItem = (item: StoredItem, people: Person[]): SplitItem | null => {
   const byId = new Map(people.map((p) => [p.id, p]));
+  const payer = byId.get(item.payerId);
+  if (payer == null) return null;
   return {
     id: item.id,
     name: item.name,
     cost: item.cost,
-    payer: byId.get(item.payerId)!,
-    participants: item.participantIds.map((id) => byId.get(id)!).filter(Boolean),
-    // Copies cached before split modes existed have none
+    payer,
+    participants: item.participantIds
+      .map((id) => byId.get(id))
+      .filter((p): p is Person => p != null),
     splitMode: item.splitMode ?? 'equal',
     shares: item.shares,
     exact: item.exact,
@@ -63,6 +62,9 @@ export const toClientItem = (item: ApiItem, people: Person[]): SplitItem => {
     original: item.original ?? null,
   };
 };
+
+const toClientItems = (items: StoredItem[], people: Person[]) =>
+  items.map((i) => toClientItem(i, people)).filter((i): i is SplitItem => i != null);
 
 export const toApiItem = (item: SplitItem): ApiItem => ({
   id: item.id,
@@ -113,12 +115,14 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
       break;
 
     case 'ADD_ITEM':
-      draft.items.push(toClientItem(action.payload, draft.people));
+      draft.items.push(...toClientItems([action.payload], draft.people));
       break;
 
     case 'UPDATE_ITEM': {
       const updated = toClientItem(action.payload, draft.people);
-      draft.items = draft.items.map((i) => (i.id === updated.id ? updated : i));
+      draft.items = draft.items.flatMap((i) =>
+        i.id !== action.payload.id ? [i] : updated ? [updated] : [],
+      );
       break;
     }
 
@@ -133,7 +137,7 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
     case 'LOAD_STATE': {
       const people = action.payload.people ?? [];
       draft.people = people;
-      draft.items = (action.payload.items ?? []).map((i) => toClientItem(i, people));
+      draft.items = toClientItems(action.payload.items ?? [], people);
       break;
     }
 

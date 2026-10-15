@@ -2,13 +2,19 @@ import { useMantineColorScheme } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { Profile, ProfilePatch, Settings, ThemeSetting, api } from '../api';
+import { Profile, api } from '../api';
 import { queryClient } from '../query-client';
 import { isOffline } from '../offline/outbox';
 import { sendKept } from '../pending-creates';
 import { reloadHomeData } from '../hooks/useHomeData';
 import { assumeLastUser, readCache, setCacheUser, writeCache } from '../split-cache';
 import { Accent, isAccent } from '../theme/accents';
+import {
+  DEFAULT_SETTINGS,
+  type ProfilePatch,
+  type Settings,
+  type ThemeSetting,
+} from '../../../shared/api';
 
 // The signed-in user's profile. Theme and accent are also kept in localStorage so
 // the app paints in the right colours before /api/me answers.
@@ -30,11 +36,11 @@ export function readAppearance(): Appearance {
       accent?: unknown;
     };
     return {
-      theme: isTheme(saved.theme) ? saved.theme : 'auto',
-      accent: isAccent(saved.accent) ? saved.accent : 'blurple',
+      theme: isTheme(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme,
+      accent: isAccent(saved.accent) ? saved.accent : DEFAULT_SETTINGS.accent,
     };
   } catch {
-    return { theme: 'auto', accent: 'blurple' };
+    return { theme: DEFAULT_SETTINGS.theme, accent: DEFAULT_SETTINGS.accent };
   }
 }
 
@@ -134,8 +140,7 @@ export function ProfileProvider({
   const applied = useRef<{ theme: ThemeSetting; accent: Accent } | null>(null);
   const apply = useCallback(
     (next: Profile) => {
-      const { theme } = next.settings;
-      const accent = isAccent(next.settings.accent) ? next.settings.accent : 'blurple';
+      const { theme, accent } = next.settings;
       if (applied.current?.theme === theme && applied.current?.accent === accent) return;
       if (applied.current?.theme !== theme) setColorScheme(theme);
       if (applied.current?.accent !== accent) onAccentChange(accent);

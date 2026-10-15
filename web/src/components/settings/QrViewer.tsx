@@ -10,8 +10,8 @@ import {
   Wallet,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { PaymentMethod, paymentQrUrl } from '../../api';
-import { BANK_TRANSFER } from '../../../../shared/payments';
+import { paymentQrUrl } from '../../api';
+import { BANK_TRANSFER, type PaymentMethod } from '../../../../shared/payments';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import ResponsiveDialog from '../ui/ResponsiveDialog';

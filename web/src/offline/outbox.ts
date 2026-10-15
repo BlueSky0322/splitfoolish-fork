@@ -1,6 +1,7 @@
 import { del, keys } from 'idb-keyval';
-import type { Change, SplitSummary } from '../api';
 import { readCache, writeCache } from '../split-cache';
+import type { Change } from '../../../shared/types';
+import type { SplitSummary } from '../../../shared/api';
 
 // Changes not yet saved, kept on the device (IndexedDB) so they survive the app being
 // closed, killed or offline. The app sends them when it can; if it's closed, the

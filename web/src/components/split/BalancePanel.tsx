@@ -8,19 +8,20 @@ import {
   ShareNetwork,
 } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { PaymentMethod, SplitMember } from '../../api';
 import { Person } from '../../split/state';
-import { SplitSummary } from '../../split/derive';
+import { SplitTotals } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodName } from '../../utils/payments';
 import QrViewer from '../settings/QrViewer';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
 import classes from './Split.module.css';
+import type { PaymentMethod } from '../../../../shared/payments';
+import type { SplitMember } from '../../../../shared/api';
 
 interface BalancePanelProps {
   people: Person[];
-  summary: SplitSummary;
+  summary: SplitTotals;
   currency: string;
   me: Person | null;
   distributorId: string | null;
@@ -41,7 +42,7 @@ export function BalanceHero({
   size,
   prefix,
 }: {
-  summary: SplitSummary;
+  summary: SplitTotals;
   currency: string;
   me: Person | null;
   onLinkMe: () => void;
@@ -97,7 +98,7 @@ export function BalanceLine({
   currency,
   me,
 }: {
-  summary: SplitSummary;
+  summary: SplitTotals;
   currency: string;
   me: Person | null;
 }) {

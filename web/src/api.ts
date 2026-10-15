@@ -1,32 +1,26 @@
 import type {
+  AcceptResult,
+  ApiErrorBody,
   Attachment,
-  JoinResult,
+  AvatarResult,
+  Created,
+  InviteTokenResult,
   ItemNameUse,
+  JoinResult,
   MyInvite,
   Ok,
+  PaymentQrResult,
   Profile as ApiProfile,
   ProfilePatch,
   RateQuote,
   SplitDetail,
+  SplitPictureResult,
   SplitSummary,
+  UpdateSplitResult,
   UsedCurrencyRates,
 } from '../../shared/api';
 import type { PaymentMethod } from '../../shared/payments';
 import type { Change, Item as ApiItem } from '../../shared/types';
-
-export type {
-  Attachment,
-  MyInvite,
-  ProfilePatch,
-  Settings,
-  SplitDetail,
-  SplitInvite,
-  SplitMember,
-  SplitSummary,
-  ThemeSetting,
-} from '../../shared/api';
-export type { PaymentMethod } from '../../shared/payments';
-export type { Change, Role } from '../../shared/types';
 
 /** The signed-in account, as this device holds it */
 export interface Profile extends ApiProfile {
@@ -74,7 +68,7 @@ async function request<T>(
   });
   const data = (await res.json().catch(() => ({}))) as unknown;
   if (!res.ok) {
-    const { error } = data as { error?: string };
+    const { error } = data as Partial<ApiErrorBody>;
     throw new ApiError(res.status, error ?? `${method} ${path} failed`);
   }
   return data as T;
@@ -90,12 +84,12 @@ export const api = {
     request<Profile>('PUT', '/api/me/payment-methods', { methods, preferredId }),
   /** Uploads a QR code method's image; done before saving the method itself */
   setPaymentQr: (methodId: string, image: Blob) =>
-    request<{ qrVersion: number }>('PUT', `/api/me/payment-qr/${methodId}`, undefined, {
+    request<PaymentQrResult>('PUT', `/api/me/payment-qr/${methodId}`, undefined, {
       body: image,
       headers: { 'Content-Type': image.type || 'image/jpeg' },
     }),
   setAvatar: (photo: Blob) =>
-    request<{ avatarVersion: number }>('PUT', '/api/me/avatar', undefined, {
+    request<AvatarResult>('PUT', '/api/me/avatar', undefined, {
       body: photo,
       headers: { 'Content-Type': photo.type || 'image/jpeg' },
     }),
@@ -107,13 +101,13 @@ export const api = {
   reorderSplits: (ids: string[]) => request<Ok>('PUT', '/api/splits/order', { ids }),
   /** id is made by the app, so the new split can open before this finishes */
   createSplit: (id: string, name: string, currency: string) =>
-    request<{ id: string }>('POST', '/api/splits', { id, name, currency }),
+    request<Created>('POST', '/api/splits', { id, name, currency }),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
   /** Sends queued changes; keepalive lets a save finish while the page is closing */
   applyChanges: (id: string, changes: Change[]) =>
     request<Ok>('POST', `${splitPath(id)}/changes`, { changes }, { keepalive: true }),
   updateSplit: (id: string, patch: { name?: string; currency?: string }) =>
-    request<Ok>('PATCH', splitPath(id), patch),
+    request<UpdateSplitResult>('PATCH', splitPath(id), patch),
   /** Uploads a photo of an item's receipt, or of the whole split when itemId is null */
   uploadPhoto: (id: string, photo: Blob, itemId: string | null) =>
     request<Attachment>(
@@ -125,20 +119,20 @@ export const api = {
   deletePhoto: (id: string, attachmentId: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/attachments/${encodeURIComponent(attachmentId)}`),
   setSplitPicture: (id: string, picture: Blob) =>
-    request<{ pictureVersion: number }>('PUT', `${splitPath(id)}/picture`, undefined, {
+    request<SplitPictureResult>('PUT', `${splitPath(id)}/picture`, undefined, {
       body: picture,
       headers: { 'Content-Type': picture.type || 'image/jpeg' },
     }),
   removeSplitPicture: (id: string) => request<Ok>('DELETE', `${splitPath(id)}/picture`),
   deleteSplit: (id: string) => request<Ok>('DELETE', splitPath(id)),
-  resetInvite: (id: string) => request<{ inviteToken: string }>('POST', `${splitPath(id)}/invite`),
+  resetInvite: (id: string) => request<InviteTokenResult>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/members/${encodeURIComponent(email)}`),
   revokeInvite: (id: string, inviteId: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/invites/${encodeURIComponent(inviteId)}`),
   myInvites: () => request<{ invites: MyInvite[] }>('GET', '/api/invites'),
   acceptInvite: (inviteId: string) =>
-    request<{ id: string }>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
+    request<AcceptResult>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
   declineInvite: (inviteId: string) =>
     request<Ok>('POST', `/api/invites/${encodeURIComponent(inviteId)}/decline`),
   /** The rate to convert `from` into `to`, for previews; the server converts again on save */
