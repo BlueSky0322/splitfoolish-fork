@@ -1,8 +1,10 @@
 import { api } from '../api';
-import { isOfflineFailure, readPendingCreates } from '../offline/outbox';
+import { isOfflineFailure } from '../offline/outbox';
+import { readPendingCreates, startCreate } from '../offline/pending-creates';
 import { queryClient } from '../query-client';
-import { readCache, writeCache } from '../offline/cache';
-import type { MyInvite, SplitSummary } from '../../../shared/api';
+import { readCache, removeCacheEntry, splitCacheKey, writeCache } from '../offline/cache';
+import type { MyInvite, Profile, SplitDetail, SplitSummary } from '../../../shared/api';
+import { newId } from '../utils/id';
 import { showError } from '../utils/notify';
 
 // My splits and pending invites, shared by the sidebar, My splits and Invites pages so
@@ -137,4 +139,64 @@ export function reloadMySplits(): Promise<void> {
       await queryClient.prefetchQuery({ queryKey: MY_SPLITS_KEY, queryFn: fetchMySplits });
     }
   });
+}
+
+/**
+ * Makes a split that opens straight away: it's listed and kept on this device at once,
+ * and created on the server in the background (once online, if need be). If the server
+ * refuses it, it's taken back out, the failure explained, and `onFailed` told.
+ * `shown` resolves once the split can be opened.
+ */
+export function createSplit(
+  me: Profile,
+  { name, currency }: { name: string; currency: string },
+  onFailed: (id: string) => void,
+) {
+  const id = newId();
+  const detail: SplitDetail = {
+    id,
+    name,
+    currency,
+    distributorId: null,
+    pictureVersion: null,
+    converting: false,
+    role: 'owner',
+    members: [
+      {
+        email: me.email,
+        role: 'owner',
+        displayName: me.displayName,
+        avatarVersion: me.avatarVersion,
+        paymentMethods: me.paymentMethods,
+      },
+    ],
+    invites: [],
+    attachments: [],
+    people: [],
+    items: [],
+  };
+  const summary: SplitSummary = {
+    id,
+    name,
+    currency,
+    role: 'owner',
+    memberCount: 1,
+    peopleCount: 0,
+    totalCents: 0,
+    myBalanceCents: null,
+    pictureVersion: null,
+    updatedAt: Date.now(),
+  };
+
+  addListedSplit(summary);
+  startCreate({ id, name, currency, summary })
+    .then(() => reloadMySplits())
+    .catch((err: unknown) => {
+      showError(err, 'Could not create the split');
+      removeListedSplit(id);
+      void removeCacheEntry(splitCacheKey(id));
+      onFailed(id);
+    });
+  // Shown from this copy until the server answers
+  return { id, shown: writeCache(splitCacheKey(id), detail) };
 }

@@ -11,8 +11,7 @@ import { DEFAULT_SETTINGS } from '../../../shared/api';
 import type { Change, Item } from '../../../shared/types';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
-import { clearCache } from '../offline/cache';
-import { forgetOfflineCreates } from '../offline/pending-creates';
+import { forgetOfflineWork } from '../offline/sync';
 
 // The whole app renders in each test, which takes a while when every test file runs at
 // once: wait longer than the default second for things to appear
@@ -308,8 +307,7 @@ export function setupAppTests() {
     cleanup();
     queryClient.clear();
     // The device's cache, and whose it is, start empty for the next test
-    forgetOfflineCreates();
-    await clearCache();
+    await forgetOfflineWork();
     vi.unstubAllGlobals();
   });
 }

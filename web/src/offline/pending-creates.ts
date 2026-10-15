@@ -1,23 +1,37 @@
 import { ApiError, api } from '../api';
-import type { PendingCreate } from './outbox';
-import {
-  isOffline,
-  isRetryable,
-  readOutbox,
-  readOutboxIds,
-  sendQueued,
-  readPendingCreates,
-  removePendingCreate,
-  requestBackgroundSync,
-  savePendingCreate,
-  withOutbox,
-  writeOutbox,
-} from './outbox';
+import type { SplitSummary } from '../../../shared/api';
+import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
+import { isOffline, isRetryable, requestBackgroundSync, withOutbox } from './outbox';
 
 // Splits that are open on screen but still being created on the server. Each is kept
 // on the device until the server has it, so one made offline is created once the
-// connection is back. Loading or saving one waits for its creation first. Also sends
-// changes kept for splits that aren't open, as the service worker does when it can.
+// connection is back. Loading or saving one waits for its creation first. Creating
+// takes the split's outbox lock, as the service worker does, so it's sent once.
+
+/** A split created on this device that the server hasn't got yet */
+export interface PendingCreate {
+  id: string;
+  name: string;
+  currency: string;
+  /** Shown in My splits until the server lists it */
+  summary: SplitSummary;
+}
+
+// Also used by public/sw.js, which can't import it (outbox.test.ts checks they match)
+export const CREATE_PREFIX = 'create:';
+const createKey = (splitId: string) => `${CREATE_PREFIX}${splitId}`;
+
+export const savePendingCreate = (create: PendingCreate) =>
+  writeCache(createKey(create.id), create);
+
+export const removePendingCreate = (id: string) => removeCacheEntry(createKey(id));
+
+/** Splits created on this device that the server hasn't confirmed yet */
+export async function readPendingCreates(): Promise<PendingCreate[]> {
+  const ids = await listCacheIds(CREATE_PREFIX);
+  const found = await Promise.all(ids.map((id) => readCache<PendingCreate>(createKey(id))));
+  return found.filter((c): c is PendingCreate => c != null);
+}
 
 const creating = new Map<string, Promise<void>>();
 /** Creates that failed for good on this page; changes to these splits aren't sent */
@@ -107,45 +121,6 @@ export async function resumeCreates() {
     // A failure is kept with the split (whenCreated rejects for it) and explained there
     void ensureCreating(create).catch(() => undefined);
   }
-}
-
-let sending: Promise<number> | null = null;
-
-/**
- * Creates splits and sends changes made on this device while offline (or before it
- * was closed), for every split. Resolves with how many splits had changes sent.
- */
-export function flushOfflineChanges(): Promise<number> {
-  if (isOffline()) return Promise.resolve(0);
-  sending ??= (async () => {
-    await resumeCreates();
-    let sent = 0;
-    for (const id of await readOutboxIds()) {
-      try {
-        await whenCreated(id);
-      } catch {
-        continue;
-      }
-      // Under the lock, so an open split (or the service worker) never sends them too
-      const stop = await withOutbox(id, async () => {
-        const queued = await readOutbox(id);
-        if (queued.length === 0) return false;
-        try {
-          await sendQueued(id, queued);
-          sent++;
-        } catch (err) {
-          if (isRetryable(err)) return true;
-          // Refused, or the split is gone: it shows as the server has it
-          console.error(err);
-        }
-        await writeOutbox(id, []);
-        return false;
-      });
-      if (stop) break;
-    }
-    return sent;
-  })().finally(() => (sending = null));
-  return sending;
 }
 
 /**

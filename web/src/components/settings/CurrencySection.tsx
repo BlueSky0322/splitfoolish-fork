@@ -1,11 +1,9 @@
 import { Button, Select, UnstyledButton } from '@mantine/core';
 import { ArrowsLeftRight } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
 import { api } from '../../api';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
-import { showError } from '../../utils/notify';
 import { FALLBACK_CURRENCY, homeCurrency, listCurrencies } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import SettingsCard from './SettingsCard';
@@ -35,13 +33,10 @@ const RATE_SOURCES = [
 // Currency: what new splits use, where rates come from, and today's rates for the
 // currencies in your splits
 const CurrencySection = ({ track }: { track: Track }) => {
-  const { profile, updateSettings } = useProfile();
-  // Saving shows beside the title; a failure is undone and explained
-  const save = (settings: Partial<Settings>) =>
-    void track(updateSettings(settings)).catch((err: unknown) =>
-      showError(err, 'Could not save your settings'),
-    );
-  const currencies = useMemo(listCurrencies, []);
+  const { profile, rememberSettings } = useProfile();
+  // Saving shows beside the title
+  const save = (settings: Partial<Settings>) => rememberSettings(settings, track);
+  const currencies = listCurrencies();
   const settings = profile?.settings;
   const home = homeCurrency(settings);
   const source = settings?.ratePreference ?? DEFAULT_SETTINGS.ratePreference;
@@ -56,7 +51,6 @@ const CurrencySection = ({ track }: { track: Track }) => {
   if (profile == null || settings == null) return null;
   const lastUsed = settings.lastCurrency ?? FALLBACK_CURRENCY;
   const nameOf = (code: string) => currencies.find((c) => c.value === code)?.name ?? code;
-  const chosen = homeCurrency(settings);
   const rows = rates.data?.currencies ?? [];
   const latest = Math.max(0, ...rows.map((r) => r.fetchedAt ?? 0));
   const sourceUsed = rows.find((r) => r.source)?.source;
@@ -79,7 +73,7 @@ const CurrencySection = ({ track }: { track: Track }) => {
           onChange={(v) => v && save({ defaultCurrency: v === LAST_USED ? null : v })}
           searchable
           allowDeselect={false}
-          leftSection={<span className={classes.codeTag}>{chosen}</span>}
+          leftSection={<span className={classes.codeTag}>{home}</span>}
           leftSectionWidth={64}
           className={classes.wideField}
         />

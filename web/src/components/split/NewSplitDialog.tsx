@@ -1,17 +1,12 @@
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useState } from 'react';
-import { startCreate } from '../../offline/pending-creates';
-import { removeCacheEntry, splitCacheKey, writeCache } from '../../offline/cache';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import { uploadSplitPicture } from '../../split/pictures';
 import type { SplitFormValues } from './SplitForm';
 import SplitForm from './SplitForm';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
-import type { SplitDetail, SplitSummary } from '../../../../shared/api';
-import { addListedSplit, reloadMySplits, removeListedSplit } from '../../my-splits/my-splits';
-import { showError } from '../../utils/notify';
-import { newId } from '../../utils/id';
+import { createSplit } from '../../my-splits/my-splits';
 import { homeCurrency } from '../../utils/money';
 
 // The one "New split" form, opened from the sidebar, My splits and the phone's FAB
@@ -26,60 +21,13 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
   // The split opens straight away; it's created on the server in the background
   const submit = ({ name, currency, picture }: SplitFormValues) => {
     if (profile == null) return;
-    const id = newId();
-    const trimmed = name;
-    const now = Date.now();
-    const detail: SplitDetail = {
-      id,
-      name: trimmed,
-      currency,
-      distributorId: null,
-      pictureVersion: null,
-      converting: false,
-      role: 'owner',
-      members: [
-        {
-          email: profile.email,
-          role: 'owner',
-          displayName: profile.displayName,
-          avatarVersion: profile.avatarVersion,
-          paymentMethods: profile.paymentMethods,
-        },
-      ],
-      invites: [],
-      attachments: [],
-      people: [],
-      items: [],
-    };
-    const summary: SplitSummary = {
-      id,
-      name: trimmed,
-      currency,
-      role: 'owner',
-      memberCount: 1,
-      peopleCount: 0,
-      totalCents: 0,
-      myBalanceCents: null,
-      pictureVersion: null,
-      updatedAt: now,
-    };
-
     replace({ ...profile, settings: { ...profile.settings, lastCurrency: currency } });
-    addListedSplit(summary);
-    startCreate({ id, name: trimmed, currency, summary })
-      .then(() => reloadMySplits())
-      .catch((err) => {
-        showError(err, 'Could not create the split');
-        removeListedSplit(id);
-        void removeCacheEntry(splitCacheKey(id));
-        if (new URLSearchParams(window.location.search).get('s') === id) navigate('');
-      });
+    const { id, shown } = createSplit(profile, { name, currency }, (gone) => {
+      if (new URLSearchParams(window.location.search).get('s') === gone) navigate('');
+    });
     // The picture shows from this device while it uploads after the split is created
-    if (picture instanceof File) {
-      void uploadSplitPicture(id, picture);
-    }
-    // Shown from this copy until the server answers
-    void writeCache(splitCacheKey(id), detail).finally(() => {
+    if (picture instanceof File) void uploadSplitPicture(id, picture);
+    void shown.finally(() => {
       onDone();
       navigate(`?s=${id}`);
     });

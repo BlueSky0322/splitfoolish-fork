@@ -2,7 +2,6 @@ import { Button, UnstyledButton } from '@mantine/core';
 import { CheckCircle, Plus } from '@phosphor-icons/react';
 import type { CSSProperties } from 'react';
 import { useProfile } from '../../profile/ProfileContext';
-import { showError } from '../../utils/notify';
 import { ACCENTS } from '../../theme/accents';
 import type { Accent } from '../../../../shared/api';
 import SettingsCard from './SettingsCard';
@@ -18,12 +17,9 @@ const THEMES: { value: ThemeSetting; label: string }[] = [
 
 // Appearance: theme as small previews, and the accent colour with a sample of it
 const AppearanceSection = ({ track }: { track: Track }) => {
-  const { profile, updateSettings } = useProfile();
-  // Saving shows beside the title; a failure is undone and explained
-  const save = (settings: Partial<Settings>) =>
-    void track(updateSettings(settings)).catch((err: unknown) =>
-      showError(err, 'Could not save your settings'),
-    );
+  const { profile, rememberSettings } = useProfile();
+  // Saving shows beside the title
+  const save = (settings: Partial<Settings>) => rememberSettings(settings, track);
   if (profile == null) return null;
   const theme = profile.settings.theme;
   const { accent } = profile.settings;

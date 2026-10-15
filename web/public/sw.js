@@ -18,7 +18,7 @@ const KEEP = [SHELL, ASSETS, IMAGE_CACHE, FONTS];
 // Shared with the app, which can't be imported here: keep each the same as its twin
 /** SYNC_TAG in web/src/offline/outbox.ts */
 const SYNC_TAG = 'sf-outbox';
-/** OUTBOX_PREFIX, CREATE_PREFIX and LOCK_PREFIX in web/src/offline/outbox.ts */
+/** OUTBOX_PREFIX and LOCK_PREFIX in web/src/offline/outbox.ts; CREATE_PREFIX in pending-creates.ts */
 const OUTBOX_PREFIX = 'outbox:';
 const CREATE_PREFIX = 'create:';
 const LOCK_PREFIX = 'sf-outbox:';

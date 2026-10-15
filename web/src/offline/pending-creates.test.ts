@@ -1,20 +1,25 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError } from '../api';
-import type { PendingCreate } from './outbox';
+import type { PendingCreate } from './pending-creates';
 
 // The network and the device are stood in for: what's kept, and what the server says
 const kept = new Map<string, PendingCreate>();
+const CREATE = 'create:';
 const createSplit = vi.fn<[id: string, name: string, currency: string], Promise<unknown>>();
 
 vi.mock('../api', async (original) => ({
   ...(await original<typeof import('../api')>()),
   api: { createSplit: (...args: [string, string, string]) => createSplit(...args) },
 }));
+vi.mock('./cache', async (original) => ({
+  ...(await original<typeof import('./cache')>()),
+  readCache: (key: string) => Promise.resolve(kept.get(key.slice(CREATE.length))),
+  writeCache: (_key: string, c: PendingCreate) => Promise.resolve(void kept.set(c.id, c)),
+  removeCacheEntry: (key: string) => Promise.resolve(void kept.delete(key.slice(CREATE.length))),
+  listCacheIds: () => Promise.resolve([...kept.keys()]),
+}));
 vi.mock('./outbox', async (original) => ({
   ...(await original<typeof import('./outbox')>()),
-  savePendingCreate: (c: PendingCreate) => Promise.resolve(void kept.set(c.id, c)),
-  removePendingCreate: (id: string) => Promise.resolve(void kept.delete(id)),
-  readPendingCreates: () => Promise.resolve([...kept.values()]),
   requestBackgroundSync: () => {},
 }));
 

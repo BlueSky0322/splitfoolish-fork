@@ -40,9 +40,16 @@ const ProfileSection = ({ track }: { track: Track }) => {
       const photo = await shrinkAvatar(file);
       preview = URL.createObjectURL(photo);
       const shown = preview;
-      patch((p) => ({ ...p, avatarPreview: shown }));
-      const { avatarVersion } = await track(api.setAvatar(photo));
-      patch((p) => ({ ...p, avatarVersion }));
+      // Through change(), so it and a remove never undo each other
+      await track(
+        change(
+          (p) => ({ ...p, avatarPreview: shown }),
+          async () => {
+            const { avatarVersion } = await api.setAvatar(photo);
+            return (p) => ({ ...p, avatarVersion });
+          },
+        ),
+      );
     } catch (err) {
       showError(err, 'Could not change your picture');
     } finally {

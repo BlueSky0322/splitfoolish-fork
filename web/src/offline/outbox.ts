@@ -1,6 +1,5 @@
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
 import type { Change } from '../../../shared/types';
-import type { SplitSummary } from '../../../shared/api';
 import { ApiError, NetworkError, api } from '../api';
 
 // Changes not yet saved, kept on the device (IndexedDB) so they survive the app being
@@ -14,22 +13,11 @@ export interface Queued {
   change: Change;
 }
 
-/** A split created on this device that the server hasn't got yet */
-export interface PendingCreate {
-  id: string;
-  name: string;
-  currency: string;
-  /** Shown in My splits until the server lists it */
-  summary: SplitSummary;
-}
-
 // The keys and lock below are also used by public/sw.js, which can't import them: a
 // change here needs the same change there (outbox.test.ts checks they match)
 export const OUTBOX_PREFIX = 'outbox:';
-export const CREATE_PREFIX = 'create:';
 export const LOCK_PREFIX = 'sf-outbox:';
 const outboxKey = (splitId: string) => `${OUTBOX_PREFIX}${splitId}`;
-const createKey = (splitId: string) => `${CREATE_PREFIX}${splitId}`;
 export const SYNC_TAG = 'sf-outbox';
 
 // Without Web Locks, calls in this page still take turns
@@ -64,20 +52,8 @@ export const readOutbox = async (splitId: string) =>
 export const writeOutbox = (splitId: string, queued: Queued[]) =>
   queued.length > 0 ? writeCache(outboxKey(splitId), queued) : removeCacheEntry(outboxKey(splitId));
 
-export const savePendingCreate = (create: PendingCreate) =>
-  writeCache(createKey(create.id), create);
-
-export const removePendingCreate = (id: string) => removeCacheEntry(createKey(id));
-
 /** Splits with changes kept on this device */
 export const readOutboxIds = () => listCacheIds(OUTBOX_PREFIX);
-
-/** Splits created on this device that the server hasn't confirmed yet */
-export async function readPendingCreates(): Promise<PendingCreate[]> {
-  const ids = await listCacheIds(CREATE_PREFIX);
-  const found = await Promise.all(ids.map((id) => readCache<PendingCreate>(createKey(id))));
-  return found.filter((c): c is PendingCreate => c != null);
-}
 
 /** Asks the service worker to send what's waiting once there's a connection */
 export function requestBackgroundSync() {

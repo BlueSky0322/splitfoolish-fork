@@ -6,7 +6,7 @@ import type { Profile } from '../api';
 import { ApiError, api } from '../api';
 import { queryClient } from '../query-client';
 import { isOfflineFailure } from '../offline/outbox';
-import { syncAfterSignIn } from '../offline/sync';
+import { forgetOfflineWork, syncOfflineChanges } from '../offline/sync';
 import { reloadMySplits } from '../my-splits/my-splits';
 import { assumeLastUser, readCache, setCacheUser, writeCache } from '../offline/cache';
 import { isAccent } from '../theme/accents';
@@ -48,6 +48,9 @@ export function readAppearance(): Appearance {
 const saveAppearance = (appearance: Appearance) =>
   quietly(() => localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)));
 
+/** What a save answers with: the saved profile, what it changed, or nothing new */
+type Saved = Profile | ((profile: Profile) => Profile) | void;
+
 interface ProfileContextValue {
   profile: Profile | null;
   signedOut: boolean;
@@ -62,19 +65,18 @@ interface ProfileContextValue {
   update: (patch: ProfilePatch) => Promise<void>;
   /**
    * Shows a change straight away and saves it, as update() does: rejects if it isn't
-   * saved (the change is undone); `save` may answer with the saved profile
+   * saved (the change is undone). `save` may answer with the saved profile, or with what
+   * the save changed, applied to the profile as it is then.
    */
-  change: (
-    show: (profile: Profile) => Profile,
-    save: () => Promise<Profile | void>,
-  ) => Promise<void>;
-  /** update() for settings alone */
-  updateSettings: (settings: Partial<Settings>) => Promise<void>;
+  change: (show: (profile: Profile) => Profile, save: () => Promise<Saved>) => Promise<void>;
   /**
-   * For quick preferences (the theme, how items are shown): shown at once, saved in the
-   * background, and a failure explained with a notification
+   * For preferences: shown at once, saved in the background, and a failure undone and
+   * explained with a notification. `track` follows the save, as Settings does to show it.
    */
-  rememberSettings: (settings: Partial<Settings>) => void;
+  rememberSettings: (
+    settings: Partial<Settings>,
+    track?: (saving: Promise<void>) => Promise<unknown>,
+  ) => void;
   /** Replaces the profile with one the server returned */
   replace: (profile: Profile) => void;
   /** Changes the profile on screen from its latest value */
@@ -97,6 +99,12 @@ export const useProfile = () => {
 export const nameFor = (email: string, displayName?: string | null) =>
   displayName?.trim() || email.split('@')[0];
 
+/** Forgets what this device kept for the account, then signs out of Cloudflare Access */
+export async function signOut() {
+  await forgetOfflineWork();
+  window.location.href = '/cdn-cgi/access/logout';
+}
+
 export function ProfileProvider({
   children,
   onAccentChange,
@@ -115,7 +123,7 @@ export function ProfileProvider({
         // Cached splits are kept per account; know whose before showing any
         await setCacheUser(me.email);
         fromDevice.current = false;
-        syncAfterSignIn(() => void reloadMySplits());
+        syncOfflineChanges(() => void reloadMySplits());
         void writeCache(ME_CACHE_KEY, me);
         return me;
       } catch (err) {
@@ -184,14 +192,17 @@ export function ProfileProvider({
   // if no newer change has been made since, so quick changes never jump back.
   const latest = useRef(0);
   const change = useCallback(
-    async (show: (profile: Profile) => Profile, save: () => Promise<Profile | void>) => {
+    async (show: (profile: Profile) => Profile, save: () => Promise<Saved>) => {
       const current = profileRef.current;
       if (current == null) return;
       const id = ++latest.current;
       replace(show(current));
       try {
         const saved = await save();
-        if (saved && id === latest.current) replace(saved);
+        const now = profileRef.current;
+        if (saved && now != null && id === latest.current) {
+          replace(typeof saved === 'function' ? saved(now) : saved);
+        }
       } catch (err) {
         if (id === latest.current) replace(current);
         throw err;
@@ -220,14 +231,12 @@ export function ProfileProvider({
     [replace],
   );
 
-  const updateSettings = useCallback(
-    (settings: Partial<Settings>) => update({ settings }),
-    [update],
-  );
-
   const rememberSettings = useCallback(
-    (settings: Partial<Settings>) =>
-      void update({ settings }).catch((err: unknown) =>
+    (
+      settings: Partial<Settings>,
+      track: (saving: Promise<void>) => Promise<unknown> = (saving) => saving,
+    ) =>
+      void track(update({ settings })).catch((err: unknown) =>
         showError(err, 'Could not save your settings'),
       ),
     [update],
@@ -242,7 +251,6 @@ export function ProfileProvider({
         retry,
         change,
         update,
-        updateSettings,
         rememberSettings,
         replace,
         patch,

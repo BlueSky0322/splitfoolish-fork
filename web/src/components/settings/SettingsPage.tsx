@@ -14,9 +14,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
-import { nameFor, useProfile } from '../../profile/ProfileContext';
-import { clearCache } from '../../offline/cache';
-import { forgetOfflineCreates } from '../../offline/pending-creates';
+import { nameFor, signOut, useProfile } from '../../profile/ProfileContext';
 import { InstallField } from '../ui/InstallApp';
 import UserAvatar from '../ui/UserAvatar';
 import AppearanceSection from './AppearanceSection';
@@ -27,12 +25,6 @@ import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import { useSaveIndicator } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
-
-async function signOut() {
-  forgetOfflineCreates();
-  await clearCache();
-  window.location.href = '/cdn-cgi/access/logout';
-}
 
 type SectionId = 'profile' | 'getting-paid' | 'currency' | 'appearance' | 'app';
 
