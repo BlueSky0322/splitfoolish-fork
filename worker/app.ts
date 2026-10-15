@@ -125,7 +125,11 @@ export function isCrossSite(req: Request, url: URL): boolean {
 /** The tab that sent a request, as the app identifies itself */
 export const clientId = (req: Request) => req.headers.get('X-Client-Id')?.slice(0, 64) ?? null;
 
-export async function readJson(req: Request): Promise<Record<string, unknown> | Response> {
+/** A request body as sent: the field names the contract gives, each value still to check */
+export type Unchecked<T> = { [K in keyof T]?: unknown };
+
+/** The JSON body of a request, as the fields of T (in shared/api.ts) still to be checked */
+export async function readJson<T>(req: Request): Promise<Unchecked<T> | Response> {
   // Turned away before reading when it says it's too big; checked again after, as the
   // header can be missing or wrong
   if (Number(req.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) {
@@ -136,7 +140,7 @@ export async function readJson(req: Request): Promise<Record<string, unknown> | 
   try {
     const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
     if (body == null || typeof body !== 'object') throw new Error();
-    return body as Record<string, unknown>;
+    return body;
   } catch {
     return fail('Invalid JSON', 400);
   }

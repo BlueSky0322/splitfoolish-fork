@@ -3,19 +3,25 @@ import type {
   ApiErrorBody,
   Attachment,
   AvatarResult,
+  ChangesBody,
   Created,
+  CreateSplitBody,
+  InviteList,
   InviteTokenResult,
-  ItemNameUse,
+  ItemNames,
   JoinResult,
   MyInvite,
   Ok,
+  PaymentMethodsBody,
   PaymentQrResult,
   Profile as ApiProfile,
   ProfilePatch,
   RateQuote,
   SplitDetail,
+  SplitList,
+  SplitOrderBody,
+  SplitPatch,
   SplitPictureResult,
-  SplitSummary,
   UpdateSplitResult,
   UsedCurrencyRates,
 } from '../../shared/api';
@@ -96,25 +102,31 @@ export const api = {
   updateMe: (patch: ProfilePatch) => request<Profile>('PATCH', '/api/me', patch),
   /** Replaces all payment methods and which one is preferred */
   setPaymentMethods: (methods: PaymentMethod[], preferredId: string | null) =>
-    request<Profile>('PUT', '/api/me/payment-methods', { methods, preferredId }),
+    request<Profile>('PUT', '/api/me/payment-methods', {
+      methods,
+      preferredId,
+    } satisfies PaymentMethodsBody),
   /** Uploads a QR code method's image; done before saving the method itself */
   setPaymentQr: (methodId: string, image: Blob) =>
     upload<PaymentQrResult>('PUT', `/api/me/payment-qr/${methodId}`, image),
   setAvatar: (photo: Blob) => upload<AvatarResult>('PUT', '/api/me/avatar', photo),
   deleteAvatar: () => request<Ok>('DELETE', '/api/me/avatar'),
-  listSplits: () => request<{ splits: SplitSummary[] }>('GET', '/api/splits'),
+  listSplits: () => request<SplitList>('GET', '/api/splits'),
   /** Names of items in your splits, most recent first, with the category last given */
-  itemNames: () => request<{ names: ItemNameUse[] }>('GET', '/api/item-names'),
+  itemNames: () => request<ItemNames>('GET', '/api/item-names'),
   /** Your own order for your splits: every id, first to last */
-  reorderSplits: (ids: string[]) => request<Ok>('PUT', '/api/splits/order', { ids }),
+  reorderSplits: (ids: string[]) =>
+    request<Ok>('PUT', '/api/splits/order', { ids } satisfies SplitOrderBody),
   /** id is made by the app, so the new split can open before this finishes */
   createSplit: (id: string, name: string, currency: string) =>
-    request<Created>('POST', '/api/splits', { id, name, currency }),
+    request<Created>('POST', '/api/splits', { id, name, currency } satisfies CreateSplitBody),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
   /** Sends queued changes; keepalive lets a save finish while the page is closing */
   applyChanges: (id: string, changes: Change[]) =>
-    request<Ok>('POST', `${splitPath(id)}/changes`, { changes }, { keepalive: true }),
-  updateSplit: (id: string, patch: { name?: string; currency?: string }) =>
+    request<Ok>('POST', `${splitPath(id)}/changes`, { changes } satisfies ChangesBody, {
+      keepalive: true,
+    }),
+  updateSplit: (id: string, patch: SplitPatch) =>
     request<UpdateSplitResult>('PATCH', splitPath(id), patch),
   /** Uploads a photo of an item's receipt, or of the whole split when itemId is null */
   uploadPhoto: (id: string, photo: Blob, itemId: string | null) =>
@@ -134,7 +146,7 @@ export const api = {
     request<Ok>('DELETE', `${splitPath(id)}/members/${encodeURIComponent(email)}`),
   revokeInvite: (id: string, inviteId: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/invites/${encodeURIComponent(inviteId)}`),
-  myInvites: () => request<{ invites: MyInvite[] }>('GET', '/api/invites'),
+  myInvites: () => request<InviteList>('GET', '/api/invites'),
   acceptInvite: (inviteId: string) =>
     request<AcceptResult>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
   declineInvite: (inviteId: string) =>

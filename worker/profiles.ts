@@ -2,6 +2,8 @@
 // (private preferences that follow the account between devices). A profile row is
 // made the first time someone saves anything; until then everything has its default.
 
+import type { Unchecked } from './app';
+import type { PaymentMethodsBody, ProfilePatch } from '../shared/api';
 import {
   BANK_TRANSFER,
   MAX_ACCOUNT_NAME,
@@ -37,7 +39,7 @@ const SETTINGS = {
   accent: { column: 'accent', values: ACCENTS },
   lastCurrency: { column: 'last_currency', values: null },
   defaultCurrency: { column: 'default_currency', values: null },
-  rateSource: { column: 'rate_source', values: RATE_PREFERENCES },
+  ratePreference: { column: 'rate_source', values: RATE_PREFERENCES },
   sidebarOpen: { column: 'sidebar_open', values: [true, false] },
   itemsView: { column: 'items_view', values: ITEMS_VIEWS },
   itemsGroupBy: { column: 'items_group_by', values: ITEMS_GROUPS },
@@ -63,7 +65,7 @@ export async function getProfile(db: D1Database, email: string): Promise<Profile
     db
       .prepare(
         `SELECT theme, accent, last_currency AS lastCurrency,
-           default_currency AS defaultCurrency, rate_source AS rateSource,
+           default_currency AS defaultCurrency, rate_source AS ratePreference,
            sidebar_open AS sidebarOpen,
            items_view AS itemsView, items_group_by AS itemsGroupBy,
            items_sort_key AS itemsSortKey, items_sort_dir AS itemsSortDir
@@ -152,7 +154,7 @@ function readSettings(raw: unknown): SettingChanges | Response {
 }
 
 /** PATCH /api/me: { displayName?, settings? } */
-export async function patchProfile(db: D1Database, email: string, body: Record<string, unknown>) {
+export async function patchProfile(db: D1Database, email: string, body: Unchecked<ProfilePatch>) {
   const statements: D1PreparedStatement[] = [];
 
   if ('displayName' in body) {
@@ -184,7 +186,7 @@ export async function patchProfile(db: D1Database, email: string, body: Record<s
 export async function putPaymentMethods(
   db: D1Database,
   email: string,
-  body: Record<string, unknown>,
+  body: Unchecked<PaymentMethodsBody>,
 ) {
   const methods = body.methods;
   if (!Array.isArray(methods) || methods.length > MAX_METHODS) {
@@ -336,10 +338,10 @@ export function assembleMembers([members, methods]: D1Result<
 }
 
 /** Where someone's exchange rates come from: Wise unless they picked the ECB */
-export async function getRateSource(db: D1Database, email: string): Promise<RatePreference> {
+export async function getRatePreference(db: D1Database, email: string): Promise<RatePreference> {
   const row = await db
-    .prepare('SELECT rate_source AS rateSource FROM user_settings WHERE email = ?')
+    .prepare('SELECT rate_source AS ratePreference FROM user_settings WHERE email = ?')
     .bind(email)
-    .first<{ rateSource: RatePreference }>();
-  return row?.rateSource ?? DEFAULT_SETTINGS.rateSource;
+    .first<{ ratePreference: RatePreference }>();
+  return row?.ratePreference ?? DEFAULT_SETTINGS.ratePreference;
 }

@@ -3,7 +3,7 @@
 // request waits in the owner's Invites to be approved or declined, and you can withdraw it.
 
 import { Hono } from 'hono';
-import type { AcceptResult, JoinResult, MyInvite } from '../../shared/api';
+import type { AcceptResult, InviteList, JoinResult, MyInvite } from '../../shared/api';
 import { AppEnv, ID, getRole } from '../app';
 import { json, fail, ok } from '../http';
 import { addEditor, openInvite } from '../sharing';
@@ -51,7 +51,7 @@ invites.get('/invites', async (c) => {
   type Base = Omit<MyInvite, 'kind'>;
   type Mine = Base & { needsApproval: number; owner: string; ownerName: string | null };
   type Request = Base & { email: string; name: string | null };
-  return json<{ invites: MyInvite[] }>({
+  return json<InviteList>({
     invites: [
       ...(requests.results as unknown as Request[]).map((r) => ({
         ...r,

@@ -102,7 +102,7 @@ export async function getRate(
   to: string,
   {
     maxAgeMs = FRESH_MS,
-    prefer = DEFAULT_SETTINGS.rateSource,
+    prefer = DEFAULT_SETTINGS.ratePreference,
     deps = defaultDeps(),
   }: RateOptions = {},
 ): Promise<Rate> {

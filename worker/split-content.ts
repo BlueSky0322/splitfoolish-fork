@@ -8,7 +8,8 @@ import { MAX_SHARES, SplitMode, isSplitMode } from '../shared/settle';
 import type { Change, Item, ItemOriginal, Person } from '../shared/types';
 import { MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../shared/types';
 import { CURRENCY, fail, ok, readName, isConstraintError } from './http';
-import { type Actor, touchSplit } from './app';
+import { type Actor, type Unchecked, touchSplit } from './app';
+import type { ChangesBody } from '../shared/api';
 import { type Rate, RatesUnavailable } from './rates';
 import { removeAccessStatements } from './sharing';
 
@@ -904,12 +905,12 @@ interface ApplyOptions {
   onAccessRemoved?: (emails: string[]) => void;
 }
 
-/** Applies a batch of changes all-or-nothing. On refusal, says which change and why. */
+/** Applies a batch of changes all-or-nothing. On refusal, says why. */
 export async function applyChanges(
   db: D1Database,
   splitId: string,
   actor: Actor,
-  body: Record<string, unknown>,
+  body: Unchecked<ChangesBody>,
   { fetchRate, onAccessRemoved }: ApplyOptions,
 ) {
   const changes = body.changes;
@@ -947,11 +948,11 @@ export async function applyChanges(
   }
 
   const statements: D1PreparedStatement[] = [];
-  for (const [index, change] of batch.entries()) {
+  for (const change of batch) {
     try {
       statements.push(...changeStatements(db, splitId, model, change, actor, rates));
     } catch (err) {
-      if (err instanceof Refused) return fail(err.message, 409, { index });
+      if (err instanceof Refused) return fail(err.message, 409);
       throw err;
     }
   }

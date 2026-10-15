@@ -4,7 +4,7 @@
 
 import type { PaymentMethod } from './payments';
 import type { RateSource } from './rates';
-import type { Item, Person, Role } from './types';
+import type { Change, Item, Person, Role } from './types';
 
 // ---------- Account ----------
 
@@ -32,7 +32,7 @@ export interface Settings {
   lastCurrency: string | null;
   /** A fixed currency for new splits; null to use the last one */
   defaultCurrency: string | null;
-  rateSource: RatePreference;
+  ratePreference: RatePreference;
   sidebarOpen: boolean;
   itemsView: (typeof ITEMS_VIEWS)[number];
   itemsGroupBy: (typeof ITEMS_GROUPS)[number];
@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: 'blurple',
   lastCurrency: null,
   defaultCurrency: null,
-  rateSource: 'wise',
+  ratePreference: 'wise',
   sidebarOpen: true,
   itemsView: 'card',
   itemsGroupBy: 'day',
@@ -223,8 +223,56 @@ export interface Ok {
 /** What every refused or failed request sends back */
 export interface ApiErrorBody {
   error: string;
-  /** For a batch of changes: which one was refused */
-  index?: number;
+}
+
+// ---------- Request bodies ----------
+// What the app sends. The server reads each field by these names and still checks its
+// value, so a renamed field fails to compile on both sides.
+
+/** POST /splits. The id is made by the app, so the split can open before this lands. */
+export interface CreateSplitBody {
+  id: string;
+  name: string;
+  currency: string;
+}
+
+/** PUT /splits/order: every split id, first to last */
+export interface SplitOrderBody {
+  ids: string[];
+}
+
+/** PATCH /splits/:id */
+export interface SplitPatch {
+  name?: string;
+  currency?: string;
+}
+
+/** POST /splits/:id/changes */
+export interface ChangesBody {
+  changes: Change[];
+}
+
+/** PUT /me/payment-methods: all of them, and which is preferred */
+export interface PaymentMethodsBody {
+  methods: PaymentMethod[];
+  preferredId: string | null;
+}
+
+// ---------- Lists ----------
+
+/** GET /splits */
+export interface SplitList {
+  splits: SplitSummary[];
+}
+
+/** GET /item-names */
+export interface ItemNames {
+  names: ItemNameUse[];
+}
+
+/** GET /invites */
+export interface InviteList {
+  invites: MyInvite[];
 }
 
 /** POST /splits: the new split's id */

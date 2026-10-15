@@ -17,8 +17,7 @@ export const json = <T = never>(body: NoInfer<T>, status = 200) =>
 export const ok = () => json<Ok>({ ok: true });
 
 /** Refuses a request, saying why */
-export const fail = (error: string, status: number, extra?: Omit<ApiErrorBody, 'error'>) =>
-  json<ApiErrorBody>({ error, ...extra }, status);
+export const fail = (error: string, status: number) => json<ApiErrorBody>({ error }, status);
 
 export const notFound = () => fail('Not found', 404);
 

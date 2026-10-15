@@ -109,7 +109,6 @@ describe('changing a split', () => {
       },
     );
     expect(res.status).toBe(409);
-    expect(res.data.index).toBe(1);
     expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.people).toEqual([]);
   });
 
@@ -898,15 +897,15 @@ describe('exchange rates', () => {
     // A pair no other test uses, so no cached rate gets in the way
     api.rates.set('NZD', 'MYR', 2.75);
     const patch = await api.call(ecbFan, 'PATCH', '/api/me', {
-      settings: { rateSource: 'ecb', defaultCurrency: 'SGD' },
+      settings: { ratePreference: 'ecb', defaultCurrency: 'SGD' },
     });
-    expect(patch.data.settings).toMatchObject({ rateSource: 'ecb', defaultCurrency: 'SGD' });
+    expect(patch.data.settings).toMatchObject({ ratePreference: 'ecb', defaultCurrency: 'SGD' });
     expect((await api.call(ecbFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe(
       'frankfurter',
     );
     expect((await api.call(wiseFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe('wise');
     expect(
-      (await api.call(ecbFan, 'PATCH', '/api/me', { settings: { rateSource: 'xe' } })).status,
+      (await api.call(ecbFan, 'PATCH', '/api/me', { settings: { ratePreference: 'xe' } })).status,
     ).toBe(400);
     // Back to "last used"
     const reset = await api.call(ecbFan, 'PATCH', '/api/me', {

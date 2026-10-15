@@ -38,7 +38,7 @@ const CurrencySection = ({ track }: { track: Track }) => {
   const currencies = useMemo(listCurrencies, []);
   const settings = profile?.settings;
   const home = homeCurrency(settings);
-  const source = settings?.rateSource ?? DEFAULT_SETTINGS.rateSource;
+  const source = settings?.ratePreference ?? DEFAULT_SETTINGS.ratePreference;
 
   const rates = useQuery({
     queryKey: ['used-currency-rates', home, source],
@@ -98,7 +98,9 @@ const CurrencySection = ({ track }: { track: Track }) => {
               aria-checked={source === s.value}
               className={classes.choiceTile}
               data-selected={source === s.value || undefined}
-              onClick={() => source !== s.value && track(updateSettings({ rateSource: s.value }))}
+              onClick={() =>
+                source !== s.value && track(updateSettings({ ratePreference: s.value }))
+              }
             >
               <span className={classes.choiceHead}>
                 <span

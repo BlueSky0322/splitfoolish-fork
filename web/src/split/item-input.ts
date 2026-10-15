@@ -41,7 +41,7 @@ export function chooseRate(r: RateInputs): { rate: number | null; source: RateSo
   ) {
     return {
       rate: saved.rate,
-      source: saved.rateSource ?? RATE_PROVIDERS[DEFAULT_SETTINGS.rateSource],
+      source: saved.rateSource ?? RATE_PROVIDERS[DEFAULT_SETTINGS.ratePreference],
     };
   }
   return { rate: r.fetched?.rate ?? null, source: r.fetched?.source ?? null };

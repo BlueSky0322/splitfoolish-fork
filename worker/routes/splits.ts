@@ -4,12 +4,17 @@
 
 import { Hono } from 'hono';
 import type {
-  ItemNameUse,
-  SplitDetail,
-  SplitSummary,
+  ChangesBody,
+  CreateSplitBody,
   Created,
   InviteTokenResult,
+  ItemNameUse,
+  ItemNames,
   RatePreference,
+  SplitDetail,
+  SplitList,
+  SplitOrderBody,
+  SplitPatch,
   UpdateSplitResult,
 } from '../../shared/api';
 import { MAX_NAME_LENGTH } from '../../shared/types';
@@ -38,7 +43,7 @@ import {
   serveSplitPicture,
   uploadAttachment,
 } from '../photos';
-import { getRateSource, settingsStatements } from '../profiles';
+import { getRatePreference, settingsStatements } from '../profiles';
 import { REFRESH_MAX_AGE_MS, getRate } from '../rates';
 import { RETRY_AFTER_MS, reconvertSplit } from '../reconvert';
 import {
@@ -73,7 +78,7 @@ const startReconvert = (
   email: string,
 ) =>
   ctx.waitUntil(
-    getRateSource(env.DB, email)
+    getRatePreference(env.DB, email)
       .then((prefer) =>
         reconvertSplit(env.DB, splitId, (from, to) => getRate(env, from, to, { prefer })),
       )
@@ -87,13 +92,13 @@ splits.use(`${SPLIT}/*`, async (c, next) => {
 });
 
 splits.get('/splits', async (c) =>
-  json<{ splits: SplitSummary[] }>({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
+  json<SplitList>({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
 );
 
 // Your own order for your splits, as dragged in the app: every id, first to last
 splits.put('/splits/order', async (c) => {
   const db = c.env.DB;
-  const body = await readJson(c.req.raw);
+  const body = await readJson<SplitOrderBody>(c.req.raw);
   if (body instanceof Response) return body;
   const ids = body.ids;
   if (
@@ -128,12 +133,12 @@ splits.get('/item-names', async (c) => {
   )
     .bind(c.var.email, MAX_ITEM_NAMES)
     .all<ItemNameUse>();
-  return json<{ names: ItemNameUse[] }>({ names: results });
+  return json<ItemNames>({ names: results });
 });
 
 splits.post('/splits', async (c) => {
   const db = c.env.DB;
-  const body = await readJson(c.req.raw);
+  const body = await readJson<CreateSplitBody>(c.req.raw);
   if (body instanceof Response) return body;
   const name = readName(body.name);
   if (name == null) return fail(`Name must be 1-${MAX_NAME_LENGTH} characters`, 400);
@@ -207,7 +212,7 @@ splits.patch(
   async (c) => {
     const db = c.env.DB;
     const id = c.req.param('id');
-    const body = await readJson(c.req.raw);
+    const body = await readJson<SplitPatch>(c.req.raw);
     if (body instanceof Response) return body;
     const statements: D1PreparedStatement[] = [];
     if ('name' in body) {
@@ -260,14 +265,14 @@ splits.delete(SPLIT, membersOnly, ownerOnly('Only the owner can delete this spli
 
 // The bill (people and items); applyChanges decides what each role may change
 splits.post(`${SPLIT}/changes`, membersOnly, async (c) => {
-  const body = await readJson(c.req.raw);
+  const body = await readJson<ChangesBody>(c.req.raw);
   if (body instanceof Response) return body;
   // Looked up only if the changes need a rate
   let prefer: Promise<RatePreference> | null = null;
   return applyChanges(c.env.DB, c.req.param('id'), { email: c.var.email, role: c.var.role }, body, {
     fetchRate: async (from, to, recent) =>
       getRate(c.env, from, to, {
-        prefer: await (prefer ??= getRateSource(c.env.DB, c.var.email)),
+        prefer: await (prefer ??= getRatePreference(c.env.DB, c.var.email)),
         maxAgeMs: recent ? REFRESH_MAX_AGE_MS : undefined,
       }),
     onAccessRemoved: (emails) => evictFromRoom(c.env, c.executionCtx, c.req.param('id'), emails),

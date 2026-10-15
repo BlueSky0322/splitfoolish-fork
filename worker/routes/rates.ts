@@ -6,7 +6,7 @@ import type { RateQuote, UsedCurrencyRate, UsedCurrencyRates } from '../../share
 import { convertCents, toCents } from '../../shared/rates';
 import { AppEnv } from '../app';
 import { CURRENCY, json, fail } from '../http';
-import { getRateSource } from '../profiles';
+import { getRatePreference } from '../profiles';
 import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate } from '../rates';
 
 const MAX_AMOUNT = 1_000_000_000;
@@ -26,7 +26,7 @@ rates.get('/rates', async (c) => {
   }
 
   try {
-    const prefer = await getRateSource(c.env.DB, c.var.email);
+    const prefer = await getRatePreference(c.env.DB, c.var.email);
     // Refresh asks for a recent rate rather than one from hours ago
     const maxAgeMs = c.req.query('fresh') != null ? REFRESH_MAX_AGE_MS : undefined;
     const { rate, source, fetchedAt } = await getRate(c.env, from, to, {
@@ -68,7 +68,7 @@ rates.get('/me/rates', async (c) => {
     .bind(c.var.email, to)
     .all<{ currency: string; splits: number }>();
 
-  const prefer = await getRateSource(c.env.DB, c.var.email);
+  const prefer = await getRatePreference(c.env.DB, c.var.email);
   const currencies = await Promise.all(
     used.results.map(async ({ currency, splits }) => {
       try {

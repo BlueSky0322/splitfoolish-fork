@@ -2,7 +2,7 @@
 // people's pictures
 
 import { Hono } from 'hono';
-import type { Profile } from '../../shared/api';
+import type { PaymentMethodsBody, Profile, ProfilePatch } from '../../shared/api';
 import { AppEnv, readJson } from '../app';
 import { json } from '../http';
 import { deleteAvatar, putAvatar, putPaymentQr, serveAvatar, servePaymentQr } from '../photos';
@@ -16,13 +16,13 @@ const METHOD_ID = '{[0-9a-f]{16}}';
 me.get('/me', async (c) => json<Profile>(await getProfile(c.env.DB, c.var.email)));
 
 me.patch('/me', async (c) => {
-  const body = await readJson(c.req.raw);
+  const body = await readJson<ProfilePatch>(c.req.raw);
   if (body instanceof Response) return body;
   return patchProfile(c.env.DB, c.var.email, body);
 });
 
 me.put('/me/payment-methods', async (c) => {
-  const body = await readJson(c.req.raw);
+  const body = await readJson<PaymentMethodsBody>(c.req.raw);
   if (body instanceof Response) return body;
   return putPaymentMethods(c.env.DB, c.var.email, body);
 });

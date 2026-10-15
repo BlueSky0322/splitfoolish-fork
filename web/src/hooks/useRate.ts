@@ -12,7 +12,7 @@ const RATE_FRESH_MS = 5 * 60 * 1000;
  * The server picks the source from Settings, so a different source is a different rate.
  */
 export function useRate(from: string, to: string, { enabled = true } = {}) {
-  const source = useProfile().profile?.settings.rateSource ?? DEFAULT_SETTINGS.rateSource;
+  const source = useProfile().profile?.settings.ratePreference ?? DEFAULT_SETTINGS.ratePreference;
   const key = ['rate', from, to, source];
   const query = useQuery({
     queryKey: key,
