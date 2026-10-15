@@ -11,7 +11,6 @@ import PhotoStrip from '../photos/PhotoStrip';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import { ReactNode } from 'react';
 import { ItemInput } from '../../api';
-import { updateHomeData } from '../../home-data';
 import type { SplitTotals } from '../../split/derive';
 import { SplitItem, toApiItem } from '../../split/state';
 import { useSplitState } from '../../split/SplitStateContext';
@@ -274,12 +273,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             pictureVersion={pictureVersion}
             canEdit={meta.role === 'owner'}
             onEnd={() => setDialog({ kind: 'end' })}
-            onSaved={(changes) => {
-              metaChanges.patchSettings(changes);
-              updateHomeData((data) => ({
-                splits: data.splits?.map((x) => (x.id === splitId ? { ...x, ...changes } : x)),
-              }));
-            }}
+            onSaved={metaChanges.patchSettings}
             onClose={close}
           />
         )}
