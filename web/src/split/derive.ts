@@ -6,14 +6,14 @@ import {
   itemShares,
   transfers,
 } from '../../../shared/settle';
-import { IItem, IPerson } from '../interfaces/app-reducer';
+import { SplitItem, Person } from './state';
 
 // Everything the split view shows that is worked out from its people and items. The
 // maths is the same code the server uses for My splits, so both always agree.
 
 const toCents = (amount: number) => Math.round(amount * 100);
 
-export function toSettleItem(item: IItem): SettleItem {
+export function toSettleItem(item: SplitItem): SettleItem {
   return {
     costCents: toCents(item.cost),
     payerId: item.payer.id,
@@ -37,8 +37,8 @@ export interface SplitSummary {
 }
 
 export function summarise(
-  people: IPerson[],
-  items: IItem[],
+  people: Person[],
+  items: SplitItem[],
   distributorId?: string | null,
 ): SplitSummary {
   // An item whose payer was just removed by someone else is skipped until it reloads
@@ -58,5 +58,5 @@ export function summarise(
 }
 
 /** The person in the bill who is this account, if one is linked */
-export const findMe = (people: IPerson[], email: string | null | undefined) =>
+export const findMe = (people: Person[], email: string | null | undefined) =>
   email == null ? null : people.find((p) => p.memberEmail === email) ?? null;

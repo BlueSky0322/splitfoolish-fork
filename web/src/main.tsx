@@ -9,8 +9,8 @@ import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
-import { AppContextProvider } from './context/AppContext/AppContext.tsx';
-import { appReducer } from './context/AppContext/app-reducer.ts';
+import { SplitStateProvider } from './split/SplitStateContext.tsx';
+import { splitReducer } from './split/state.ts';
 import './index.css';
 import { ProfileProvider, readAppearance } from './profile/ProfileContext.tsx';
 import { queryClient } from './query-client.ts';
@@ -54,12 +54,12 @@ trackInstall();
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary fallback={<p>Something went wrong</p>}>
-      <AppContextProvider
-        reducer={appReducer}
+      <SplitStateProvider
+        reducer={splitReducer}
         initialState={{ items: [], people: [] }}
       >
         <Root />
-      </AppContextProvider>
+      </SplitStateProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -18,7 +18,7 @@ import { convertCents, convertParts, isValidRate } from '../../../../shared/rate
 import { SplitMode, itemShares } from '../../../../shared/settle';
 import { MAX_NOTES_LENGTH } from '../../../../shared/types';
 import { Attachment, ItemInput, api } from '../../api';
-import { IItem, IPerson } from '../../interfaces/app-reducer';
+import { SplitItem, Person } from '../../split/state';
 import { CATEGORIES } from '../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../split/itemNames';
 import { currencySymbol, formatMoney } from '../../utils/money';
@@ -34,10 +34,10 @@ import { SOURCE_LABELS, describeRate } from '../../utils/rates';
 
 interface ItemFormProps {
   splitId: string;
-  people: IPerson[];
+  people: Person[];
   currency: string;
   /** Editing this item; adding a new one when absent */
-  item?: IItem;
+  item?: SplitItem;
   /** Who paid by default for a new item */
   defaultPayerId?: string | null;
   /** A new item's amount and the currency it was paid in, e.g. from Convert */

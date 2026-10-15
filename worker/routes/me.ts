@@ -2,13 +2,15 @@
 // people's pictures
 
 import { Hono } from 'hono';
-import { AppEnv, json, readJson } from '../app';
+import type { Profile } from '../../shared/api';
+import { AppEnv, readJson } from '../app';
+import { json } from '../http';
 import { deleteAvatar, getAvatar, getPaymentQr, putAvatar, putPaymentQr } from '../photos';
 import { getProfile, patchProfile, putPaymentMethods } from '../profiles';
 
 const me = new Hono<AppEnv>();
 
-me.get('/me', async (c) => json(await getProfile(c.env.DB, c.var.email)));
+me.get('/me', async (c) => json<Profile>(await getProfile(c.env.DB, c.var.email)));
 
 me.patch('/me', async (c) => {
   const body = await readJson(c.req.raw);

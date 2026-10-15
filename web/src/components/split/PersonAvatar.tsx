@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { IPerson } from '../../interfaces/app-reducer';
+import { Person } from '../../split/state';
 import UserAvatar from '../ui/UserAvatar';
 
 /** Profile picture versions by account email, for people linked to an account */
@@ -13,7 +13,7 @@ const PersonAvatar = ({
   active,
   preview,
 }: {
-  person: IPerson;
+  person: Person;
   size?: number;
   active?: boolean;
   preview?: boolean;

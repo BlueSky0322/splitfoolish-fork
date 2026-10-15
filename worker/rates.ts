@@ -4,6 +4,7 @@
 // services a few requests per pair, and a day-old rate still serves if both are down.
 // Refresh in the Currencies sheet asks for one no older than 10 minutes.
 
+import type { RatePreference } from '../shared/api';
 import { RateSource, isValidRate } from '../shared/rates';
 
 export interface RatesEnv {
@@ -45,7 +46,7 @@ const defaultDeps = (): Deps => ({
 });
 
 /** Wise first (the default), or the ECB first for people who picked it in Settings */
-export type RatePreference = 'wise' | 'ecb';
+export type { RatePreference };
 
 export interface RateOptions {
   /** Use a cached rate younger than this rather than fetching */

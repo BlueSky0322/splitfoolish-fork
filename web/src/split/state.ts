@@ -1,11 +1,51 @@
+// The open split's bill on this device: its people and items, changed straight away
+// and saved after (see useSplit). Items hold the person objects they refer to; the API
+// refers to people by id.
+
 import { ImmerReducer } from 'use-immer';
-import type { Item } from '../../../../shared/types';
-import { AppReducerAction, AppReducerState, IItem, IPerson } from '../../interfaces/app-reducer.ts';
+import type { SplitMode } from '../../../shared/settle';
+import type { Item as ApiItem, ItemOriginal, Person } from '../../../shared/types';
 
-/** An item as the API returns it, referring to people by id */
-export type ApiItem = Item;
+export type { Person };
 
-export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
+/** An item with its payer and participants as person objects */
+export interface SplitItem {
+  id: string;
+  name: string;
+  /** In currency units */
+  cost: number;
+  payer: Person;
+  participants: Person[];
+  splitMode: SplitMode;
+  /** Shares per person id, when split by shares */
+  shares?: Record<string, number>;
+  /** Amount per person id in currency units, when split by exact amounts */
+  exact?: Record<string, number>;
+  category: string | null;
+  notes?: string | null;
+  createdAt: number;
+  /** Entered in another currency: what was typed and the rate it was converted at */
+  original?: ItemOriginal | null;
+}
+
+export interface SplitState {
+  people: Person[];
+  items: SplitItem[];
+}
+
+// Every action is a change made on this device. Items arrive as the API shapes them.
+export type SplitAction =
+  | { type: 'ADD_PERSON'; payload: Person }
+  | { type: 'UPDATE_PERSON'; payload: Partial<Person> & { id: string } }
+  | { type: 'REMOVE_PERSON'; payload: string }
+  | { type: 'CLEAR_PEOPLE'; payload: null }
+  | { type: 'ADD_ITEM'; payload: ApiItem }
+  | { type: 'UPDATE_ITEM'; payload: ApiItem }
+  | { type: 'REMOVE_ITEM'; payload: string }
+  | { type: 'CLEAR_ITEMS'; payload: null }
+  | { type: 'LOAD_STATE'; payload: { people?: Person[]; items?: ApiItem[] } };
+
+export const toClientItem = (item: ApiItem, people: Person[]): SplitItem => {
   const byId = new Map(people.map((p) => [p.id, p]));
   return {
     id: item.id,
@@ -24,7 +64,7 @@ export const toClientItem = (item: ApiItem, people: IPerson[]): IItem => {
   };
 };
 
-export const toApiItem = (item: IItem): ApiItem => ({
+export const toApiItem = (item: SplitItem): ApiItem => ({
   id: item.id,
   name: item.name,
   cost: item.cost,
@@ -39,8 +79,7 @@ export const toApiItem = (item: IItem): ApiItem => ({
   original: item.original,
 });
 
-// Every action is a change made on this device, applied straight away and saved after
-export const appReducer: ImmerReducer<AppReducerState, AppReducerAction> = (draft, action) => {
+export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, action) => {
   switch (action.type) {
     case 'ADD_PERSON':
       draft.people.push(action.payload);

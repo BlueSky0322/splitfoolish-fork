@@ -1,14 +1,15 @@
-import { IItem } from '../interfaces/app-reducer';
+import type { Settings } from '../../../shared/api';
+import { SplitItem } from './state';
 import { categoryLabel } from './categories';
 
-export type GroupBy = 'none' | 'day' | 'payer' | 'category';
-export type SortKey = 'date' | 'name' | 'payer' | 'amount';
-export type SortDir = 'asc' | 'desc';
+export type GroupBy = Settings['itemsGroupBy'];
+export type SortKey = Settings['itemsSortKey'];
+export type SortDir = Settings['itemsSortDir'];
 
 export interface ItemGroup {
   key: string;
   label: string;
-  items: IItem[];
+  items: SplitItem[];
   subtotalCents: number;
 }
 
@@ -33,7 +34,7 @@ const dayLabel = (time: number) =>
     month: 'short',
   });
 
-const compare = (key: SortKey) => (a: IItem, b: IItem) => {
+const compare = (key: SortKey) => (a: SplitItem, b: SplitItem) => {
   switch (key) {
     case 'name':
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
@@ -46,7 +47,7 @@ const compare = (key: SortKey) => (a: IItem, b: IItem) => {
   }
 };
 
-export function sortItems(items: IItem[], key: SortKey, dir: SortDir): IItem[] {
+export function sortItems(items: SplitItem[], key: SortKey, dir: SortDir): SplitItem[] {
   const by = compare(key);
   // Ties keep the order items were added in
   return [...items].sort(
@@ -58,7 +59,7 @@ const cents = (amount: number) => Math.round(amount * 100);
 
 /** Items in groups, each sorted; groups follow the order of their first item */
 export function groupItems(
-  items: IItem[],
+  items: SplitItem[],
   groupBy: GroupBy,
   key: SortKey,
   dir: SortDir,

@@ -3,7 +3,9 @@
 // request waits in the owner's Invites to be approved or declined, and you can withdraw it.
 
 import { Hono } from 'hono';
-import { AppEnv, ID, INVITE_TTL_MS, clientId, getRole, json, newId, notifySplit } from '../app';
+import type { JoinResult, MyInvite } from '../../shared/api';
+import { AppEnv, ID, INVITE_TTL_MS, clientId, getRole, notifySplit } from '../app';
+import { json, newId } from '../http';
 import { newInviteToken } from '../split-content';
 
 const invites = new Hono<AppEnv>();
@@ -101,12 +103,18 @@ invites.get('/invites', async (c) => {
       )
       .bind(c.var.email, Date.now()),
   ]);
-  type Row = Record<string, unknown> & { needsApproval: number; owner: string; ownerName: string };
-  return json({
+  type Base = Omit<MyInvite, 'kind'>;
+  type Mine = Base & { needsApproval: number; owner: string; ownerName: string | null };
+  type Request = Base & { email: string; name: string | null };
+  return json<{ invites: MyInvite[] }>({
     invites: [
-      ...requests.results.map((r) => ({ ...r, kind: 'request' })),
-      ...(mine.results as Row[]).map(({ needsApproval, owner, ownerName, ...r }) =>
-        needsApproval ? { ...r, kind: 'sent', owner, ownerName } : { ...r, kind: 'invite' },
+      ...(requests.results as unknown as Request[]).map((r) => ({
+        ...r,
+        kind: 'request' as const,
+      })),
+      ...(mine.results as unknown as Mine[]).map(
+        ({ needsApproval, owner, ownerName, ...r }): MyInvite =>
+          needsApproval ? { ...r, kind: 'sent', owner, ownerName } : { ...r, kind: 'invite' },
       ),
     ],
   });
@@ -179,7 +187,7 @@ invites.post(`/join/:token${ID}`, async (c) => {
 
   // Already in it (the owner included): nothing to accept
   if ((await getRole(db, split.id, email)) != null) {
-    return json({ status: 'member', id: split.id });
+    return json<JoinResult>({ status: 'member', id: split.id });
   }
 
   // One per person per split: opening a link again keeps it, an expired one starts over,
@@ -218,7 +226,7 @@ invites.post(`/join/:token${ID}`, async (c) => {
     .first<{ id: string; needsApproval: number }>();
   // Shows up in the owner's list of who's waiting
   notifySplit(c.env, c.executionCtx, split.id, clientId(c.req.raw));
-  return json({
+  return json<JoinResult>({
     status: invite!.needsApproval ? 'requested' : 'invited',
     id: split.id,
     inviteId: invite!.id,

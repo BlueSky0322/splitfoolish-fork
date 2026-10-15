@@ -1,13 +1,13 @@
 import { ArrowRight } from '@phosphor-icons/react';
 import { ReactNode } from 'react';
-import { IPerson } from '../../interfaces/app-reducer';
+import { Person } from '../../split/state';
 import { formatMoney } from '../../utils/money';
 import PersonAvatar from './PersonAvatar';
 import classes from './Split.module.css';
 
 interface TransferRowProps {
-  from: IPerson;
-  to: IPerson;
+  from: Person;
+  to: Person;
   amountCents: number;
   currency: string;
   /** lg for Settle up on phones, xl for the share image */

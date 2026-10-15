@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { IItem, IPerson } from '../interfaces/app-reducer';
+import { SplitItem, Person } from './state';
 import { groupItems, sortItems } from './grouping';
 
-const ann: IPerson = { id: 'a', name: 'Ann' };
-const ben: IPerson = { id: 'b', name: 'ben' };
+const ann: Person = { id: 'a', name: 'Ann', memberEmail: null };
+const ben: Person = { id: 'b', name: 'ben', memberEmail: null };
 
 const day = (d: number, hour = 12) => new Date(2026, 9, d, hour).getTime();
 
@@ -11,10 +11,10 @@ const item = (
   id: string,
   name: string,
   cost: number,
-  payer: IPerson,
+  payer: Person,
   createdAt: number,
   category: string | null = null,
-): IItem => ({
+): SplitItem => ({
   id,
   name,
   cost,

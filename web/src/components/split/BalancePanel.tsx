@@ -9,7 +9,7 @@ import {
 } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { PaymentMethod, SplitMember } from '../../api';
-import { IPerson } from '../../interfaces/app-reducer';
+import { Person } from '../../split/state';
 import { SplitSummary } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
 import { isQr, methodName } from '../../utils/payments';
@@ -19,10 +19,10 @@ import TransferRow from './TransferRow';
 import classes from './Split.module.css';
 
 interface BalancePanelProps {
-  people: IPerson[];
+  people: Person[];
   summary: SplitSummary;
   currency: string;
-  me: IPerson | null;
+  me: Person | null;
   distributorId: string | null;
   onDistributorChange: (id: string | null) => void;
   onShareImage: () => void;
@@ -43,7 +43,7 @@ export function BalanceHero({
 }: {
   summary: SplitSummary;
   currency: string;
-  me: IPerson | null;
+  me: Person | null;
   onLinkMe: () => void;
   size: number;
   prefix?: string;
@@ -99,7 +99,7 @@ export function BalanceLine({
 }: {
   summary: SplitSummary;
   currency: string;
-  me: IPerson | null;
+  me: Person | null;
 }) {
   if (me == null) {
     return (
@@ -137,7 +137,7 @@ function PayLine({
   currency,
 }: {
   methods: PaymentMethod[];
-  to: IPerson;
+  to: Person;
   member: SplitMember | undefined;
   amountCents: number;
   currency: string;
@@ -215,8 +215,8 @@ const BalancePanel = ({
   variant = 'panel',
 }: BalancePanelProps) => {
   // When you owe someone linked to an account, show how they like to be paid
-  const memberFor = (person: IPerson) => members.find((m) => m.email === person.memberEmail);
-  const methodsFor = (person: IPerson) => memberFor(person)?.paymentMethods ?? [];
+  const memberFor = (person: Person) => members.find((m) => m.email === person.memberEmail);
+  const methodsFor = (person: Person) => memberFor(person)?.paymentMethods ?? [];
   const byId = new Map(people.map((p) => [p.id, p]));
   const mine = me ? summary.balances.get(me.id) : null;
   const count = summary.transfers.length;

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { IItem } from '../interfaces/app-reducer';
+import { SplitItem } from './state';
 import { usedCurrencies } from './currencies';
 
-const person = { id: 'a', name: 'A' };
-const item = (original: IItem['original']): IItem => ({
+const person = { id: 'a', name: 'A', memberEmail: null };
+const item = (original: SplitItem['original']): SplitItem => ({
   id: Math.random().toString(16),
   name: 'x',
   cost: 1,

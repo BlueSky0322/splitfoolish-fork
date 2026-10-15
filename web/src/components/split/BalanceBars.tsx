@@ -1,5 +1,5 @@
 import { Balance } from '../../../../shared/settle';
-import { IPerson } from '../../interfaces/app-reducer';
+import { Person } from '../../split/state';
 import { formatSigned } from '../../utils/money';
 import classes from './Split.module.css';
 
@@ -9,7 +9,7 @@ const BalanceBars = ({
   people,
   balances,
 }: {
-  people: IPerson[];
+  people: Person[];
   balances: Map<string, Balance>;
 }) => {
   const max = Math.max(1, ...people.map((p) => Math.abs(balances.get(p.id)?.balanceCents ?? 0)));

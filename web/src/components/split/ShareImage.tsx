@@ -1,7 +1,7 @@
 import { Button, Loader, useComputedColorScheme } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IItem, IPerson } from '../../interfaces/app-reducer';
+import { SplitItem, Person } from '../../split/state';
 import { SplitSummary } from '../../split/derive';
 import { useProfile } from '../../profile/ProfileContext';
 import { ACCENTS, Accent, isAccent } from '../../theme/accents';
@@ -12,8 +12,8 @@ import classes from './ShareImage.module.css';
 interface ShareImageProps {
   name: string;
   currency: string;
-  people: IPerson[];
-  items: IItem[];
+  people: Person[];
+  items: SplitItem[];
   summary: SplitSummary;
 }
 
@@ -50,7 +50,7 @@ export function shareImagePalette(scheme: 'dark' | 'light', accent: Accent) {
 const WIDTH = 1080;
 const HEIGHT = 1350;
 
-function dateRange(items: IItem[]) {
+function dateRange(items: SplitItem[]) {
   const times = items.map((i) => i.createdAt).filter((t) => t > 0);
   if (times.length === 0) return null;
   const fmt = (t: number) =>

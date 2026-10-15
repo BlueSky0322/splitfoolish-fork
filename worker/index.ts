@@ -2,7 +2,8 @@
 // API request passes the cross-site check and sign-in before reaching a route.
 
 import { Hono } from 'hono';
-import { AppEnv, Env, clientId, json, notFound, notifySplit } from './app';
+import { AppEnv, Env, clientId, notifySplit } from './app';
+import { json, notFound } from './http';
 import { getUserEmail } from './auth';
 import invites from './routes/invites';
 import me from './routes/me';

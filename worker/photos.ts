@@ -10,15 +10,9 @@ const MAX_AVATAR_BYTES = 256_000;
 const MAX_QR_BYTES = 512_000;
 const MAX_PHOTOS_PER_SPLIT = 300;
 
+import type { Attachment } from '../shared/api';
+import { json, newId } from './http';
 import { ensureProfile } from './profiles';
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 
 /** The image type from the file's first bytes, so a mislabelled upload can't pass as an image */
 function detectImageType(bytes: Uint8Array): string | null {
@@ -89,7 +83,7 @@ export async function uploadAttachment(
   const image = await readImage(req, MAX_PHOTO_BYTES);
   if (image instanceof Response) return image;
 
-  const attachment = {
+  const attachment: Attachment = {
     id: newId(),
     itemId,
     size: image.bytes.length,

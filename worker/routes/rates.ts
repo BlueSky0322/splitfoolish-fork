@@ -2,8 +2,10 @@
 // rate actually saved with an item is fetched again by the server when it's saved.
 
 import { Hono } from 'hono';
+import type { RateQuote, UsedCurrencyRate, UsedCurrencyRates } from '../../shared/api';
 import { convertCents } from '../../shared/rates';
-import { AppEnv, json } from '../app';
+import { AppEnv } from '../app';
+import { json } from '../http';
 import { CURRENCY, getRateSource } from '../profiles';
 import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate } from '../rates';
 
@@ -31,7 +33,7 @@ rates.get('/rates', async (c) => {
       prefer,
       maxAgeMs,
     });
-    return json({
+    return json<RateQuote>({
       from,
       to,
       rate,
@@ -73,17 +75,23 @@ rates.get('/me/rates', async (c) => {
         const { rate, source, fetchedAt } = await getRate(c.env, currency, to, undefined, {
           prefer,
         });
-        return { currency, splits, rate, source, fetchedAt };
+        return { currency, splits, rate, source, fetchedAt } satisfies UsedCurrencyRate;
       } catch (err) {
         // One rate missing doesn't hide the rest
         if (err instanceof RatesUnavailable) {
-          return { currency, splits, rate: null, source: null, fetchedAt: null };
+          return {
+            currency,
+            splits,
+            rate: null,
+            source: null,
+            fetchedAt: null,
+          } satisfies UsedCurrencyRate;
         }
         throw err;
       }
     }),
   );
-  return json({ to, currencies });
+  return json<UsedCurrencyRates>({ to, currencies });
 });
 
 export default rates;

@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'vitest';
-import { IItem, IPerson } from '../interfaces/app-reducer';
+import { SplitItem, Person } from './state';
 import { findMe, summarise } from './derive';
 
-const ann: IPerson = { id: 'a', name: 'Ann', memberEmail: 'ann@example.com' };
-const ben: IPerson = { id: 'b', name: 'Ben' };
-const cat: IPerson = { id: 'c', name: 'Cat' };
+const ann: Person = { id: 'a', name: 'Ann', memberEmail: 'ann@example.com' };
+const ben: Person = { id: 'b', name: 'Ben', memberEmail: null };
+const cat: Person = { id: 'c', name: 'Cat', memberEmail: null };
 
 const base = { category: null, createdAt: 1 };
 
 describe('summarising a split', () => {
   test('mixes equal, shares and exact items in cents', () => {
-    const items: IItem[] = [
+    const items: SplitItem[] = [
       {
         ...base,
         id: '1',
@@ -53,7 +53,7 @@ describe('summarising a split', () => {
   });
 
   test('routes everything through the chosen person', () => {
-    const items: IItem[] = [
+    const items: SplitItem[] = [
       {
         ...base,
         id: '1',

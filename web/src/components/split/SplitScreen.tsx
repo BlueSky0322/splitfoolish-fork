@@ -35,13 +35,13 @@ import {
 } from '@phosphor-icons/react';
 import { ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Attachment, ItemInput } from '../../api';
-import { AppContext } from '../../context/AppContext/AppContext';
-import { toApiItem } from '../../context/AppContext/app-reducer';
+import { SplitStateContext } from '../../split/SplitStateContext';
+import { toApiItem } from '../../split/state';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { updateHomeData, useHomeDataSnapshot } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
 import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../hooks/useSplit';
-import { IItem, IPerson } from '../../interfaces/app-reducer';
+import { SplitItem, Person } from '../../split/state';
 import { findMe, summarise } from '../../split/derive';
 import {
   GROUP_LABELS,
@@ -73,6 +73,7 @@ import { useItemSelection } from '../../hooks/useItemSelection';
 import PeopleSheet from './PeopleSheet';
 import ShareImage from './ShareImage';
 import SplitSettings from './SplitSettings';
+import { DEFAULT_SETTINGS } from '../../../../shared/api';
 import classes from './Split.module.css';
 
 interface ViewPrefs {
@@ -82,7 +83,12 @@ interface ViewPrefs {
   sortDir: SortDir;
 }
 
-const DEFAULT_PREFS: ViewPrefs = { view: 'card', groupBy: 'day', sortKey: 'date', sortDir: 'desc' };
+const DEFAULT_PREFS: ViewPrefs = {
+  view: DEFAULT_SETTINGS.itemsView,
+  groupBy: DEFAULT_SETTINGS.itemsGroupBy,
+  sortKey: DEFAULT_SETTINGS.itemsSortKey,
+  sortDir: DEFAULT_SETTINGS.itemsSortDir,
+};
 const GROUP_ORDER: GroupBy[] = ['none', 'day', 'payer', 'category'];
 // Item and payer read best A to Z; amounts largest first
 const FIRST_DIR: Record<SortKey, SortDir> = {
@@ -96,7 +102,7 @@ const FIRST_DIR: Record<SortKey, SortDir> = {
 type Dialog =
   /** prefill: an amount and currency from Convert */
   | { kind: 'add'; prefill?: { amount: string; currency: string } }
-  | { kind: 'edit'; item: IItem }
+  | { kind: 'edit'; item: SplitItem }
   | { kind: 'people'; personId?: string }
   | { kind: 'settle' }
   | { kind: 'share' }
@@ -110,7 +116,7 @@ type Dialog =
 
 const MAX_AVATARS = 4;
 
-function AvatarStack({ people, size, max }: { people: IPerson[]; size: number; max: number }) {
+function AvatarStack({ people, size, max }: { people: Person[]; size: number; max: number }) {
   const shown = people.slice(0, max);
   return (
     <div
@@ -184,7 +190,7 @@ function SaveStatus({
 }
 
 /** "Chen and Dev owe you", for the phone's people summary */
-function oweLine(people: IPerson[], summary: ReturnType<typeof summarise>, me: IPerson | null) {
+function oweLine(people: Person[], summary: ReturnType<typeof summarise>, me: Person | null) {
   if (!summary.hasItems) return 'No items yet';
   if (me == null) return 'Tap to edit or pick yourself';
   const owe = summary.transfers.filter((t) => t.toId === me.id).map((t) => t.fromId);
@@ -207,7 +213,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   // People can remove photos they added; the owner can remove any
   const canRemovePhoto = (photo: Attachment) =>
     photo.uploadedBy === myEmail || meta?.role === 'owner';
-  const { state } = useContext(AppContext);
+  const { state } = useContext(SplitStateContext);
   const isDesktop = useIsDesktop();
   // How items are shown, saved with the account
   const { profile, updateSettings } = useProfile();
@@ -463,7 +469,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     />
   );
 
-  const deleteItem = (item: IItem, confirmed = false) => {
+  const deleteItem = (item: SplitItem, confirmed = false) => {
     const count = photos.photosOf(item.id).length;
     if (count > 0) {
       // Photos are deleted with the item and can't be undone, so ask first
@@ -539,7 +545,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
 
   // A copy of a saved item (not edits still in the form), as of its date or today.
   // Receipts stay with the original.
-  const duplicateItem = (item: IItem, keepDate: boolean) => {
+  const duplicateItem = (item: SplitItem, keepDate: boolean) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, createdAt, ...input } = toApiItem(item);
     close();

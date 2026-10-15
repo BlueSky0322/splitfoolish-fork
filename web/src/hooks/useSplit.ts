@@ -9,10 +9,10 @@ import {
   useState,
 } from 'react';
 import { ApiError, Change, ItemInput, SplitDetail, api } from '../api';
-import { AppContext } from '../context/AppContext/AppContext';
-import { ApiItem, toApiItem } from '../context/AppContext/app-reducer';
+import { SplitStateContext } from '../split/SplitStateContext';
 import { convertCents, convertParts } from '../../../shared/rates';
-import { AppReducerState, IItem } from '../interfaces/app-reducer';
+import type { Item as ApiItem } from '../../../shared/types';
+import { SplitItem, SplitState, toApiItem } from '../split/state';
 import { readCache, removeCache, writeCache } from '../split-cache';
 import { whenCreated } from '../pending-creates';
 import {
@@ -96,7 +96,7 @@ const refuse = (message: string) => {
 };
 
 /** An item paid in another currency, converted again at a typed rate, as the server does it */
-function atRate(item: IItem, rate: number): IItem {
+function atRate(item: SplitItem, rate: number): SplitItem {
   const original = item.original!;
   const costCents = convertCents(Math.round(original.amount * 100), rate);
   const exact =
@@ -125,7 +125,7 @@ function atRate(item: IItem, rate: number): IItem {
  * would leave an item with nobody or break an exact split.
  */
 export function removeBlocker(
-  state: AppReducerState,
+  state: SplitState,
   personId: string,
   fromItems: boolean,
 ): string | null {
@@ -152,7 +152,7 @@ export function removeBlocker(
 // Unsaved changes are also kept on the device (the outbox), so they survive going
 // offline or the app closing; the service worker sends them if the app isn't open.
 export function useSplit(splitId: string) {
-  const { state, dispatch } = useContext(AppContext);
+  const { state, dispatch } = useContext(SplitStateContext);
   const [status, setStatus] = useState<SyncStatus>('loading');
   const [meta, setMeta] = useState<SplitMeta | null>(null);
   const metaRef = useRef(meta);
@@ -160,7 +160,7 @@ export function useSplit(splitId: string) {
 
   const cacheKey = `split:${splitId}`;
   // What's on screen, for checking changes before they're queued
-  const current = useRef<AppReducerState>(state);
+  const current = useRef<SplitState>(state);
   current.current = state;
 
   const pending = useRef<Queued[]>([]);

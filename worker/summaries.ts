@@ -1,9 +1,11 @@
 // My Splits: each split the person belongs to, with its total and their own balance.
 // Everything is read in one round trip and balanced with the same maths as the app.
 
+import type { SplitSummary } from '../shared/api';
 import { SettleItem, SplitMode, balances } from '../shared/settle';
+import type { Role } from '../shared/types';
 
-export async function listSplitSummaries(db: D1Database, email: string) {
+export async function listSplitSummaries(db: D1Database, email: string): Promise<SplitSummary[]> {
   const [splits, items, participants, mine, people] = await db.batch<Record<string, unknown>>([
     db
       .prepare(
@@ -84,7 +86,7 @@ export async function listSplitSummaries(db: D1Database, email: string) {
       name: string;
       currency: string;
       updatedAt: number;
-      role: string;
+      role: Role;
       memberCount: number;
       pictureVersion: number | null;
     }[]

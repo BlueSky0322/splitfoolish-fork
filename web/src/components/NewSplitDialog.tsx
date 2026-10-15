@@ -34,6 +34,7 @@ function NewSplitForm({ onDone }: { onDone: () => void }) {
       currency,
       distributorId: null,
       pictureVersion: null,
+      converting: false,
       role: 'owner',
       members: [
         {

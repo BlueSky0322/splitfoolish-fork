@@ -1,7 +1,7 @@
 import { ActionIcon, UnstyledButton, UnstyledButtonProps } from '@mantine/core';
 import { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Note, Paperclip, PencilSimple, Trash } from '@phosphor-icons/react';
-import { IItem, IPerson } from '../../interfaces/app-reducer';
+import { SplitItem, Person } from '../../split/state';
 import { SplitSummary } from '../../split/derive';
 import { categoryIcon } from '../../split/categories';
 import { ItemGroup, SortDir, SortKey } from '../../split/grouping';
@@ -16,12 +16,12 @@ interface ItemViewProps {
   /** Hide group headers when there's only the one "all items" group */
   grouped: boolean;
   summary: SplitSummary;
-  me: IPerson | null;
-  people: IPerson[];
+  me: Person | null;
+  people: Person[];
   currency: string;
   mobile: boolean;
-  onEdit: (item: IItem) => void;
-  onDelete: (item: IItem) => void;
+  onEdit: (item: SplitItem) => void;
+  onDelete: (item: SplitItem) => void;
   /** Receipt photos per item id */
   photoCounts: Map<string, number>;
   /** Picking several items at once; absent where items can't be picked */
@@ -62,7 +62,7 @@ function ItemButton({
 }
 
 /** The tick in a row, while picking items */
-function CheckSlot({ item, selection }: { item: IItem; selection?: RowSelection }) {
+function CheckSlot({ item, selection }: { item: SplitItem; selection?: RowSelection }) {
   if (selection == null || !selection.active) return null;
   return (
     <span
@@ -108,7 +108,7 @@ function NotesBadge({ notes }: { notes?: string | null }) {
 const MODE_LABELS = { equal: 'Equal', shares: 'Shares', exact: 'Exact' } as const;
 
 /** What an item in another currency came to as paid, under its converted amount */
-function OriginalAmount({ item }: { item: IItem }) {
+function OriginalAmount({ item }: { item: SplitItem }) {
   if (item.original == null) return null;
   return (
     <span className={classes.originalAmount}>
@@ -119,20 +119,21 @@ function OriginalAmount({ item }: { item: IItem }) {
 
 const cents = (amount: number) => Math.round(amount * 100);
 
-const who = (item: IItem, people: IPerson[]) =>
+const who = (item: SplitItem, people: Person[]) =>
   item.participants.length === people.length && people.length > 1
     ? 'everyone'
     : item.participants.map((p) => p.name).join(', ');
 
-function useMyShare(summary: SplitSummary, me: IPerson | null) {
-  return (item: IItem) => (me == null ? null : summary.sharesByItem.get(item.id)?.get(me.id) ?? 0);
+function useMyShare(summary: SplitSummary, me: Person | null) {
+  return (item: SplitItem) =>
+    me == null ? null : summary.sharesByItem.get(item.id)?.get(me.id) ?? 0;
 }
 
 function RowActions({
   item,
   onEdit,
   onDelete,
-}: { item: IItem } & Pick<ItemViewProps, 'onEdit' | 'onDelete'>) {
+}: { item: SplitItem } & Pick<ItemViewProps, 'onEdit' | 'onDelete'>) {
   return (
     <div className={classes.rowActions}>
       <ActionIcon

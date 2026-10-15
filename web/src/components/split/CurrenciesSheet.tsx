@@ -2,7 +2,7 @@ import { Button, NumberInput, Tooltip, UnstyledButton } from '@mantine/core';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { isValidRate } from '../../../../shared/rates';
-import { IItem } from '../../interfaces/app-reducer';
+import { SplitItem } from '../../split/state';
 import { UsedCurrency, usedCurrencies } from '../../split/currencies';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import classes from './CurrenciesSheet.module.css';
@@ -11,7 +11,7 @@ const plural = (n: number) => (n === 1 ? '1 item' : `${n} items`);
 
 interface CurrenciesSheetProps {
   currency: string;
-  items: IItem[];
+  items: SplitItem[];
   saving: boolean;
   onRefresh: (currencies: string[]) => void;
   onSetRate: (currency: string, rate: number | null) => void;

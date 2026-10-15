@@ -1,7 +1,7 @@
 // The other currencies a split's items were paid in
 
 import type { RateSource } from '../../../shared/rates';
-import { IItem } from '../interfaces/app-reducer';
+import { SplitItem } from './state';
 
 export interface UsedCurrency {
   code: string;
@@ -14,8 +14,8 @@ export interface UsedCurrency {
 }
 
 /** The other currencies items were paid in, with the rate each is converted at now */
-export function usedCurrencies(items: IItem[]): UsedCurrency[] {
-  const byCode = new Map<string, IItem[]>();
+export function usedCurrencies(items: SplitItem[]): UsedCurrency[] {
+  const byCode = new Map<string, SplitItem[]>();
   for (const item of items) {
     const code = item.original?.currency;
     if (code) byCode.set(code, [...(byCode.get(code) ?? []), item]);

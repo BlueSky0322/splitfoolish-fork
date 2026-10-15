@@ -12,53 +12,49 @@ import {
   QR_CODE,
   needsDetail,
 } from '../shared/payments';
+import {
+  ACCENTS,
+  DEFAULT_SETTINGS,
+  ITEMS_GROUPS,
+  ITEMS_SORT_KEYS,
+  ITEMS_VIEWS,
+  type Profile,
+  RATE_PREFERENCES,
+  type RatePreference,
+  SORT_DIRS,
+  type Settings,
+  type SplitMember,
+  THEMES,
+} from '../shared/api';
+import type { Role } from '../shared/types';
+import { json } from './http';
 
-export const ACCENTS = ['blurple', 'blue', 'teal', 'green', 'amber', 'rose'] as const;
 export const CURRENCY = /^[A-Z]{3}$/;
 
 const MAX_DISPLAY_NAME = 32;
 const MAX_METHODS = 10;
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-
 export type { PaymentMethod };
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {
-  theme: { column: 'theme', values: ['dark', 'light', 'auto'] },
+  theme: { column: 'theme', values: THEMES },
   accent: { column: 'accent', values: ACCENTS },
   lastCurrency: { column: 'last_currency', values: null },
   defaultCurrency: { column: 'default_currency', values: null },
-  rateSource: { column: 'rate_source', values: ['wise', 'ecb'] },
+  rateSource: { column: 'rate_source', values: RATE_PREFERENCES },
   sidebarOpen: { column: 'sidebar_open', values: [true, false] },
-  itemsView: { column: 'items_view', values: ['card', 'table'] },
-  itemsGroupBy: { column: 'items_group_by', values: ['none', 'day', 'payer', 'category'] },
-  itemsSortKey: { column: 'items_sort_key', values: ['date', 'name', 'payer', 'amount'] },
-  itemsSortDir: { column: 'items_sort_dir', values: ['asc', 'desc'] },
-} as const;
+  itemsView: { column: 'items_view', values: ITEMS_VIEWS },
+  itemsGroupBy: { column: 'items_group_by', values: ITEMS_GROUPS },
+  itemsSortKey: { column: 'items_sort_key', values: ITEMS_SORT_KEYS },
+  itemsSortDir: { column: 'items_sort_dir', values: SORT_DIRS },
+} as const satisfies Record<keyof Settings, unknown>;
 
 type SettingKey = keyof typeof SETTINGS;
 type SettingChanges = Partial<Record<SettingKey, string | boolean | null>>;
 
-// Settings before anyone changes them. A new settings row is written with all of these
-// (not the table's own column defaults), so they can change here alone.
-const DEFAULT_SETTINGS = {
-  theme: 'auto',
-  accent: 'blurple',
-  lastCurrency: null as string | null,
-  defaultCurrency: null as string | null,
-  rateSource: 'wise',
-  sidebarOpen: true,
-  itemsView: 'card',
-  itemsGroupBy: 'day',
-  itemsSortKey: 'date',
-  // Newest items first
-  itemsSortDir: 'desc',
-};
+// A new settings row is written with every one of DEFAULT_SETTINGS (not the table's
+// own column defaults), so the defaults can change in shared/api.ts alone.
 
 /** Makes the profile row if there isn't one, so rows that belong to it can be added */
 export const ensureProfile = (db: D1Database, email: string) =>
@@ -66,7 +62,7 @@ export const ensureProfile = (db: D1Database, email: string) =>
     .prepare('INSERT OR IGNORE INTO profiles (email, created_at, updated_at) VALUES (?1, ?2, ?2)')
     .bind(email, Date.now());
 
-export async function getProfile(db: D1Database, email: string) {
+export async function getProfile(db: D1Database, email: string): Promise<Profile> {
   const [profile, settings, avatar, methods] = await db.batch<Record<string, unknown>>([
     db.prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?').bind(email),
     db
@@ -89,7 +85,9 @@ export async function getProfile(db: D1Database, email: string) {
       )
       .bind(email),
   ]);
-  const saved = settings.results[0] as unknown as typeof DEFAULT_SETTINGS | undefined;
+  const saved = settings.results[0] as unknown as
+    | (Omit<Settings, 'sidebarOpen'> & { sidebarOpen: number })
+    | undefined;
   const all = methods.results as unknown as (PaymentMethod & { isPreferred: number })[];
   return {
     email,
@@ -306,7 +304,9 @@ export const memberProfileStatements = (db: D1Database, splitId: string) => [
     .bind(splitId),
 ];
 
-export function assembleMembers([members, methods]: D1Result<Record<string, unknown>>[]) {
+export function assembleMembers([members, methods]: D1Result<
+  Record<string, unknown>
+>[]): SplitMember[] {
   const byEmail = new Map<string, PaymentMethod[]>();
   for (const m of methods.results as unknown as (PaymentMethod & { email: string })[]) {
     byEmail.set(m.email, [
@@ -324,7 +324,7 @@ export function assembleMembers([members, methods]: D1Result<Record<string, unkn
   return (
     members.results as unknown as {
       email: string;
-      role: string;
+      role: Role;
       displayName: string | null;
       avatarVersion: number | null;
     }[]
@@ -339,10 +339,10 @@ export function assembleMembers([members, methods]: D1Result<Record<string, unkn
 }
 
 /** Where someone's exchange rates come from: Wise unless they picked the ECB */
-export async function getRateSource(db: D1Database, email: string): Promise<'wise' | 'ecb'> {
+export async function getRateSource(db: D1Database, email: string): Promise<RatePreference> {
   const row = await db
     .prepare('SELECT rate_source AS rateSource FROM user_settings WHERE email = ?')
     .bind(email)
-    .first<{ rateSource: 'wise' | 'ecb' }>();
+    .first<{ rateSource: RatePreference }>();
   return row?.rateSource ?? 'wise';
 }

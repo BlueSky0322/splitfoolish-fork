@@ -7,27 +7,16 @@ import { RateSource, convertCents, convertParts, isValidRate } from '../shared/r
 import { SplitMode } from '../shared/settle';
 import type { Change, Item, ItemOriginal, Person } from '../shared/types';
 import { MAX_NOTES_LENGTH } from '../shared/types';
+import { MAX_NAME_LENGTH, json, readName } from './http';
 
 export type { Change, Item, Person };
 
-const MAX_NAME_LENGTH = 80;
 const MAX_CATEGORY_LENGTH = 32;
 const MAX_COST = 1_000_000_000;
 const MAX_SHARES = 999;
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-
 const touchSplit = (db: D1Database, splitId: string) =>
   db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), splitId);
-
-const readName = (value: unknown) => {
-  const name = typeof value === 'string' ? value.trim() : '';
-  return name.length > 0 && name.length <= MAX_NAME_LENGTH ? name : null;
-};
 
 const toCents = (amount: number) => Math.round(amount * 100);
 

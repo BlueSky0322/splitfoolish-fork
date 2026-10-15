@@ -2,7 +2,9 @@
 // decide whether they may see or change a split.
 
 import { createMiddleware } from 'hono/factory';
+import type { Role } from '../shared/types';
 import { AuthEnv } from './auth';
+import { json, notFound } from './http';
 import { RatesEnv } from './rates';
 import type { RoomMessage, SplitRoom } from './room';
 
@@ -17,7 +19,7 @@ export interface Env extends AuthEnv, RatesEnv {
   RECONVERT_RETRY_MS?: string;
 }
 
-export type Role = 'owner' | 'editor';
+export type { Role };
 
 export type AppEnv = {
   Bindings: Env;
@@ -30,14 +32,7 @@ export const ID = '{[A-Za-z0-9_-]{8,64}}';
 export const SPLIT = `/splits/:id${ID}`;
 
 const MAX_BODY_BYTES = 256 * 1024;
-export const MAX_NAME_LENGTH = 80;
 export const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-
-export const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' },
-  });
 
 /** The room for a split, where everyone with it open is listening */
 export const splitRoom = (env: Env, splitId: string) =>
@@ -64,10 +59,6 @@ export const notifySplit = (
 /** The tab that sent a request, as the app identifies itself */
 export const clientId = (req: Request) => req.headers.get('X-Client-Id')?.slice(0, 64) ?? null;
 
-export const notFound = () => json({ error: 'Not found' }, 404);
-
-export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-
 export async function readJson(req: Request): Promise<Record<string, unknown> | Response> {
   // Turned away before reading when it says it's too big; checked again after, as the
   // header can be missing or wrong
@@ -84,11 +75,6 @@ export async function readJson(req: Request): Promise<Record<string, unknown> | 
     return json({ error: 'Invalid JSON' }, 400);
   }
 }
-
-export const readName = (body: Record<string, unknown>) => {
-  const name = typeof body.name === 'string' ? body.name.trim() : '';
-  return name.length > 0 && name.length <= MAX_NAME_LENGTH ? name : null;
-};
 
 export async function getRole(
   db: D1Database,

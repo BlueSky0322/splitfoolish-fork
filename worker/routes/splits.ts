@@ -3,22 +3,15 @@
 // opening one, which checks membership in the same database round trip as the rest.
 
 import { Hono } from 'hono';
-import {
-  AppEnv,
-  Env,
-  ID,
-  MAX_NAME_LENGTH,
-  Role,
-  SPLIT,
-  json,
-  member,
-  newId,
-  notFound,
-  ownerOnly,
-  readJson,
-  readName,
-  splitRoom,
-} from '../app';
+import type {
+  Attachment,
+  ItemNameUse,
+  SplitDetail,
+  SplitInvite,
+  SplitSummary,
+} from '../../shared/api';
+import { AppEnv, Env, ID, Role, SPLIT, member, ownerOnly, readJson, splitRoom } from '../app';
+import { MAX_NAME_LENGTH, json, newId, notFound, readName } from '../http';
 import {
   deleteAttachment,
   deleteSplitPicture,
@@ -74,7 +67,7 @@ const startReconvert = (
   );
 
 splits.get('/splits', async (c) =>
-  json({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
+  json<{ splits: SplitSummary[] }>({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
 );
 
 // Your own order for your splits, as dragged in the app: every id, first to last
@@ -114,15 +107,15 @@ splits.get('/item-names', async (c) => {
      ) WHERE n = 1 ORDER BY last DESC LIMIT ?`,
   )
     .bind(c.var.email, MAX_ITEM_NAMES)
-    .all();
-  return json({ names: results });
+    .all<ItemNameUse>();
+  return json<{ names: ItemNameUse[] }>({ names: results });
 });
 
 splits.post('/splits', async (c) => {
   const db = c.env.DB;
   const body = await readJson(c.req.raw);
   if (body instanceof Response) return body;
-  const name = readName(body);
+  const name = readName(body.name);
   if (name == null) return json({ error: `Name must be 1-${MAX_NAME_LENGTH} characters` }, 400);
   const currency = body.currency ?? 'MYR';
   if (typeof currency !== 'string' || !CURRENCY.test(currency)) {
@@ -215,7 +208,7 @@ splits.get(SPLIT, async (c) => {
     startReconvert(c.env, c.executionCtx, id, c.var.email);
   }
 
-  return json({
+  return json<SplitDetail>({
     id,
     name: split.name,
     currency: split.currency,
@@ -226,11 +219,15 @@ splits.get(SPLIT, async (c) => {
     members: assembleMembers([memberRows, methodRows]),
     invites:
       role === 'owner'
-        ? inviteRows.results.map((i) => ({ ...i, needsApproval: Boolean(i.needsApproval) }))
+        ? (
+            inviteRows.results as unknown as (Omit<SplitInvite, 'needsApproval'> & {
+              needsApproval: number;
+            })[]
+          ).map((i) => ({ ...i, needsApproval: Boolean(i.needsApproval) }))
         : undefined,
     // Everyone shares with their own link; a member's asks the owner to approve
     inviteToken: role === 'owner' ? split.inviteToken : shareToken ?? undefined,
-    attachments: attachmentRows.results,
+    attachments: attachmentRows.results as unknown as Attachment[],
     ...assembleContent(content),
   });
 });
@@ -253,7 +250,7 @@ splits.patch(SPLIT, member, ownerOnly('Only the owner can change split settings'
   if (body instanceof Response) return body;
   const statements: D1PreparedStatement[] = [];
   if ('name' in body) {
-    const name = readName(body);
+    const name = readName(body.name);
     if (name == null) return json({ error: `Name must be 1-${MAX_NAME_LENGTH} characters` }, 400);
     statements.push(db.prepare('UPDATE splits SET name = ? WHERE id = ?').bind(name, id));
   }

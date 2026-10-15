@@ -3,7 +3,7 @@ import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosp
 import { useState } from 'react';
 import { SplitInvite, SplitMember } from '../../api';
 import { removeBlocker, useSplitActions } from '../../hooks/useSplit';
-import { AppReducerState, IPerson } from '../../interfaces/app-reducer';
+import { SplitState, Person } from '../../split/state';
 import { nameFor } from '../../profile/ProfileContext';
 import { SplitSummary } from '../../split/derive';
 import { formatMoney } from '../../utils/money';
@@ -12,7 +12,7 @@ import TransferRow from './TransferRow';
 import classes from './PeopleSheet.module.css';
 
 interface PeopleSheetProps {
-  state: AppReducerState;
+  state: SplitState;
   summary: SplitSummary;
   currency: string;
   myEmail: string | null;
@@ -58,8 +58,8 @@ function PersonPage({
   onBack,
   onShowItems,
 }: {
-  person: IPerson;
-  state: AppReducerState;
+  person: Person;
+  state: SplitState;
   summary: SplitSummary;
   currency: string;
   myEmail: string | null;
