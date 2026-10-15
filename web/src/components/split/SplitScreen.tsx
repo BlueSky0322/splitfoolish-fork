@@ -52,16 +52,16 @@ import {
 } from '../../split/grouping';
 import { useProfile } from '../../profile/ProfileContext';
 import { currencySymbol } from '../../utils/money';
-import ErrorBoundary from '../ErrorBoundary';
+import ErrorBoundary from '../ui/ErrorBoundary';
 import CurrenciesSheet from './CurrenciesSheet';
 import PhotoStrip from '../photos/PhotoStrip';
 import { usePhotos } from '../photos/usePhotos';
-import EndSplit, { EndSplitTitle } from '../EndSplit';
-import ResetLink from '../ResetLink';
-import SplitMembers, { ShareTitle } from '../SplitMembers';
+import EndSplit, { EndSplitTitle } from './EndSplit';
+import ResetLink from './ResetLink';
+import SplitMembers, { ShareTitle } from './SplitMembers';
 import Fab from '../ui/Fab';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
-import SplitAvatar from '../ui/SplitAvatar';
+import SplitAvatar from './SplitAvatar';
 import StateCard from '../ui/StateCard';
 import PersonAvatar, { AvatarVersionsContext } from './PersonAvatar';
 import BalancePanel, { BalanceHero, BalanceLine } from './BalancePanel';
@@ -77,6 +77,7 @@ import classes from './Split.module.css';
 import { updateHomeData } from '../../home-data';
 import { newId } from '../../utils/id';
 import { useSplitState } from '../../split/SplitStateContext';
+import { plural } from '../../utils/text';
 
 interface ViewPrefs {
   view: 'card' | 'table';
@@ -154,9 +155,7 @@ function SaveStatus({
     return (
       <div className={classes.status}>
         <CloudSlash size={14} />
-        {waiting === 0
-          ? 'Offline'
-          : `Offline · ${waiting} ${waiting === 1 ? 'change' : 'changes'} waiting`}
+        {waiting === 0 ? 'Offline' : `Offline · ${plural(waiting, 'change')} waiting`}
       </div>
     );
   }
@@ -186,7 +185,7 @@ function SaveStatus({
   return (
     <div className={classes.status}>
       <CloudCheck size={14} />
-      {label} · {count} {count === 1 ? 'item' : 'items'}
+      {label} · {plural(count, 'item')}
     </div>
   );
 }
@@ -389,7 +388,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     const items = state.items.filter((i) => selection.selected.has(i.id));
     if (items.length === 0) return;
     const photoCount = items.reduce((n, i) => n + photos.photosOf(i.id).length, 0);
-    const label = items.length === 1 ? items[0].name : `${items.length} items`;
+    const label = items.length === 1 ? items[0].name : plural(items.length, 'item');
     const remove = () => {
       const saved = items.map(toApiItem);
       for (const item of items) {
@@ -444,10 +443,11 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     setMoving(false);
     selection.clear();
     notifications.show({
-      message: `Moved ${count === 1 ? '1 item' : `${count} items`} to ${day.toLocaleDateString(
-        undefined,
-        { weekday: 'short', day: 'numeric', month: 'short' },
-      )}`,
+      message: `Moved ${plural(count, 'item')} to ${day.toLocaleDateString(undefined, {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      })}`,
     });
   };
 
@@ -1259,7 +1259,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
               />
               <div className={classes.peopleSummaryText}>
                 <div className={classes.peopleSummaryTitle}>
-                  {state.people.length} {state.people.length === 1 ? 'person' : 'people'}
+                  {plural(state.people.length, 'person', 'people')}
                 </div>
                 <div className={classes.peopleSummarySub}>{oweLine(state.people, summary, me)}</div>
               </div>

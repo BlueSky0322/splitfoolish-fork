@@ -11,7 +11,6 @@ import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifi
 import { SortableContext, SortingStrategy, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { ReactNode } from 'react';
 import { markDragged } from '../../hooks/useSortableSplit';
-import { moveSplit } from '../../home-data';
 
 // Dragging splits into your own order, in the sidebar and on My splits. A mouse drags
 // after moving a few pixels; a finger after a short press, so lists still scroll.
@@ -23,9 +22,12 @@ export function SortableSplits({
   ids,
   strategy = verticalListSortingStrategy,
   layout = 'list',
+  onMove,
   children,
 }: {
   ids: string[];
+  /** A split dropped where another one is */
+  onMove: (id: string, toId: string) => void;
   strategy?: SortingStrategy;
   /** list: one column, so up and down only. grid: rows and columns */
   layout?: 'list' | 'grid';
@@ -37,7 +39,7 @@ export function SortableSplits({
   );
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     markDragged();
-    if (over && active.id !== over.id) moveSplit(String(active.id), String(over.id));
+    if (over && active.id !== over.id) onMove(String(active.id), String(over.id));
   };
   return (
     <DndContext

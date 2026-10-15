@@ -20,18 +20,19 @@ import { MAX_NOTES_LENGTH, MAX_NAME_LENGTH } from '../../../../shared/types';
 import { ItemInput, api } from '../../api';
 import { SplitItem, Person } from '../../split/state';
 import { CATEGORIES } from '../../split/categories';
-import { ITEM_NAMES_KEY, suggestNames } from '../../split/itemNames';
+import { ITEM_NAMES_KEY, suggestNames } from '../../split/item-names';
 import { currencySymbol, formatMoney } from '../../utils/money';
 import { loadMath } from '../../utils/math';
 import { useProfile } from '../../profile/ProfileContext';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../ui/CurrencySelect';
-import { DialogHeaderSlot } from '../ui/dialogHeader';
+import { DialogHeaderSlot } from '../ui/dialog-header';
 import PersonAvatar from './PersonAvatar';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../utils/rates';
 import { DEFAULT_SETTINGS, type Attachment } from '../../../../shared/api';
+import { plural } from '../../utils/text';
 
 interface ItemFormProps {
   splitId: string;
@@ -633,9 +634,7 @@ const ItemForm = ({
       {confirmDelete ? (
         // Photos can't come back with Undo, so it's asked first when there are some
         <div className={classes.actions}>
-          <span className={classes.confirm}>
-            Delete with {photos.length} {photos.length === 1 ? 'photo' : 'photos'}?
-          </span>
+          <span className={classes.confirm}>Delete with {plural(photos.length, 'photo')}?</span>
           <Button
             variant="default"
             onClick={() => setConfirmDelete(false)}

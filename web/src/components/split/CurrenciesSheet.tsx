@@ -6,8 +6,7 @@ import { SplitItem } from '../../split/state';
 import { UsedCurrency, usedCurrencies } from '../../split/currencies';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import classes from './CurrenciesSheet.module.css';
-
-const plural = (n: number) => (n === 1 ? '1 item' : `${n} items`);
+import { plural } from '../../utils/text';
 
 interface CurrenciesSheetProps {
   currency: string;
@@ -88,7 +87,7 @@ function RateRow({
         </div>
       </div>
       <div className={classes.side}>
-        <div className={classes.count}>{plural(used.count)}</div>
+        <div className={classes.count}>{plural(used.count, 'item')}</div>
         <UnstyledButton
           className={classes.action}
           onClick={() => {

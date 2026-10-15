@@ -23,7 +23,7 @@ import {
   isRetryable,
 } from '../offline/outbox';
 import { queryClient } from '../query-client';
-import { ITEM_NAMES_KEY } from './itemNames';
+import { ITEM_NAMES_KEY } from './item-names';
 import { useSplitLive } from './useSplitLive';
 import type { SplitDetail, Attachment } from '../../../shared/api';
 import { reloadHomeData } from '../home-data';

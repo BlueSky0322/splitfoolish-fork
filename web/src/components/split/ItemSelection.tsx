@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { RowSelection } from '../../hooks/useItemSelection';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import classes from './ItemSelection.module.css';
+import { plural } from '../../utils/text';
 
 // Picking several items at once to delete them or move them to another day. Phones
 // start with a long press on an item; computers with the checkbox that shows on hover.
@@ -95,7 +96,7 @@ export function MobileSelectionBar({
       <ActionIcon
         variant="subtle"
         size={44}
-        aria-label={`Delete ${count} ${count === 1 ? 'item' : 'items'}`}
+        aria-label={`Delete ${plural(count, 'item')}`}
         className={classes.danger}
         onClick={onDelete}
       >
@@ -202,7 +203,7 @@ export function MoveDateDialog({
     <ResponsiveDialog
       opened={opened}
       onClose={onClose}
-      title={`Move ${count} ${count === 1 ? 'item' : 'items'} to`}
+      title={`Move ${plural(count, 'item')} to`}
       width={380}
     >
       <form

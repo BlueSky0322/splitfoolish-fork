@@ -11,6 +11,7 @@ import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';
 import { DEFAULT_SETTINGS } from '../../../../shared/api';
+import { plural } from '../../utils/text';
 
 /** The Select value for "use the currency used last" */
 const LAST_USED = 'last';
@@ -29,8 +30,6 @@ const RATE_SOURCES = [
     help: 'European Central Bank reference rates, published once a working day.',
   },
 ] as const;
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // Currency (9c): what new splits use, where rates come from, and today's rates for the
 // currencies in your splits

@@ -3,7 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { DotsThreeVertical, DownloadSimple, Export, PlusSquare } from '@phosphor-icons/react';
 import { ReactNode, useState } from 'react';
 import { useInstall } from '../../hooks/useInstall';
-import ResponsiveDialog from './ResponsiveDialog';
+import ResponsiveDialog from '../ui/ResponsiveDialog';
 import classes from './InstallApp.module.css';
 
 // Getting people to install Splitfoolish as an app: a card on My splits they can put

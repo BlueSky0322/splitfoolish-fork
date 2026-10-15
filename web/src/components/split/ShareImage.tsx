@@ -10,6 +10,7 @@ import TransferRow from './TransferRow';
 import classes from './ShareImage.module.css';
 import { toCents } from '../../../../shared/rates';
 import { DEFAULT_SETTINGS } from '../../../../shared/api';
+import { plural } from '../../utils/text';
 
 interface ShareImageProps {
   name: string;
@@ -190,7 +191,7 @@ const ShareImage = ({ name, currency, people, items, summary }: ShareImageProps)
           <div className={classes.meta}>
             {[
               range,
-              `${people.length} ${people.length === 1 ? 'person' : 'people'}`,
+              plural(people.length, 'person', 'people'),
               formatMoney(summary.totalCents, currency),
             ]
               .filter(Boolean)

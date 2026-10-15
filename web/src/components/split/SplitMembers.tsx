@@ -1,14 +1,14 @@
 import { ActionIcon, Button, CopyButton, Tooltip, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ArrowClockwise, Check, Copy, LinkSimple, ShareNetwork } from '@phosphor-icons/react';
-import { api, inviteUrl } from '../api';
-import { useIsMobile } from '../hooks/useBreakpoints';
-import { MetaChanges, SplitMeta } from '../split/useSplit';
-import { nameFor } from '../profile/ProfileContext';
-import UserAvatar from './ui/UserAvatar';
+import { api, inviteUrl } from '../../api';
+import { useIsMobile } from '../../hooks/useBreakpoints';
+import { MetaChanges, SplitMeta } from '../../split/useSplit';
+import { nameFor } from '../../profile/ProfileContext';
+import UserAvatar from '../ui/UserAvatar';
 import classes from './SplitMembers.module.css';
-import type { SplitInvite } from '../../../shared/api';
-import { reloadHomeData } from '../home-data';
+import type { SplitInvite } from '../../../../shared/api';
+import { reloadHomeData } from '../../home-data';
 
 interface SplitMembersProps {
   meta: SplitMeta;

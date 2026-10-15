@@ -3,24 +3,25 @@ import { notifications } from '@mantine/notifications';
 import { ArrowsLeftRight, Check, Plus, X } from '@phosphor-icons/react';
 import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { useState } from 'react';
-import { actionableInvites, api } from '../api';
-import { useIsDesktop } from '../hooks/useBreakpoints';
-import { useHomeData } from '../hooks/useHomeData';
-import { navigate } from '../hooks/useRoute';
-import { nameFor, useProfile } from '../profile/ProfileContext';
-import { formatMoney } from '../utils/money';
-import { useOpenNewSplit } from './NewSplitDialog';
-import Fab from './ui/Fab';
-import { justDragged, useSortableSplit } from '../hooks/useSortableSplit';
-import { SortableSplits } from './ui/SortableSplits';
-import ThemeToggle from './ui/ThemeToggle';
-import SplitAvatar from './ui/SplitAvatar';
-import UserAvatar from './ui/UserAvatar';
+import { actionableInvites, api } from '../../api';
+import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { useHomeData } from '../../hooks/useHomeData';
+import { navigate } from '../../hooks/useRoute';
+import { nameFor, useProfile } from '../../profile/ProfileContext';
+import { formatMoney } from '../../utils/money';
+import { useOpenNewSplit } from '../NewSplitDialog';
+import Fab from '../ui/Fab';
+import { justDragged, useSortableSplit } from '../../hooks/useSortableSplit';
+import { SortableSplits } from './SortableSplits';
+import ThemeToggle from '../ui/ThemeToggle';
+import SplitAvatar from '../split/SplitAvatar';
+import UserAvatar from '../ui/UserAvatar';
 import classes from './SplitsHome.module.css';
-import { InstallCard } from './ui/InstallApp';
-import type { MyInvite, SplitSummary } from '../../../shared/api';
-import { reloadHomeData, updateHomeData } from '../home-data';
-import { showError } from '../utils/notify';
+import { InstallCard } from '../shell/InstallApp';
+import type { MyInvite, SplitSummary } from '../../../../shared/api';
+import { reloadHomeData, updateHomeData, moveSplit } from '../../home-data';
+import { showError } from '../../utils/notify';
+import { plural } from '../../utils/text';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -32,8 +33,6 @@ const EMPTY_MESSAGES: Record<Exclude<Filter, 'invites'>, string> = {
 };
 
 const INVITE_DAYS = 14;
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function Balance({ split }: { split: SplitSummary }) {
   const cents = split.myBalanceCents;
@@ -396,6 +395,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
           )}
           {shown != null && shown.length > 0 && isDesktop && (
             <SortableSplits
+              onMove={moveSplit}
               ids={shown.map((s) => s.id)}
               strategy={rectSortingStrategy}
               layout="grid"
@@ -411,7 +411,10 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
             </SortableSplits>
           )}
           {shown != null && shown.length > 0 && !isDesktop && (
-            <SortableSplits ids={shown.map((s) => s.id)}>
+            <SortableSplits
+              onMove={moveSplit}
+              ids={shown.map((s) => s.id)}
+            >
               <div className={`sf-card ${classes.list}`}>
                 {shown.map((s) => (
                   <SplitListRow

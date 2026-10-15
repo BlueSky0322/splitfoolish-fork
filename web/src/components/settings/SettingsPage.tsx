@@ -15,7 +15,7 @@ import { useIsDesktop } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { clearCache } from '../../offline/cache';
-import { InstallField } from '../ui/InstallApp';
+import { InstallField } from '../shell/InstallApp';
 import UserAvatar from '../ui/UserAvatar';
 import AppearanceSection from './AppearanceSection';
 import CurrencySection from './CurrencySection';

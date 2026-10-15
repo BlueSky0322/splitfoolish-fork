@@ -1,5 +1,6 @@
 import { convertCents, convertParts, toCents } from '../../../shared/rates';
 import type { SplitItem, SplitState } from './state';
+import { plural } from '../utils/text';
 
 // The bill's rules that the app checks before sending a change, so it can explain a
 // refusal straight away. The server checks the same rules (worker/split-content.ts);
@@ -41,12 +42,12 @@ export function removeBlocker(
 ): string | null {
   const person = state.people.find((p) => p.id === personId);
   if (person == null) return null;
-  const count = (n: number) => (n === 1 ? '1 item' : `${n} items`);
   const paid = state.items.filter((i) => i.payer.id === personId).length;
-  if (paid > 0) return `${person.name} paid for ${count(paid)}. Edit or remove those items first.`;
+  if (paid > 0)
+    return `${person.name} paid for ${plural(paid, 'item')}. Edit or remove those items first.`;
   const shared = state.items.filter((i) => i.participants.some((p) => p.id === personId));
   if (shared.length === 0) return null;
-  if (!fromItems) return `${person.name} is on ${count(shared.length)}.`;
+  if (!fromItems) return `${person.name} is on ${plural(shared.length, 'item')}.`;
   if (shared.some((i) => i.participants.length === 1)) {
     return `${person.name} is the only person on an item. Edit or remove it first.`;
   }

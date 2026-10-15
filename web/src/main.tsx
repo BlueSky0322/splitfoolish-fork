@@ -8,7 +8,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
-import ErrorBoundary from './components/ErrorBoundary.tsx';
+import ErrorBoundary from './components/ui/ErrorBoundary.tsx';
 import './index.css';
 import { ProfileProvider, readAppearance } from './profile/ProfileContext.tsx';
 import { queryClient } from './query-client.ts';

@@ -17,11 +17,13 @@ export function useSaveIndicator() {
     setJustSaved(false);
     setPending((n) => n + 1);
     try {
-      return await work;
-    } finally {
-      setPending((n) => n - 1);
+      const result = await work;
+      // Only a save that went through says so; a failure explains itself elsewhere
       setJustSaved(true);
       timer.current = setTimeout(() => setJustSaved(false), SAVED_FOR_MS);
+      return result;
+    } finally {
+      setPending((n) => n - 1);
     }
   };
 

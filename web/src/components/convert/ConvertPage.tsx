@@ -30,7 +30,7 @@ import { formatMoney, listCurrencies } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rates';
 import CurrencySelect from '../ui/CurrencySelect';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
-import SplitAvatar from '../ui/SplitAvatar';
+import SplitAvatar from '../split/SplitAvatar';
 import classes from './Convert.module.css';
 import { DEFAULT_SETTINGS, type SplitSummary } from '../../../../shared/api';
 import { showError } from '../../utils/notify';

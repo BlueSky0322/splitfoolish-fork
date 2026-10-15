@@ -11,6 +11,7 @@ import { RowCheck } from './ItemSelection';
 import PersonAvatar from './PersonAvatar';
 import classes from './Split.module.css';
 import { toCents } from '../../../../shared/rates';
+import { plural } from '../../utils/text';
 
 interface ItemViewProps {
   groups: ItemGroup[];
@@ -84,7 +85,7 @@ function PhotoBadge({ count }: { count?: number }) {
   return (
     <span
       className={classes.photoBadge}
-      title={`${count} ${count === 1 ? 'photo' : 'photos'}`}
+      title={plural(count, 'photo')}
     >
       <Paperclip size={12} />
       {count > 1 && count}
@@ -373,9 +374,7 @@ export function ItemTable({
           {grouped && (
             <div className={classes.tableGroup}>
               <span className={classes.tableGroupLabel}>{group.label}</span>
-              <span className={classes.tableGroupCount}>
-                {group.items.length} {group.items.length === 1 ? 'item' : 'items'}
-              </span>
+              <span className={classes.tableGroupCount}>{plural(group.items.length, 'item')}</span>
               <span className={classes.tableGroupTotal}>
                 {formatMoney(group.subtotalCents, currency)}
               </span>

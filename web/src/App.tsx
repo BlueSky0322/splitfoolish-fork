@@ -6,7 +6,7 @@ import StateCard from './components/ui/StateCard';
 import { NewSplitProvider } from './components/NewSplitDialog';
 import SettingsPage from './components/settings/SettingsPage';
 import SplitScreen from './components/split/SplitScreen';
-import SplitsHome from './components/SplitsHome';
+import SplitsHome from './components/home/SplitsHome';
 import AppLayout from './components/shell/AppLayout';
 import { useRoute } from './hooks/useRoute';
 import { useProfile } from './profile/ProfileContext';

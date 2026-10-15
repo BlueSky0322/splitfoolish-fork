@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { suggestNames } from './itemNames';
+import { suggestNames } from './item-names';
 
 const past = ['Grab to airport', 'Airport taxi', 'abc', 'Coffee', 'Breakfast'].map((name) => ({
   name,

@@ -16,13 +16,14 @@ import { Route, navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { useOpenNewSplit } from '../NewSplitDialog';
 import BalanceTag from '../ui/BalanceTag';
-import SplitAvatar from '../ui/SplitAvatar';
+import SplitAvatar from '../split/SplitAvatar';
 import ThemeToggle from '../ui/ThemeToggle';
 import { justDragged, useSortableSplit } from '../../hooks/useSortableSplit';
-import { SortableSplits } from '../ui/SortableSplits';
+import { SortableSplits } from '../home/SortableSplits';
 import UserAvatar from '../ui/UserAvatar';
 import classes from './Sidebar.module.css';
 import type { SplitSummary } from '../../../../shared/api';
+import { moveSplit } from '../../home-data';
 
 interface SidebarProps {
   route: Route;
@@ -184,7 +185,10 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
         </Tooltip>
         <div className={classes.railDivider} />
         <div className={classes.railSplits}>
-          <SortableSplits ids={splits?.map((s) => s.id) ?? []}>
+          <SortableSplits
+            onMove={moveSplit}
+            ids={splits?.map((s) => s.id) ?? []}
+          >
             {splits?.map((s) => (
               <RailTile
                 key={s.id}
@@ -282,7 +286,10 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
               </span>
             </UnstyledButton>
             <div className={classes.splitList}>
-              <SortableSplits ids={splits?.map((s) => s.id) ?? []}>
+              <SortableSplits
+                onMove={moveSplit}
+                ids={splits?.map((s) => s.id) ?? []}
+              >
                 {splits?.map((s) => (
                   <SplitRow
                     key={s.id}
