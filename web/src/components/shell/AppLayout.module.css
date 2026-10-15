@@ -16,3 +16,9 @@
     transition: none;
   }
 }
+
+/* Phones: the page ends above the bottom tabs, and what floats sits above them too */
+.withTabs {
+  --sf-chrome-bottom: calc(64px + var(--sf-safe-bottom));
+  padding-bottom: var(--sf-chrome-bottom);
+}

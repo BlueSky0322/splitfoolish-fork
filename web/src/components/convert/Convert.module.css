@@ -335,3 +335,12 @@
   border-radius: 18px 18px 0 0;
   background: color-mix(in srgb, var(--sf-accent) 6%, transparent);
 }
+
+/* Phones: a large title where tablets have a back button */
+.mobileTitle {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}

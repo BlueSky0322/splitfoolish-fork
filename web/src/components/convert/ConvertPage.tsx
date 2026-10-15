@@ -19,7 +19,7 @@ import {
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, isCurrency, toCents } from '@shared/rates';
-import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { useMySplits } from '../../my-splits/useMySplits';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
@@ -181,6 +181,7 @@ function SplitSheet({
 // drop the amount straight into a split as a new item
 const ConvertPage = () => {
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const { profile } = useProfile();
   const { splits } = useMySplits();
 
@@ -314,14 +315,18 @@ const ConvertPage = () => {
     const canAdd = amount != null && amount > 0;
     return (
       <div className={classes.mobilePage}>
-        <UnstyledButton
-          className={classes.back}
-          onClick={() => navigate('')}
-          aria-label="Back to My splits"
-        >
-          <CaretLeft size={20} />
-          <span>Convert</span>
-        </UnstyledButton>
+        {isMobile ? (
+          <h1 className={classes.mobileTitle}>Convert</h1>
+        ) : (
+          <UnstyledButton
+            className={classes.back}
+            onClick={() => navigate('')}
+            aria-label="Back to My splits"
+          >
+            <CaretLeft size={20} />
+            <span>Convert</span>
+          </UnstyledButton>
+        )}
 
         {/* Two rows, like a calculator: what you have on top, what it comes to below */}
         <div className={classes.converter}>
