@@ -12,7 +12,7 @@ import {
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, signOut, useProfile } from '../../profile/ProfileContext';
 import { InstallField } from '../common/InstallApp';
@@ -127,6 +127,7 @@ const open = (id: SectionId, fromList: boolean) => {
 const SettingsPage = () => {
   const { profile } = useProfile();
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const hashed = useSectionHash();
   const { track, note } = useSaveIndicator();
   if (profile == null) return null;
@@ -216,14 +217,19 @@ const SettingsPage = () => {
   return (
     <div className={classes.mobile}>
       <div className={classes.topBar}>
-        <UnstyledButton
-          className={classes.back}
-          onClick={back}
-          aria-label={hashed ? 'Back to Settings' : 'Back to My splits'}
-        >
-          <CaretLeft size={20} />
-          <span>{hashed ? hashed.label : 'Settings'}</span>
-        </UnstyledButton>
+        {isMobile ? (
+          // Phones go back with the gesture or the tabs, so the page just says where it is
+          <h1 className={classes.mobileTitle}>{hashed ? hashed.label : 'You'}</h1>
+        ) : (
+          <UnstyledButton
+            className={classes.back}
+            onClick={back}
+            aria-label={hashed ? 'Back to Settings' : 'Back to My splits'}
+          >
+            <CaretLeft size={20} />
+            <span>{hashed ? hashed.label : 'Settings'}</span>
+          </UnstyledButton>
+        )}
         {note}
       </div>
 

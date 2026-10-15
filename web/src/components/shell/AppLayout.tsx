@@ -1,18 +1,20 @@
 import { AppShell } from '@mantine/core';
 import { useHotkeys } from '@mantine/hooks';
 import type { ReactNode } from 'react';
-import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import type { Route } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
+import BottomTabs from './BottomTabs';
 import OfflineNotice from './OfflineNotice';
 import UpdateNotice from './UpdateNotice';
 import Sidebar from './Sidebar';
 import classes from './AppLayout.module.css';
 
-// Desktop gets a sidebar (collapsible to a rail with the button or "["); phones and
-// tablets get the page alone, each with its own top bar
+// Desktop gets a sidebar (collapsible to a rail with the button or "["); phones get the
+// page over bottom tabs; tablets get the page alone, each with its own top bar
 const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) => {
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const { profile, rememberSettings } = useProfile();
   // Saved with the account, so it's the same on every computer
   const open = profile?.settings.sidebarOpen ?? true;
@@ -21,10 +23,15 @@ const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) =
 
   if (!isDesktop) {
     return (
-      <main className="min-h-dvh">
+      <main
+        className={`min-h-dvh ${isMobile ? classes.withTabs : ''}`}
+        data-tabs={isMobile || undefined}
+      >
+        {isMobile && <OfflineNotice inline />}
         {children}
-        <OfflineNotice />
+        {!isMobile && <OfflineNotice />}
         <UpdateNotice />
+        {isMobile && <BottomTabs route={route} />}
       </main>
     );
   }

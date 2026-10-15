@@ -1,5 +1,7 @@
 import { Avatar, Button, FileButton, Select, TextInput, UnstyledButton } from '@mantine/core';
+import { Camera } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
+import { useIsMobile } from '../../../hooks/useBreakpoints';
 import { listCurrencies } from '../../../utils/money';
 import SplitAvatar from '../../common/SplitAvatar';
 import classes from './SplitForm.module.css';
@@ -39,6 +41,9 @@ const SplitForm = ({
   const [pictureUrl, setPictureUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const currencies = useMemo(listCurrencies, []);
+  // Phones (10k, 10q): the code as a tag beside the currency's name, the main button at the bottom
+  const isMobile = useIsMobile();
+  const size = isMobile ? 64 : 56;
 
   useEffect(() => {
     if (!(picture instanceof File)) {
@@ -73,7 +78,7 @@ const SplitForm = ({
           <Avatar
             src={pictureUrl}
             alt=""
-            size={56}
+            size={size}
             radius={14}
           />
         ) : splitId && picture !== 'remove' ? (
@@ -81,19 +86,19 @@ const SplitForm = ({
             splitId={splitId}
             name={letter}
             pictureVersion={initial.pictureVersion}
-            size={56}
+            size={size}
           />
         ) : (
           <Avatar
-            size={56}
+            size={size}
             radius={14}
             styles={{ placeholder: { background: 'var(--sf-tag)', color: 'var(--sf-text)' } }}
           >
-            {letter.charAt(0).toUpperCase()}
+            {isMobile && splitId == null ? <Camera size={22} /> : letter.charAt(0).toUpperCase()}
           </Avatar>
         )}
         {canEdit && (
-          <div className="flex gap-3">
+          <div className={isMobile ? 'flex flex-col gap-1' : 'flex gap-3'}>
             <FileButton
               onChange={(file) => file && setPicture(file)}
               accept="image/*"
@@ -115,6 +120,7 @@ const SplitForm = ({
                 Remove
               </UnstyledButton>
             )}
+            {isMobile && !hasPicture && <span className="sf-muted text-[13px]">Optional</span>}
           </div>
         )}
       </div>
@@ -136,7 +142,22 @@ const SplitForm = ({
         label="Currency"
         searchable
         allowDeselect={false}
-        data={currencies}
+        data={isMobile ? currencies.map((c) => ({ value: c.value, label: c.detail })) : currencies}
+        // Phones find a currency by its code too, which shows as a tag
+        filter={
+          isMobile
+            ? ({ options, search }) => {
+                const q = search.trim().toLowerCase();
+                return options.filter(
+                  (o) =>
+                    'value' in o &&
+                    (o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q)),
+                );
+              }
+            : undefined
+        }
+        leftSection={isMobile ? <span className="sf-tag font-medium">{currency}</span> : undefined}
+        leftSectionWidth={isMobile ? 64 : undefined}
         value={currency}
         onChange={(v) => v && setCurrency(v)}
         disabled={!canEdit}
@@ -145,15 +166,30 @@ const SplitForm = ({
         comboboxProps={{ withinPortal: false }}
       />
       {!canEdit && <div className="sf-muted text-sm">Only the owner can change these.</div>}
-      <div className="flex justify-end gap-2">
-        <Button
-          variant="default"
-          onClick={onCancel}
-        >
-          {canEdit ? 'Cancel' : 'Close'}
-        </Button>
-        {canEdit && <Button type="submit">{submitLabel}</Button>}
-      </div>
+      {isMobile ? (
+        // The sheet's X closes it, so the main button gets the room
+        canEdit && (
+          <div className={classes.mainAction}>
+            <Button
+              type="submit"
+              size="lg"
+              fullWidth
+            >
+              {submitLabel}
+            </Button>
+          </div>
+        )
+      ) : (
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="default"
+            onClick={onCancel}
+          >
+            {canEdit ? 'Cancel' : 'Close'}
+          </Button>
+          {canEdit && <Button type="submit">{submitLabel}</Button>}
+        </div>
+      )}
     </form>
   );
 };

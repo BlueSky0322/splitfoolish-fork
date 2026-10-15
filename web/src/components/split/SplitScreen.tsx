@@ -4,7 +4,7 @@ import { notifications } from '@mantine/notifications';
 import { LockSimple, Rows, Table, UsersThree, X } from '@phosphor-icons/react';
 import { useCallback, useMemo, useState } from 'react';
 import type { Attachment } from '@shared/api';
-import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { useMySplitsSnapshot } from '../../my-splits/useMySplits';
 import { useItemSelection, useSelectionKeys } from './items/useItemSelection';
 import { navigate } from '../../hooks/useRoute';
@@ -42,6 +42,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
   const photos = usePhotos({ splitId, meta, metaChanges, whenSaved });
   const { state } = useSplitState();
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const { prefs, setPref, sortBy } = useItemViewPrefs();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
@@ -218,7 +219,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     groups,
     grouped,
     mobile: !isDesktop,
-    onEdit: (item: SplitItem) => setDialog({ kind: 'edit', item }),
+    // Phones show the item first, with Edit a tap away
+    onEdit: (item: SplitItem) =>
+      setDialog(isMobile ? { kind: 'item', itemId: item.id } : { kind: 'edit', item }),
     onDelete: (item: SplitItem) => deleteItems([item]),
     photoCounts,
     selection: selection.row,

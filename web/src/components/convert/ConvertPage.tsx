@@ -14,16 +14,17 @@ import {
   CaretDown,
   CaretLeft,
   CaretRight,
+  CaretUpDown,
   MagnifyingGlass,
   Plus,
 } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { COMMON_CURRENCIES, convertCents, isCurrency, toCents } from '@shared/rates';
-import { useIsDesktop } from '../../hooks/useBreakpoints';
+import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { useMySplits } from '../../my-splits/useMySplits';
 import { navigate } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
-import { formatMoney, homeCurrency, listCurrencies } from '../../utils/money';
+import { formatAmount, formatMoney, homeCurrency, listCurrencies } from '../../utils/money';
 import type { CurrencyOption } from '../../utils/money';
 import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rate-labels';
 import CurrencySelect from '../ui/CurrencySelect';
@@ -181,6 +182,7 @@ function SplitSheet({
 // drop the amount straight into a split as a new item
 const ConvertPage = () => {
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const { profile } = useProfile();
   const { splits } = useMySplits();
 
@@ -248,6 +250,33 @@ const ConvertPage = () => {
   const [picking, setPicking] = useState<'from' | 'to' | 'split' | null>(null);
   const suggested = [...new Set([home, ...recent.flat(), ...COMMON_CURRENCIES])].slice(0, 6);
 
+  const refreshButton = from !== to && (
+    <Tooltip label="Fetch the live rate">
+      <Button
+        variant="subtle"
+        size="compact-sm"
+        leftSection={<ArrowClockwise size={14} />}
+        loading={rate.isFetching || refreshing}
+        onClick={() => void refresh()}
+      >
+        Refresh
+      </Button>
+    </Tooltip>
+  );
+
+  // Phones: one line, "1 JPY = 0.0297 MYR, Wise, today 14:20", with Refresh by the title
+  const phoneRateLine = (
+    <div className={classes.rateLine}>
+      {from === to
+        ? 'Same currency'
+        : rate.data
+          ? `${describeRate(rate.data.rate, from, to)}, ${SOURCE_LABELS[rate.data.source]}, ${describeWhen(rate.data.fetchedAt)}`
+          : rate.isError
+            ? "Couldn't get a rate right now"
+            : 'Getting the rate…'}
+    </div>
+  );
+
   const rateLine = (
     <div className={classes.rateLine}>
       {from === to ? (
@@ -264,19 +293,7 @@ const ConvertPage = () => {
       ) : (
         <span>Getting the rate…</span>
       )}
-      {from !== to && (
-        <Tooltip label="Fetch the live rate">
-          <Button
-            variant="subtle"
-            size="compact-sm"
-            leftSection={<ArrowClockwise size={14} />}
-            loading={rate.isFetching || refreshing}
-            onClick={() => void refresh()}
-          >
-            Refresh
-          </Button>
-        </Tooltip>
-      )}
+      {refreshButton}
     </div>
   );
 
@@ -293,7 +310,7 @@ const ConvertPage = () => {
               setTo(t);
             }}
           >
-            {f} to {t}
+            {f} → {t}
           </UnstyledButton>
         ))}
       </div>
@@ -314,14 +331,21 @@ const ConvertPage = () => {
     const canAdd = amount != null && amount > 0;
     return (
       <div className={classes.mobilePage}>
-        <UnstyledButton
-          className={classes.back}
-          onClick={() => navigate('')}
-          aria-label="Back to My splits"
-        >
-          <CaretLeft size={20} />
-          <span>Convert</span>
-        </UnstyledButton>
+        {isMobile ? (
+          <div className={classes.mobileTitleRow}>
+            <h1 className={classes.mobileTitle}>Convert</h1>
+            {refreshButton}
+          </div>
+        ) : (
+          <UnstyledButton
+            className={classes.back}
+            onClick={() => navigate('')}
+            aria-label="Back to My splits"
+          >
+            <CaretLeft size={20} />
+            <span>Convert</span>
+          </UnstyledButton>
+        )}
 
         {/* Two rows, like a calculator: what you have on top, what it comes to below */}
         <div className={classes.converter}>
@@ -364,23 +388,35 @@ const ConvertPage = () => {
                 data-empty={convertedCents == null || undefined}
                 aria-live="polite"
               >
-                {convertedCents == null ? '0' : formatMoney(convertedCents, to)}
+                {convertedCents == null ? '0' : formatAmount(convertedCents, to)}
               </output>
             </span>
           </div>
         </div>
-        {rateLine}
+        {isMobile ? phoneRateLine : rateLine}
         {recentChips}
 
+        {/* The split to add it to, and adding it: it opens the item sheet filled in */}
         <div className={classes.mobileFooter}>
+          <UnstyledButton
+            className={classes.splitPicker}
+            onClick={() => setPicking('split')}
+            disabled={splitOptions.length === 0}
+            aria-label="Split to add to"
+          >
+            <span className="min-w-0 flex-1 truncate">
+              {splitOptions.find((o) => o.value === chosenSplit)?.label ?? 'No splits yet'}
+            </span>
+            <CaretUpDown size={16} />
+          </UnstyledButton>
           <Button
             fullWidth
             size="lg"
             leftSection={<Plus size={18} />}
-            disabled={!canAdd}
-            onClick={() => setPicking('split')}
+            disabled={!canAdd || chosenSplit == null}
+            onClick={addAsItem}
           >
-            {canAdd ? `Add ${formatMoney(toCents(amount), from)} to a split` : 'Add to a split'}
+            Add as item
           </Button>
         </div>
 
@@ -395,10 +431,10 @@ const ConvertPage = () => {
         <SplitSheet
           opened={picking === 'split'}
           splits={splits ?? []}
-          label={canAdd ? `Add ${formatMoney(toCents(amount), from)} to` : 'Add to'}
+          label="Add to"
           onPick={(id) => {
             setPicking(null);
-            addTo(id);
+            setSplitId(id);
           }}
           onClose={() => setPicking(null)}
         />

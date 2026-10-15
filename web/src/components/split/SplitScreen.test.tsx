@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
 import {
@@ -186,17 +186,82 @@ describe('the split page', () => {
     );
   });
 
-  test('on a phone, leads with where you stand and who owes whom', async () => {
+  test('on a phone, leads with where you stand, with settling up and photos as tabs', async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     expect(await screen.findByText('Dinner')).toBeTruthy();
     // Ryan paid 90 and Ann 30 of 120 split evenly: Ann owes Ryan 30
     expect(screen.getByText("You're owed")).toBeTruthy();
-    expect(screen.getByText('Ann owes you')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: 'Settle up' }));
+    await user.click(screen.getByRole('button', { name: /Settle up/ }));
+    expect(screen.getByRole('tab', { name: 'Settle up' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(await screen.findByText('Ann pays Ryan')).toBeTruthy();
+    expect(screen.queryByText('Dinner')).toBeNull();
+
+    // A swipe moves on to the next tab
+    const content = screen.getByText('Ann pays Ryan').closest('[class*=content]')!;
+    fireEvent.touchStart(content, { touches: [{ clientX: 300, clientY: 400 }] });
+    fireEvent.touchEnd(content, { changedTouches: [{ clientX: 100, clientY: 410 }] });
+    expect(screen.getByRole('tab', { name: 'Photos' }).getAttribute('aria-selected')).toBe('true');
+    expect(await screen.findByText(/No photos yet/)).toBeTruthy();
+
+    // The split's menu is a sheet
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    const menu = await screen.findByRole('dialog');
+    expect(within(menu).getByText('People')).toBeTruthy();
+    expect(within(menu).getByText('Split settings')).toBeTruthy();
+  });
+
+  test('on a phone, an item opens as it stands, with Edit a tap away', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Taxi'));
+    const detail = await screen.findByRole('dialog');
+    expect(within(detail).getByText('Ann paid')).toBeTruthy();
+    expect(within(detail).getAllByText('15.00')).toHaveLength(2);
+
+    await user.click(within(detail).getByRole('button', { name: 'Edit item' }));
+    expect(await screen.findByText('Edit item')).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '30');
+  });
+
+  test('on a phone, the item sheet shows who it is split between and asks before losing an entry', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Add item' }));
     const sheet = await screen.findByRole('dialog');
-    expect(within(sheet).getByText('1 transfer clears every balance')).toBeTruthy();
+    await user.type(within(sheet).getByRole('textbox', { name: 'Amount' }), '50');
+    await user.type(within(sheet).getByRole('textbox', { name: 'What it was for' }), 'Snacks');
+    expect(within(sheet).getByText('2 of 2 people, RM 25.00 each')).toBeTruthy();
+
+    // Tapping someone leaves them out
+    await user.click(within(sheet).getByRole('checkbox', { name: 'Ann' }));
+    expect(within(sheet).getByText('Not in')).toBeTruthy();
+    expect(within(sheet).getByText('1 of 2 people, RM 50.00 each')).toBeTruthy();
+
+    // Exact amounts that don't add up yet can't be added
+    await user.click(within(sheet).getByText('Exact'));
+    expect(within(sheet).getByText('RM 50.00 left of RM 50.00')).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: 'Add item' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+
+    // Back asks first; Keep editing keeps it all
+    window.history.back();
+    expect(await screen.findByText('Discard this item?')).toBeTruthy();
+    expect(screen.getByText("You've entered an amount and a name.")).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+    await waitFor(() => expect(screen.queryByText('Discard this item?')).toBeNull());
+    expect(within(sheet).getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '50');
+
+    // Asked again, Discard closes both and takes their entries off together
+    window.history.back();
+    await user.click(await screen.findByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.location.search).toBe('?s=trip');
   });
 
   test("explains that a split isn't there, or isn't shared with you", async () => {

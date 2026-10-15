@@ -213,3 +213,59 @@
   font-size: 14px;
   color: var(--sf-negative);
 }
+
+/* Phones (10c): the amount in a box with its currency as a button */
+.form[data-phone] .amount {
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--sf-border);
+  border-radius: 14px;
+}
+
+.form[data-phone] .amount:focus-within {
+  border-color: var(--sf-accent);
+}
+
+.form[data-phone] .currency {
+  width: 74px;
+}
+
+.form[data-phone] .currency :global(.mantine-Select-input) {
+  height: 44px;
+  padding: 0 22px 0 10px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--sf-text);
+  background: color-mix(in srgb, var(--sf-text) 6%, transparent);
+}
+
+.form[data-phone] .amountInput {
+  font-size: 32px;
+}
+
+.form[data-phone] .conversion {
+  margin-top: -12px;
+  font-size: 12px;
+}
+
+.form[data-phone] .pill {
+  min-height: 40px;
+  padding-right: 14px;
+}
+
+/* The main button stays at the bottom of the sheet however long the form gets */
+.mainAction {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -20px -20px;
+  padding: 12px 20px 16px;
+  background: var(--sf-surface);
+  border-top: 1px solid var(--sf-divider);
+}
+
+.mainAction :global(.mantine-Button-root) {
+  height: 52px;
+}

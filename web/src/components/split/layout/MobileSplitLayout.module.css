@@ -1,0 +1,118 @@
+.page {
+  gap: 0;
+  padding-bottom: 0;
+}
+
+/* The header, balance card and tabs stay in reach while the tab below scrolls */
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(8px + env(safe-area-inset-top)) 0 0;
+  background: var(--sf-bg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px 0 20px;
+}
+
+.name {
+  margin: 0;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.balanceCard {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 20px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-sm);
+}
+
+.settleLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  color: var(--sf-accent);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Items, Settle up, Photos: 44px, with a 2px mark under the one showing */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--sf-divider);
+}
+
+.tab {
+  position: relative;
+  flex: 1;
+  height: 44px;
+  font-size: 15px;
+  text-align: center;
+  color: var(--sf-text-muted);
+}
+
+.tab[data-active] {
+  color: var(--sf-text);
+  font-weight: 500;
+}
+
+.tab[data-active]::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 44px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--sf-accent);
+  transform: translateX(-50%);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 60vh;
+  padding: 12px 0 110px;
+}
+
+.settle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 20px 0;
+}
+
+.sticky[data-selecting] {
+  padding-top: calc(56px + env(safe-area-inset-top));
+}
+
+.header[hidden] {
+  display: none;
+}

@@ -1,16 +1,19 @@
 import { BalanceHero } from '../balances/BalancePanel';
 import CurrenciesSheet from './CurrenciesSheet';
 import EndSplit, { EndSplitTitle } from './EndSplit';
+import ItemDetail from '../items/ItemDetail';
 import ItemForm from '../items/ItemForm';
 import PeopleSheet from '../people/PeopleSheet';
 import ResetLink from '../people/ResetLink';
 import ShareImage from './ShareImage';
 import SplitMembers, { ShareTitle } from '../people/SplitMembers';
+import SplitMenuSheet from './SplitMenuSheet';
 import SplitSettings from './SplitSettings';
 import PhotoStrip from '../photos/PhotoStrip';
 import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import { Button } from '@mantine/core';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
+import { useIsMobile } from '../../../hooks/useBreakpoints';
 import type { ItemInput } from '../../../api';
 import type { SplitTotals } from '../../../split/derive';
 import type { SplitItem } from '../../../split/state';
@@ -40,6 +43,17 @@ interface SplitDialogsProps {
   onShowItems: (personId: string) => void;
 }
 
+/** A sheet's title, with a line under it on phones */
+const SheetTitle = ({ title, under }: { title: string; under?: string }) =>
+  under ? (
+    <span className="flex flex-col gap-0.5">
+      <span>{title}</span>
+      <span className="sf-muted text-[13px] font-normal truncate">{under}</span>
+    </span>
+  ) : (
+    title
+  );
+
 // Everything the split page opens over itself
 const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsProps) => {
   const {
@@ -58,7 +72,25 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
   } = useSplitPage();
   const { state } = useSplitState();
   const actions = useSplitActions();
-  const close = () => setDialog(null);
+  const isMobile = useIsMobile();
+  // What the item form has that closing it would lose; phones ask first (10d)
+  const unsaved = useRef<string | null>(null);
+  const [discarding, setDiscarding] = useState<string | null>(null);
+  const close = () => {
+    unsaved.current = null;
+    setDialog(null);
+  };
+  /** Closes the item form, unless that would lose what's in it; then it asks */
+  const closeItemForm = () => {
+    if (!isMobile || unsaved.current == null) {
+      close();
+      return;
+    }
+    setDiscarding(unsaved.current);
+    return false;
+  };
+  // The item shown, kept current with changes to it
+  const shown = dialog?.kind === 'item' ? state.items.find((i) => i.id === dialog.itemId) : null;
   // The item being edited, when the item form is open for one
   const editing = dialog?.kind === 'edit' ? dialog.item : null;
 
@@ -91,8 +123,15 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
     <>
       <ResponsiveDialog
         opened={dialog?.kind === 'add' || dialog?.kind === 'edit'}
-        onClose={close}
-        title={dialog?.kind === 'edit' ? 'Edit item' : 'Add item'}
+        onClose={() => void closeItemForm()}
+        onBack={closeItemForm}
+        title={
+          <SheetTitle
+            title={dialog?.kind === 'edit' ? 'Edit item' : 'Add item'}
+            // Phones say which split it's going in
+            under={isMobile ? meta?.name : undefined}
+          />
+        }
         width={520}
       >
         {editing ? (
@@ -107,6 +146,9 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             }}
             onDuplicate={(keepDate) => duplicateItem(editing, keepDate)}
             onCancel={close}
+            onDirtyChange={(u) => {
+              unsaved.current = u;
+            }}
           />
         ) : (
           dialog?.kind === 'add' && (
@@ -116,8 +158,56 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
               initialCurrency={dialog.prefill?.currency}
               onSave={saveItem}
               onCancel={close}
+              onDirtyChange={(u) => {
+                unsaved.current = u;
+              }}
             />
           )
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={discarding != null}
+        onClose={() => setDiscarding(null)}
+        title="Discard this item?"
+        floating
+      >
+        <p className="sf-muted text-sm mb-4">{discarding}</p>
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="default"
+            size="lg"
+            className="sf-danger-outline"
+            onClick={() => {
+              setDiscarding(null);
+              close();
+            }}
+          >
+            Discard
+          </Button>
+          <Button
+            variant="subtle"
+            color="gray"
+            size="lg"
+            onClick={() => setDiscarding(null)}
+          >
+            Keep editing
+          </Button>
+        </div>
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={shown != null}
+        onClose={close}
+        title={shown?.name}
+      >
+        {shown && (
+          <ItemDetail
+            item={shown}
+            onEdit={() => setDialog({ kind: 'edit', item: shown })}
+            onDelete={() => {
+              close();
+              deleteItems([shown]);
+            }}
+          />
         )}
       </ResponsiveDialog>
       <ResponsiveDialog
@@ -135,6 +225,13 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             }}
           />
         )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'menu'}
+        onClose={close}
+        title={null}
+      >
+        {dialog?.kind === 'menu' && <SplitMenuSheet />}
       </ResponsiveDialog>
       <ResponsiveDialog
         opened={dialog?.kind === 'settle'}

@@ -3,7 +3,7 @@
 // Also the names of items across those splits, for suggesting as you type one, and the
 // currencies used in them, for Settings.
 
-import type { ItemNameUse, SplitSummary } from '../shared/api';
+import type { FoundItem, ItemNameUse, SplitSummary } from '../shared/api';
 import type { SettleItem, SplitMode } from '../shared/settle';
 import { balances } from '../shared/settle';
 import type { Role } from '../shared/types';
@@ -13,6 +13,7 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
     db
       .prepare(
         `SELECT s.id, s.name, s.currency, s.updated_at AS updatedAt, m.role,
+           m.archived_at IS NOT NULL AS archived,
            (SELECT count(*) FROM split_members WHERE split_id = s.id) AS memberCount,
            (SELECT version FROM split_pictures WHERE split_id = s.id) AS pictureVersion
          FROM splits s JOIN split_members m ON m.split_id = s.id
@@ -44,8 +45,8 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
       .bind(email),
     db
       .prepare(
-        `SELECT p.split_id AS splitId, count(*) AS n FROM people p
-         JOIN split_members m ON m.split_id = p.split_id WHERE m.email = ? GROUP BY p.split_id`,
+        `SELECT p.split_id AS splitId, p.id FROM people p
+         JOIN split_members m ON m.split_id = p.split_id WHERE m.email = ?`,
       )
       .bind(email),
   ]);
@@ -79,9 +80,10 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
   const myPerson = new Map(
     (mine.results as { splitId: string; id: string }[]).map((r) => [r.splitId, r.id]),
   );
-  const peopleCount = new Map(
-    (people.results as { splitId: string; n: number }[]).map((r) => [r.splitId, r.n]),
-  );
+  const peopleOf = new Map<string, string[]>();
+  for (const p of people.results as { splitId: string; id: string }[]) {
+    peopleOf.set(p.splitId, [...(peopleOf.get(p.splitId) ?? []), p.id]);
+  }
 
   return (
     splits.results as {
@@ -92,14 +94,23 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
       role: Role;
       memberCount: number;
       pictureVersion: number | null;
+      archived: number;
     }[]
   ).map((s) => {
     const splitItems = bySplit.get(s.id) ?? [];
     const me = myPerson.get(s.id);
+    const ids = peopleOf.get(s.id) ?? [];
+    const totalCents = splitItems.reduce((a, i) => a + i.costCents, 0);
     return {
       ...s,
-      peopleCount: peopleCount.get(s.id) ?? 0,
-      totalCents: splitItems.reduce((a, i) => a + i.costCents, 0),
+      archived: s.archived === 1,
+      peopleCount: ids.length,
+      itemCount: splitItems.length,
+      totalCents,
+      // Something was spent and no one owes anyone
+      settled:
+        totalCents > 0 &&
+        [...balances(ids, splitItems).values()].every((b) => b.balanceCents === 0),
       // Null when no one in the bill is linked to this account; balances() gives every
       // id it's asked about an entry
       myBalanceCents: me == null ? null : balances([me], splitItems).get(me)!.balanceCents,
@@ -154,4 +165,28 @@ export async function listUsedCurrencies(
     .bind(email, except, MAX_USED_CURRENCIES)
     .all<{ currency: string; splits: number }>();
   return used.results;
+}
+
+/** At most this many items found by a search */
+const MAX_FOUND_ITEMS = 50;
+
+/** Items in someone's splits whose name has `text` in it, newest first */
+export async function searchItems(
+  db: D1Database,
+  email: string,
+  text: string,
+): Promise<FoundItem[]> {
+  // % and _ are wildcards in LIKE: they're looked for as typed
+  const pattern = `%${text.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+  const { results } = await db
+    .prepare(
+      `SELECT i.id, i.name, i.cost_cents AS costCents, i.category, i.created_at AS createdAt,
+         s.id AS splitId, s.name AS splitName, s.currency
+       FROM items i JOIN splits s ON s.id = i.split_id
+       JOIN split_members m ON m.split_id = i.split_id AND m.email = ?
+       WHERE i.name LIKE ? ESCAPE '\\' ORDER BY i.created_at DESC LIMIT ?`,
+    )
+    .bind(email, pattern, MAX_FOUND_ITEMS)
+    .all<FoundItem>();
+  return results;
 }

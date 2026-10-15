@@ -1,6 +1,7 @@
 import { ActionIcon, Modal, Tooltip } from '@mantine/core';
 import { CaretLeft, CaretRight, DownloadSimple, Trash, X } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
+import { useBackDismiss } from '../../hooks/useBackDismiss';
 import classes from './PhotoViewer.module.css';
 
 export interface ViewerPhoto {
@@ -46,6 +47,9 @@ const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+
+  // Back on a phone closes the photo, not the page under it
+  useBackDismiss(photo != null, close);
 
   return (
     <Modal

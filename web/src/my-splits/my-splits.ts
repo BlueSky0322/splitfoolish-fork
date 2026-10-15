@@ -132,6 +132,15 @@ export function moveSplit(id: string, toId: string) {
   });
 }
 
+/** Archives a split for you, or brings it back, straight away */
+export function archiveSplit(id: string, archived: boolean) {
+  patchListedSplit(id, { archived });
+  void sendMySplitsChange(
+    () => api.archiveSplit(id, archived),
+    archived ? 'Could not archive the split' : 'Could not bring the split back',
+  );
+}
+
 /** Fetches the splits and invites again, so they include every change made before the call */
 export async function reloadMySplits(): Promise<void> {
   // A first load under way may have been asked before the change this follows (it would
@@ -186,7 +195,10 @@ export function createSplit(
     role: 'owner',
     memberCount: 1,
     peopleCount: 0,
+    itemCount: 0,
     totalCents: 0,
+    settled: false,
+    archived: false,
     myBalanceCents: null,
     pictureVersion: null,
     updatedAt: Date.now(),

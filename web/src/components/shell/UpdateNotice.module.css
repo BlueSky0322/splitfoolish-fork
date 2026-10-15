@@ -54,3 +54,35 @@
     animation: none;
   }
 }
+
+/* Phones: a card across the screen, floating just above the bottom tabs */
+:global([data-tabs]) .notice {
+  left: 16px;
+  right: 16px;
+  bottom: calc(12px + var(--sf-chrome-bottom));
+  width: auto;
+  max-width: none;
+  justify-content: space-between;
+  padding: 10px 10px 10px 16px;
+  border-radius: 14px;
+  background: var(--sf-surface);
+  color: var(--sf-text);
+  box-shadow: var(--sf-shadow-lg);
+  transform: none;
+  animation: none;
+}
+
+:global([data-tabs]) .text {
+  flex: 1;
+  font-size: 14px;
+}
+
+:global([data-tabs]) .reload:global(.mantine-Button-root) {
+  background: none;
+  color: var(--sf-accent);
+  border: 1px solid var(--sf-accent);
+}
+
+:global([data-tabs]) .close:global(.mantine-CloseButton-root) {
+  color: var(--sf-text-muted);
+}

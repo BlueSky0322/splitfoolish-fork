@@ -96,6 +96,8 @@ export interface FakeServer {
   sent: { splitId: string; changes: Change[] }[];
   /** The next save of the profile, a split's changes or its settings answers with this status */
   failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join', number>>;
+  /** Splits the signed-in account has archived */
+  archived: Set<string>;
 }
 
 export const person = (id: string, name: string, memberEmail: string | null = null) => ({
@@ -139,10 +141,8 @@ export function splitDetail(id: string, items: Item[] = []): SplitDetail {
 }
 
 /** Where the signed-in account stands in a split, as the server works it out */
-function myBalance(s: SplitDetail) {
-  const me = s.people.find((p) => p.memberEmail === EMAIL);
-  if (me == null) return null;
-  const items = s.items.map(
+const settleItems = (s: SplitDetail) =>
+  s.items.map(
     (i): SettleItem => ({
       costCents: toCents(i.cost),
       payerId: i.payerId,
@@ -154,17 +154,31 @@ function myBalance(s: SplitDetail) {
       })),
     }),
   );
-  return balances([me.id], items).get(me.id)!.balanceCents;
+
+function myBalance(s: SplitDetail) {
+  const me = s.people.find((p) => p.memberEmail === EMAIL);
+  if (me == null) return null;
+  return balances([me.id], settleItems(s)).get(me.id)!.balanceCents;
 }
 
-const summaryOf = (s: SplitDetail): SplitSummary => ({
+const summaryOf = (s: SplitDetail, archived: boolean): SplitSummary => ({
   id: s.id,
   name: s.name,
   currency: s.currency,
   role: s.role,
   memberCount: s.members.length,
   peopleCount: s.people.length,
+  itemCount: s.items.length,
   totalCents: s.items.reduce((sum, i) => sum + toCents(i.cost), 0),
+  settled:
+    s.items.length > 0 &&
+    [
+      ...balances(
+        s.people.map((p) => p.id),
+        settleItems(s),
+      ).values(),
+    ].every((b) => b.balanceCents === 0),
+  archived,
   myBalanceCents: myBalance(s),
   pictureVersion: s.pictureVersion,
   updatedAt: 1,
@@ -235,7 +249,9 @@ function serve(server: FakeServer) {
       return json(server.me);
     }
     if (path === '/api/splits' && method === 'GET') {
-      return json({ splits: [...server.splits.values()].map(summaryOf) });
+      return json({
+        splits: [...server.splits.values()].map((s) => summaryOf(s, server.archived.has(s.id))),
+      });
     }
     if (path === '/api/splits' && method === 'POST') {
       const { id, name, currency } = body as { id: string; name: string; currency: string };
@@ -282,6 +298,30 @@ function serve(server: FakeServer) {
       return json({ id: split.id });
     }
     if (path === '/api/item-names') return json({ names: [] });
+    if (path === '/api/archived' && method === 'PUT') {
+      const { id, archived } = body as { id: string; archived: boolean };
+      if (archived) server.archived.add(id);
+      else server.archived.delete(id);
+      return json({ ok: true });
+    }
+    if (path === '/api/search') {
+      const text = (url.searchParams.get('q') ?? '').toLowerCase();
+      const items = [...server.splits.values()].flatMap((s) =>
+        s.items
+          .filter((i) => i.name.toLowerCase().includes(text))
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            costCents: toCents(i.cost),
+            category: i.category,
+            createdAt: i.createdAt,
+            splitId: s.id,
+            splitName: s.name,
+            currency: s.currency,
+          })),
+      );
+      return json({ items });
+    }
     if (path === '/api/rates') {
       const [from, to] = [url.searchParams.get('from'), url.searchParams.get('to')];
       const rate = server.rates.get(`${from}${to}`);
@@ -337,6 +377,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     rates: new Map(),
     sent: [],
     failNext: {},
+    archived: new Set(),
   };
 }
 
