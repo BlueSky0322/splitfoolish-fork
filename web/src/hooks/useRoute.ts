@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LAST_PAGE_KEY } from '../offline/cache';
 
 export type Route =
   | { view: 'home'; tab: string | null }
@@ -19,7 +20,6 @@ function readRoute(): Route {
 }
 
 const ROUTE_CHANGE = 'routechange';
-export const LAST_PAGE_KEY = 'splitfoolish:lastPage';
 const SESSION_KEY = 'splitfoolish:session';
 // One-off parts of an address, such as an item to add from the converter
 const TRANSIENT = ['join', 'add', 'from', 'amount'];
@@ -37,10 +37,12 @@ function rememberPage() {
   }
 }
 
-// Opening the app afresh at its start address (the installed app's icon, or typing
-// the address) goes back to the page that was open last time. A reload, or a link to
-// a particular page, keeps its own address.
-(function restoreLastPage() {
+/**
+ * Opening the app afresh at its start address (the installed app's icon, or typing the
+ * address) goes back to the page that was open last time. A reload, or a link to a
+ * particular page, keeps its own address. Called once at start, before the first render.
+ */
+export function restoreLastPage() {
   try {
     const fresh = sessionStorage.getItem(SESSION_KEY) == null;
     sessionStorage.setItem(SESSION_KEY, '1');
@@ -50,9 +52,9 @@ function rememberPage() {
       window.history.replaceState(null, '', `${window.location.pathname}${last}`);
     }
   } catch {
-    // ignore
+    // Storage can be unavailable; the app opens where the address says
   }
-})();
+}
 
 export function navigate(search: string, { replace = false } = {}) {
   const url = `${window.location.pathname}${search}`;

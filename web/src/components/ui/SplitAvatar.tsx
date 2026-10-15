@@ -1,6 +1,6 @@
 import { Avatar } from '@mantine/core';
 import { splitPictureUrl } from '../../api';
-import { useSplitPicturePreview } from '../../split-pictures';
+import { useSplitPicturePreview } from '../../split/pictures';
 
 interface SplitAvatarProps {
   splitId: string;

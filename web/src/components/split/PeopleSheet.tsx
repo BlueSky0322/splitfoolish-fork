@@ -1,7 +1,7 @@
 import { Autocomplete, Button, TextInput, UnstyledButton } from '@mantine/core';
 import { CaretLeft, CaretRight, ListBullets, UserCheck, UserMinus } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { removeBlocker, useSplitActions } from '../../hooks/useSplit';
+import { removeBlocker, useSplitActions } from '../../split/useSplit';
 import { SplitState, Person } from '../../split/state';
 import { nameFor } from '../../profile/ProfileContext';
 import { SplitTotals } from '../../split/derive';

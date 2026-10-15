@@ -1,7 +1,8 @@
 import { del, keys } from 'idb-keyval';
-import { readCache, writeCache } from '../split-cache';
+import { readCache, writeCache } from './cache';
 import type { Change } from '../../../shared/types';
 import type { SplitSummary } from '../../../shared/api';
+import { ApiError } from '../api';
 
 // Changes not yet saved, kept on the device (IndexedDB) so they survive the app being
 // closed, killed or offline. The app sends them when it can; if it's closed, the
@@ -23,8 +24,13 @@ export interface PendingCreate {
   summary: SplitSummary;
 }
 
-const outboxKey = (splitId: string) => `outbox:${splitId}`;
-const createKey = (splitId: string) => `create:${splitId}`;
+// The keys and lock below are also used by public/sw.js, which can't import them: a
+// change here needs the same change there
+const OUTBOX_PREFIX = 'outbox:';
+const CREATE_PREFIX = 'create:';
+const LOCK_PREFIX = 'sf-outbox:';
+const outboxKey = (splitId: string) => `${OUTBOX_PREFIX}${splitId}`;
+const createKey = (splitId: string) => `${CREATE_PREFIX}${splitId}`;
 export const SYNC_TAG = 'sf-outbox';
 
 // Without Web Locks, calls in this page still take turns
@@ -32,7 +38,7 @@ const chains = new Map<string, Promise<unknown>>();
 
 /** Runs fn holding a split's outbox lock; the service worker takes the same one */
 export function withOutbox<T>(splitId: string, fn: () => Promise<T>): Promise<T> {
-  const name = `sf-outbox:${splitId}`;
+  const name = `${LOCK_PREFIX}${splitId}`;
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
   if (locks) return locks.request(name, fn);
   const run = (chains.get(name) ?? Promise.resolve()).then(fn, fn);
@@ -60,8 +66,8 @@ export const removePendingCreate = (id: string) => del(createKey(id)).catch(() =
 export async function readOutboxIds(): Promise<string[]> {
   try {
     return (await keys())
-      .filter((k): k is string => typeof k === 'string' && k.startsWith('outbox:'))
-      .map((k) => k.slice('outbox:'.length));
+      .filter((k): k is string => typeof k === 'string' && k.startsWith(OUTBOX_PREFIX))
+      .map((k) => k.slice(OUTBOX_PREFIX.length));
   } catch {
     return [];
   }
@@ -71,7 +77,7 @@ export async function readOutboxIds(): Promise<string[]> {
 export async function readPendingCreates(): Promise<PendingCreate[]> {
   try {
     const all = (await keys()).filter(
-      (k): k is string => typeof k === 'string' && k.startsWith('create:'),
+      (k): k is string => typeof k === 'string' && k.startsWith(CREATE_PREFIX),
     );
     const found = await Promise.all(all.map((k) => readCache<PendingCreate>(k)));
     return found.filter((c): c is PendingCreate => c != null);
@@ -98,3 +104,13 @@ export const isOffline = () => typeof navigator !== 'undefined' && navigator.onL
 
 /** A fetch that failed to reach the server at all, rather than an answer from it */
 export const isNetworkError = (err: unknown) => err instanceof TypeError || isOffline();
+
+/**
+ * Whether a failed send is worth trying again: no connection, busy (429), something
+ * wrong on the server's side (5xx, including no exchange rate yet), or signed out (401).
+ * Anything else is the server refusing the change itself. public/sw.js follows the
+ * same rule.
+ */
+export const isRetryable = (err: unknown) =>
+  isNetworkError(err) ||
+  (err instanceof ApiError && (err.status === 401 || err.status === 429 || err.status >= 500));

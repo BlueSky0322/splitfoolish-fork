@@ -19,6 +19,7 @@ import { buildTheme, cssVariablesResolver } from './theme/theme.ts';
 import './theme/tokens.css';
 import { trackKeyboardInset } from './keyboard-inset';
 import { trackInstall } from './install';
+import { restoreLastPage } from './hooks/useRoute';
 
 const initialAppearance = readAppearance();
 
@@ -46,6 +47,8 @@ function Root() {
   );
 }
 
+// Back to the page that was open last time, before anything reads the address
+restoreLastPage();
 // Bottom sheets stay above the on-screen keyboard
 trackKeyboardInset();
 // The browser's install prompt comes once, early; keep it for the app's own buttons

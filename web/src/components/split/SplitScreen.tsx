@@ -38,9 +38,9 @@ import { ItemInput } from '../../api';
 import { SplitStateContext } from '../../split/SplitStateContext';
 import { toApiItem } from '../../split/state';
 import { useIsDesktop } from '../../hooks/useBreakpoints';
-import { updateHomeData, useHomeDataSnapshot } from '../../hooks/useHomeData';
+import { useHomeDataSnapshot } from '../../hooks/useHomeData';
 import { navigate } from '../../hooks/useRoute';
-import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../hooks/useSplit';
+import { SplitActionsContext, SyncStatus, newId, useSplit } from '../../split/useSplit';
 import { SplitItem, Person } from '../../split/state';
 import { SplitTotals, computeTotals, findMe } from '../../split/derive';
 import {
@@ -75,6 +75,7 @@ import ShareImage from './ShareImage';
 import SplitSettings from './SplitSettings';
 import { DEFAULT_SETTINGS, type Attachment } from '../../../../shared/api';
 import classes from './Split.module.css';
+import { updateHomeData } from '../../home-data';
 
 interface ViewPrefs {
   view: 'card' | 'table';

@@ -10,12 +10,20 @@
 //   them here when the connection is back, even if the app is closed.
 const SHELL = 'splitfoolish-shell-v1';
 const ASSETS = 'splitfoolish-assets-v1';
+/** IMAGE_CACHE in web/src/offline/cache.ts, which clears it on sign-out */
 const IMAGES = 'splitfoolish-images-v1';
 const FONTS = 'splitfoolish-fonts-v1';
 const KEEP = [SHELL, ASSETS, IMAGES, FONTS];
 
-/** Same as SYNC_TAG in web/src/offline/outbox.ts */
+// Shared with the app, which can't be imported here: keep each the same as its twin
+/** SYNC_TAG in web/src/offline/outbox.ts */
 const SYNC_TAG = 'sf-outbox';
+/** OUTBOX_PREFIX, CREATE_PREFIX and LOCK_PREFIX in web/src/offline/outbox.ts */
+const OUTBOX_PREFIX = 'outbox:';
+const CREATE_PREFIX = 'create:';
+const LOCK_PREFIX = 'sf-outbox:';
+/** SW_USER_KEY in web/src/offline/cache.ts; entries there are { email, value } */
+const USER_KEY = 'sf-user';
 
 // Profile pictures and payment QR codes (always with ?v=), and photos of splits and receipts
 const isImage = (url) =>
@@ -142,7 +150,7 @@ function idb(db, mode, run) {
 
 /** The same lock the app takes, so a change is never sent twice */
 const withLock = (id, fn) =>
-  self.navigator.locks ? self.navigator.locks.request(`sf-outbox:${id}`, fn) : fn();
+  self.navigator.locks ? self.navigator.locks.request(`${LOCK_PREFIX}${id}`, fn) : fn();
 
 class TryLater extends Error {}
 
@@ -157,8 +165,11 @@ async function post(path, body) {
   } catch {
     throw new TryLater('No connection');
   }
-  // Busy, or no exchange rate yet: nothing wrong with what was sent
-  if (res.status === 429 || res.status >= 500) throw new TryLater(`HTTP ${res.status}`);
+  // The same rule as isRetryable in web/src/offline/outbox.ts: busy, a problem on the
+  // server's side, or signed out. Nothing wrong with what was sent.
+  if (res.status === 401 || res.status === 429 || res.status >= 500) {
+    throw new TryLater(`HTTP ${res.status}`);
+  }
   // Signed out (Cloudflare Access sends a sign-in page): the app sends it once signed in
   if (res.redirected || res.type === 'opaqueredirect') throw new TryLater('Signed out');
   // Otherwise done; a refusal (4xx) is dropped, and the app shows the split as the
@@ -166,18 +177,18 @@ async function post(path, body) {
   return res;
 }
 
-async function sendKept() {
+async function flushOfflineChanges() {
   const db = await openDb();
   try {
-    const user = await idb(db, 'readonly', (s) => s.get('sf-user'));
+    const user = await idb(db, 'readonly', (s) => s.get(USER_KEY));
     const keys = await idb(db, 'readonly', (s) => s.getAllKeys());
     const mine = (entry) => entry != null && user != null && entry.email === user;
     const read = (key) => idb(db, 'readonly', (s) => s.get(key));
     const drop = (key) => idb(db, 'readwrite', (s) => s.delete(key));
 
     // New splits first, so their changes have somewhere to go
-    for (const key of keys.filter((k) => typeof k === 'string' && k.startsWith('create:'))) {
-      const id = key.slice('create:'.length);
+    for (const key of keys.filter((k) => typeof k === 'string' && k.startsWith(CREATE_PREFIX))) {
+      const id = key.slice(CREATE_PREFIX.length);
       await withLock(id, async () => {
         const entry = await read(key);
         if (!mine(entry)) return;
@@ -187,8 +198,8 @@ async function sendKept() {
       });
     }
 
-    for (const key of keys.filter((k) => typeof k === 'string' && k.startsWith('outbox:'))) {
-      const id = key.slice('outbox:'.length);
+    for (const key of keys.filter((k) => typeof k === 'string' && k.startsWith(OUTBOX_PREFIX))) {
+      const id = key.slice(OUTBOX_PREFIX.length);
       await withLock(id, async () => {
         const entry = await read(key);
         if (!mine(entry) || entry.value.length === 0) return;
@@ -205,5 +216,5 @@ async function sendKept() {
 
 self.addEventListener('sync', (event) => {
   // Failing makes the browser try again later
-  if (event.tag === SYNC_TAG) event.waitUntil(sendKept());
+  if (event.tag === SYNC_TAG) event.waitUntil(flushOfflineChanges());
 });

@@ -16,7 +16,7 @@ import {
   MAX_METHODS,
   type PaymentMethod,
 } from '../../../../shared/payments';
-import { newId } from '../../hooks/useSplit';
+import { newId } from '../../split/useSplit';
 import { prepareQrCode } from '../../utils/image';
 import { isQr, methodLine, methodName } from '../../utils/payments';
 import classes from './Settings.module.css';

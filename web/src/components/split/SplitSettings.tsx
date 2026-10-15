@@ -2,9 +2,9 @@ import { Button } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../../api';
-import { reloadHomeData } from '../../hooks/useHomeData';
-import { removeSplitPicture, uploadSplitPicture } from '../../split-pictures';
+import { removeSplitPicture, uploadSplitPicture } from '../../split/pictures';
 import SplitForm, { SplitFormValues } from './SplitForm';
+import { reloadHomeData } from '../../home-data';
 
 interface SplitSettingsProps {
   splitId: string;

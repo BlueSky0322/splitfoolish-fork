@@ -2,9 +2,9 @@ import { Button } from '@mantine/core';
 import { CircleNotch, LinkBreak } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { reloadHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
 import StateCard from './ui/StateCard';
+import { reloadHomeData } from '../home-data';
 
 const JoinSplit = ({ token }: { token: string }) => {
   const [failed, setFailed] = useState(false);

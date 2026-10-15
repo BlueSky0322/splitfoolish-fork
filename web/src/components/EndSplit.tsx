@@ -2,9 +2,9 @@ import { Button } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { SignOut, Trash } from '@phosphor-icons/react';
 import { api } from '../api';
-import { reloadHomeData, updateHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
 import classes from './SplitMembers.module.css';
+import { reloadHomeData, updateHomeData } from '../home-data';
 
 interface EndSplitProps {
   splitId: string;

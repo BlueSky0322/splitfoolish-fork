@@ -1,8 +1,8 @@
-import { ApiError, api } from './api';
+import { ApiError, api } from '../api';
 import {
   PendingCreate,
-  isNetworkError,
   isOffline,
+  isRetryable,
   readOutbox,
   readOutboxIds,
   readPendingCreates,
@@ -11,7 +11,7 @@ import {
   savePendingCreate,
   withOutbox,
   writeOutbox,
-} from './offline/outbox';
+} from './outbox';
 
 // Splits that are open on screen but still being created on the server. Each is kept
 // on the device until the server has it, so one made offline is created once the
@@ -19,6 +19,8 @@ import {
 // changes kept for splits that aren't open, as the service worker does when it can.
 
 const creating = new Map<string, Promise<void>>();
+/** Creates that failed for good on this page; changes to these splits aren't sent */
+const failed = new Map<string, unknown>();
 const MAX_RETRY_MS = 60_000;
 
 const onceOnline = () =>
@@ -30,12 +32,8 @@ const wait = (ms: number) =>
   // Whichever comes first: the delay, or the connection coming back
   Promise.race([new Promise<void>((r) => setTimeout(r, ms)), onceOnline()]);
 
-/** No connection, busy, or no exchange rate yet: nothing wrong with what was sent */
-const tryLater = (err: unknown) =>
-  isNetworkError(err) || (err instanceof ApiError && (err.status === 503 || err.status === 429));
-
 /** Sends one create; true once the server has it, false to try again later */
-const send = (create: PendingCreate) =>
+const sendCreateOnce = (create: PendingCreate) =>
   withOutbox(create.id, async () => {
     // The service worker may have sent it while this page was asleep
     if (!(await readPendingCreates()).some((c) => c.id === create.id)) return true;
@@ -48,29 +46,36 @@ const send = (create: PendingCreate) =>
     await removePendingCreate(create.id);
     return true;
   }).catch(async (err: unknown) => {
-    if (!tryLater(err)) {
+    if (!isRetryable(err)) {
       await removePendingCreate(create.id);
       throw err;
     }
     return false;
   });
 
-async function run(create: PendingCreate) {
+/** Keeps trying until the server has it, waiting longer each time and for a connection */
+async function createUntilDone(create: PendingCreate) {
   for (let attempt = 0; ; attempt++) {
     if (isOffline()) {
       requestBackgroundSync();
       await onceOnline();
     }
-    if (await send(create)) return;
+    if (await sendCreateOnce(create)) return;
     requestBackgroundSync();
     await wait(Math.min(MAX_RETRY_MS, 3000 * 2 ** attempt));
   }
 }
 
-function track(create: PendingCreate) {
+/** Starts creating it, unless that's already under way on this page */
+function ensureCreating(create: PendingCreate) {
   const existing = creating.get(create.id);
   if (existing) return existing;
-  const done = run(create).finally(() => creating.delete(create.id));
+  const done = createUntilDone(create)
+    .catch((err: unknown) => {
+      failed.set(create.id, err);
+      throw err;
+    })
+    .finally(() => creating.delete(create.id));
   creating.set(create.id, done);
   return done;
 }
@@ -78,12 +83,14 @@ function track(create: PendingCreate) {
 /** Creates a split on the server, keeping it on the device until that's done */
 export async function startCreate(create: PendingCreate) {
   await savePendingCreate(create);
-  return track(create);
+  return ensureCreating(create);
 }
 
 /** Carries on creating splits made on this device before it was last closed */
 export async function resumeCreates() {
-  for (const create of await readPendingCreates()) void track(create).catch(() => undefined);
+  for (const create of await readPendingCreates()) {
+    void ensureCreating(create).catch(() => undefined);
+  }
 }
 
 let sending: Promise<number> | null = null;
@@ -92,7 +99,7 @@ let sending: Promise<number> | null = null;
  * Creates splits and sends changes made on this device while offline (or before it
  * was closed), for every split. Resolves with how many splits had changes sent.
  */
-export function sendKept(): Promise<number> {
+export function flushOfflineChanges(): Promise<number> {
   if (isOffline()) return Promise.resolve(0);
   sending ??= (async () => {
     await resumeCreates();
@@ -114,7 +121,7 @@ export function sendKept(): Promise<number> {
           );
           sent++;
         } catch (err) {
-          if (tryLater(err)) return true;
+          if (isRetryable(err)) return true;
           // Refused, or the split is gone: it shows as the server has it
           console.error(err);
         }
@@ -128,10 +135,11 @@ export function sendKept(): Promise<number> {
   return sending;
 }
 
-/** Splits still being created, to show in My splits until the server lists them */
-export const pendingCreates = readPendingCreates;
-
-/** Resolves once the split exists; rejects if creating it failed */
+/**
+ * Waits for a create started on this page, if there is one, and rejects if creating
+ * that split failed. Any other split is taken to exist already.
+ */
 export const whenCreated = async (id: string) => {
+  if (failed.has(id)) throw failed.get(id);
   await creating.get(id);
 };

@@ -5,7 +5,7 @@ import { rectSortingStrategy } from '@dnd-kit/sortable';
 import { useState } from 'react';
 import { actionableInvites, api } from '../api';
 import { useIsDesktop } from '../hooks/useBreakpoints';
-import { reloadHomeData, updateHomeData, useHomeData } from '../hooks/useHomeData';
+import { useHomeData } from '../hooks/useHomeData';
 import { navigate } from '../hooks/useRoute';
 import { nameFor, useProfile } from '../profile/ProfileContext';
 import { formatMoney } from '../utils/money';
@@ -19,6 +19,7 @@ import UserAvatar from './ui/UserAvatar';
 import classes from './SplitsHome.module.css';
 import { InstallCard } from './ui/InstallApp';
 import type { MyInvite, SplitSummary } from '../../../shared/api';
+import { reloadHomeData, updateHomeData } from '../home-data';
 
 const FILTERS = ['all', 'mine', 'shared', 'invites'] as const;
 type Filter = (typeof FILTERS)[number];

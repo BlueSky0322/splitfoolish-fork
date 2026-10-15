@@ -9,12 +9,12 @@ import {
   useState,
 } from 'react';
 import { ApiError, ItemInput, api } from '../api';
-import { SplitStateContext } from '../split/SplitStateContext';
+import { SplitStateContext } from './SplitStateContext';
 import { convertCents, convertParts, toCents } from '../../../shared/rates';
 import type { Item as ApiItem, Change } from '../../../shared/types';
-import { SplitItem, SplitState, toApiItem, type StoredItem } from '../split/state';
-import { readCache, removeCache, writeCache } from '../split-cache';
-import { whenCreated } from '../pending-creates';
+import { SplitItem, SplitState, toApiItem, type StoredItem } from './state';
+import { readCache, removeCache, writeCache } from '../offline/cache';
+import { whenCreated } from '../offline/pending-creates';
 import {
   Queued,
   isNetworkError,
@@ -23,12 +23,13 @@ import {
   requestBackgroundSync,
   withOutbox,
   writeOutbox,
+  isRetryable,
 } from '../offline/outbox';
 import { queryClient } from '../query-client';
-import { ITEM_NAMES_KEY } from '../split/itemNames';
-import { reloadHomeData } from './useHomeData';
+import { ITEM_NAMES_KEY } from './itemNames';
 import { useSplitLive } from './useSplitLive';
 import type { SplitDetail } from '../../../shared/api';
+import { reloadHomeData } from '../home-data';
 
 /** A split as this device keeps it: an older copy's items may predate some fields */
 type CachedSplit = Omit<SplitDetail, 'items'> & { items: StoredItem[] };
@@ -88,6 +89,8 @@ const SAVE_DELAY_MS = 500;
 const RETRY_DELAY_MS = 3000;
 const MAX_RETRY_DELAY_MS = 60_000;
 const CONVERT_POLL_MS = 3000;
+/** How long whenSaved waits before giving up */
+const WHEN_SAVED_TIMEOUT_MS = 20_000;
 
 export const newId = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) =>
@@ -223,6 +226,56 @@ export function useSplit(splitId: string) {
     return sentElsewhere;
   }, [splitId]);
 
+  // Everyone waiting in whenSaved, told once nothing is left to send
+  const savedWaiters = useRef<(() => void)[]>([]);
+  const settled = useCallback(() => {
+    for (const resolve of savedWaiters.current.splice(0)) resolve();
+  }, []);
+
+  /**
+   * A batch that didn't reach the server, or that the server refused. True when it's
+   * kept to send again later.
+   */
+  const failed = useCallback(
+    async (err: unknown, batch: Queued[]): Promise<boolean> => {
+      // Removed from the split (or it was deleted) while it was open
+      if (err instanceof ApiError && err.status === 404) {
+        pending.current = [];
+        void withOutbox(splitId, syncOutbox);
+        void removeCache(cacheKey);
+        void reloadHomeData();
+        setStatus('notfound');
+        settled();
+        return false;
+      }
+      if (err instanceof ApiError && !isRetryable(err)) {
+        // Refused: everything queued after it was built on top of it, so start over
+        notifications.show({ color: 'red', message: err.message });
+        pending.current = [];
+        await withOutbox(splitId, syncOutbox);
+        reloadAfterSave.current = false;
+        try {
+          await load();
+          setStatus('saved');
+        } catch (loadErr) {
+          setStatus(isNetworkError(loadErr) ? 'offline' : 'error');
+        }
+        settled();
+        return false;
+      }
+      // Not the change's fault (no connection, busy, a problem on the server's side):
+      // keep the changes (they're still in the outbox) and try again, less often the
+      // longer it lasts
+      console.error(err);
+      pending.current = [...batch, ...pending.current];
+      setWaiting(pending.current.length);
+      requestBackgroundSync();
+      setStatus(isNetworkError(err) ? 'offline' : 'error');
+      return !isOffline();
+    },
+    [splitId, syncOutbox, cacheKey, load, settled],
+  );
+
   const save = useCallback(async (): Promise<void> => {
     clearTimeout(timer.current);
     if (inFlight.current || pending.current.length === 0) return;
@@ -238,6 +291,7 @@ export function useSplit(splitId: string) {
     setStatus('saving');
 
     let batch: Queued[] = [];
+    let sent = false;
     try {
       await whenCreated(splitId);
       // Held while sending, so the service worker can't send the same changes
@@ -251,58 +305,36 @@ export function useSplit(splitId: string) {
             batch.map((q) => q.change),
           );
         }
+        sent = true;
         await syncOutbox();
       });
-      inFlight.current = false;
-      failures.current = 0;
-      if (pending.current.length > 0) return save();
-      setStatus('saved');
-      // Totals and balances in the sidebar and My splits follow the change
-      void reloadHomeData();
-      // A new item name is suggested next time
-      void queryClient.invalidateQueries({ queryKey: ITEM_NAMES_KEY });
-      if (reloadAfterSave.current) {
-        reloadAfterSave.current = false;
-        await load();
-      }
     } catch (err) {
       inFlight.current = false;
-      // Removed from the split (or it was deleted) while it was open
-      if (err instanceof ApiError && err.status === 404) {
-        pending.current = [];
-        void withOutbox(splitId, syncOutbox);
-        void removeCache(cacheKey);
-        void reloadHomeData();
-        setStatus('notfound');
+      if (!sent) {
+        if (await failed(err, batch)) {
+          const delay = Math.min(MAX_RETRY_DELAY_MS, RETRY_DELAY_MS * 2 ** failures.current++);
+          timer.current = setTimeout(() => void save(), delay);
+        }
         return;
       }
-      // No exchange rate yet (503) or too many changes this minute (429): nothing was
-      // wrong with the change itself, so it's kept and sent again
-      if (err instanceof ApiError && err.status !== 503 && err.status !== 429) {
-        // Refused: everything queued after it was built on top of it, so start over
-        notifications.show({ color: 'red', message: err.message });
-        pending.current = [];
-        await withOutbox(splitId, syncOutbox);
-        reloadAfterSave.current = false;
-        await load().catch(() => undefined);
-        setStatus('saved');
-        return;
-      }
-      // Network trouble: keep the changes (they're still in the outbox) and try again,
-      // less often the longer it lasts
+      // Saved; only crossing them off on the device failed, so that's tried again
       console.error(err);
-      pending.current = [...batch, ...pending.current];
-      setWaiting(pending.current.length);
-      requestBackgroundSync();
-      if (isOffline()) {
-        setStatus('offline');
-        return;
-      }
-      setStatus(isNetworkError(err) ? 'offline' : 'error');
-      const delay = Math.min(MAX_RETRY_DELAY_MS, RETRY_DELAY_MS * 2 ** failures.current++);
-      timer.current = setTimeout(() => void save(), delay);
+      void withOutbox(splitId, syncOutbox).catch(() => undefined);
     }
-  }, [splitId, load, cacheKey, syncOutbox]);
+    inFlight.current = false;
+    failures.current = 0;
+    if (pending.current.length > 0) return save();
+    setStatus('saved');
+    settled();
+    // Totals and balances in the sidebar and My splits follow the change
+    void reloadHomeData();
+    // A new item name is suggested next time
+    void queryClient.invalidateQueries({ queryKey: ITEM_NAMES_KEY });
+    if (reloadAfterSave.current) {
+      reloadAfterSave.current = false;
+      await load().catch((err: unknown) => console.error(err));
+    }
+  }, [splitId, load, syncOutbox, settled, failed]);
 
   const queue = useCallback(
     (change: Change) => {
@@ -582,13 +614,19 @@ export function useSplit(splitId: string) {
   }, [save]);
 
   /** Saves anything queued now, resolving once the server has it (photos need their item saved) */
-  const whenSaved = useCallback(async () => {
-    const deadline = Date.now() + 20_000;
+  /** Resolves once everything queued is saved (or refused); gives up after 20 seconds */
+  const whenSaved = useCallback(() => {
+    if (pending.current.length === 0 && !inFlight.current) return Promise.resolve();
+    const saved = new Promise<void>((resolve) => savedWaiters.current.push(resolve));
     void save();
-    while (pending.current.length > 0 || inFlight.current) {
-      if (Date.now() > deadline) throw new Error('Still saving. Try again in a moment.');
-      await new Promise((r) => setTimeout(r, 100));
-    }
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const tooLong = new Promise<never>((_, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error('Still saving. Try again in a moment.')),
+        WHEN_SAVED_TIMEOUT_MS,
+      );
+    });
+    return Promise.race([saved, tooLong]).finally(() => clearTimeout(timeout));
   }, [save]);
 
   // While the server converts the items into a new currency, fetch them until it's done

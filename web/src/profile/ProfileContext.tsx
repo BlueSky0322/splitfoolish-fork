@@ -5,9 +5,8 @@ import { ReactNode, createContext, useCallback, useContext, useEffect, useRef } 
 import { Profile, api } from '../api';
 import { queryClient } from '../query-client';
 import { isOffline } from '../offline/outbox';
-import { sendKept } from '../pending-creates';
-import { reloadHomeData } from '../hooks/useHomeData';
-import { assumeLastUser, readCache, setCacheUser, writeCache } from '../split-cache';
+import { flushOfflineChanges } from '../offline/pending-creates';
+import { assumeLastUser, readCache, setCacheUser, writeCache } from '../offline/cache';
 import { Accent, isAccent } from '../theme/accents';
 import {
   DEFAULT_SETTINGS,
@@ -15,6 +14,7 @@ import {
   type Settings,
   type ThemeSetting,
 } from '../../../shared/api';
+import { reloadHomeData } from '../home-data';
 
 // The signed-in user's profile. Theme and accent are also kept in localStorage so
 // the app paints in the right colours before /api/me answers.
@@ -99,7 +99,7 @@ export function ProfileProvider({
         await setCacheUser(me.email);
         fromDevice.current = false;
         // Splits made and changes kept on this device before it was last closed
-        void sendKept().then((sent) => (sent > 0 ? reloadHomeData() : undefined));
+        void flushOfflineChanges().then((sent) => (sent > 0 ? reloadHomeData() : undefined));
         void writeCache(ME_CACHE_KEY, me);
         return me;
       } catch (err) {
@@ -128,7 +128,7 @@ export function ProfileProvider({
   useEffect(() => {
     const refresh = () => {
       if (fromDevice.current) void queryClient.invalidateQueries({ queryKey: ME_KEY });
-      void sendKept().then(() => reloadHomeData());
+      void flushOfflineChanges().then(() => reloadHomeData());
     };
     window.addEventListener('online', refresh);
     return () => window.removeEventListener('online', refresh);

@@ -1,15 +1,15 @@
 import { ReactNode, createContext, useCallback, useContext, useState } from 'react';
 import { notifications } from '@mantine/notifications';
-import { newId } from '../hooks/useSplit';
-import { reloadHomeData, updateHomeData } from '../hooks/useHomeData';
-import { startCreate } from '../pending-creates';
-import { removeCache, writeCache } from '../split-cache';
+import { newId } from '../split/useSplit';
+import { startCreate } from '../offline/pending-creates';
+import { removeCache, writeCache } from '../offline/cache';
 import { navigate } from '../hooks/useRoute';
 import { useProfile } from '../profile/ProfileContext';
-import { uploadSplitPicture } from '../split-pictures';
+import { uploadSplitPicture } from '../split/pictures';
 import SplitForm, { SplitFormValues } from './split/SplitForm';
 import ResponsiveDialog from './ui/ResponsiveDialog';
 import type { SplitDetail, SplitSummary } from '../../../shared/api';
+import { reloadHomeData, updateHomeData } from '../home-data';
 
 // The one "New split" form, opened from the sidebar, My splits and the phone's FAB
 

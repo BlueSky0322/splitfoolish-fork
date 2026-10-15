@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
-import { api } from './api';
-import { reloadHomeData, updateHomeData } from './hooks/useHomeData';
-import { whenCreated } from './pending-creates';
-import { shrinkAvatar } from './utils/image';
+import { api } from '../api';
+import { whenCreated } from '../offline/pending-creates';
+import { shrinkAvatar } from '../utils/image';
+import { reloadHomeData, updateHomeData } from '../home-data';
 
 // Split pictures being uploaded, shown from this device in the meantime
 
