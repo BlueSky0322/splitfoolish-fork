@@ -21,7 +21,7 @@ import { newId } from '../../utils/id';
 import { notifications } from '@mantine/notifications';
 import { type Dialog, useSplitPage } from './SplitPageContext';
 import type { DeleteItems } from './items/delete-items';
-import { canEditSplitSettings } from '../../../../shared/rules';
+import { canDeleteSplit, canEditSplitSettings } from '../../../../shared/rules';
 
 /** Under Settle up's title: how many transfers settle everyone */
 const settleNote = (totals: SplitTotals) => {
@@ -201,14 +201,14 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
       <ResponsiveDialog
         opened={dialog?.kind === 'end'}
         onClose={close}
-        title={<EndSplitTitle isOwner={meta?.role === 'owner'} />}
+        title={<EndSplitTitle canDelete={meta != null && canDeleteSplit(meta.role)} />}
         width={420}
       >
         {dialog?.kind === 'end' && myEmail && meta && (
           <EndSplit
             splitId={splitId}
             name={meta.name}
-            isOwner={meta.role === 'owner'}
+            canDelete={canDeleteSplit(meta.role)}
             myEmail={myEmail}
             onCancel={() => setDialog({ kind: 'settings' })}
           />

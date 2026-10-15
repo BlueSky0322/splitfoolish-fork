@@ -94,6 +94,15 @@ describe('split actions', () => {
     expect(queued).toEqual([{ op: 'removePerson', id: 'a', fromItems: false }]);
   });
 
+  test('clearing everyone takes away the access of those with accounts, as one by one', () => {
+    const { actions, deps, queued } = setup([]);
+    expect(actions.clearPeople()).toBe(true);
+    expect(deps.metaChanges.removeMember).toHaveBeenCalledTimes(1);
+    expect(deps.metaChanges.removeMember).toHaveBeenCalledWith('ann@example.com');
+    expect(deps.reloadAfterSave).toHaveBeenCalledOnce();
+    expect(queued).toEqual([{ op: 'clearPeople' }]);
+  });
+
   test('moving items to another day keeps their time, but never later than now', () => {
     const { actions, queued, state } = setup([item(), item({ id: 'i2', createdAt: 1 })]);
     const future = new Date(Date.now() + 7 * 86_400_000);

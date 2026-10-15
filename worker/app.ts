@@ -94,6 +94,3 @@ export const allowedIf = (can: (role: Role) => boolean, error: string) =>
     if (!can(c.var.role)) return fail(error, 403);
     await next();
   });
-
-/** After `membersOnly`: only the split's owner gets past */
-export const ownerOnly = (error: string) => allowedIf((role) => role === 'owner', error);

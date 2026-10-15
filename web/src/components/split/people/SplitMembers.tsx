@@ -10,7 +10,7 @@ import UserAvatar from '../../ui/UserAvatar';
 import classes from './SplitMembers.module.css';
 import type { SplitInvite } from '../../../../../shared/api';
 import { reloadMySplits } from '../../../my-splits/my-splits';
-import { canRemoveMember } from '../../../../../shared/rules';
+import { canManageInvites, canRemoveMember } from '../../../../../shared/rules';
 
 interface SplitMembersProps {
   meta: SplitMeta;
@@ -43,7 +43,7 @@ export const ShareTitle = ({ name }: { name: string }) => (
 // accept, and deleting or leaving the split
 const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMembersProps) => {
   const isMobile = useIsMobile();
-  const isOwner = meta.role === 'owner';
+  const managesInvites = canManageInvites(meta.role);
   const link = meta.shareToken ? inviteUrl(meta.shareToken) : null;
   const invites = (meta.invites ?? []).filter((i) => !i.needsApproval);
   const requests = (meta.invites ?? []).filter((i) => i.needsApproval);
@@ -65,7 +65,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
 
   const helper = (
     <p className={classes.help}>
-      {isOwner
+      {managesInvites
         ? 'Anyone with the link can ask to join and edit.'
         : `Your own link. People who open it ask ${ownerName} to let them in.`}
     </p>
@@ -114,7 +114,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
                 )}
               </CopyButton>
             </div>
-            {isOwner && (
+            {managesInvites && (
               <Tooltip label="Reset link">
                 <ActionIcon
                   variant="subtle"
@@ -157,7 +157,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
                 </Button>
               )}
             </CopyButton>
-            {isOwner && (
+            {managesInvites && (
               <Button
                 variant="default"
                 className={`${classes.half} flex-1`}
@@ -219,7 +219,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
         </div>
       </div>
 
-      {isOwner && requests.length > 0 && (
+      {managesInvites && requests.length > 0 && (
         <div className="flex flex-col gap-1">
           <h6 className="sf-label">Asking to join · {requests.length}</h6>
           <div className={classes.rows}>
@@ -258,7 +258,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
         </div>
       )}
 
-      {isOwner && invites.length > 0 && (
+      {managesInvites && invites.length > 0 && (
         <div className="flex flex-col gap-1">
           <h6 className="sf-label">Waiting to accept · {invites.length}</h6>
           <div className={classes.rows}>

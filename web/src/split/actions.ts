@@ -60,149 +60,158 @@ const refuse = (message: string) => {
   return false;
 };
 
-export const makeSplitActions = (d: ActionDeps): SplitActions => ({
-  addPerson: (name, memberEmail) => {
-    const trimmed = name.trim();
-    if (trimmed === '') return false;
-    if (d.current().people.some((p) => p.name === trimmed)) {
-      return refuse(`${trimmed} is already in this split`);
-    }
-    const person = { id: newId(), name: trimmed, memberEmail: memberEmail ?? null };
-    d.dispatch({ type: 'ADD_PERSON', payload: person });
-    d.queue({ op: 'addPerson', ...person });
-    return true;
-  },
-  renamePerson: (personId, name) => {
-    const trimmed = name.trim();
-    const person = d.current().people.find((p) => p.id === personId);
-    if (person == null || trimmed === '' || trimmed === person.name) return false;
-    if (person.memberEmail != null) {
-      return refuse(`${person.name}'s name comes from their account`);
-    }
-    if (d.current().people.some((p) => p.name === trimmed && p.id !== personId)) {
-      return refuse(`${trimmed} is already in this split`);
-    }
-    d.dispatch({ type: 'UPDATE_PERSON', payload: { id: personId, name: trimmed } });
-    d.queue({ op: 'renamePerson', id: personId, name: trimmed });
-    return true;
-  },
-  linkPerson: (personId, memberEmail) => {
-    const people = d.current().people;
-    const person = people.find((p) => p.id === personId);
-    if (person == null) return false;
-    if (memberEmail != null) {
-      const other = people.find((p) => p.memberEmail === memberEmail && p.id !== personId);
-      if (other) return refuse(`That account is already ${other.name}`);
-      if (person.memberEmail != null && person.memberEmail !== memberEmail) {
-        return refuse(`${person.name} is already linked to another account`);
+export const makeSplitActions = (d: ActionDeps): SplitActions => {
+  // Someone with an account loses access along with their person, as the server does it,
+  // and the share link changes, so it's fetched again once saved
+  const revokeAccessOf = (people: { memberEmail: string | null }[]) => {
+    const members = d.meta()?.members ?? [];
+    const losing = people
+      .map((p) => p.memberEmail)
+      .filter((email) => members.some((m) => m.email === email && m.role !== 'owner'));
+    for (const email of losing) d.metaChanges.removeMember(email!);
+    if (losing.length > 0) d.reloadAfterSave();
+  };
+
+  return {
+    addPerson: (name, memberEmail) => {
+      const trimmed = name.trim();
+      if (trimmed === '') return false;
+      if (d.current().people.some((p) => p.name === trimmed)) {
+        return refuse(`${trimmed} is already in this split`);
       }
-    }
-    // Linked people go by their account's display name, as the server shows them
-    const displayName = d.meta()?.members.find((m) => m.email === memberEmail)?.displayName;
-    d.dispatch({
-      type: 'UPDATE_PERSON',
-      payload: { id: personId, memberEmail, ...(displayName ? { name: displayName } : {}) },
-    });
-    d.queue({ op: 'linkPerson', id: personId, memberEmail });
-    return true;
-  },
-  removePerson: (personId, fromItems = false) => {
-    const person = d.current().people.find((p) => p.id === personId);
-    if (person == null) return false;
-    const blocker = removalBlocker(d.current(), personId, fromItems);
-    if (blocker) return refuse(blocker);
-    d.dispatch({ type: 'REMOVE_PERSON', payload: personId });
-    // Someone with an account loses access too, and the share link changes
-    const email = person.memberEmail;
-    if (email != null && d.meta()?.members.some((m) => m.email === email && m.role !== 'owner')) {
-      d.metaChanges.removeMember(email);
-      d.reloadAfterSave();
-    }
-    d.queue({ op: 'removePerson', id: personId, fromItems });
-    return true;
-  },
-  clearPeople: () => {
-    if (d.current().items.length > 0) {
-      return refuse('Remove the items first, then clear the people.');
-    }
-    d.dispatch({ type: 'CLEAR_PEOPLE', payload: null });
-    d.queue({ op: 'clearPeople' });
-    return true;
-  },
-  addItem: (input, id = newId(), createdAt = Date.now()) => {
-    const item = { id, createdAt, ...input };
-    d.dispatch({ type: 'ADD_ITEM', payload: item });
-    // In another currency the server works out the amounts; show its numbers after
-    if (input.original) d.reloadAfterSave();
-    d.queue({ op: 'addItem', item });
-    return true;
-  },
-  updateItem: (itemId, input) => {
-    const existing = d.current().items.find((i) => i.id === itemId);
-    // Removed meanwhile, say by someone else
-    if (existing == null) return refuse('That item has been removed');
-    const item = { id: itemId, createdAt: existing.createdAt, ...input };
-    d.dispatch({ type: 'UPDATE_ITEM', payload: item });
-    if (input.original || existing.original) d.reloadAfterSave();
-    d.queue({ op: 'updateItem', item });
-    return true;
-  },
-  removeItem: (itemId) => {
-    if (!d.current().items.some((i) => i.id === itemId)) return false;
-    d.dispatch({ type: 'REMOVE_ITEM', payload: itemId });
-    d.queue({ op: 'removeItem', id: itemId });
-    return true;
-  },
-  moveItemsToDay: (itemIds, day) => {
-    const ids = new Set(itemIds);
-    const now = Date.now();
-    let moved = false;
-    for (const item of d.current().items) {
-      if (!ids.has(item.id)) continue;
-      const at = new Date(day);
-      const was = new Date(item.createdAt || now);
-      at.setHours(was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds());
-      const createdAt = Math.min(at.getTime(), now);
-      if (createdAt === item.createdAt) continue;
-      d.dispatch({ type: 'PATCH_ITEM', payload: { id: item.id, createdAt } });
-      d.queue({ op: 'setItemDate', id: item.id, createdAt });
-      moved = true;
-    }
-    return moved;
-  },
-  setDistributor: (personId) => {
-    d.metaChanges.setDistributor(personId);
-    d.queue({ op: 'setDistributor', personId });
-    return true;
-  },
-  restoreItem: (item) => {
-    if (d.current().items.some((i) => i.id === item.id)) return false;
-    d.dispatch({ type: 'ADD_ITEM', payload: item });
-    d.queue({ op: 'addItem', item });
-    return true;
-  },
-  clearItems: () => {
-    d.dispatch({ type: 'CLEAR_ITEMS', payload: null });
-    d.queue({ op: 'clearItems' });
-    return true;
-  },
-  refreshRates: (currencies) => {
-    if (currencies.length === 0) return false;
-    // The server fetches the rates; its numbers show once saved
-    d.reloadAfterSave();
-    d.queue({ op: 'refreshRates', currencies });
-    return true;
-  },
-  setRate: (currency, rate) => {
-    if (rate == null) {
-      d.reloadAfterSave();
-    } else {
+      const person = { id: newId(), name: trimmed, memberEmail: memberEmail ?? null };
+      d.dispatch({ type: 'ADD_PERSON', payload: person });
+      d.queue({ op: 'addPerson', ...person });
+      return true;
+    },
+    renamePerson: (personId, name) => {
+      const trimmed = name.trim();
+      const person = d.current().people.find((p) => p.id === personId);
+      if (person == null || trimmed === '' || trimmed === person.name) return false;
+      if (person.memberEmail != null) {
+        return refuse(`${person.name}'s name comes from their account`);
+      }
+      if (d.current().people.some((p) => p.name === trimmed && p.id !== personId)) {
+        return refuse(`${trimmed} is already in this split`);
+      }
+      d.dispatch({ type: 'UPDATE_PERSON', payload: { id: personId, name: trimmed } });
+      d.queue({ op: 'renamePerson', id: personId, name: trimmed });
+      return true;
+    },
+    linkPerson: (personId, memberEmail) => {
+      const people = d.current().people;
+      const person = people.find((p) => p.id === personId);
+      if (person == null) return false;
+      if (memberEmail != null) {
+        const other = people.find((p) => p.memberEmail === memberEmail && p.id !== personId);
+        if (other) return refuse(`That account is already ${other.name}`);
+        if (person.memberEmail != null && person.memberEmail !== memberEmail) {
+          return refuse(`${person.name} is already linked to another account`);
+        }
+      }
+      // Linked people go by their account's display name, as the server shows them
+      const displayName = d.meta()?.members.find((m) => m.email === memberEmail)?.displayName;
+      d.dispatch({
+        type: 'UPDATE_PERSON',
+        payload: { id: personId, memberEmail, ...(displayName ? { name: displayName } : {}) },
+      });
+      d.queue({ op: 'linkPerson', id: personId, memberEmail });
+      return true;
+    },
+    removePerson: (personId, fromItems = false) => {
+      const person = d.current().people.find((p) => p.id === personId);
+      if (person == null) return false;
+      const blocker = removalBlocker(d.current(), personId, fromItems);
+      if (blocker) return refuse(blocker);
+      d.dispatch({ type: 'REMOVE_PERSON', payload: personId });
+      revokeAccessOf([person]);
+      d.queue({ op: 'removePerson', id: personId, fromItems });
+      return true;
+    },
+    clearPeople: () => {
+      if (d.current().items.length > 0) {
+        return refuse('Remove the items first, then clear the people.');
+      }
+      revokeAccessOf(d.current().people);
+      d.dispatch({ type: 'CLEAR_PEOPLE', payload: null });
+      d.queue({ op: 'clearPeople' });
+      return true;
+    },
+    addItem: (input, id = newId(), createdAt = Date.now()) => {
+      const item = { id, createdAt, ...input };
+      d.dispatch({ type: 'ADD_ITEM', payload: item });
+      // In another currency the server works out the amounts; show its numbers after
+      if (input.original) d.reloadAfterSave();
+      d.queue({ op: 'addItem', item });
+      return true;
+    },
+    updateItem: (itemId, input) => {
+      const existing = d.current().items.find((i) => i.id === itemId);
+      // Removed meanwhile, say by someone else
+      if (existing == null) return refuse('That item has been removed');
+      const item = { id: itemId, createdAt: existing.createdAt, ...input };
+      d.dispatch({ type: 'UPDATE_ITEM', payload: item });
+      if (input.original || existing.original) d.reloadAfterSave();
+      d.queue({ op: 'updateItem', item });
+      return true;
+    },
+    removeItem: (itemId) => {
+      if (!d.current().items.some((i) => i.id === itemId)) return false;
+      d.dispatch({ type: 'REMOVE_ITEM', payload: itemId });
+      d.queue({ op: 'removeItem', id: itemId });
+      return true;
+    },
+    moveItemsToDay: (itemIds, day) => {
+      const ids = new Set(itemIds);
+      const now = Date.now();
+      let moved = false;
       for (const item of d.current().items) {
-        if (item.original?.currency !== currency) continue;
-        d.dispatch({ type: 'PATCH_ITEM', payload: atRate(item, rate) });
+        if (!ids.has(item.id)) continue;
+        const at = new Date(day);
+        const was = new Date(item.createdAt || now);
+        at.setHours(was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds());
+        const createdAt = Math.min(at.getTime(), now);
+        if (createdAt === item.createdAt) continue;
+        d.dispatch({ type: 'PATCH_ITEM', payload: { id: item.id, createdAt } });
+        d.queue({ op: 'setItemDate', id: item.id, createdAt });
+        moved = true;
       }
-    }
-    d.queue({ op: 'setRate', currency, rate });
-    return true;
-  },
-});
+      return moved;
+    },
+    setDistributor: (personId) => {
+      d.metaChanges.setDistributor(personId);
+      d.queue({ op: 'setDistributor', personId });
+      return true;
+    },
+    restoreItem: (item) => {
+      if (d.current().items.some((i) => i.id === item.id)) return false;
+      d.dispatch({ type: 'ADD_ITEM', payload: item });
+      d.queue({ op: 'addItem', item });
+      return true;
+    },
+    clearItems: () => {
+      d.dispatch({ type: 'CLEAR_ITEMS', payload: null });
+      d.queue({ op: 'clearItems' });
+      return true;
+    },
+    refreshRates: (currencies) => {
+      if (currencies.length === 0) return false;
+      // The server fetches the rates; its numbers show once saved
+      d.reloadAfterSave();
+      d.queue({ op: 'refreshRates', currencies });
+      return true;
+    },
+    setRate: (currency, rate) => {
+      if (rate == null) {
+        d.reloadAfterSave();
+      } else {
+        for (const item of d.current().items) {
+          if (item.original?.currency !== currency) continue;
+          d.dispatch({ type: 'PATCH_ITEM', payload: atRate(item, rate) });
+        }
+      }
+      d.queue({ op: 'setRate', currency, rate });
+      return true;
+    },
+  };
+};

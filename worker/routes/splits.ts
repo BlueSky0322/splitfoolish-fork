@@ -1,5 +1,5 @@
 // Splits: listing and creating them, and everything under one split. Routes under a
-// split go through `membersOnly` (and `ownerOnly`, or `allowedIf` a rule from
+// split go through `membersOnly` (and `allowedIf` a rule from
 // shared/rules.ts, where only the owner may act), except opening one, which checks
 // membership in the same database round trip as the rest. The work is in splits.ts and
 // the other feature modules.
@@ -19,7 +19,12 @@ import type {
   UpdateSplitResult,
 } from '../../shared/api';
 import { isCurrency } from '../../shared/rates';
-import { canEditSplitSettings, canRemoveMember } from '../../shared/rules';
+import {
+  canDeleteSplit,
+  canEditSplitSettings,
+  canManageInvites,
+  canRemoveMember,
+} from '../../shared/rules';
 import { MAX_NAME_LENGTH } from '../../shared/types';
 import type { AppEnv } from '../app';
 import {
@@ -30,7 +35,6 @@ import {
   batchGroups,
   getRole,
   membersOnly,
-  ownerOnly,
 } from '../app';
 import {
   json,
@@ -184,7 +188,7 @@ splits.patch(
 splits.delete(
   SPLIT_PATH,
   membersOnly,
-  ownerOnly('Only the owner can delete this split'),
+  allowedIf(canDeleteSplit, 'Only the owner can delete this split'),
   async (c) => {
     await c.env.DB.batch(deleteSplitStatements(c.env.DB, c.req.param('id')));
     return ok();
@@ -237,7 +241,7 @@ splits.delete(`${SPLIT_PATH}/attachments/:attachmentId${ID_PARAM}`, membersOnly,
 splits.post(
   `${SPLIT_PATH}/invite`,
   membersOnly,
-  ownerOnly('Only the owner can reset the invite link'),
+  allowedIf(canManageInvites, 'Only the owner can reset the invite link'),
   async (c) =>
     json<ShareTokenResult>({ shareToken: await resetShareLinks(c.env.DB, c.req.param('id')) }),
 );
@@ -245,7 +249,7 @@ splits.post(
 splits.delete(
   `${SPLIT_PATH}/invites/:inviteId${ID_PARAM}`,
   membersOnly,
-  ownerOnly('Only the owner can revoke invites'),
+  allowedIf(canManageInvites, 'Only the owner can revoke invites'),
   async (c) => {
     await revokeInviteStatement(c.env.DB, c.req.param('id'), c.req.param('inviteId')).run();
     // Already gone is fine, as for every other delete: the result is the same

@@ -24,6 +24,15 @@ export const canEditSplitSettings = (role: Role) => role === 'owner';
 export const canLinkPerson = (account: string | null, actor: Actor) =>
   canChangePeople(actor.role) || account === actor.email;
 
+/** Deleting the split, for everyone, is the owner's; anyone else can leave it */
+export const canDeleteSplit = (role: Role) => role === 'owner';
+
+/**
+ * The owner's share link and who's waiting to join (invites, and requests through
+ * members' links) are the owner's to manage
+ */
+export const canManageInvites = (role: Role) => role === 'owner';
+
 /** A photo is removed by whoever added it, or by the owner */
 export const canRemovePhoto = (uploadedBy: string, actor: Actor) =>
   uploadedBy === actor.email || actor.role === 'owner';
