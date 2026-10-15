@@ -8,7 +8,7 @@ import { fail, json, newId, ok } from './http';
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** A share link's token, hard to guess */
-export const newInviteToken = () =>
+export const newShareToken = () =>
   btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24))))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
@@ -26,7 +26,7 @@ export const removeAccessStatements = (db: D1Database, splitId: string, email: s
   db
     .prepare('UPDATE people SET member_email = NULL WHERE split_id = ? AND member_email = ?')
     .bind(splitId, email),
-  db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(newInviteToken(), splitId),
+  db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(newShareToken(), splitId),
 ];
 
 /** Everyone's access to a split, for deleting it: its invites, then its members */
@@ -48,17 +48,17 @@ export async function resetShareLinks(db: D1Database, splitId: string) {
     .prepare(`SELECT email FROM split_members WHERE split_id = ? AND role = 'editor'`)
     .bind(splitId)
     .all<{ email: string }>();
-  const inviteToken = newInviteToken();
+  const shareToken = newShareToken();
   await db.batch([
-    db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(inviteToken, splitId),
+    db.prepare('UPDATE splits SET invite_token = ? WHERE id = ?').bind(shareToken, splitId),
     ...editors.map(({ email }) =>
       db
         .prepare('UPDATE split_members SET share_token = ? WHERE split_id = ? AND email = ?')
-        .bind(newInviteToken(), splitId, email),
+        .bind(newShareToken(), splitId, email),
     ),
     db.prepare('DELETE FROM split_invites WHERE split_id = ?').bind(splitId),
   ]);
-  return inviteToken;
+  return shareToken;
 }
 
 /**
@@ -129,7 +129,7 @@ export async function addEditor(db: D1Database, splitId: string, email: string) 
         `INSERT OR IGNORE INTO split_members (split_id, email, role, joined_at, share_token)
          VALUES (?, ?, 'editor', ?, ?)`,
       )
-      .bind(splitId, email, Date.now(), newInviteToken()),
+      .bind(splitId, email, Date.now(), newShareToken()),
     db.prepare('DELETE FROM split_invites WHERE split_id = ? AND email = ?').bind(splitId, email),
   ];
 

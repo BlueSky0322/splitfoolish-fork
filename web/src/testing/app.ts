@@ -124,7 +124,7 @@ export function splitDetail(id: string, items: Item[] = []): SplitDetail {
       { email: EMAIL, role: 'owner', displayName: 'Ryan', avatarVersion: null, paymentMethods: [] },
     ],
     invites: [],
-    inviteToken: 'token',
+    shareToken: 'token',
     attachments: [],
     people: [person('me', 'Ryan', EMAIL), person('ann', 'Ann')],
     items,
@@ -223,7 +223,7 @@ function serve(server: FakeServer) {
     if (joinMatch && method === 'POST') {
       const failure = failing('join');
       if (failure) return failure;
-      const split = [...server.splits.values()].find((s) => s.inviteToken === joinMatch[1]);
+      const split = [...server.splits.values()].find((s) => s.shareToken === joinMatch[1]);
       return split
         ? json({ status: 'member', id: split.id })
         : json({ error: 'This invite link is no longer valid' }, 404);

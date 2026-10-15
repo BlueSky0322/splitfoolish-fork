@@ -17,7 +17,7 @@ export const splitDetailStatements = (db: D1Database, splitId: string, email: st
       .bind(splitId, email),
     db
       .prepare(
-        `SELECT s.name, s.currency, s.invite_token AS inviteToken,
+        `SELECT s.name, s.currency, s.invite_token AS ownerToken,
            s.distributor_person_id AS distributorId, p.version AS pictureVersion,
            s.converting_since AS convertingSince
          FROM splits s LEFT JOIN split_pictures p ON p.split_id = s.id WHERE s.id = ?`,
@@ -55,7 +55,7 @@ export function assembleSplitDetail(
     | {
         name: string;
         currency: string;
-        inviteToken: string;
+        ownerToken: string;
         distributorId: string | null;
         pictureVersion: number | null;
         convertingSince: number | null;
@@ -81,7 +81,7 @@ export function assembleSplitDetail(
           ? invites.map((i) => ({ ...i, needsApproval: i.needsApproval === 1 }))
           : undefined,
       // Everyone shares with their own link; a member's asks the owner to approve
-      inviteToken: role === 'owner' ? split.inviteToken : shareToken ?? undefined,
+      shareToken: role === 'owner' ? split.ownerToken : shareToken ?? undefined,
       attachments: assembleAttachments(attachments),
       ...assembleContent(content),
     },

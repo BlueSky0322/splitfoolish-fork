@@ -8,7 +8,7 @@ import type {
   Created,
   CreateSplitBody,
   InviteList,
-  InviteTokenResult,
+  ShareTokenResult,
   ItemNames,
   JoinResult,
   MyInvite,
@@ -150,7 +150,7 @@ export const api = {
     upload<SplitPictureResult>('PUT', `${splitPath(id)}/picture`, picture),
   deleteSplitPicture: (id: string) => request<Ok>('DELETE', `${splitPath(id)}/picture`),
   deleteSplit: (id: string) => request<Ok>('DELETE', splitPath(id)),
-  resetInvite: (id: string) => request<InviteTokenResult>('POST', `${splitPath(id)}/invite`),
+  resetShareLinks: (id: string) => request<ShareTokenResult>('POST', `${splitPath(id)}/invite`),
   removeMember: (id: string, email: string) =>
     request<Ok>('DELETE', `${splitPath(id)}/members/${encodeURIComponent(email)}`),
   revokeInvite: (id: string, inviteId: string) =>

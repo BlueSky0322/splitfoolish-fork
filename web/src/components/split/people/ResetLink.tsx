@@ -17,7 +17,7 @@ const ResetLink = ({ splitId, onDone, onCancel }: ResetLinkProps) => {
   const reset = async () => {
     setBusy(true);
     try {
-      await api.resetInvite(splitId);
+      await api.resetShareLinks(splitId);
       onDone();
     } catch (err) {
       showError(err, 'Could not reset the link');

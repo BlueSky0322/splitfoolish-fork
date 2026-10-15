@@ -31,7 +31,7 @@ async function splitWith(owner: string, ...members: string[]) {
     currency: 'MYR',
   });
   const id: string = data.id;
-  const token: string = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.inviteToken;
+  const token: string = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.shareToken;
   for (const m of members) {
     const opened = await api.call(m, 'POST', `/api/join/${token}`);
     await api.call(m, 'POST', `/api/invites/${opened.data.inviteId}/accept`);
@@ -77,8 +77,8 @@ describe('who can see a split', () => {
       (await api.call(editor, 'DELETE', `/api/splits/${id}/members/${owner}`)).status,
     ).not.toBe(200);
     // Members share with a link of their own, never the owner's
-    const ownToken = (await api.call(editor, 'GET', `/api/splits/${id}`)).data.inviteToken;
-    const ownerToken = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.inviteToken;
+    const ownToken = (await api.call(editor, 'GET', `/api/splits/${id}`)).data.shareToken;
+    const ownerToken = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.shareToken;
     expect(ownToken).toBeTruthy();
     expect(ownToken).not.toBe(ownerToken);
   });
@@ -352,7 +352,7 @@ describe('share link invites', () => {
     const { inviteId } = (await api.call(ben, 'POST', `/api/join/${token}`)).data;
 
     const reset = await api.call(owner, 'POST', `/api/splits/${id}/invite`);
-    expect(reset.data.inviteToken).not.toBe(token);
+    expect(reset.data.shareToken).not.toBe(token);
     expect((await api.call(ben, 'POST', `/api/invites/${inviteId}/accept`)).status).toBe(404);
     expect((await api.call(ben, 'POST', `/api/join/${token}`)).status).toBe(404);
   });
@@ -381,7 +381,7 @@ describe("sharing through a member's link", () => {
     const member = person('member');
     const { id, token } = await splitWith(owner, member);
     const memberToken: string = (await api.call(member, 'GET', `/api/splits/${id}`)).data
-      .inviteToken;
+      .shareToken;
     return { owner, member, id, token, memberToken };
   }
   const invitesOf = async (who: string) =>
@@ -452,7 +452,7 @@ describe("sharing through a member's link", () => {
     const reset = await api.call(owner, 'POST', `/api/splits/${id}/invite`);
     expect(reset.status).toBe(200);
     expect((await api.call(other, 'POST', `/api/join/${memberToken}`)).status).toBe(404);
-    const newToken = (await api.call(member, 'GET', `/api/splits/${id}`)).data.inviteToken;
+    const newToken = (await api.call(member, 'GET', `/api/splits/${id}`)).data.shareToken;
     expect(newToken).not.toBe(memberToken);
 
     await api.call(member, 'DELETE', `/api/splits/${id}/members/${member}`);

@@ -7,7 +7,7 @@ import type {
   ChangesBody,
   CreateSplitBody,
   Created,
-  InviteTokenResult,
+  ShareTokenResult,
   ItemNameUse,
   ItemNames,
   RatePreference,
@@ -56,7 +56,7 @@ import { evictFromRoom, joinRoom } from '../room';
 import {
   deleteAccessStatements,
   leaveStatement,
-  newInviteToken,
+  newShareToken,
   removeAccessStatements,
   resetShareLinks,
 } from '../sharing';
@@ -162,7 +162,7 @@ splits.post('/splits', async (c) => {
           `INSERT INTO splits (id, name, currency, invite_token, created_at, updated_at)
            VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
         )
-        .bind(id, name, currency, newInviteToken(), now),
+        .bind(id, name, currency, newShareToken(), now),
       // New splits default to the currency used last
       ...settingsStatements(db, c.var.email, { lastCurrency: currency }),
       db
@@ -316,7 +316,7 @@ splits.post(
   membersOnly,
   ownerOnly('Only the owner can reset the invite link'),
   async (c) =>
-    json<InviteTokenResult>({ inviteToken: await resetShareLinks(c.env.DB, c.req.param('id')) }),
+    json<ShareTokenResult>({ shareToken: await resetShareLinks(c.env.DB, c.req.param('id')) }),
 );
 
 splits.delete(

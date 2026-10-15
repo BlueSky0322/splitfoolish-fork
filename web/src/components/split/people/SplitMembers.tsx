@@ -43,7 +43,7 @@ export const ShareTitle = ({ name }: { name: string }) => (
 const SplitMembers = ({ meta, myEmail, onChange, changeSharing, onReset }: SplitMembersProps) => {
   const isMobile = useIsMobile();
   const isOwner = meta.role === 'owner';
-  const link = meta.inviteToken ? inviteUrl(meta.inviteToken) : null;
+  const link = meta.shareToken ? inviteUrl(meta.shareToken) : null;
   const invites = (meta.invites ?? []).filter((i) => !i.needsApproval);
   const requests = (meta.invites ?? []).filter((i) => i.needsApproval);
   const owner = meta.members.find((m) => m.role === 'owner');

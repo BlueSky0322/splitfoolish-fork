@@ -133,7 +133,7 @@ export interface SplitDetail {
   /** Invites and requests to join not yet answered; only sent to the owner */
   invites?: SplitInvite[];
   /** Your share link: the owner's lets people in, a member's asks the owner first */
-  inviteToken?: string;
+  shareToken?: string;
   attachments: Attachment[];
   people: Person[];
   items: Item[];
@@ -316,8 +316,8 @@ export interface UpdateSplitResult extends Ok {
 }
 
 /** A new share link */
-export interface InviteTokenResult {
-  inviteToken: string;
+export interface ShareTokenResult {
+  shareToken: string;
 }
 
 /** A new picture's version, for its address */
