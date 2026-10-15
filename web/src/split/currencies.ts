@@ -1,6 +1,6 @@
 // The other currencies a split's items were paid in
 
-import type { RateSource } from '../../../shared/rates';
+import { type RateSource, savedRateSource } from '../../../shared/rates';
 import type { ItemOriginal } from '../../../shared/types';
 import type { SplitItem } from './state';
 
@@ -32,7 +32,7 @@ export function usedCurrencies(items: SplitItem[]): UsedCurrency[] {
         code,
         count: list.length,
         rate: shown.rate ?? 1,
-        source: shown.rateSource ?? 'manual',
+        source: savedRateSource(shown.rateSource),
         at: shown.rateAt ?? 0,
         manual,
       };

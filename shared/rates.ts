@@ -49,6 +49,13 @@ export const isValidRate = (rate: unknown): rate is number =>
  * same currency and amount, and the same kind of rate. A fetched rate is kept while no
  * rate is typed; a typed one only when the same rate is typed again.
  */
+/**
+ * Where a saved rate came from. One saved without a source (from before sources were
+ * kept) counts as typed, so it's never swapped for a fetched one unasked.
+ */
+export const savedRateSource = (source: RateSource | null | undefined): RateSource =>
+  source ?? 'manual';
+
 export function keepsSavedConversion(
   saved: { currency: string; cents: number; rate: number; source?: RateSource | null },
   entered: { currency: string; cents: number; manualRate: number | null },

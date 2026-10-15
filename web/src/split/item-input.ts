@@ -1,6 +1,11 @@
-import { DEFAULT_SETTINGS, RATE_PROVIDERS } from '../../../shared/api';
 import type { RateSource } from '../../../shared/rates';
-import { convertParts, isValidRate, keepsSavedConversion, toCents } from '../../../shared/rates';
+import {
+  convertParts,
+  isValidRate,
+  keepsSavedConversion,
+  savedRateSource,
+  toCents,
+} from '../../../shared/rates';
 import type { SplitMode } from '../../../shared/settle';
 import type { ItemOriginal } from '../../../shared/types';
 import type { ItemInput } from '../api';
@@ -42,15 +47,12 @@ export function chooseRate(r: RateInputs): { rate: number | null; source: RateSo
         currency: saved.currency,
         cents: toCents(saved.amount),
         rate: saved.rate,
-        source: saved.rateSource,
+        source: savedRateSource(saved.rateSource),
       },
       { currency: r.entryCurrency, cents: r.enteredCents, manualRate: null },
     )
   ) {
-    return {
-      rate: saved.rate,
-      source: saved.rateSource ?? RATE_PROVIDERS[DEFAULT_SETTINGS.ratePreference],
-    };
+    return { rate: saved.rate, source: savedRateSource(saved.rateSource) };
   }
   return { rate: r.fetched?.rate ?? null, source: r.fetched?.source ?? null };
 }

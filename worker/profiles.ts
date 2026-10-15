@@ -184,6 +184,34 @@ export async function patchProfile(db: D1Database, email: string, body: Unchecke
   return json<Profile>(await getProfile(db, email));
 }
 
+type SavedMethod = PaymentMethod & { bank: string | null; accountName: string | null };
+
+const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+/** One payment method as sent, checked and trimmed; or why it's refused */
+function readPaymentMethod(raw: unknown): SavedMethod | string {
+  const m = (raw != null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (!isRowId(m.id)) return 'Invalid payment method';
+  const type = text(m.type);
+  const detail = text(m.detail);
+  if (
+    !type ||
+    type.length > MAX_METHOD_TYPE ||
+    (!detail && needsDetail(type)) ||
+    detail.length > MAX_METHOD_DETAIL
+  ) {
+    return 'Each payment method needs a type and details';
+  }
+  // Only bank transfers name a bank and an account holder
+  const isBank = type === BANK_TRANSFER;
+  const bank = isBank ? text(m.bank) : '';
+  const accountName = isBank ? text(m.accountName) : '';
+  if (bank.length > MAX_BANK || accountName.length > MAX_ACCOUNT_NAME) {
+    return 'The bank or account name is too long';
+  }
+  return { id: m.id, type, detail, bank: bank || null, accountName: accountName || null };
+}
+
 /** Replaces the whole list of payment methods, and which one is preferred */
 export async function putPaymentMethods(
   db: D1Database,
@@ -194,31 +222,12 @@ export async function putPaymentMethods(
   if (!Array.isArray(methods) || methods.length > MAX_METHODS) {
     return fail(`You can save up to ${MAX_METHODS} payment methods`, 400);
   }
-  const clean: (PaymentMethod & { bank: string | null; accountName: string | null })[] = [];
-  for (const m of methods as Record<string, unknown>[]) {
-    const id = isRowId(m?.id) ? m.id : null;
-    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
-    const type = text(m?.type);
-    const detail = text(m?.detail);
-    if (id == null || clean.some((c) => c.id === id)) {
-      return fail('Invalid payment method', 400);
-    }
-    if (
-      !type ||
-      type.length > MAX_METHOD_TYPE ||
-      (!detail && needsDetail(type)) ||
-      detail.length > MAX_METHOD_DETAIL
-    ) {
-      return fail('Each payment method needs a type and details', 400);
-    }
-    // Only bank transfers name a bank and an account holder
-    const isBank = type === BANK_TRANSFER;
-    const bank = isBank ? text(m?.bank) : '';
-    const accountName = isBank ? text(m?.accountName) : '';
-    if (bank.length > MAX_BANK || accountName.length > MAX_ACCOUNT_NAME) {
-      return fail('The bank or account name is too long', 400);
-    }
-    clean.push({ id, type, detail, bank: bank || null, accountName: accountName || null });
+  const clean: SavedMethod[] = [];
+  for (const raw of methods as unknown[]) {
+    const method = readPaymentMethod(raw);
+    if (typeof method === 'string') return fail(method, 400);
+    if (clean.some((c) => c.id === method.id)) return fail('Invalid payment method', 400);
+    clean.push(method);
   }
 
   // A QR code method needs its image, uploaded first

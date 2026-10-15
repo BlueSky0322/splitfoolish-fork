@@ -69,7 +69,10 @@ export async function reconvertSplit(
   const { currency: to, fromCurrency, since } = split;
 
   const items = itemRows.results as ItemRow[];
-  const parts = partRows.results as PartRow[];
+  const partsOf = new Map<string, PartRow[]>();
+  for (const part of partRows.results as PartRow[]) {
+    partsOf.set(part.itemId, [...(partsOf.get(part.itemId) ?? []), part]);
+  }
   // What each item was paid in: its own currency, or the split's old one
   const paidIn = (item: ItemRow) => item.originalCurrency ?? fromCurrency;
 
@@ -85,8 +88,7 @@ export async function reconvertSplit(
   for (const item of items) {
     const from = paidIn(item);
     const paidCents = item.originalCents ?? item.costCents;
-    const itemParts = parts.filter((p) => p.itemId === item.id);
-    const paidParts = itemParts.map((p): [string, number] => [
+    const paidParts = (partsOf.get(item.id) ?? []).map((p): [string, number] => [
       p.personId,
       p.originalExactCents ?? p.exactCents ?? 0,
     ]);

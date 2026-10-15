@@ -70,7 +70,7 @@ import {
   deleteSplitStatements,
   retryStalledReconvert,
   splitOrderStatements,
-  splitSettingsStatements,
+  planSplitSettings,
   startReconvert,
 } from '../splits';
 import { listItemNames, listSplitSummaries } from '../summaries';
@@ -178,7 +178,7 @@ splits.patch(
       if (!isCurrency(body.currency)) return fail('Invalid currency', 400);
       changes.currency = body.currency;
     }
-    const { statements, converting } = await splitSettingsStatements(db, id, changes);
+    const { statements, converting } = await planSplitSettings(db, id, changes);
     if (statements.length > 0) await db.batch(statements);
     if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email);
     return json<UpdateSplitResult>({ ok: true, converting });

@@ -55,7 +55,7 @@ export const splitOrderStatements = (db: D1Database, email: string, ids: string[
  * run; until it's done, plain items are still in the currency the split had before.
  * No statements when nothing changes.
  */
-export async function splitSettingsStatements(
+export async function planSplitSettings(
   db: D1Database,
   splitId: string,
   changes: { name?: string; currency?: string },

@@ -6,12 +6,16 @@
 // uploaded a photo, which person is being linked or removed) are checked by the handler
 // that loads that row, such as deleteAttachment and applyChanges. The work lives in the
 // feature modules (photos, profiles, sharing, splits, split-content, split-detail,
-// summaries), which export three kinds of function: handlers, taking the database, the
-// ids and person involved, then the request or its body, and answering with a
-// Response; loaders, returning data shaped as in shared/api.ts for the route to send
-// with json<T>(); and statement builders (named *Statement or *Statements), returning
-// statements for a route to run in one batch with others. Reading requests is in
-// http.ts, and telling the apps that have a split open about changes in room.ts.
+// summaries), which export these kinds of function:
+//   - handlers, taking the database, the ids and person involved, then the request or
+//     its body, and answering with a Response;
+//   - loaders, returning data shaped as in shared/api.ts for the route to send with
+//     json<T>(), and assemblers (assemble*) shaping rows a route read in one batch;
+//   - statement builders (*Statement, *Statements), returning statements for a route to
+//     run in one batch with others, and planners (plan*), reading what they need first;
+//   - actions, which write themselves and answer with what changed (a new token, say).
+// Reading requests is in http.ts, and telling the apps that have a split open about
+// changes in room.ts.
 
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';

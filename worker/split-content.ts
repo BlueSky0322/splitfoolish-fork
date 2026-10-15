@@ -10,6 +10,7 @@ import {
   isCurrency,
   isValidRate,
   keepsSavedConversion,
+  savedRateSource,
   toCents,
 } from '../shared/rates';
 import type { SplitMode } from '../shared/settle';
@@ -244,7 +245,7 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
                   currency: i.currency,
                   cents: i.cents,
                   rate: i.rate,
-                  source: i.source ?? 'manual',
+                  source: savedRateSource(i.source),
                   at: i.at ?? 0,
                 },
         },
