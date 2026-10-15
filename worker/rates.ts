@@ -104,7 +104,8 @@ export async function getRate(
     deps = defaultDeps(),
   }: RateOptions = {},
 ): Promise<Rate> {
-  if (from === to) return { rate: 1, source: RATE_PROVIDERS.ecb, fetchedAt: deps.now() };
+  // Nothing to fetch; named after the service the person chose, which a fetch would use
+  if (from === to) return { rate: 1, source: RATE_PROVIDERS[prefer], fetchedAt: deps.now() };
 
   const key = cacheKey(from, to, prefer);
   const cached = deps.cache ? await deps.cache.match(key) : undefined;

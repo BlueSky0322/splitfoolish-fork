@@ -38,7 +38,6 @@ import {
   readName,
   fail,
   ok,
-  isClientId,
   isConstraintError,
   isCrossSite,
   readJson,
@@ -56,7 +55,7 @@ import { REFRESH_MAX_AGE_MS, getRate } from '../rates';
 import { evictFromRoom, joinRoom } from '../room';
 import {
   leaveStatement,
-  removeAccessStatements,
+  revokeMemberStatements,
   resetShareLinks,
   revokeInviteStatement,
 } from '../sharing';
@@ -71,6 +70,7 @@ import {
   startReconvert,
 } from '../splits';
 import { listItemNames, listSplitSummaries } from '../summaries';
+import { isRowId } from '../../shared/api';
 
 const splits = new Hono<AppEnv>();
 
@@ -120,7 +120,7 @@ splits.post('/splits', async (c) => {
   const { id, currency } = body;
   if (!isCurrency(currency)) return fail('Invalid currency', 400);
   // The app picks the id, so it can open the new split before this finishes
-  if (!isClientId(id)) return fail('Invalid split id', 400);
+  if (!isRowId(id)) return fail('Invalid split id', 400);
   const created = await db.batch(createSplitStatements(db, id, name, currency, c.var.email)).then(
     () => true,
     (err) => {
@@ -270,7 +270,7 @@ splits.delete(`${SPLIT_PATH}/members/:email`, membersOnly, async (c) => {
 
   // Leaving is a choice and the link still works; being removed shuts the door
   await db.batch(
-    target === email ? [leaveStatement(db, id, target)] : removeAccessStatements(db, id, target),
+    target === email ? [leaveStatement(db, id, target)] : revokeMemberStatements(db, id, target),
   );
   evictFromRoom(c.env, c.executionCtx, id, [target]);
   return ok();

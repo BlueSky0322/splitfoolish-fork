@@ -2,6 +2,7 @@ import { Button, CloseButton } from '@mantine/core';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import classes from './UpdateNotice.module.css';
+import { isOffline } from '../../offline/outbox';
 
 // A new version of the app was deployed while this one is open: offer to reload. The
 // page names its built script by content hash, so a different name on the server's
@@ -31,7 +32,7 @@ const UpdateNotice = () => {
     if (running == null) return;
     let last = 0;
     const check = () => {
-      if (document.visibilityState !== 'visible' || !navigator.onLine) return;
+      if (document.visibilityState !== 'visible' || isOffline()) return;
       if (Date.now() - last < MIN_GAP_MS) return;
       last = Date.now();
       latestScript()

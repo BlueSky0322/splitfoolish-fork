@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { CLIENT_ID } from '../api';
+import { isOffline } from '../offline/outbox';
 import { LIVE_PING, LIVE_PONG, LIVE_REMOVED_CODE, type RoomMessage } from '../../../shared/api';
 
 const PING_MS = 30_000;
@@ -26,7 +27,7 @@ export function useSplitLive(splitId: string, enabled: boolean, onChange: () => 
     // Set after a disconnect, so the next connection catches up on what was missed
     let missed = false;
 
-    const wanted = () => document.visibilityState === 'visible' && navigator.onLine !== false;
+    const wanted = () => document.visibilityState === 'visible' && !isOffline();
 
     const connect = () => {
       clearTimeout(reconnect);

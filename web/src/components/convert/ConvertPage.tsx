@@ -201,14 +201,13 @@ const ConvertPage = () => {
     if (!converted || from === to) return;
     setRecent((list) => {
       if (list[0]?.[0] === from && list[0]?.[1] === to) return list;
-      const next = [
-        [from, to] as Pair,
-        ...list.filter(([f, t]) => !(f === from && t === to)),
-      ].slice(0, MAX_RECENT);
-      saveRecent(next);
-      return next;
+      return [[from, to] as Pair, ...list.filter(([f, t]) => !(f === from && t === to))].slice(
+        0,
+        MAX_RECENT,
+      );
     });
   }, [converted, from, to]);
+  useEffect(() => saveRecent(recent), [recent]);
 
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {

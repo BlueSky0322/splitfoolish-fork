@@ -6,9 +6,10 @@
 export type RateSource = 'wise' | 'frankfurter' | 'manual';
 
 /** A currency code, like MYR */
-export const CURRENCY = /^[A-Z]{3}$/;
+const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
-export const isCurrency = (v: unknown): v is string => typeof v === 'string' && CURRENCY.test(v);
+export const isCurrency = (v: unknown): v is string =>
+  typeof v === 'string' && CURRENCY_PATTERN.test(v);
 
 /** Offered first in currency pickers: the currencies people here travel and spend in */
 export const COMMON_CURRENCIES = [

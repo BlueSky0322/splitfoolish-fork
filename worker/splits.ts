@@ -7,7 +7,7 @@ import { touchSplitStatement } from './app';
 import { getRatePreference, settingsStatements } from './profiles';
 import { getRate } from './rates';
 import { RETRY_AFTER_MS, reconvertSplit } from './reconvert';
-import { deleteAccessStatements, newShareToken } from './sharing';
+import { deleteAllAccessStatements, newShareToken } from './sharing';
 import { deleteContentStatements } from './split-content';
 
 type WaitUntil = { waitUntil: (p: Promise<unknown>) => void };
@@ -92,7 +92,7 @@ export async function splitSettingsStatements(
 /** Everything of a split, children first, for deleting it */
 export const deleteSplitStatements = (db: D1Database, splitId: string) => [
   ...deleteContentStatements(db, splitId),
-  ...deleteAccessStatements(db, splitId),
+  ...deleteAllAccessStatements(db, splitId),
   db.prepare('DELETE FROM splits WHERE id = ?').bind(splitId),
 ];
 

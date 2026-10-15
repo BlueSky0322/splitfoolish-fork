@@ -3,7 +3,7 @@
 
 import { Hono } from 'hono';
 import type { RateQuote, UsedCurrencyRate, UsedCurrencyRates } from '../../shared/api';
-import { CURRENCY, convertCents, toCents } from '../../shared/rates';
+import { convertCents, isCurrency, toCents } from '../../shared/rates';
 import { MAX_COST } from '../../shared/types';
 import type { AppEnv } from '../app';
 import { json, fail } from '../http';
@@ -16,7 +16,7 @@ const rates = new Hono<AppEnv>();
 rates.get('/rates', async (c) => {
   const from = c.req.query('from')?.toUpperCase() ?? '';
   const to = c.req.query('to')?.toUpperCase() ?? '';
-  if (!CURRENCY.test(from) || !CURRENCY.test(to)) {
+  if (!isCurrency(from) || !isCurrency(to)) {
     return fail('Give from and to as currency codes, like USD', 400);
   }
   const rawAmount = c.req.query('amount');
@@ -51,7 +51,7 @@ rates.get('/rates', async (c) => {
 // `to`, all in one go for Settings
 rates.get('/me/rates', async (c) => {
   const to = c.req.query('to')?.toUpperCase() ?? '';
-  if (!CURRENCY.test(to)) return fail('Give to as a currency code, like MYR', 400);
+  if (!isCurrency(to)) return fail('Give to as a currency code, like MYR', 400);
   const [used, prefer] = await Promise.all([
     listUsedCurrencies(c.env.DB, c.var.email, to),
     getRatePreference(c.env.DB, c.var.email),

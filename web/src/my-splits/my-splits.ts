@@ -19,7 +19,8 @@ export interface MySplits {
 
 type Loaded = { splits: SplitSummary[]; invites: MyInvite[] };
 
-export const MY_SPLITS_KEY = ['home'] as const;
+export const MY_SPLITS_KEY = ['my-splits'] as const;
+// Named before My splits was; kept so copies already saved on devices are still read
 const CACHE_KEY = 'home-v2';
 
 /** Adds splits made on this device that the server doesn't have yet (say, offline) */

@@ -19,6 +19,7 @@ import type { AuthEnv } from './auth';
 import { fail, notFound } from './http';
 import type { RatesEnv } from './rates';
 import type { SplitRoom } from './room';
+import { ROW_ID_CHARS } from '../shared/api';
 
 export interface Env extends AuthEnv, RatesEnv {
   DB: D1Database;
@@ -43,6 +44,8 @@ export type AppEnv = {
 const ID_CHARS = '[A-Za-z0-9_-]{8,64}';
 /** A split, invite or attachment id in a path: the constraint after its :param */
 export const ID_PARAM = `{${ID_CHARS}}`;
+/** Route constraint for a row's id, such as a payment method's */
+export const ROW_ID_PARAM = `{${ROW_ID_CHARS}}`;
 /** The same id sent in a body */
 export const ID_PATTERN = new RegExp(`^${ID_CHARS}$`);
 /** The path of one split, which the routes under it extend */

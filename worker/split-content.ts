@@ -16,13 +16,14 @@ import type { SplitMode } from '../shared/settle';
 import { MAX_SHARES, isSplitMode } from '../shared/settle';
 import type { Change, Item, ItemOriginal, Person, Role } from '../shared/types';
 import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../shared/types';
-import { type Unchecked, fail, ok, readName, isClientId, isConstraintError } from './http';
+import { type Unchecked, fail, ok, readName, isConstraintError } from './http';
 import type { Actor } from '../shared/rules';
 import { touchSplitStatement } from './app';
 import type { ChangesBody } from '../shared/api';
 import { canChangePeople, canLinkPerson, removalBlocker } from '../shared/rules';
 import { type Rate, RatesUnavailable } from './rates';
-import { removeAccessStatements } from './sharing';
+import { revokeMemberStatements } from './sharing';
+import { isRowId } from '../shared/api';
 
 const MAX_CATEGORY_LENGTH = 32;
 
@@ -207,6 +208,8 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
       .bind(splitId),
   ]);
   const memberRows = members.results as { email: string; role: Role }[];
+  // The route already found the split, so its row is there
+  const splitRow = split.results[0] as { currency: string; convertingSince: number | null };
 
   const model: Model = {
     people: new Map(
@@ -247,9 +250,8 @@ async function loadModel(db: D1Database, splitId: string): Promise<Model> {
         },
       ]),
     ),
-    currency: (split.results[0] as { currency: string } | undefined)?.currency ?? 'MYR',
-    converting:
-      (split.results[0] as { convertingSince: number | null } | undefined)?.convertingSince != null,
+    currency: splitRow.currency,
+    converting: splitRow.convertingSince != null,
     members: new Set(memberRows.map((m) => m.email)),
     owner: memberRows.find((m) => m.role === 'owner')?.email ?? null,
     nextPersonPosition: (positions.results[0] as { person: number }).person,
@@ -329,6 +331,14 @@ const reusableConversion = (model: Model, itemId: unknown, original: OriginalInp
 };
 
 /** The currencies a batch needs a fetched rate for, read before the batch is checked */
+/** Whether a rate change converts this item again: one of its currencies, and not kept */
+const convertsAgain = (
+  c: ModelItem['converted'],
+  currencies: string[],
+  keepManual: boolean,
+): c is NonNullable<ModelItem['converted']> =>
+  c != null && currencies.includes(c.currency) && !(keepManual && c.source === 'manual');
+
 function currenciesToFetch(model: Model, changes: Batch): Set<string> {
   const needed = new Set<string>();
   for (const change of changes) {
@@ -336,13 +346,12 @@ function currenciesToFetch(model: Model, changes: Batch): Set<string> {
       try {
         // Only for currencies some item would take the fetched rate in
         const { toFetch, keepManual } = readRateChange(model, change);
-        for (const item of model.items.values()) {
-          const c = item.converted;
-          if (c == null || !toFetch.includes(c.currency)) continue;
-          if (!(keepManual && c.source === 'manual')) needed.add(c.currency);
+        for (const { converted } of model.items.values()) {
+          if (convertsAgain(converted, toFetch, keepManual)) needed.add(converted.currency);
         }
-      } catch {
+      } catch (err) {
         // Refused properly when the batch is checked
+        if (!(err instanceof Refused)) throw err;
       }
       continue;
     }
@@ -352,8 +361,9 @@ function currenciesToFetch(model: Model, changes: Batch): Set<string> {
       const original = readOriginal(model, item.original);
       if (original == null || original.manualRate != null) continue;
       if (reusableConversion(model, item.id, original) == null) needed.add(original.currency);
-    } catch {
+    } catch (err) {
       // Refused properly when the batch is checked
+      if (!(err instanceof Refused)) throw err;
     }
   }
   return needed;
@@ -437,8 +447,7 @@ function rateStatements(
   const statements: D1PreparedStatement[] = [];
   for (const [id, item] of model.items) {
     const c = item.converted;
-    if (c == null || !affected.includes(c.currency)) continue;
-    if (keepManual && c.source === 'manual') continue;
+    if (!convertsAgain(c, affected, keepManual)) continue;
     const next = { ...c, ...chooseRate(manualRate, rates.get(c.currency)) };
     item.converted = next;
     const costCents = convertCents(c.cents, next.rate);
@@ -558,7 +567,7 @@ function readParticipants(
 function readItem(model: Model, raw: unknown, rates: FetchedRates) {
   const item = (raw ?? {}) as Record<string, unknown>;
   // Ids are made by the app so its changes can refer to people and items it just added
-  if (!isClientId(item.id)) throw new Refused('Invalid item');
+  if (!isRowId(item.id)) throw new Refused('Invalid item');
   const name = readName(item.name);
   if (name == null) throw new Refused(`Item name must be 1-${MAX_NAME_LENGTH} characters`);
 
@@ -714,7 +723,7 @@ function removePersonStatements(
   const email = person.memberEmail;
   if (email != null && email !== model.owner && model.members.has(email)) {
     model.members.delete(email);
-    statements.push(...removeAccessStatements(db, splitId, email));
+    statements.push(...revokeMemberStatements(db, splitId, email));
   }
   return statements;
 }
@@ -734,7 +743,7 @@ function changeStatements(
   }
   switch (change?.op) {
     case 'addPerson': {
-      if (!isClientId(change.id) || model.people.has(change.id)) {
+      if (!isRowId(change.id) || model.people.has(change.id)) {
         throw new Refused('Invalid person');
       }
       const name = readName(change.name);
@@ -808,7 +817,7 @@ function changeStatements(
       for (const email of emails) model.members.delete(email);
       return [
         db.prepare('DELETE FROM people WHERE split_id = ?').bind(splitId),
-        ...emails.flatMap((email) => removeAccessStatements(db, splitId, email)),
+        ...emails.flatMap((email) => revokeMemberStatements(db, splitId, email)),
       ];
     }
 

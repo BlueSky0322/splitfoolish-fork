@@ -31,7 +31,8 @@ import {
 } from '../shared/api';
 import { isCurrency } from '../shared/rates';
 import type { Role } from '../shared/types';
-import { type Unchecked, json, fail, isClientId, isConstraintError } from './http';
+import { type Unchecked, json, fail, isConstraintError } from './http';
+import { isRowId } from '../shared/api';
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {
@@ -195,7 +196,7 @@ export async function putPaymentMethods(
   }
   const clean: (PaymentMethod & { bank: string | null; accountName: string | null })[] = [];
   for (const m of methods as Record<string, unknown>[]) {
-    const id = isClientId(m?.id) ? m.id : null;
+    const id = isRowId(m?.id) ? m.id : null;
     const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
     const type = text(m?.type);
     const detail = text(m?.detail);

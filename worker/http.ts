@@ -23,12 +23,8 @@ export const notFound = () => fail('Not found', 404);
 /** Whether a D1 error is a constraint failing (a missing parent row, a duplicate key) */
 export const isConstraintError = (err: unknown) => String(err).includes('CONSTRAINT');
 
-/** A new id for a row: 16 hex characters */
+/** A new id for a row, shaped as ROW_ID_CHARS in shared/api.ts */
 export const newId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-
-/** An id the app made, shaped like newId's, for a row it can refer to before it's saved */
-export const isClientId = (v: unknown): v is string =>
-  typeof v === 'string' && /^[0-9a-f]{16}$/.test(v);
 
 /** A name as sent, trimmed; null when it's missing, empty or too long */
 export const readName = (value: unknown) => {

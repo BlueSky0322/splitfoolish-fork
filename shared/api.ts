@@ -228,6 +228,11 @@ export const MAX_QR_BYTES = 512_000;
 /** The header a request names its tab in, so the tab can skip news of its own change */
 export const CLIENT_ID_HEADER = 'X-Client-Id';
 
+/** A row the app makes before it's saved (a person, item, payment method): 16 hex characters */
+export const ROW_ID_CHARS = '[0-9a-f]{16}';
+const ROW_ID_PATTERN = new RegExp(`^${ROW_ID_CHARS}$`);
+export const isRowId = (v: unknown): v is string => typeof v === 'string' && ROW_ID_PATTERN.test(v);
+
 /** Sent by the app to keep a quiet live-update socket open, and the room's answer */
 export const LIVE_PING = 'ping';
 export const LIVE_PONG = 'pong';
