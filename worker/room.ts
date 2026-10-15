@@ -11,12 +11,12 @@ const MEMBER_HEADER = 'X-Split-Member';
 
 type WaitUntil = { waitUntil: (p: Promise<unknown>) => void };
 
-/** The room for a split, where everyone with it open is listening */
 /** What the rooms need from the Worker's bindings: one room per split */
 export interface RoomEnv {
   SPLIT_ROOM: DurableObjectNamespace<SplitRoom>;
 }
 
+/** The room for a split, where everyone with it open is listening */
 const splitRoom = (env: RoomEnv, splitId: string) =>
   env.SPLIT_ROOM.get(env.SPLIT_ROOM.idFromName(splitId));
 

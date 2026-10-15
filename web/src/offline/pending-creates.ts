@@ -70,7 +70,10 @@ const wait = (ms: number) =>
     window.addEventListener('online', done);
   });
 
-/** Sends one create; true once the server has it, false to try again later */
+/**
+ * Sends one create: true once the server has it, false to try again later; rejects
+ * (forgetting it here) when the server refuses it
+ */
 const sendCreateOnce = (create: PendingCreate) =>
   withOutbox(create.id, async () => {
     // The service worker may have sent it while this page was asleep

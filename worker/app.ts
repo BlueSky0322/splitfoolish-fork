@@ -5,7 +5,7 @@
 // shared/rules.ts) where only the owner may act. Rules that depend on a row (who
 // uploaded a photo, which person is being linked or removed) are checked by the handler
 // that loads that row, such as deleteAttachment and applyChanges. The work lives in the
-// feature modules (photos, profiles, sharing, splits, split-content, split-detail,
+// feature modules (photos, profiles, sharing, split-lifecycle, reconvert, split-content, split-detail,
 // summaries), which export these kinds of function:
 //   - handlers, taking the database, the ids and person involved, then the request or
 //     its body, and answering with a Response;

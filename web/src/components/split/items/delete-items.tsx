@@ -23,17 +23,17 @@ export interface DeleteConfirmation {
   remove: () => void;
 }
 
-/**
- * Deleting one item or several. Without photos it happens at once, with Undo; photos
- * go with their item and can't be brought back, so then it asks first (unless that was
- * asked already, as the item form does).
- */
 /** Deletes items; `confirmed` when photos going too was asked about already */
 export type DeleteItems = (
   items: SplitItem[],
   options?: { confirmed?: boolean; onDeleted?: () => void },
 ) => void;
 
+/**
+ * Deleting one item or several. Without photos it happens at once, with Undo; photos
+ * go with their item and can't be brought back, so then it asks first (unless that was
+ * asked already, as the item form does).
+ */
 export function makeDeleteItems({
   actions,
   photosOf,

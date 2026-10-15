@@ -1,5 +1,6 @@
-// Exchange rates for converting items into a split's currency. Wise's live mid-market
-// rate when a token is set, else the ECB's daily rate from Frankfurter (free, no key).
+// Exchange rates for converting items into a split's currency: Wise's live mid-market
+// rate (when a token is set) and the ECB's daily rate from Frankfurter (free, no key),
+// the one the person prefers tried first and the other after.
 // Each pair is kept in Cloudflare's cache and reused for 4 hours, so a day costs the
 // services a few requests per pair, and a day-old rate still serves if both are down.
 // Refresh in the Currencies sheet asks for one no older than 10 minutes.
@@ -80,7 +81,7 @@ async function fromFrankfurter(env: RatesEnv, from: string, to: string, deps: De
   const res = await deps.fetch(`${base}/v1/latest?base=${from}&symbols=${to}`, {
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  // Frankfurter answers 404 for currencies it doesn't cover
+  // Frankfurter answers 404 or 422 for currencies it doesn't cover
   if (res.status === 404 || res.status === 422) return null;
   if (!res.ok) throw new Error(`Frankfurter: ${res.status}`);
   const body = await res.json<{ rates?: Record<string, unknown> }>();

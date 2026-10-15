@@ -331,7 +331,6 @@ const reusableConversion = (model: Model, itemId: unknown, original: OriginalInp
   return saved != null && keepsSavedConversion(saved, original) ? saved : null;
 };
 
-/** The currencies a batch needs a fetched rate for, read before the batch is checked */
 /** Whether a rate change converts this item again: one of its currencies, and not kept */
 const convertsAgain = (
   c: ModelItem['converted'],
@@ -340,6 +339,7 @@ const convertsAgain = (
 ): c is NonNullable<ModelItem['converted']> =>
   c != null && currencies.includes(c.currency) && !(keepManual && c.source === 'manual');
 
+/** The currencies a batch needs a fetched rate for, read before the batch is checked */
 function currenciesToFetch(model: Model, changes: Batch): Set<string> {
   const needed = new Set<string>();
   for (const change of changes) {

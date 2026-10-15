@@ -19,8 +19,9 @@ function subscribe(listener: () => void) {
 export const useSplitPicturePreview = (splitId: string) =>
   useSyncExternalStore(subscribe, () => previews.get(splitId) ?? null);
 
-// Both follow sendMySplitsChange: shown in My splits straight away, a failure explained
-// here, and resolving with the new picture version (or undefined after a failure)
+// A new picture follows sendMySplitsChange: shown in My splits straight away, a failure
+// explained here, resolving with the new picture version (or undefined after a failure).
+// Removing one goes through the split page's changeMeta.
 
 /** Shows the picture straight away and uploads it once the split exists */
 export async function uploadSplitPicture(splitId: string, file: File) {

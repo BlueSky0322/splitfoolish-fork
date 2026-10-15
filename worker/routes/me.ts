@@ -11,8 +11,6 @@ import { ROW_ID_PARAM } from '../app';
 
 const me = new Hono<AppEnv>();
 
-/** A payment method's id in a path, as the app makes them */
-
 me.get('/me', async (c) => json<Profile>(await getProfile(c.env.DB, c.var.email)));
 
 me.patch('/me', async (c) => {
