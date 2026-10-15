@@ -1,5 +1,5 @@
-// Lint rules for the app (src), the Worker (worker) and the code they share (shared).
-// TypeScript files are checked with type information, as the README recommends.
+// Lint rules for the app (web/src), the Worker (worker) and the code they share (shared).
+// TypeScript files are checked with type information.
 
 import js from '@eslint/js';
 import react from 'eslint-plugin-react';
@@ -16,10 +16,7 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: {
-          // Files outside a tsconfig: the Worker's Node-run tests and the build configs
-          allowDefaultProject: ['worker/test/*.ts', 'vitest.config.ts', '*.config.js'],
-        },
+        projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -27,7 +24,7 @@ export default tseslint.config(
 
   // The app
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['web/src/**/*.{ts,tsx}'],
     ...react.configs.flat.recommended,
     languageOptions: {
       ...react.configs.flat.recommended.languageOptions,
@@ -36,11 +33,11 @@ export default tseslint.config(
     settings: { react: { version: 'detect' } },
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['web/src/**/*.{ts,tsx}'],
     ...react.configs.flat['jsx-runtime'],
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['web/src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -51,11 +48,11 @@ export default tseslint.config(
     // These export hooks or helpers next to their component by design (and main.tsx is
     // the entry point); fast refresh just reloads the page for them
     files: [
-      'src/components/NewSplitDialog.tsx',
-      'src/components/settings/SettingsPage.tsx',
-      'src/components/split/ShareImage.tsx',
-      'src/profile/ProfileContext.tsx',
-      'src/main.tsx',
+      'web/src/components/NewSplitDialog.tsx',
+      'web/src/components/settings/SettingsPage.tsx',
+      'web/src/components/split/ShareImage.tsx',
+      'web/src/profile/ProfileContext.tsx',
+      'web/src/main.tsx',
     ],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
@@ -70,7 +67,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['web/src/**/*.{ts,tsx}'],
     rules: {
       // Props are typed with TypeScript instead
       'react/prop-types': 'off',
@@ -98,11 +95,11 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    files: ['public/sw.js'],
+    files: ['web/public/sw.js'],
     languageOptions: { globals: globals.serviceworker },
   },
   {
-    files: ['*.config.{js,ts}', 'worker/test/**'],
+    files: ['*.config.{js,ts}', 'web/*.config.{js,ts}', 'worker/test/**'],
     languageOptions: { globals: globals.node },
   },
 );
