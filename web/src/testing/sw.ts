@@ -43,13 +43,17 @@ function load(fetch: unknown, caches?: unknown): Handlers {
         (handlers[type] = handler),
       navigator: {},
       location: new URL(ORIGIN),
+      skipWaiting: () => Promise.resolve(),
     },
     fetch,
     caches,
     indexedDB,
+    Headers,
     Response,
     TextEncoder,
     URL,
+    // Through the test's own, so fake timers reach the service worker too
+    setTimeout: (run: () => void, ms: number) => setTimeout(run, ms),
   });
   return handlers;
 }
@@ -82,8 +86,9 @@ export async function backgroundSync(answers: Answer | Answer[]) {
 /** The browser's caches, kept in memory by URL, and shared by each page load in a test */
 export function fakeCaches() {
   const stores = new Map<string, Map<string, Response>>();
+  // As the browser does, a path is on the service worker's own address
   const urlOf = (request: Request | string) =>
-    typeof request === 'string' ? request : request.url;
+    new URL(typeof request === 'string' ? request : request.url, ORIGIN).href;
   return {
     stores,
     open: (name: string) => {
@@ -95,9 +100,81 @@ export function fakeCaches() {
           store.set(urlOf(request), response);
           return Promise.resolve();
         },
+        keys: () => Promise.resolve([...store.keys()].map((url) => new Request(url))),
+        delete: (request: Request | string) => Promise.resolve(store.delete(urlOf(request))),
       });
     },
   };
+}
+
+/** The paths kept in one of the browser's caches, in order */
+export const keptPaths = (caches: ReturnType<typeof fakeCaches>, name: string) =>
+  [...(caches.stores.get(name)?.keys() ?? [])].map((url) => new URL(url).pathname).sort();
+
+/** What a kept response says, or undefined when nothing is kept at `path` */
+export const keptText = (caches: ReturnType<typeof fakeCaches>, name: string, path: string) =>
+  caches.stores.get(name)?.get(`${ORIGIN}${path}`)?.clone().text();
+
+/**
+ * How the server answers each path; a promise for an answer that takes a while. Also
+ * a redirect to sign in, which the browser hands a page's request as it is.
+ */
+export type Site = (path: string) => Answer | { signIn: true } | Promise<Answer>;
+
+/** The response the browser would hand the service worker for `answer` */
+async function siteResponse(answer: Awaited<ReturnType<Site>>) {
+  if ('signIn' in answer) {
+    const res = new Response(null);
+    Object.defineProperties(res, {
+      type: { value: 'opaqueredirect' },
+      status: { value: 0 },
+      ok: { value: false },
+    });
+    return res;
+  }
+  const res = await respond(answer);
+  // From the app's own address, as the browser marks it
+  Object.defineProperty(res, 'type', { value: 'basic' });
+  return res;
+}
+
+/**
+ * The browser opening `path` (a page load, or a fresh start of the installed app)
+ * through the service worker, with the server answering as `site` says. `response` is
+ * what the page gets (null when it fails, as with no connection); `done` settles once
+ * the service worker has finished what it carries on with afterwards.
+ */
+export function openPage(path: string, site: Site, caches: ReturnType<typeof fakeCaches>) {
+  const fetch = vi.fn(async (request: string | { url: string }) =>
+    siteResponse(
+      await site(new URL(typeof request === 'string' ? request : request.url, ORIGIN).pathname),
+    ),
+  );
+  const handlers = load(fetch, caches);
+  const background: Promise<unknown>[] = [];
+  let answered: Promise<Response> | null = null;
+  handlers.fetch({
+    // A page load: what Request can't be made with outside the browser
+    request: { url: `${ORIGIN}${path}`, method: 'GET', mode: 'navigate' },
+    respondWith: (r: Promise<Response>) => (answered = r),
+    waitUntil: (work: Promise<unknown>) => background.push(work),
+  });
+  if (answered == null) throw new Error(`The service worker left ${path} to the browser`);
+  return {
+    fetch,
+    response: (answered as Promise<Response>).catch(() => null),
+    done: Promise.allSettled(background).then(() => undefined),
+  };
+}
+
+/** The service worker being installed, as after a deploy, with the server answering as `site` says */
+export async function install(site: Site, caches: ReturnType<typeof fakeCaches>) {
+  const fetch = vi.fn(async (request: string) => siteResponse(await site(request)));
+  const handlers = load(fetch, caches);
+  let done: Promise<unknown> = Promise.resolve();
+  handlers.install({ waitUntil: (work: Promise<unknown>) => (done = work) });
+  await done;
+  return { fetch };
 }
 
 /**

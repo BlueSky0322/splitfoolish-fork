@@ -6,6 +6,7 @@ import { trackKeyboardInset } from './pwa/keyboard-inset';
 import { trackInstall } from './pwa/install';
 import { restoreLastPage } from './hooks/useRoute';
 import { syncWhenOnline } from './offline/sync';
+import { keepStorageOnceInstalled } from './offline/storage';
 import { reloadMySplits } from './my-splits/my-splits';
 
 // Back to the page that was open last time, before anything reads the address
@@ -17,6 +18,8 @@ syncWhenOnline(() => void reloadMySplits());
 trackKeyboardInset();
 // The browser's install prompt comes once, early; keep it for the app's own buttons
 trackInstall();
+// Once installed, ask the browser not to clear what this device keeps when space runs low
+keepStorageOnceInstalled();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

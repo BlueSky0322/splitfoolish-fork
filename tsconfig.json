@@ -1,5 +1,5 @@
 {
-  // The build configs, run by Node. worker/test extends it for the Worker tests; the app,
+  // The build configs and the build's own code (web/build), run by Node. worker/test extends it for the Worker tests; the app,
   // the Worker and shared code each have their own.
   "compilerOptions": {
     "target": "ES2022",
@@ -11,5 +11,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["*.config.ts", "web/*.config.ts"]
+  "include": ["*.config.ts", "web/*.config.ts", "web/build"]
 }

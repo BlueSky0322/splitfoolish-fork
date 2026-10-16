@@ -278,17 +278,37 @@ page or, if it's closed, by the service worker.
   counting what signing out would lose (Settings asks first).
 - [storage-health.ts](../web/src/offline/storage-health.ts): whether the device kept the
   latest unsent work; the shell's `OfflineNotice` says when it couldn't.
+- [storage.ts](../web/src/offline/storage.ts): once the app is installed, asks the
+  browser (once per device) not to clear what's kept when space runs low.
 
 An open split sends its own changes through `useSaveQueue`.
 
-**Parts.** [web/public/sw.js](../web/public/sw.js) keeps the built files and pictures,
-and sends the outbox by background sync. It can't import app code, so the keys, lock
-names and limits it shares with `offline/` and `shared/api.ts` are copied in it.
+**Parts.** [web/public/sw.js](../web/public/sw.js) keeps the page, the built files and
+pictures, and sends the outbox by background sync. It can't import app code, so the
+keys, lock names and limits it shares with `offline/` and `shared/api.ts` are copied in
+it. The build writes `precache.json`, every built file the app needs offline: the entry
+and its styles, and the chunks the app's own code loads later (sharing an image, PDF
+export) with their imports, but not a library's own optional extras
+([web/build/precache.ts](../web/build/precache.ts)). The PDF font is not in it: it's
+kept the first time Export opens.
+
+**Flow.** A page load waits up to 3 seconds for the network; offline, slower, or a
+5xx or non-page answer, and the kept page opens instead, marked as opened from the
+device. A sign-in redirect or a 4xx goes to the browser, and `/cdn-cgi/` (Access) is
+never handled. A good page is kept in the background, even when it came too late. Opened
+from the device, the profile waits 2 seconds on `/api/me` (or not at all if it fails
+with a 5xx), then shows the last account's saved copies
+([ProfileContext](../web/src/profile/ProfileContext.tsx)).
 
 **Invariants.**
 
 - Nothing kept on the device is shown before the signed-in account is known, and one
-  account never sees another's.
+  account never sees another's. The last account is only assumed offline, or when the
+  page was opened from the device; if the server then names someone else, their copies
+  are dropped and the app reloads.
+- The kept page is only replaced once every file it and `precache.json` name is kept,
+  so a stopped update leaves the old page whole. Built files of the newest two pages
+  are kept, for a tab still open on the older one; others go when a new page is kept.
 - A batch leaves the outbox once the server accepts it with a JSON answer; a refused
   batch is dropped with everything queued after it. Where the browser has Web Locks,
   the page and the service worker take the same lock per split, so a change is sent
@@ -306,6 +326,11 @@ names and limits it shares with `offline/` and `shared/api.ts` are copied in it.
 writes, so the copied keys and lock names can't drift),
 [sw.test.ts](../web/src/offline/sw.test.ts) (batches by count and size and every kind
 of answer, on the page and in `sw.js` alike),
+[shell.test.ts](../web/src/offline/shell.test.ts) (slow, failing and redirected page
+loads, stopped updates, which files are kept),
+[start.test.tsx](../web/src/offline/start.test.tsx) (starting from the device's copy),
+[storage.test.ts](../web/src/offline/storage.test.ts),
+[web/build/precache.test.ts](../web/build/precache.test.ts) (what the build lists),
 [delivery.test.ts](../web/src/offline/delivery.test.ts) (page and service worker
 together, keepalive, coming back to the app, signed-out retries), and [pending-creates.test.ts](../web/src/offline/pending-creates.test.ts).
 

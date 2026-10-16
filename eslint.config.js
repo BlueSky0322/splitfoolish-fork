@@ -18,8 +18,8 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          // web/tsconfig.json covers the app; the root one, the build configs beside it
-          allowDefaultProject: ['web/*.config.ts'],
+          // web/tsconfig.json covers the app; the root one, the build configs and web/build
+          allowDefaultProject: ['web/*.config.ts', 'web/build/*.ts'],
           defaultProject: 'tsconfig.json',
         },
         tsconfigRootDir: import.meta.dirname,
@@ -120,7 +120,7 @@ export default tseslint.config(
     languageOptions: { globals: globals.serviceworker },
   },
   {
-    files: ['*.config.{js,ts}', 'web/*.config.{js,ts}', 'worker/test/**'],
+    files: ['*.config.{js,ts}', 'web/*.config.{js,ts}', 'web/build/**', 'worker/test/**'],
     languageOptions: { globals: globals.node },
   },
 );
