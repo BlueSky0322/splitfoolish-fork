@@ -138,4 +138,22 @@ describe('Settings', () => {
     await waitFor(() => expect(signedOut()).toBe(true));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  test.each([
+    ['on a computer', 'desktop'],
+    ['on a phone', 'phone'],
+  ] as const)('shows its menu %s while your account loads', async (_where, size) => {
+    const server = fakeServer();
+    const held = holdNext(server, 'GET', '/api/me');
+    renderApp(server, size === 'phone' ? '/?settings' : '/?settings#profile', { size });
+
+    expect(await screen.findByRole('button', { name: 'Currency' })).toBeTruthy();
+    expect(
+      screen.getByText(size === 'phone' ? 'Loading your account' : 'Loading your settings'),
+    ).toBeTruthy();
+
+    held.release();
+    expect((await screen.findAllByText('ryan@example.com')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Loading your (account|settings)/)).toBeNull();
+  });
 });

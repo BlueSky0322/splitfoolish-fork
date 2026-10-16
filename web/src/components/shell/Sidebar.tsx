@@ -22,6 +22,7 @@ import ThemeToggle from '../common/ThemeToggle';
 import { justDragged, useSortableSplit } from '../home/useSortableSplit';
 import { SortableSplits } from '../home/SortableSplits';
 import UserAvatar from '../common/UserAvatar';
+import Skeleton, { Loading } from '../ui/Skeleton';
 import classes from './Sidebar.module.css';
 import type { SplitSummary } from '@shared/api';
 import { moveSplit } from '../../my-splits/my-splits';
@@ -89,6 +90,40 @@ function SplitRow({ split, active }: { split: SplitSummary; active: boolean }) {
   );
 }
 
+/** The split list until it loads: rows in the open sidebar, tiles in the collapsed one */
+const SplitsSkeleton = ({ rail }: { rail?: boolean }) => (
+  <Loading
+    label="Loading your splits"
+    className={rail ? classes.railSkeleton : undefined}
+  >
+    {[0, 1, 2, 3, 4].map((i) =>
+      rail ? (
+        <Skeleton
+          key={i}
+          width={36}
+          height={36}
+          radius={9}
+        />
+      ) : (
+        <div
+          key={i}
+          className={classes.splitRow}
+        >
+          <Skeleton
+            circle
+            width={22}
+            height={22}
+          />
+          <Skeleton
+            height={12}
+            style={{ flex: 1, maxWidth: `${70 - i * 8}%` }}
+          />
+        </div>
+      ),
+    )}
+  </Loading>
+);
+
 /** A split in the collapsed sidebar */
 function RailTile({ split, active }: { split: SplitSummary; active: boolean }) {
   const sortable = useSortableSplit(split.id);
@@ -129,14 +164,34 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
       onClick={() => navigate('?settings')}
       aria-label="Settings"
     >
-      <UserAvatar
-        preview={false}
-        name={name}
-        email={profile?.email}
-        avatarVersion={profile?.avatarVersion}
-        previewSrc={profile?.avatarPreview}
-      />
-      {open && (
+      {profile == null ? (
+        <Skeleton
+          circle
+          width={26}
+          height={26}
+        />
+      ) : (
+        <UserAvatar
+          preview={false}
+          name={name}
+          email={profile.email}
+          avatarVersion={profile.avatarVersion}
+          previewSrc={profile.avatarPreview}
+        />
+      )}
+      {open && profile == null && (
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <Skeleton
+            width="60%"
+            height={11}
+          />
+          <Skeleton
+            width="80%"
+            height={9}
+          />
+        </div>
+      )}
+      {open && profile != null && (
         <>
           <div className="min-w-0 flex-1">
             <div className={classes.accountName}>{name}</div>
@@ -186,6 +241,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
         </Tooltip>
         <div className={classes.railDivider} />
         <div className={classes.railSplits}>
+          {splits == null && <SplitsSkeleton rail />}
           <SortableSplits
             onMove={moveSplit}
             ids={splits?.map((s) => s.id) ?? []}
@@ -287,6 +343,7 @@ const Sidebar = ({ route, open, onToggle }: SidebarProps) => {
               </span>
             </UnstyledButton>
             <div className={classes.splitList}>
+              {splits == null && <SplitsSkeleton />}
               <SortableSplits
                 onMove={moveSplit}
                 ids={splits?.map((s) => s.id) ?? []}

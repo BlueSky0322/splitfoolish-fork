@@ -3,11 +3,34 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import type { MyInvite } from '@shared/api';
-import { fakeServer, item, renderApp, splitDetail, setupAppTests } from '../../testing/app';
+import {
+  fakeServer,
+  holdNext,
+  item,
+  renderApp,
+  splitDetail,
+  setupAppTests,
+} from '../../testing/app';
 
 setupAppTests();
 
 describe('My splits', () => {
+  test.each([
+    ['on a computer', 'desktop'],
+    ['on a phone', 'phone'],
+  ] as const)('holds the place of your splits %s until they arrive', async (_where, size) => {
+    const server = fakeServer(splitDetail('trip'));
+    const held = holdNext(server, 'GET', '/api/splits');
+    renderApp(server, '/', { size });
+
+    expect((await screen.findAllByText('Loading your splits')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Trip')).toBeNull();
+
+    held.release();
+    expect(await screen.findByText('Trip')).toBeTruthy();
+    expect(screen.queryAllByText('Loading your splits')).toHaveLength(0);
+  });
+
   test('lists your splits, and opens one', async () => {
     renderApp(fakeServer(splitDetail('trip', [item({ id: 'dinner', name: 'Dinner', cost: 90 })])));
     const user = userEvent.setup();

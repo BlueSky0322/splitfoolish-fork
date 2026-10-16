@@ -1,12 +1,4 @@
-import {
-  ActionIcon,
-  Button,
-  Loader,
-  Menu,
-  SegmentedControl,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
+import { ActionIcon, Button, Menu, SegmentedControl, Title, UnstyledButton } from '@mantine/core';
 import { ArrowsLeftRight, CaretDown, Check, Plus, SortAscending, X } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { rectSortingStrategy } from '@dnd-kit/sortable';
@@ -14,6 +6,7 @@ import { countActionableInvites } from '../../api';
 import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import MobileHome from './MobileHome';
 import MobileInvites from './MobileInvites';
+import { InviteRowsSkeleton, SplitCardsSkeleton, SplitRowsSkeleton } from './HomeSkeletons';
 import {
   type DesktopSplitSort,
   readDesktopSort,
@@ -240,7 +233,7 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
             expire after {INVITE_DAYS} days.
           </p>
         </div>
-        {loading && <Loader size="sm" />}
+        {loading && <InviteRowsSkeleton />}
         {invites != null && invites.length === 0 && (
           <div className="sf-muted">
             No pending invites. Open a share link from a split to get one.
@@ -369,7 +362,14 @@ const SplitsHome = ({ tab }: { tab: string | null }) => {
       <InstallCard />
 
       {error && <div className="sf-negative">{error}</div>}
-      {loading && <Loader size="sm" />}
+      {loading &&
+        (filter === 'invites' ? (
+          <InviteRowsSkeleton />
+        ) : isDesktop ? (
+          <SplitCardsSkeleton />
+        ) : (
+          <SplitRowsSkeleton />
+        ))}
 
       {filter === 'invites' ? (
         <>

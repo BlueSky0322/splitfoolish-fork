@@ -95,4 +95,29 @@ describe('loading a split', () => {
     expect(screen.getByText('In B')).toBeTruthy();
     expect(screen.queryByText('In A')).toBeNull();
   });
+
+  test.each([
+    ['on a computer', 'desktop'],
+    ['on a phone', 'phone'],
+  ] as const)(
+    'until the split arrives %s, placeholders hold its place instead of an empty split',
+    async (_where, size) => {
+      const server = fakeServer(withItem('trip', 'Dinner'));
+      const held = holdNext(server, 'GET', '/api/splits/trip');
+      renderApp(server, '/?s=trip', { size });
+
+      expect(await screen.findByText('Loading the split')).toBeTruthy();
+      // Not an empty split that then fills in
+      expect(screen.queryByText(/Which one is you/)).toBeNull();
+      expect(screen.queryByText('No items yet')).toBeNull();
+      expect(screen.queryByText(/RM\s?0\.00/)).toBeNull();
+
+      await act(async () => {
+        held.release();
+        await Promise.resolve();
+      });
+      expect(await screen.findByText('Dinner')).toBeTruthy();
+      expect(screen.queryByText('Loading the split')).toBeNull();
+    },
+  );
 });

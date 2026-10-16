@@ -14,6 +14,7 @@ import { isQr, methodName } from '../../../utils/payment-labels';
 import QrViewer from '../../common/QrViewer';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
+import { HeroSkeleton, PanelSkeleton } from '../layout/SplitSkeletons';
 import classes from './Balances.module.css';
 import page from '../Split.module.css';
 import type { PaymentMethod } from '@shared/payments';
@@ -24,7 +25,8 @@ import { useSplitPage } from '../SplitPageContext';
 
 /** Where you stand, in large type; until you've picked yourself, the total */
 export function BalanceHero({ size, prefix }: { size: number; prefix?: string }) {
-  const { totals, currency, me, openDialog } = useSplitPage();
+  const { totals, currency, me, meta, status, openDialog } = useSplitPage();
+  if (meta == null && status === 'loading') return <HeroSkeleton size={size} />;
   if (me == null) {
     return (
       <div className="flex flex-col gap-1">
@@ -177,7 +179,7 @@ const ROUTE_HELP =
  * and no outer card.
  */
 const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) => {
-  const { totals, currency, me, distributorId, meta, openDialog } = useSplitPage();
+  const { totals, currency, me, distributorId, meta, status, openDialog } = useSplitPage();
   const { people } = useSplitState().state;
   const actions = useSplitActions();
   const onDistributorChange = (id: string | null) => actions.setDistributor(id);
@@ -221,6 +223,20 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
       comboboxProps={{ withinPortal: !isSheet }}
     />
   );
+
+  if (meta == null && status === 'loading') {
+    return (
+      <div className={variant === 'panel' ? classes.panel : classes.sheetPanel}>
+        {variant === 'panel' && (
+          <>
+            <HeroSkeleton size={42} />
+            <hr className="sf-rule" />
+          </>
+        )}
+        <PanelSkeleton />
+      </div>
+    );
+  }
 
   if (isSheet && view === 'balances') {
     return (

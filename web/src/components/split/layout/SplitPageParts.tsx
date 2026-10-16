@@ -16,6 +16,7 @@ import { otherCurrencyCount } from '../../../split/derive';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { plural } from '../../../utils/text';
 import type { SelectionBarProps } from '../items/ItemSelection';
+import Skeleton from '../../ui/Skeleton';
 import PersonAvatar from '../PersonAvatar';
 import { useSplitPage } from '../SplitPageContext';
 import classes from '../Split.module.css';
@@ -76,8 +77,19 @@ export function AvatarStack({
 
 /** Whether changes are saved, or waiting on a connection */
 export function SaveStatus() {
-  const { status, waiting, retry } = useSplitPage();
+  const { status, waiting, retry, meta } = useSplitPage();
   const count = useSplitState().state.items.length;
+  if (status === 'loading' && meta == null) {
+    return (
+      <div className={classes.status}>
+        <Skeleton
+          width={110}
+          height={10}
+          style={{ margin: '5px 0' }}
+        />
+      </div>
+    );
+  }
   if (status === 'offline') {
     return (
       <div className={classes.status}>

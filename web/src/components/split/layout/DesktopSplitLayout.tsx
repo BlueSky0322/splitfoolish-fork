@@ -28,6 +28,8 @@ import {
   SplitNotices,
 } from './SplitPageParts';
 import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
+import Skeleton from '../../ui/Skeleton';
+import { TitleSkeleton, ToolbarSkeleton } from './SplitSkeletons';
 import classes from '../Split.module.css';
 import { canChangePeople } from '@shared/rules';
 import DesktopPhotos, { AddPhotosButton } from '../photos/DesktopPhotos';
@@ -60,10 +62,11 @@ const DesktopSplitLayout = ({
   parts: SplitPageParts;
   selection: SelectionUi;
 }) => {
-  const { splitId, myEmail, meta, currency, pictureVersion, openDialog } = useSplitPage();
+  const { splitId, myEmail, meta, status, currency, pictureVersion, openDialog } = useSplitPage();
   const { state } = useSplitState();
   const { prefs, setPref, sortBy } = useItemViewPrefs();
   const loaded = meta != null;
+  const loading = !loaded && status === 'loading';
   const hasPeople = state.people.length > 0;
   const otherCurrencies = otherCurrencyCount(state.items);
   const [tab, setTab] = useState<DesktopTab>('items');
@@ -89,7 +92,11 @@ const DesktopSplitLayout = ({
                     size={40}
                   />
                 )}
-                <Title order={2}>{meta?.name ?? ' '}</Title>
+                {loading ? (
+                  <TitleSkeleton size={40} />
+                ) : (
+                  <Title order={2}>{meta?.name ?? ' '}</Title>
+                )}
                 {meta && (
                   <span className="sf-tag">
                     {currency} · {currencySymbol(currency)}
@@ -149,6 +156,22 @@ const DesktopSplitLayout = ({
           </div>
 
           {/* On both tabs, so switching tabs doesn't move them */}
+          {loading && (
+            <div className={classes.peopleLine}>
+              {[0, 1, 2].map((i) => (
+                <Skeleton
+                  key={i}
+                  circle
+                  width={26}
+                  height={26}
+                />
+              ))}
+              <Skeleton
+                width={180}
+                height={11}
+              />
+            </div>
+          )}
           {hasPeople && (
             <div className={classes.peopleLine}>
               <AvatarStack
@@ -171,6 +194,22 @@ const DesktopSplitLayout = ({
 
           <SplitNotices />
 
+          {loading && (
+            <div className={classes.pageTabs}>
+              {[60, 64].map((width) => (
+                <span
+                  key={width}
+                  className={classes.pageTab}
+                >
+                  <Skeleton
+                    width={width}
+                    height={12}
+                    style={{ margin: '6px 0 5px' }}
+                  />
+                </span>
+              ))}
+            </div>
+          )}
           {loaded && (
             <div
               className={classes.pageTabs}
@@ -204,6 +243,7 @@ const DesktopSplitLayout = ({
 
         <div className={classes.main}>
           {!onItems && <DesktopPhotos />}
+          {onItems && loading && <ToolbarSkeleton />}
 
           {onItems && hasPeople && state.items.length > 0 && (
             <div className={classes.toolbar}>
