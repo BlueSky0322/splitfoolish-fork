@@ -21,7 +21,9 @@
 //   - bill/: a split's people and items, read (read.ts) and changed in batches
 //     (changes.ts, checking each against model.ts with what input.ts reads);
 //   - currency/: exchange rates, and converting a split's items into a new currency;
-//   - photos/: photos on a split, and profile, split and payment QR pictures.
+//   - photos/: photos on a split, and profile, split and payment QR pictures;
+//   - mcp/: tools for agents at /mcp, signed in over OAuth (docs/mcp.md), which save
+//     through the same saveChanges as the API.
 // Reading requests and answering is in http.ts. Besides requests, the Worker takes
 // messages from the reconvert queue: currency conversions to retry after a failed first
 // attempt (currency/reconvert-queue.ts, wired in index.ts and wrangler.jsonc).
@@ -46,6 +48,15 @@ export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   RECONVERT_QUEUE: Queue<ReconvertJob>;
   /** Seconds between those retries, instead of the backoff; for tests */
   RECONVERT_RETRY_DELAY_S?: string;
+  /**
+   * Where this deployment lives (https://host), naming the MCP resource and its OAuth
+   * issuer. MCP and OAuth stay off until it and OAUTH_KV are set (mcp/oauth.ts).
+   */
+  MCP_ORIGIN?: string;
+  /** Other origins allowed to call /mcp from a browser, comma-separated (MCP Inspector) */
+  MCP_ALLOWED_ORIGINS?: string;
+  /** OAuth clients, grants and tokens, kept by the provider library (hashed) */
+  OAUTH_KV?: KVNamespace;
 }
 
 export type AppEnv = {

@@ -155,10 +155,15 @@ describe('opening the app', () => {
     },
   );
 
-  test('signing in and out with Cloudflare Access is left to the browser', () => {
-    expect(() =>
-      openPage('/cdn-cgi/access/authorization?token=t', deployed(version(1)), fakeCaches()),
-    ).toThrow('left /cdn-cgi/access/authorization?token=t to the browser');
+  test.each([
+    ['signing in and out with Cloudflare Access', '/cdn-cgi/access/authorization?token=t'],
+    ["an agent's sign-in page", '/oauth/authorize?client_id=c&state=s'],
+    ['OAuth discovery', '/.well-known/oauth-authorization-server'],
+    ['MCP', '/mcp'],
+  ])('%s is left to the browser', (_what, path) => {
+    expect(() => openPage(path, deployed(version(1)), fakeCaches())).toThrow(
+      `left ${path} to the browser`,
+    );
   });
 });
 

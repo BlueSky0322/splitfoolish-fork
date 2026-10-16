@@ -20,6 +20,7 @@ in [AGENTS.md](../AGENTS.md).
 | [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                                                        | (none; the API is the same)                                      |
 | [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `offline/photo-queue.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos/`                                                        |
 | [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                                                    | (none)                                                           |
+| [Agents over MCP](#agents-over-mcp)                                            | (none; agents call the Worker)                                                                    | `mcp/`, `bill/changes.ts` (`saveChanges`)                        |
 
 App paths are under `web/src/`, Worker paths under `worker/`.
 
@@ -121,7 +122,8 @@ it current.
 - Form logic: [split/item-input.ts](../web/src/split/item-input.ts) and
   [split/bill-rules.ts](../web/src/split/bill-rules.ts).
 - API: [worker/bill/changes.ts](../worker/bill/changes.ts) applies a batch of changes
-  (all or none), checking each against the bill as it stands
+  (all or none, `saveChanges`, which the MCP tools use too), checking each against the
+  bill as it stands
   ([model.ts](../worker/bill/model.ts)) with what [input.ts](../worker/bill/input.ts)
   reads from it; [worker/bill/read.ts](../worker/bill/read.ts) reads the bill, and
   [worker/splits/detail.ts](../worker/splits/detail.ts)
@@ -457,3 +459,60 @@ what Back does.
 cases (`{ size: 'phone' }`) in
 [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx) and
 [SplitsHome.test.tsx](../web/src/components/home/SplitsHome.test.tsx).
+
+## Agents over MCP
+
+**What it is.** An agent signs in over OAuth as one account and uses four tools at
+`/mcp`: `list_splits`, `get_split`, `add_expense`, `update_expense`. The contracts,
+units, retries and deployment steps are in [mcp.md](mcp.md).
+
+**Owner.** The Worker only; the app doesn't use MCP. A split's bill still changes only
+through [bill/changes.ts](../worker/bill/changes.ts): `saveChanges` checks and saves a
+batch, `applyChanges` answers the API with it, and the expense tools call it with their
+retry receipt saved alongside.
+
+**Parts.**
+
+- Entry: [worker/index.ts](../worker/index.ts) sends `/mcp`, `/oauth/*` and
+  `/.well-known/*` to [mcp/oauth.ts](../worker/mcp/oauth.ts) before the app's files
+  (`run_worker_first` in `wrangler.jsonc` too). Off (404) until `MCP_ORIGIN` and
+  `OAUTH_KV` are set.
+- Sign-in: [mcp/oauth.ts](../worker/mcp/oauth.ts), with
+  `@cloudflare/workers-oauth-provider` running discovery, registration, tokens and the
+  bearer check; the consent page at `/oauth/authorize` is the app's, behind Access.
+  Grants live in the `OAUTH_KV` namespace (hashed by the library).
+- Tools: [mcp/server.ts](../worker/mcp/server.ts) (a fresh stateless MCP server per
+  request, the Origin check and scope step-up) and
+  [mcp/tools.ts](../worker/mcp/tools.ts). Reads reuse `listSplitSummaries`,
+  `contentStatements` and `shared/settle.ts`.
+- Receipts: [mcp/receipts.ts](../worker/mcp/receipts.ts) and the `mcp_receipts` table
+  ([0019](../migrations/0019_mcp_receipts.sql)), deleted with their split
+  (`splits/lifecycle.ts`).
+- The service worker leaves these routes to the browser (`web/public/sw.js`).
+
+**Flow.** Agent → `401` with the resource metadata → registers and sends the person to
+`/oauth/authorize` → Access signs them in, they allow it → token → `POST /mcp` → the
+provider checks the token and hands the grant's account to the tools → membership,
+scope, change limit and the bill's rules are checked as for the app → saved with a
+receipt → the split's room tells open apps.
+
+**Invariants.**
+
+- The acting account is the one Access verified on the consent page, carried in the
+  grant; nothing the agent sends can change it. Each request builds its own server and
+  tools for its own account.
+- Membership, scope and roles are checked on every call, retries included; a split
+  you're not in is `not_found`, like a missing one.
+- An expense write and its receipt are saved in one transaction: a retry with the same
+  `requestId` returns the first answer and never applies the change again, and the same
+  id for a different change is refused.
+- Writes use the split's own currency only, and never touch an expense paid in another
+  currency.
+- `/api/*` keeps its own sign-in and cross-site checks; MCP never goes through them,
+  and they never accept an OAuth token.
+- Answers leave out share links, invitations, emails and payment details.
+
+**Tests.** [worker/test/mcp.test.ts](../worker/test/mcp.test.ts) (sign-in through the
+provider, every tool through a real MCP client, retries, scopes and membership against
+a local Worker) and [mcp/receipts.test.ts](../worker/mcp/receipts.test.ts) (the same
+request saved twice at once, which a local Worker can't race).

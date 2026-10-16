@@ -1,0 +1,191 @@
+# MCP: letting an agent use Splitfoolish
+
+An agent (Hermes, Claude, MCP Inspector, any MCP client) can find your splits, read
+their expenses and balances, add expenses and edit them. It signs in once over OAuth,
+as you, and everything it does is checked and saved like a change you make in the app.
+
+- Endpoint: `https://YOUR_APP_HOST/mcp`, Streamable HTTP, stateless. Clients POST JSON-RPC
+  and get JSON back; there is no session and no standing event stream (GET and DELETE
+  answer 405).
+- Tested with the MCP TypeScript SDK client 1.32.1, which negotiated protocol version
+  `2025-11-25`. Hermes and MCP Inspector have not been run against it yet.
+- Code: [worker/mcp/](../worker/mcp/oauth.ts). Where it fits:
+  [feature map](feature-map.md#agents-over-mcp).
+
+## Signing in
+
+OAuth 2.1 authorization code with PKCE (S256), run by
+[`@cloudflare/workers-oauth-provider`](https://github.com/cloudflare/workers-oauth-provider)
+1.2.3 in the same Worker. A client finds everything from the `401` it gets at `/mcp`:
+
+| What                                     | Where                                       |
+| ---------------------------------------- | ------------------------------------------- |
+| Protected resource metadata (RFC 9728)   | `/.well-known/oauth-protected-resource/mcp` |
+| Authorization server metadata (RFC 8414) | `/.well-known/oauth-authorization-server`   |
+| Client registration (RFC 7591)           | `/oauth/register`                           |
+| Consent page                             | `/oauth/authorize`                          |
+| Tokens, refresh and revocation           | `/oauth/token`                              |
+
+- **Clients register themselves** at `/oauth/register` (dynamic client registration),
+  which MCP clients do on their own; no client id needs setting up. Registering gives
+  an app nothing until someone allows it on the consent page, which shows that the
+  app's name is unverified and where its access will be sent.
+- **The consent page** sits behind Cloudflare Access like the rest of the app. The
+  account the agent acts as is the one Access signed in there, verified again on the
+  page; nothing the agent or the form sends can change it.
+- **Scopes:** `splits:read` (list and read splits) and `splits:write` (add and edit
+  expenses). The page offers what the client asked for, and the person can untick
+  either. Each tool checks its own scope; a call the grant doesn't cover gets a `403`
+  with `error="insufficient_scope"`, so the client can ask for more.
+- **Lifetimes:** access tokens last an hour; refresh tokens rotate on use and the
+  grant ends 30 days after sign-in. Authorizing the same app again replaces its earlier
+  grant. Revoke a token at `/oauth/token` (RFC 7009).
+- **Every call is checked now, not at sign-in:** someone removed from a split loses it
+  through the agent at once, as in the app.
+
+## The tools
+
+Amounts named `*Cents` are whole cents. `cost` and `exact` are in currency units, as in
+the app (`12.5` is 12.50). People and expenses are named by id, never by name. Expense
+names and notes are what people typed, returned as data.
+
+| Tool             | Scope          | Does                                                                                                  |
+| ---------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
+| `list_splits`    | `splits:read`  | Your splits in your own order: id, name, currency, your role, archived, settled, totals, your balance |
+| `get_split`      | `splits:read`  | One split: its people, its expenses, and the total, balances and suggested transfers                  |
+| `add_expense`    | `splits:write` | Adds one expense, in the split's currency, dated now                                                  |
+| `update_expense` | `splits:write` | Changes the fields you send on one expense                                                            |
+
+- **Paging:** `list_splits` returns up to `limit` (default 50, at most 200) from
+  `offset`; `get_split` the same for expenses (default 100), in the app's order. Each
+  answer has the full count and a `nextOffset` (null on the last page). The total,
+  balances and transfers always cover every expense, whatever the page. Each call reads
+  the split as saved at that moment; if it changes between pages, later pages can shift.
+- **`get_split` leaves out** share links, invitations, members' emails and payment
+  details. A person shows `hasAccount` and `isYou` (this grant's account) instead.
+- **Writes take the split's currency** in `currency`, and are refused
+  (`currency_mismatch`) when it no longer matches, say after the owner changed it.
+  Foreign-currency amounts aren't taken here yet. While a split is converting to a new
+  currency, writes answer `temporarily_unavailable`; retry shortly.
+- **`add_expense`** needs `name`, `cost`, `payerId` and `participantIds`. `splitMode`
+  is `equal` unless you say `shares` (with `shares`: whole shares by person id) or
+  `exact` (with `exact`: amounts by person id adding up to `cost`). `category` and
+  `notes` are optional.
+- **`update_expense` replaces only what you send.** Anything left out, and the
+  expense's id and date, stays. Send `null` to clear `category` or `notes`. Shares or
+  exact amounts carry over while the split mode stays the same; changing who shares it
+  may need new ones, and the change is refused if they don't fit. Expenses paid in
+  another currency (`original` set) are refused here rather than losing what was
+  typed; edit those in the app.
+- **The same rules as the app:** everything goes through the app's own save path, so
+  a payer who isn't in the split, shares that aren't whole, or exact amounts that don't
+  add up are refused with the app's own reason.
+
+A saved write answers:
+
+```json
+{
+  "status": "saved",
+  "splitId": "…",
+  "expenseId": "…",
+  "requestId": "dinner-2026-10-16-1",
+  "savedAt": "2026-10-16T12:00:00.000Z",
+  "actor": "you@example.com",
+  "replayed": false
+}
+```
+
+`actor` is the account the grant acts as: who the change was saved as. It is not the
+payer (`payerId`), and not whoever asked the agent. Open apps showing the split reload
+once it's saved; the answer guarantees it's saved, not that every app has refreshed.
+
+Errors come back as a tool error whose text is
+`{"error": {"code", "message", "retryable"}}`. The codes are `not_found` (no such split
+or expense, or not yours: the same answer either way), `invalid_input`, `refused`
+(the bill's rules said no), `forbidden`, `currency_mismatch`, `idempotency_conflict`,
+`rate_limited`, `temporarily_unavailable` and `insufficient_scope`. `retryable` is true
+for `rate_limited` and `temporarily_unavailable`: send those again as they are, a little
+later. Signing-in problems are HTTP `401` and `403`, not tool errors.
+
+## Retrying writes
+
+Every write carries a `requestId` you choose (8 to 128 letters, digits, `.`, `_`, `:`
+or `-`), new for each change. If an answer is lost, send exactly the same call again:
+
+- Saved the first time: you get the first answer back with `replayed: true`, and
+  nothing is applied again. An old edit sent again never overwrites a newer one.
+- Not saved the first time: it's applied now, as a new change.
+- The same `requestId` with anything different (another split, expense, field or
+  value) is refused as `idempotency_conflict`.
+- Sent twice at once: one saves it, the other gets its answer as a repeat.
+
+Request ids belong to the account: two accounts using the same one don't meet. The
+receipt is saved in the same database transaction as the change, so it exists exactly
+when the change does. Receipts are kept until their split is deleted, so a late retry
+can never apply a change twice. They are not a history of who changed what: an expense
+has no record of who added or last edited it.
+
+## What an agent sees
+
+The tools read and write what's saved on the server. Changes still waiting on
+someone's phone (made offline, or not sent yet) aren't there until they arrive, and
+the agent never sees anything unsaved in an open app.
+
+## A shared bot (Hermes on Discord)
+
+One person's grant can serve a bot that friends share: the bot acts as that account,
+in the splits that account is in, and can enter expenses for anyone in their bills.
+Map each Discord user to a person id in the bot's own configuration, then set
+`payerId` and `participantIds` from it. If Alice asks it to enter a dinner Bob paid,
+the grant's account is the `actor`, Bob's person id is `payerId`, and Alice is just who
+asked; nothing here records her. Which Discord users and channels may use the bot is
+the bot's to decide.
+
+```yaml
+mcp_servers:
+  splitfoolish:
+    url: https://YOUR_APP_HOST/mcp
+    auth: oauth
+```
+
+No client id is needed: the client registers itself on first connection.
+
+## Running it locally
+
+1. Copy `.dev.vars.example` to `.dev.vars`. It sets `MCP_ORIGIN` to
+   `http://localhost:8787` and lets MCP Inspector's page (`http://localhost:6274`) call
+   `/mcp` from the browser.
+2. `yarn db:migrate:local` (adds `mcp_receipts`), then `yarn dev:worker`.
+3. Run `npx @modelcontextprotocol/inspector`, choose Streamable HTTP, enter
+   `http://localhost:8787/mcp` and connect. Inspector registers itself and opens the
+   consent page, where you're `DEV_USER_EMAIL` (there's no Access locally).
+
+`worker/test/mcp.test.ts` runs the whole sign-in and every tool against a local Worker:
+`yarn vitest run worker/test/mcp.test.ts`.
+
+## Deploying
+
+The code ships switched off: until both of these are set, `/mcp`, `/oauth/*` and
+`/.well-known/*` answer 404 and the rest of the app is unchanged.
+
+1. **Back up production D1** before merging: migration `0019_mcp_receipts.sql` is
+   applied by the deploy on push to `main`.
+2. **KV for grants:** `wrangler kv namespace create OAUTH_KV`, then add its `id` to the
+   `OAUTH_KV` entry in `wrangler.jsonc`.
+3. **`MCP_ORIGIN`:** the app's canonical address, e.g. `"https://split.example.com"`
+   (scheme and host, no path), as a var in `wrangler.jsonc`. It names the resource
+   (`MCP_ORIGIN/mcp`) and the OAuth issuer, so it must be the address clients use.
+   `MCP_ALLOWED_ORIGINS` is for local browser tools; leave it unset in production.
+4. **Cloudflare Access policies.** The protocol endpoints must reach the Worker
+   without an Access login, while the consent page stays behind it:
+   - Add Access applications with a **Bypass** policy (everyone) for these paths on the
+     app's host: `/mcp`, `/oauth/token`, `/oauth/register` and `/.well-known/`.
+     `/mcp` still needs a valid OAuth token for everything; the others are the public
+     OAuth endpoints.
+   - Keep `/oauth/authorize` under the existing Allow policy, so the person is signed
+     in there. The page checks the Access token itself and refuses without one.
+   - Leave `/api/*` and the app as they are.
+5. **After deploying,** connect one client end to end (MCP Inspector, or Hermes) and
+   check: the `401` at `/mcp` names `MCP_ORIGIN`, the consent page shows the right
+   account, a read works, and an added expense appears in the open app. Code alone
+   can't show the Access policies are right.

@@ -3,3 +3,7 @@
 ACCESS_TEAM_DOMAIN=""
 ACCESS_AUD=""
 DEV_USER_EMAIL="you@example.com"
+# MCP for agents (docs/mcp.md): this server's address, and MCP Inspector's page, which
+# calls /mcp from the browser
+MCP_ORIGIN="http://localhost:8787"
+MCP_ALLOWED_ORIGINS="http://localhost:6274"

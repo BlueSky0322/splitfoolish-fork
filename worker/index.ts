@@ -1,5 +1,7 @@
 // The Worker: the app's files for everything outside /api, and the API itself. Every
-// API request passes the cross-site check and sign-in before reaching a route.
+// API request passes the cross-site check and sign-in before reaching a route. Agents
+// reach the MCP tools at /mcp, signing in over OAuth (/oauth/*, /.well-known/*): see
+// mcp/oauth.ts.
 
 import { Hono } from 'hono';
 import type { AppEnv, Env } from './app';
@@ -12,6 +14,7 @@ import splits from './routes/splits';
 import type { ReconvertJob } from './currency/reconvert';
 import { handleReconvertQueue } from './currency/reconvert-queue';
 import { notifySplit } from './splits/room';
+import { isOAuthPath } from './mcp/paths';
 
 export { SplitRoom } from './splits/room';
 
@@ -61,7 +64,13 @@ api.onError((err) => {
 
 export default {
   fetch(req, env, ctx): Response | Promise<Response> {
-    if (!new URL(req.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+    const path = new URL(req.url).pathname;
+    // Never the app's page: an agent asking here gets its protocol's answer or a 404.
+    // Loaded only here, so the MCP and OAuth libraries stay out of every other request
+    if (isOAuthPath(path)) {
+      return import('./mcp/oauth').then((m) => m.handleOAuthRoute(req, env, ctx));
+    }
+    if (!path.startsWith('/api/')) return env.ASSETS.fetch(req);
     return api.fetch(req, env, ctx);
   },
   // Conversions to retry, and the ones given up on (currency/reconvert-queue.ts)

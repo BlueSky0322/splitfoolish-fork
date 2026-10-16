@@ -55,6 +55,7 @@ The Worker is laid out the same way, by feature:
 | `bill/`                                    | A split's people and items: reading them, and checking and applying changes |
 | `currency/`                                | Exchange rates, and converting a split's items into a new currency          |
 | `photos/`                                  | Photos on a split, and profile, split and payment QR pictures               |
+| `mcp/`                                     | Tools for agents at `/mcp`, and signing them in over OAuth (`docs/mcp.md`)  |
 | `test/`                                    | The API tests, run against a real local Worker and database                 |
 
 Routes only decide who gets in; the work is in the feature folders (see the top of

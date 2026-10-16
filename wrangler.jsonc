@@ -15,7 +15,8 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"],
+    // The API, and MCP with its OAuth routes, which must never get the app's page
+    "run_worker_first": ["/api/*", "/mcp", "/mcp/*", "/oauth/*", "/.well-known/*"],
   },
   // A room per split that tells everyone with it open when it changes
   "durable_objects": { "bindings": [{ "name": "SPLIT_ROOM", "class_name": "SplitRoom" }] },
@@ -41,6 +42,10 @@
       { "queue": "reconvert-dlq", "max_batch_size": 10, "max_retries": 0 },
     ],
   },
+  // OAuth clients, grants and tokens for MCP (worker/mcp/oauth.ts). Before deploying,
+  // create it (`wrangler kv namespace create OAUTH_KV`), add its "id" here, and set
+  // MCP_ORIGIN; until both are there, /mcp and /oauth/* answer 404. Locally it's simulated.
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
   "d1_databases": [
     {
       "binding": "DB",
