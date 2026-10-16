@@ -45,7 +45,8 @@
   justify-content: center;
   padding: 0 16px;
   overflow: hidden;
-  touch-action: pan-y pinch-zoom;
+  /* Pinches and drags are the viewer's own, not the page's */
+  touch-action: none;
 }
 
 .image {
@@ -55,21 +56,16 @@
   border-radius: 4px;
   cursor: zoom-in;
   user-select: none;
+  transform-origin: center;
+  transition: transform 180ms ease-out;
 }
 
-/* Full size, scrolled around to see the detail on a receipt */
-.zoomed {
-  display: block;
-  overflow: auto;
-  padding: 0;
-  touch-action: auto;
+/* Following the fingers: no easing to lag behind them */
+.image[data-moving] {
+  transition: none;
 }
 
-.zoomed .image {
-  max-width: none;
-  max-height: none;
-  width: 200%;
-  border-radius: 0;
+.stage[data-zoomed] .image {
   cursor: zoom-out;
 }
 
