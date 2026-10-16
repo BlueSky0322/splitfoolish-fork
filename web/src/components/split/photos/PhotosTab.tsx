@@ -13,6 +13,7 @@ import { useLongPress } from '../items/useItemSelection';
 import bar from '../items/ItemSelection.module.css';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './PhotosTab.module.css';
+import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 import type { PhotoSelection } from './usePhotoSelection';
 
 /** One photo: a tap opens it, or picks it while picking; a long press starts picking */
@@ -82,10 +83,11 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
     if (last?.key === key) last.count++;
     else days.push({ key, label: dayLabel(photo.createdAt), start: index, count: 1 });
   });
+  const { confirm, dialog: confirmDialog } = useConfirmRemovePhotos();
   const viewer: ViewerPhoto[] = all.map((photo) => ({
     key: photo.id,
     src: attachmentUrl(splitId, photo.id),
-    onRemove: canRemovePhoto(photo) ? () => photos.remove(photo) : undefined,
+    onRemove: canRemovePhoto(photo) ? () => confirm(1, () => photos.remove(photo)) : undefined,
     fileName: photoFileName(photo),
   }));
   // Picked photos still there (one removed elsewhere drops out)
@@ -137,10 +139,12 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
               aria-label={chosen.length === 1 ? 'Remove photo' : 'Remove photos'}
               className={bar.danger}
               disabled={!canRemoveAll}
-              onClick={() => {
-                void photos.removeMany(chosen);
-                pick.clear();
-              }}
+              onClick={() =>
+                confirm(chosen.length, () => {
+                  void photos.removeMany(chosen);
+                  pick.clear();
+                })
+              }
             >
               <Trash size={20} />
             </ActionIcon>
@@ -187,6 +191,7 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
         index={open}
         onIndexChange={setOpen}
       />
+      {confirmDialog}
     </div>
   );
 };
