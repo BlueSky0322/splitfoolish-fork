@@ -8,7 +8,7 @@ import { photoFileName } from '../../../split/photo-download';
 import { fileLabel } from '../../../split/photo-days';
 import type { SplitItem } from '../../../split/state';
 import { formatMoney } from '../../../utils/money';
-import UserAvatar from '../../ui/UserAvatar';
+import UserAvatar from '../../common/UserAvatar';
 import { useSplitPage } from '../SplitPageContext';
 import { timeLabel, useAddedBy } from './added-by';
 import classes from './PhotoDetails.module.css';

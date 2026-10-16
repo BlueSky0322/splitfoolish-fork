@@ -16,7 +16,7 @@ import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
 import { nameFor, signOut, useProfile } from '../../profile/ProfileContext';
 import { InstallField } from '../common/InstallApp';
-import UserAvatar from '../ui/UserAvatar';
+import UserAvatar from '../common/UserAvatar';
 import AppearanceSection from './AppearanceSection';
 import CurrencySection from './CurrencySection';
 import PaymentsSection from './PaymentsSection';

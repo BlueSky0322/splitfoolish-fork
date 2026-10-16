@@ -1,7 +1,7 @@
 import { Avatar, UnstyledButton } from '@mantine/core';
 import { useState } from 'react';
 import { avatarUrl } from '../../api';
-import PhotoViewer from './PhotoViewer';
+import PhotoViewer from '../ui/PhotoViewer';
 import classes from './UserAvatar.module.css';
 
 interface UserAvatarProps {

@@ -25,7 +25,7 @@ import {
 import { usePhotoDownload } from '../../../split/photo-download';
 import { useSplitState } from '../../../split/SplitStateContext';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
-import UserAvatar from '../../ui/UserAvatar';
+import UserAvatar from '../../common/UserAvatar';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './DesktopPhotos.module.css';
 import { timeLabel, useAddedBy } from './added-by';
