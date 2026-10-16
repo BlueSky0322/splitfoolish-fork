@@ -1,6 +1,6 @@
 // Starts the real Worker with `wrangler dev` against a fresh, empty local D1, for tests
 // that go through the API the way the app does. Access is switched off and requests say
-// who they are with the X-Dev-User header (see auth.ts).
+// who they are with the X-Dev-User header (see accounts/auth.ts).
 //
 // Every step has a time limit, and whatever has been started so far is stopped again if
 // a later step fails. Each run has its own ports, database folder and stand-in rate

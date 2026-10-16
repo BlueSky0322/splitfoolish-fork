@@ -3,9 +3,9 @@
 // again from that, plain items become "paid in the old currency", and items paid in
 // the new currency become plain again, so switching back restores the exact amounts.
 
-import type { RateSource } from '../shared/rates';
-import { convertCents, convertParts } from '../shared/rates';
-import type { SplitMode } from '../shared/settle';
+import type { RateSource } from '../../shared/rates';
+import { convertCents, convertParts } from '../../shared/rates';
+import type { SplitMode } from '../../shared/settle';
 import type { Rate } from './exchange-rates';
 
 /**

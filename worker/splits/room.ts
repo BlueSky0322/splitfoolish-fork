@@ -4,7 +4,7 @@
 // nothing. The functions below are how the Worker's routes reach a split's room.
 
 import { DurableObject } from 'cloudflare:workers';
-import { LIVE_PING, LIVE_PONG, LIVE_REMOVED_CODE, type RoomMessage } from '../shared/api';
+import { LIVE_PING, LIVE_PONG, LIVE_REMOVED_CODE, type RoomMessage } from '../../shared/api';
 
 /** Set by the Worker when it hands a member's socket to the room: whose it is */
 const MEMBER_HEADER = 'X-Split-Member';

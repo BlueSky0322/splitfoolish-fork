@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { getUserEmail } from './auth';
-import worker from './index';
-import type { Env } from './app';
+import worker from '../index';
+import type { Env } from '../app';
 
 // The Worker's entry also exports the split rooms, which need the Workers runtime
 vi.mock('cloudflare:workers', () => ({ DurableObject: class {} }));

@@ -11,8 +11,8 @@ import {
   RATE_PREFERENCES,
   RATE_PROVIDERS,
   type RatePreference,
-} from '../shared/api';
-import { isValidRate } from '../shared/rates';
+} from '../../shared/api';
+import { isValidRate } from '../../shared/rates';
 
 export interface RatesEnv {
   /** Wise personal API token (a Worker secret); without it Wise is skipped */

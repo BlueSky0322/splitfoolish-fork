@@ -1,15 +1,15 @@
 // Retrying currency conversions that failed (usually because both rate services were
 // down), so a split never stays stuck converting just because nobody opens it. The
-// first attempt runs straight after the change (startReconvert in split-lifecycle.ts);
+// first attempt runs straight after the change (startReconvert in splits/lifecycle.ts);
 // only a failed one comes here, through the reconvert queue (wrangler.jsonc). Each retry
 // waits longer than the last; after max_retries the job goes to reconvert-dlq, and
 // opening the split still retries it (retryStalledReconvert).
 
-import type { Env } from './app';
+import type { Env } from '../app';
 import { getRate } from './exchange-rates';
-import { getRatePreference } from './profiles';
+import { getRatePreference } from '../accounts/profiles';
 import { FIRST_RETRY_S, type ReconvertJob, reconvertSplit, retryDelaySeconds } from './reconvert';
-import { notifySplit } from './room';
+import { notifySplit } from '../splits/room';
 
 /** Seconds before the next try; RECONVERT_RETRY_DELAY_S (for tests) sets every wait */
 export function retryDelay(env: Pick<Env, 'RECONVERT_RETRY_DELAY_S'>, attempts: number | null) {

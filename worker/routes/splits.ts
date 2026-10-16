@@ -1,8 +1,8 @@
 // Splits: listing and creating them, and everything under one split. Routes under a
 // split go through `membersOnly` (and `allowedIf` a rule from
 // shared/rules.ts, where only the owner may act), except opening one, which checks
-// membership in the same database round trip as the rest. The work is in splits.ts and
-// the other feature modules.
+// membership in the same database round trip as the rest. The work is in the feature
+// folders: splits/, bill/, currency/ and photos/.
 
 import { Hono } from 'hono';
 import type {
@@ -50,25 +50,19 @@ import {
   isCrossSite,
   readJson,
 } from '../http';
-import {
-  deleteAttachments,
-  deleteSplitPicture,
-  putSplitPicture,
-  serveAttachment,
-  serveSplitPicture,
-  uploadAttachment,
-} from '../photos';
-import { getRatePreference } from '../profiles';
-import { REFRESH_MAX_AGE_MS, getRate } from '../exchange-rates';
-import { evictFromRoom, joinRoom } from '../room';
+import { deleteAttachments, serveAttachment, uploadAttachment } from '../photos/attachments';
+import { deleteSplitPicture, putSplitPicture, serveSplitPicture } from '../photos/pictures';
+import { getRatePreference } from '../accounts/profiles';
+import { REFRESH_MAX_AGE_MS, getRate } from '../currency/exchange-rates';
+import { evictFromRoom, joinRoom } from '../splits/room';
 import {
   leaveStatement,
   revokeMemberStatements,
   resetShareLinks,
   revokeInviteStatement,
-} from '../sharing';
-import { applyChanges } from '../split-content';
-import { assembleSplitDetail, splitDetailStatements } from '../split-detail';
+} from '../splits/sharing';
+import { applyChanges } from '../bill/changes';
+import { assembleSplitDetail, splitDetailStatements } from '../splits/detail';
 import {
   createSplitStatements,
   deleteSplitStatements,
@@ -76,8 +70,8 @@ import {
   splitOrderStatements,
   planSplitSettings,
   startReconvert,
-} from '../split-lifecycle';
-import { listItemNames, listSplitSummaries, searchItems } from '../summaries';
+} from '../splits/lifecycle';
+import { listItemNames, listSplitSummaries, searchItems } from '../splits/summaries';
 import { isRowId } from '../../shared/api';
 
 const splits = new Hono<AppEnv>();

@@ -13,7 +13,7 @@ import {
   findShareLink,
   inviteFromShareLink,
   listInvites,
-} from '../sharing';
+} from '../splits/sharing';
 
 const invites = new Hono<AppEnv>();
 

@@ -1,11 +1,11 @@
 // A split as opened: everything the app shows of it, read in one round trip (the
 // database can be far from the user, so every query costs), membership check included.
 
-import type { SplitDetail, SplitInvite } from '../shared/api';
-import type { Role } from '../shared/types';
-import { assembleAttachments, listAttachmentsStatement } from './photos';
-import { assembleMembers, memberProfileStatements } from './profiles';
-import { assembleContent, contentStatements } from './split-content';
+import type { SplitDetail, SplitInvite } from '../../shared/api';
+import type { Role } from '../../shared/types';
+import { assembleAttachments, listAttachmentsStatement } from '../photos/attachments';
+import { assembleMembers, memberProfileStatements } from '../accounts/profiles';
+import { assembleContent, contentStatements } from '../bill/read';
 
 /** What to read, in groups; run with batchGroups, then pass to assembleSplitDetail */
 export const splitDetailStatements = (db: D1Database, splitId: string, email: string) => [
