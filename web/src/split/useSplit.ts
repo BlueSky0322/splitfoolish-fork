@@ -80,20 +80,30 @@ export function useSplit(splitId: string) {
     [dispatch],
   );
 
+  // Loads can overlap (someone saves twice in quick succession) and answer out of order:
+  // each is numbered as it's asked for, and an answer older than one already shown is
+  // dropped. Zero until the server has answered, so a copy kept on the device can show.
+  const loadsAsked = useRef(0);
+  const loadShown = useRef(0);
+
   const load = useCallback(async () => {
     // Fails straight away offline (the cached copy stays), rather than waiting
     if (isOffline()) throw new NetworkError('Offline');
     // A split made a moment ago may still be on its way to the server
     await whenCreated(splitId);
+    const asked = ++loadsAsked.current;
     for (;;) {
       const seen = saves.sentCount();
       const detail = await api.getSplit(splitId);
       if (seen !== saves.sentCount()) continue;
+      // A newer load has already shown the split as it is now
+      if (asked < loadShown.current) return;
       if (saves.busy()) {
         // Showing this would hide the unsaved changes; fetch again after saving
         saves.reloadAfterSave();
         return;
       }
+      loadShown.current = asked;
       show(detail);
       return;
     }
@@ -108,7 +118,7 @@ export function useSplit(splitId: string) {
 
     // Show the last-seen copy straight away, unless the server has already answered
     void readCache<SplitDetail>(cacheKey).then((cached) => {
-      if (cached == null || cancelled || answered) return;
+      if (cached == null || cancelled || answered || loadShown.current > 0) return;
       show(cached);
       setStatus('refreshing');
     });

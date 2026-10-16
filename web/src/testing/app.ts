@@ -98,6 +98,19 @@ export interface FakeServer {
   failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join', number>>;
   /** Splits the signed-in account has archived */
   archived: Set<string>;
+  /** Answers being held back until a test releases them (see holdNext) */
+  held: { method: string; path: string; release: Promise<void> }[];
+}
+
+/**
+ * Holds back the answer to the next `method` request for `path`: it's worked out when
+ * the request arrives (so it shows the server as it was then) and delivered once
+ * `release` is called. For putting answers in a different order than their requests.
+ */
+export function holdNext(server: FakeServer, method: string, path: string) {
+  let release = () => {};
+  server.held.push({ method, path, release: new Promise<void>((r) => (release = r)) });
+  return { release };
 }
 
 export const person = (id: string, name: string, memberEmail: string | null = null) => ({
@@ -214,6 +227,19 @@ function apply(split: SplitDetail, change: Change) {
 }
 
 function serve(server: FakeServer) {
+  const answer = answerNow(server);
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = answer(input, init);
+    const method = init?.method ?? 'GET';
+    const path = new URL(input instanceof Request ? input.url : input, 'http://app').pathname;
+    const at = server.held.findIndex((h) => h.method === method && h.path === path);
+    if (at < 0) return response;
+    const [{ release }] = server.held.splice(at, 1);
+    return release.then(() => response);
+  };
+}
+
+function answerNow(server: FakeServer) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : input, 'http://app');
     const method = init?.method ?? 'GET';
@@ -382,6 +408,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     sent: [],
     failNext: {},
     archived: new Set(),
+    held: [],
   };
 }
 
