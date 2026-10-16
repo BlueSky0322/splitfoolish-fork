@@ -81,7 +81,11 @@ balance, pending invites, archive, your own order, and search across items and s
 
 **Flow.** A change shows in the list at once, is sent, and the list is reloaded or the
 change undone. Splits made offline are added from `offline/pending-creates.ts` until the
-server has them.
+server has them. Your own order is changed by dragging
+([SortableSplits](../web/src/components/home/SortableSplits.tsx), then `moveSplit`): with a
+mouse on computers, and by tapping and holding a split on phones, where a quick sideways
+swipe still shows Archive and Leave. Only Your order can be dragged; the other sorts are
+worked out.
 
 **Invariants.**
 
@@ -210,7 +214,8 @@ from `computeTotals` in `split/derive.ts`.
   `web/public/fonts/NotoSansJP-subset-v2.ttf` (Latin, kana, and the everyday and name kanji, made by
   [scripts/subset-font.sh](../scripts/subset-font.sh)); `sw.js` keeps it offline.
 - Delivery: [utils/deliver-file.ts](../web/src/utils/deliver-file.ts), the share sheet
-  or a download, also used by Share image.
+  or a download, also used by Share image. Computers always download, even where the
+  browser has a share sheet (it would only offer to copy the file).
 
 **Invariants.**
 

@@ -92,6 +92,9 @@
   padding: 0 16px;
   background: var(--sf-bg);
   touch-action: pan-y;
+  /* Holding a split drags it: no text selection or callout menu in its way */
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
 .rowName {

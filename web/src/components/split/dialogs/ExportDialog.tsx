@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { type ExportKind, makeExportFile } from '../../../split/export/export';
 import { preparePdf } from '../../../split/export/pdf';
 import { useSplitState } from '../../../split/SplitStateContext';
-import { deliverFile } from '../../../utils/deliver-file';
+import { useIsDesktop } from '../../../hooks/useBreakpoints';
+import { deliverFile, saveBlob } from '../../../utils/deliver-file';
 import { useSplitPage } from '../SplitPageContext';
 
 const FAILED: Record<ExportKind, string> = {
@@ -14,12 +15,14 @@ const FAILED: Record<ExportKind, string> = {
 
 // Saving the split as a file: a CSV for spreadsheets or a PDF to share or keep. Made on
 // this device from what's on screen, so it works offline and includes changes not yet
-// saved. Phones offer to share the file; computers download it.
+// saved. Phones and tablets offer to share the file; computers download it, even where
+// the browser has a share sheet (Windows, macOS), which would only offer to copy it.
 const ExportDialog = ({ onDone }: { onDone: () => void }) => {
   const { meta, currency, totals } = useSplitPage();
   const { people, items } = useSplitState().state;
   const [busy, setBusy] = useState<ExportKind | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isDesktop = useIsDesktop();
 
   // So the PDF is quick to make, and ready while the tap still counts for sharing it
   useEffect(() => preparePdf(), []);
@@ -40,6 +43,11 @@ const ExportDialog = ({ onDone }: { onDone: () => void }) => {
         totals,
         members: meta.members,
       });
+      if (isDesktop) {
+        saveBlob(file);
+        onDone();
+        return;
+      }
       const delivery = await deliverFile(file, { title: meta.name });
       if (delivery !== 'cancelled') onDone();
     } catch {
