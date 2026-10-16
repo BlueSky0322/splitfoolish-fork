@@ -9,16 +9,17 @@ The data model is in [erd.md](erd.md). How the Worker's routes and modules fit t
 is at the top of [worker/app.ts](../worker/app.ts). The rules every change follows are
 in [AGENTS.md](../AGENTS.md).
 
-| Feature                                                                        | State owner (app)                                                       | Worker                                                   |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------- |
-| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                            | `auth.ts`, `profiles.ts`, `routes/me.ts`                 |
-| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts` |
-| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`        | `split-content.ts`, `split-detail.ts`                    |
-| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                | `exchange-rates.ts`, `reconvert.ts`, `routes/rates.ts`   |
-| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`  | `sharing.ts`, `room.ts`, `routes/invites.ts`             |
-| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                              | (none; the API is the same)                              |
-| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                              |
-| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                          | (none)                                                   |
+| Feature                                                                        | State owner (app)                                                       | Worker                                                                       |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                            | `auth.ts`, `profiles.ts`, `routes/me.ts`                                     |
+| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts`                     |
+| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`        | `split-content.ts`, `split-detail.ts`                                        |
+| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                | `exchange-rates.ts`, `reconvert.ts`, `reconvert-queue.ts`, `routes/rates.ts` |
+| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                         | (none)                                                                       |
+| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`  | `sharing.ts`, `room.ts`, `routes/invites.ts`                                 |
+| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                              | (none; the API is the same)                                                  |
+| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                                                  |
+| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                          | (none)                                                                       |
 
 App paths are under `web/src/`, Worker paths under `worker/`.
 
@@ -160,7 +161,10 @@ Currencies sheet, and rate changes go through the split's actions.
 - API: [worker/exchange-rates.ts](../worker/exchange-rates.ts) (Wise and the ECB,
   cached), [worker/routes/rates.ts](../worker/routes/rates.ts), and
   [worker/reconvert.ts](../worker/reconvert.ts) (converting every item after the
-  split's currency changes, in the background).
+  split's currency changes, in the background). A failed conversion is retried by the
+  `reconvert` queue with growing waits ([worker/reconvert-queue.ts](../worker/reconvert-queue.ts),
+  wired in `worker/index.ts` and `wrangler.jsonc`); opening a split retries one stuck
+  for 10 minutes.
 - Shared: [shared/rates.ts](../shared/rates.ts) (`toCents`, `convertCents`,
   `convertParts`, rate validity) and [shared/settle.ts](../shared/settle.ts).
 
@@ -171,14 +175,55 @@ Currencies sheet, and rate changes go through the split's actions.
 - Converted exact parts add up to the converted total, the leftover cents going by
   largest remainder (`convertParts`).
 - A rate someone typed is kept as typed; only live rates are refreshed.
+- Every conversion run is idempotent and only finishes the change it was started for
+  (`converting_since`), so the first attempt, queued retries and the open-split retry
+  can overlap safely.
 
 **Tests.** [shared/settle.test.ts](../shared/settle.test.ts),
+[worker/reconvert-queue.test.ts](../worker/reconvert-queue.test.ts) (acks, retries,
+backoff, given-up jobs),
 [derive.test.ts](../web/src/split/derive.test.ts),
 [currencies.test.ts](../web/src/split/currencies.test.ts),
 [worker/exchange-rates.test.ts](../worker/exchange-rates.test.ts),
 [ConvertPage.test.tsx](../web/src/components/convert/ConvertPage.test.tsx),
 [CurrenciesSheet.test.tsx](../web/src/components/split/CurrenciesSheet.test.tsx), and
 the rate and reconversion cases in [worker/test/api.test.ts](../worker/test/api.test.ts).
+
+## Exporting a split
+
+**What it is.** Export in the split's menu (More on computers, ⋯ on phones): a CSV for
+spreadsheets or a PDF to keep or send, shared on phones and saved elsewhere.
+
+**Owner.** [split/export/](../web/src/split/export/export.ts) builds both from the
+split as this device shows it (unsaved changes included); nothing is sent to the
+server. [rows.ts](../web/src/split/export/rows.ts) works out the rows both formats use,
+from `computeTotals` in `split/derive.ts`.
+
+**Parts.**
+
+- UI: [ExportDialog](../web/src/components/split/dialogs/ExportDialog.tsx), opened as
+  the `export` dialog of the split page.
+- Formats: [csv.ts](../web/src/split/export/csv.ts) and
+  [pdf.ts](../web/src/split/export/pdf.ts) (jspdf, loaded only when Export opens).
+- Font: [font.ts](../web/src/split/export/font.ts) fetches
+  `web/public/fonts/NotoSansJP-subset.ttf` (Latin and Japanese, made by
+  [scripts/subset-font.sh](../scripts/subset-font.sh)); `sw.js` keeps it offline.
+- Delivery: [utils/deliver-file.ts](../web/src/utils/deliver-file.ts), the share sheet
+  or a download, also used by Share image.
+
+**Invariants.**
+
+- Amounts come from cents: the CSV writes plain decimals to the cent, the PDF uses
+  `formatMoney`.
+- CSV text a spreadsheet would run as a formula starts with `'`; amounts stay numbers.
+- A font change gets a new file name, since the service worker keeps `/fonts/*` for good.
+
+**Tests.** [rows.test.ts](../web/src/split/export/rows.test.ts),
+[csv.test.ts](../web/src/split/export/csv.test.ts),
+[pdf.test.ts](../web/src/split/export/pdf.test.ts),
+[font.test.ts](../web/src/split/export/font.test.ts),
+[ExportDialog.test.tsx](../web/src/components/split/ExportDialog.test.tsx), and the font
+cases in [sw.test.ts](../web/src/offline/sw.test.ts).
 
 ## Sharing, invites and live updates
 
