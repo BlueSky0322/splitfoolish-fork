@@ -21,6 +21,30 @@ describe('Convert', () => {
     expect(await screen.findByText(/RM\s?90\.00/)).toBeTruthy();
   });
 
+  test.each([
+    ['on a computer', 'desktop'],
+    ['on a phone', 'phone'],
+  ] as const)(
+    'clicking the amount %s selects it, so typing replaces it; a second click places the cursor',
+    async (_where, size) => {
+      const server = fakeServer(splitDetail('trip'));
+      server.rates.set('USDMYR', 4.5);
+      renderApp(server, '/?convert', { size });
+      const user = userEvent.setup();
+      const amount = await screen.findByRole<HTMLInputElement>('textbox', { name: 'Amount' });
+      expect(amount.value).toBe('100');
+
+      await user.click(amount);
+      expect([amount.selectionStart, amount.selectionEnd]).toEqual([0, 3]);
+      await user.keyboard('20');
+      expect(amount.value).toBe('20');
+
+      // Already in it: clicking again doesn't select everything again
+      await user.pointer({ keys: '[MouseLeft]', target: amount, offset: 1 });
+      expect(amount.selectionStart).toBe(amount.selectionEnd);
+    },
+  );
+
   test('says so when there is no rate', async () => {
     renderApp(fakeServer(), '/?convert');
     // After one retry

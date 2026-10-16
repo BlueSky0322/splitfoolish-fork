@@ -5,7 +5,6 @@ import ExportDialog from './ExportDialog';
 import ItemDetail from '../items/ItemDetail';
 import ItemForm from '../items/ItemForm';
 import PeopleSheet from '../people/PeopleSheet';
-import ResetLink from '../people/ResetLink';
 import ShareImage from './ShareImage';
 import SplitMembers, { ShareTitle } from '../people/SplitMembers';
 import SplitMenuSheet from './SplitMenuSheet';
@@ -282,24 +281,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             myEmail={myEmail}
             onChange={refreshMeta}
             changeMeta={metaChanges.changeMeta}
-            onReset={() => setDialog({ kind: 'reset' })}
-          />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'reset'}
-        onClose={() => setDialog({ kind: 'members' })}
-        title="Reset share link?"
-        width={400}
-      >
-        {dialog?.kind === 'reset' && (
-          <ResetLink
             splitId={splitId}
-            onDone={() => {
-              void refreshMeta();
-              setDialog({ kind: 'members' });
-            }}
-            onCancel={() => setDialog({ kind: 'members' })}
           />
         )}
       </ResponsiveDialog>

@@ -273,12 +273,13 @@
   padding: 0 4px;
 }
 
-/* Recent pairs scroll sideways rather than wrapping */
+/* Recent pairs scroll sideways rather than wrapping, out to the screen's edges: as far
+   as .mobilePage's side padding and no further, or the page grows wider than the screen */
 .mobilePage .chips {
   flex-wrap: nowrap;
   overflow-x: auto;
-  margin: 0 -20px;
-  padding: 0 20px;
+  margin: 0 -16px;
+  padding: 0 16px;
   scrollbar-width: none;
 }
 

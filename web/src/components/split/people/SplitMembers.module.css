@@ -121,3 +121,25 @@
 .textAction:disabled {
   opacity: 0.45;
 }
+
+/* Asking before the link is reset, in place of the line under it */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--sf-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sf-text) 4%, transparent);
+}
+
+.confirmTitle {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.resetNote {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--sf-accent);
+}

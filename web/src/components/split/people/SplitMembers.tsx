@@ -11,6 +11,8 @@ import classes from './SplitMembers.module.css';
 import type { SplitInvite } from '@shared/api';
 import { reloadMySplits } from '../../../my-splits/my-splits';
 import { canManageInvites, canRemoveMember } from '@shared/rules';
+import { useEffect, useState } from 'react';
+import ResetLink from './ResetLink';
 
 interface SplitMembersProps {
   meta: SplitMeta;
@@ -19,11 +21,12 @@ interface SplitMembersProps {
   onChange: () => Promise<void>;
   /** Shows a change straight away, before the server confirms it */
   changeMeta: MetaChanges['changeMeta'];
-  /** Swaps this for the reset-link confirm */
-  onReset: () => void;
+  splitId: string;
 }
 
 const COPIED_MS = 1500;
+/** How long "New link ready" shows after a reset */
+const RESET_NOTE_MS = 4000;
 
 const shortDate = (time: number) =>
   new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'numeric' });
@@ -41,8 +44,16 @@ export const ShareTitle = ({ name }: { name: string }) => (
 
 // Sharing: the share link, who's in the split, who's yet to
 // accept, and deleting or leaving the split
-const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMembersProps) => {
+const SplitMembers = ({ meta, myEmail, onChange, changeMeta, splitId }: SplitMembersProps) => {
   const isMobile = useIsMobile();
+  // Resetting the link asks first, in place under it; then says the new one is ready
+  const [resetting, setResetting] = useState(false);
+  const [justReset, setJustReset] = useState(false);
+  useEffect(() => {
+    if (!justReset) return;
+    const timer = setTimeout(() => setJustReset(false), RESET_NOTE_MS);
+    return () => clearTimeout(timer);
+  }, [justReset]);
   const managesInvites = canManageInvites(meta.role);
   const link = meta.shareToken ? inviteUrl(meta.shareToken) : null;
   const invites = (meta.invites ?? []).filter((i) => !i.needsApproval);
@@ -63,13 +74,32 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
     await copyText(url, 'Link copied');
   };
 
-  const helper = (
-    <p className={classes.help}>
-      {managesInvites
-        ? 'Anyone with the link can ask to join and edit.'
-        : `Your own link. People who open it ask ${ownerName} to let them in.`}
+  const helper = resetting ? (
+    <ResetLink
+      splitId={splitId}
+      onDone={async () => {
+        await onChange();
+        setResetting(false);
+        setJustReset(true);
+      }}
+      onCancel={() => setResetting(false)}
+    />
+  ) : (
+    <p
+      className={justReset ? classes.resetNote : classes.help}
+      role={justReset ? 'status' : undefined}
+    >
+      {justReset
+        ? 'New link ready. The old one no longer works.'
+        : managesInvites
+          ? 'Anyone with the link can ask to join and edit.'
+          : `Your own link. People who open it ask ${ownerName} to let them in.`}
     </p>
   );
+  const askToReset = () => {
+    setJustReset(false);
+    setResetting(true);
+  };
 
   const answerRequest = (invite: SplitInvite, approve: boolean) =>
     changeMeta(
@@ -121,7 +151,8 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
                   size={36}
                   className={classes.reset}
                   aria-label="Reset link"
-                  onClick={onReset}
+                  aria-expanded={resetting}
+                  onClick={askToReset}
                 >
                   <ArrowClockwise size={18} />
                 </ActionIcon>
@@ -162,7 +193,8 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, onReset }: SplitMem
                 variant="default"
                 className={`${classes.half} flex-1`}
                 leftSection={<ArrowClockwise size={16} />}
-                onClick={onReset}
+                aria-expanded={resetting}
+                onClick={askToReset}
               >
                 Reset
               </Button>
