@@ -201,7 +201,14 @@ describe('the split page', () => {
   test('asks before deleting an item whose photos would go with it', async () => {
     const split = trip();
     split.attachments = [
-      { id: 'receipt', itemId: 'taxi', size: 1, uploadedBy: 'ryan@example.com', createdAt: 1 },
+      {
+        id: 'receipt',
+        itemId: 'taxi',
+        size: 1,
+        contentType: 'image/jpeg',
+        uploadedBy: 'ryan@example.com',
+        createdAt: 1,
+      },
     ];
     const server = fakeServer(split);
     renderApp(server, '/?s=trip');

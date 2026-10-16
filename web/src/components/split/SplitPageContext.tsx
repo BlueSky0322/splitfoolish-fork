@@ -29,7 +29,6 @@ export type Dialog =
   | { kind: 'settings' }
   /** The split's menu, as a sheet on phones (computers use a dropdown) */
   | { kind: 'menu' }
-  | { kind: 'photos' }
   | { kind: 'currencies' }
   /** Deleting items would delete their photos too */
   | ({ kind: 'confirmDelete' } & DeleteConfirmation);

@@ -107,6 +107,8 @@ export interface Attachment {
   /** Null for a photo of the whole split */
   itemId: string | null;
   size: number;
+  /** image/jpeg, image/png or image/webp */
+  contentType: string;
   uploadedBy: string;
   createdAt: number;
 }
@@ -237,6 +239,9 @@ export const MAX_QR_BYTES = 512_000;
  */
 export const MAX_CHANGES = 200;
 
+/** Photos removed in one request (D1 takes up to 100 values in one query) */
+export const MAX_PHOTOS_REMOVED = 100;
+
 export const CLIENT_ID_HEADER = 'X-Client-Id';
 
 /** A row the app makes before it's saved (a person, item, payment method): 16 hex characters */
@@ -285,6 +290,11 @@ export interface SplitOrderBody {
 }
 
 /** PUT /archived: archives a split for you, or brings it back */
+/** POST /splits/:id/attachments/remove: up to MAX_PHOTOS_REMOVED at once */
+export interface RemovePhotosBody {
+  ids: string[];
+}
+
 export interface ArchiveBody {
   id: string;
   archived: boolean;

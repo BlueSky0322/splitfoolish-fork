@@ -20,8 +20,6 @@ interface PhotoStripProps {
   onRemove: (photo: Attachment) => void;
   onRemovePending?: (file: File) => void;
   label?: string;
-  /** A wrapping grid of larger tiles, for the split's own photos */
-  layout?: 'strip' | 'gallery';
 }
 
 /** Addresses for photos still on this device, freed once they're gone */
@@ -82,8 +80,7 @@ function PendingThumb({
   );
 }
 
-// A row of photo thumbnails after an "Add photo" tile (or a grid ending in one, for a
-// split's photos); tapping a photo opens the viewer
+// A row of photo thumbnails after an "Add photo" tile; tapping a photo opens the viewer
 const PhotoStrip = ({
   splitId,
   photos,
@@ -94,7 +91,6 @@ const PhotoStrip = ({
   onRemove,
   onRemovePending,
   label = 'Add photo',
-  layout = 'strip',
 }: PhotoStripProps) => {
   const input = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState<number | null>(null);
@@ -130,9 +126,9 @@ const PhotoStrip = ({
   );
 
   return (
-    // A strip is one row that scrolls sideways, with Add first so it's always in reach
-    <div className={layout === 'gallery' ? classes.gallery : classes.strip}>
-      {layout === 'strip' && addTile}
+    // One row that scrolls sideways, with Add first so it's always in reach
+    <div className={classes.strip}>
+      {addTile}
       {photos.map((photo, ix) => (
         <div
           key={photo.id}
@@ -181,7 +177,6 @@ const PhotoStrip = ({
           busy
         />
       ))}
-      {layout === 'gallery' && addTile}
       <input
         ref={input}
         type="file"

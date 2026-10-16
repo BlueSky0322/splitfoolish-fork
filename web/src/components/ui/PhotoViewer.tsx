@@ -1,6 +1,6 @@
 import { ActionIcon, Modal, Tooltip } from '@mantine/core';
 import { CaretLeft, CaretRight, DownloadSimple, Trash, X } from '@phosphor-icons/react';
-import { type TouchEvent, useEffect, useRef, useState } from 'react';
+import { type ReactNode, type TouchEvent, useEffect, useRef, useState } from 'react';
 import { useBackDismiss } from '../../hooks/useBackDismiss';
 import classes from './PhotoViewer.module.css';
 
@@ -9,6 +9,11 @@ export interface ViewerPhoto {
   src: string;
   /** Removes it; absent when this person can't */
   onRemove?: () => void;
+  /**
+   * About the photo, in a panel beside it (on a computer). The panel then has the
+   * photo's own buttons, so the bar above the photo only closes it.
+   */
+  details?: ReactNode;
 }
 
 interface PhotoViewerProps {
@@ -38,7 +43,8 @@ const distance = (
 
 // Photos full screen, on phones and computers alike: arrows, keys or a swipe move
 // between them, and a swipe down closes it. Pinch or double tap to zoom on a phone (and
-// drag a zoomed photo around); a click zooms on a computer.
+// drag a zoomed photo around); a click zooms on a computer. With details, they sit in a
+// panel on the right.
 const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
   const count = photos.length;
   // A photo removed while open: show the one that took its place, or close
@@ -148,126 +154,155 @@ const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
     >
       {photo && (
         <>
-          <div className={classes.bar}>
-            <span className={classes.count}>{count > 1 ? `${current! + 1} of ${count}` : ''}</span>
-            <Tooltip label="Download">
-              <ActionIcon
-                component="a"
-                href={photo.src}
-                download
-                variant="subtle"
-                color="gray"
-                size={40}
-                className={classes.tool}
-                aria-label="Download photo"
-              >
-                <DownloadSimple size={20} />
-              </ActionIcon>
-            </Tooltip>
-            {photo.onRemove && (
-              <Tooltip label="Remove photo">
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size={40}
-                  className={classes.tool}
-                  aria-label="Remove photo"
-                  onClick={() => {
-                    photo.onRemove!();
-                    if (count === 1) close();
-                  }}
-                >
-                  <Trash size={20} />
-                </ActionIcon>
-              </Tooltip>
-            )}
-            <Tooltip label="Close">
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size={40}
-                className={classes.tool}
-                aria-label="Close"
-                onClick={close}
-                data-autofocus
-              >
-                <X size={20} />
-              </ActionIcon>
-            </Tooltip>
-          </div>
-
-          <div
-            className={classes.stage}
-            data-zoomed={zoomed || undefined}
-            onClick={(e) => {
-              // A tap has done its work already
-              if (Date.now() - touchedAt.current < 600) return;
-              // A click on the dark area closes; on the photo, zooms in or out
-              if (e.target !== e.currentTarget)
-                setView(zoomed ? FIT : { scale: STEP_SCALE, x: 0, y: 0 });
-              else if (!zoomed) close();
-            }}
-            onTouchStart={onTouchStart}
-            onTouchMove={onTouchMove}
-            onTouchEnd={onTouchEnd}
-            onTouchCancel={onTouchEnd}
-          >
-            <img
-              key={photo.key}
-              src={photo.src}
-              alt={count > 1 ? `Photo ${current! + 1} of ${count}` : 'Photo'}
-              className={classes.image}
-              data-moving={moving || undefined}
-              style={
-                zoomed
-                  ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
-                  : undefined
-              }
-              draggable={false}
-            />
-          </div>
-
-          {count > 1 && (
-            <>
-              <ActionIcon
-                className={`${classes.nav} ${classes.prev}`}
-                variant="subtle"
-                radius="xl"
-                size={44}
-                aria-label="Previous photo"
-                onClick={() => go(-1)}
-              >
-                <CaretLeft size={20} />
-              </ActionIcon>
-              <ActionIcon
-                className={`${classes.nav} ${classes.next}`}
-                variant="subtle"
-                radius="xl"
-                size={44}
-                aria-label="Next photo"
-                onClick={() => go(1)}
-              >
-                <CaretRight size={20} />
-              </ActionIcon>
-              <div className={classes.thumbs}>
-                {photos.map((p, ix) => (
-                  <button
-                    key={p.key}
-                    type="button"
-                    className={`${classes.thumb} ${ix === current ? classes.active : ''}`}
-                    aria-label={`Show photo ${ix + 1}`}
-                    aria-current={ix === current}
-                    onClick={() => onIndexChange(ix)}
+          <div className={classes.main}>
+            {photo.details ? (
+              <div className={classes.bar}>
+                <Tooltip label="Close">
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size={40}
+                    className={classes.tool}
+                    aria-label="Close"
+                    onClick={close}
+                    data-autofocus
                   >
-                    <img
-                      src={p.src}
-                      alt=""
-                    />
-                  </button>
-                ))}
+                    <X size={20} />
+                  </ActionIcon>
+                </Tooltip>
+                <span className={classes.count}>
+                  {count > 1 ? `${current! + 1} of ${count}` : ''}
+                </span>
+                <span className={classes.hint}>
+                  {count > 1 ? '← → to browse, Esc to close' : 'Esc to close'}
+                </span>
               </div>
-            </>
-          )}
+            ) : (
+              <div className={classes.bar}>
+                <span className={classes.count}>
+                  {count > 1 ? `${current! + 1} of ${count}` : ''}
+                </span>
+                <Tooltip label="Download">
+                  <ActionIcon
+                    component="a"
+                    href={photo.src}
+                    download
+                    variant="subtle"
+                    color="gray"
+                    size={40}
+                    className={classes.tool}
+                    aria-label="Download photo"
+                  >
+                    <DownloadSimple size={20} />
+                  </ActionIcon>
+                </Tooltip>
+                {photo.onRemove && (
+                  <Tooltip label="Remove photo">
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size={40}
+                      className={classes.tool}
+                      aria-label="Remove photo"
+                      onClick={() => {
+                        photo.onRemove!();
+                        if (count === 1) close();
+                      }}
+                    >
+                      <Trash size={20} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+                <Tooltip label="Close">
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size={40}
+                    className={classes.tool}
+                    aria-label="Close"
+                    onClick={close}
+                    data-autofocus
+                  >
+                    <X size={20} />
+                  </ActionIcon>
+                </Tooltip>
+              </div>
+            )}
+
+            <div
+              className={classes.stage}
+              data-zoomed={zoomed || undefined}
+              onClick={(e) => {
+                // A tap has done its work already
+                if (Date.now() - touchedAt.current < 600) return;
+                // A click on the dark area closes; on the photo, zooms in or out
+                if (e.target !== e.currentTarget)
+                  setView(zoomed ? FIT : { scale: STEP_SCALE, x: 0, y: 0 });
+                else if (!zoomed) close();
+              }}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+              onTouchCancel={onTouchEnd}
+            >
+              <img
+                key={photo.key}
+                src={photo.src}
+                alt={count > 1 ? `Photo ${current! + 1} of ${count}` : 'Photo'}
+                className={classes.image}
+                data-moving={moving || undefined}
+                style={
+                  zoomed
+                    ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }
+                    : undefined
+                }
+                draggable={false}
+              />
+            </div>
+
+            {count > 1 && (
+              <>
+                <ActionIcon
+                  className={`${classes.nav} ${classes.prev}`}
+                  variant="subtle"
+                  radius="xl"
+                  size={44}
+                  aria-label="Previous photo"
+                  onClick={() => go(-1)}
+                >
+                  <CaretLeft size={20} />
+                </ActionIcon>
+                <ActionIcon
+                  className={`${classes.nav} ${classes.next}`}
+                  variant="subtle"
+                  radius="xl"
+                  size={44}
+                  aria-label="Next photo"
+                  onClick={() => go(1)}
+                >
+                  <CaretRight size={20} />
+                </ActionIcon>
+                <div className={classes.thumbs}>
+                  {photos.map((p, ix) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      className={`${classes.thumb} ${ix === current ? classes.active : ''}`}
+                      aria-label={`Show photo ${ix + 1}`}
+                      aria-current={ix === current}
+                      onClick={() => onIndexChange(ix)}
+                    >
+                      <img
+                        src={p.src}
+                        alt=""
+                      />
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          {photo.details && <aside className={classes.details}>{photo.details}</aside>}
         </>
       )}
     </Modal>

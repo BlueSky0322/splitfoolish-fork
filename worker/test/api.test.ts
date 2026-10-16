@@ -1153,6 +1153,66 @@ describe('profile, pictures and photos', () => {
     expect((await api.call(editor, 'GET', `/api/splits/${id}`)).data.name).toBe('Renamed');
   });
 
+  it('lists each photo with its file type and size, and removes several at once', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const ownerPhoto = (await upload(owner, 'POST', `/api/splits/${id}/attachments`)).data;
+    const editorPhotos = [
+      (await upload(editor, 'POST', `/api/splits/${id}/attachments`)).data,
+      (await upload(editor, 'POST', `/api/splits/${id}/attachments`)).data,
+    ];
+    expect(ownerPhoto).toMatchObject({
+      contentType: 'image/jpeg',
+      size: jpeg.length,
+      uploadedBy: owner,
+    });
+    const listed = (await api.call(editor, 'GET', `/api/splits/${id}`)).data.attachments;
+    expect(listed).toContainEqual(ownerPhoto);
+
+    const remove = (who: string, ids: unknown) =>
+      api.call(who, 'POST', `/api/splits/${id}/attachments/remove`, { ids });
+    const ids = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.attachments.map(
+      (a: { id: string }) => a.id,
+    );
+
+    // One of them isn't the editor's: none are removed
+    const refused = await remove(editor, [editorPhotos[0].id, ownerPhoto.id]);
+    expect(refused.status).toBe(403);
+    expect(refused.data.error).toBe(
+      'Only the person who added a photo, or the owner, can remove it',
+    );
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.attachments).toHaveLength(3);
+
+    expect((await remove(editor, [])).status).toBe(400);
+    expect((await remove(editor, 'nope')).status).toBe(400);
+    expect(
+      (
+        await remove(
+          editor,
+          Array.from({ length: 101 }, () => ids[0]),
+        )
+      ).status,
+    ).toBe(400);
+
+    // Their own, and one that isn't there (already removed), are fine
+    expect(
+      (await remove(editor, [editorPhotos[0].id, editorPhotos[1].id, '0123456789abcdef'])).status,
+    ).toBe(200);
+    expect(
+      (await api.call(owner, 'GET', `/api/splits/${id}`)).data.attachments.map(
+        (a: { id: string }) => a.id,
+      ),
+    ).toEqual([ownerPhoto.id]);
+    expect(
+      (await api.call(owner, 'GET', `/api/splits/${id}/attachments/${editorPhotos[0].id}`)).status,
+    ).toBe(404);
+
+    // The owner removes anyone's
+    expect((await remove(owner, [ownerPhoto.id])).status).toBe(200);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.attachments).toEqual([]);
+  });
+
   it('answers unknown API paths with a JSON 404', async () => {
     const res = await api.call(person('x'), 'GET', '/api/nope');
     expect(res.status).toBe(404);

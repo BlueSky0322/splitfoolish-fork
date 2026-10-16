@@ -380,6 +380,14 @@ function answerNow(server: FakeServer) {
         ? json({ error: 'No rate' }, 503)
         : json({ from, to, rate, source: 'wise', fetchedAt: Date.now() });
     }
+    const removePhotos = path.match(/^\/api\/splits\/([^/]+)\/attachments\/remove$/);
+    if (removePhotos && method === 'POST') {
+      const split = server.splits.get(removePhotos[1]);
+      if (split == null) return json({ error: 'Not found' }, 404);
+      const { ids } = body as { ids: string[] };
+      split.attachments = split.attachments.filter((a) => !ids.includes(a.id));
+      return json({ ok: true });
+    }
     if (splitMatch) {
       const split = server.splits.get(splitMatch[1]);
       if (split == null) return json({ error: 'Not found' }, 404);

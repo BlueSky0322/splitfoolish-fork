@@ -19,7 +19,9 @@ import type {
   SplitOrderBody,
   SplitPatch,
   UpdateSplitResult,
+  RemovePhotosBody,
 } from '../../shared/api';
+import { MAX_PHOTOS_REMOVED } from '../../shared/api';
 import { isCurrency } from '../../shared/rates';
 import {
   canDeleteSplit,
@@ -49,7 +51,7 @@ import {
   readJson,
 } from '../http';
 import {
-  deleteAttachment,
+  deleteAttachments,
   deleteSplitPicture,
   putSplitPicture,
   serveAttachment,
@@ -264,11 +266,29 @@ splits.get(`${SPLIT_PATH}/attachments/:attachmentId${ID_PARAM}`, membersOnly, (c
   serveAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId')),
 );
 splits.delete(`${SPLIT_PATH}/attachments/:attachmentId${ID_PARAM}`, membersOnly, (c) =>
-  deleteAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId'), {
+  deleteAttachments(c.env.DB, c.req.param('id'), [c.req.param('attachmentId')], {
     email: c.var.email,
     role: c.var.role,
   }),
 );
+// Several at once, chosen on the Photos tab
+splits.post(`${SPLIT_PATH}/attachments/remove`, membersOnly, async (c) => {
+  const body = await readJson<RemovePhotosBody>(c.req.raw);
+  if (body instanceof Response) return body;
+  const { ids } = body;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > MAX_PHOTOS_REMOVED ||
+    !ids.every((id) => typeof id === 'string' && ID_PATTERN.test(id))
+  ) {
+    return fail(`Send 1-${MAX_PHOTOS_REMOVED} photo ids`, 400);
+  }
+  return deleteAttachments(c.env.DB, c.req.param('id'), ids as string[], {
+    email: c.var.email,
+    role: c.var.role,
+  });
+});
 
 // New share links, the owner's and every member's; invites picked up from the old ones go
 splits.post(

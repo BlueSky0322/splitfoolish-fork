@@ -54,18 +54,23 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
     [splitId, addAttachment, whenSaved],
   );
 
-  const remove = useCallback(
-    (photo: Attachment) =>
-      changeMeta(
-        (m) => ({ ...m, attachments: m.attachments.filter((a) => a.id !== photo.id) }),
-        async () => void (await api.deleteAttachment(splitId, photo.id)),
-        'Could not remove that photo',
-      ),
+  /** Removes them all at once: they go together, and come back together if that fails */
+  const removeMany = useCallback(
+    (gone: Attachment[]) => {
+      const ids = new Set(gone.map((p) => p.id));
+      return changeMeta(
+        (m) => ({ ...m, attachments: m.attachments.filter((a) => !ids.has(a.id)) }),
+        async () => void (await api.deleteAttachments(splitId, [...ids])),
+        gone.length === 1 ? 'Could not remove that photo' : 'Could not remove those photos',
+      );
+    },
     [splitId, changeMeta],
   );
+
+  const remove = useCallback((photo: Attachment) => removeMany([photo]), [removeMany]);
 
   const photosOf = (itemId: string | null) =>
     meta?.attachments.filter((a) => a.itemId === itemId) ?? [];
 
-  return { upload, remove, photosOf, uploading };
+  return { upload, remove, removeMany, photosOf, uploading };
 }

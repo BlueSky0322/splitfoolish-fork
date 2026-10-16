@@ -9,7 +9,6 @@ import ShareImage from './ShareImage';
 import SplitMembers, { ShareTitle } from '../people/SplitMembers';
 import SplitMenuSheet from './SplitMenuSheet';
 import SplitSettings from './SplitSettings';
-import PhotoStrip from '../photos/PhotoStrip';
 import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import { Button } from '@mantine/core';
 import { type ReactNode, useRef, useState } from 'react';
@@ -67,7 +66,6 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
     currency,
     pictureVersion,
     photos,
-    canRemovePhoto,
     openDialog: setDialog,
   } = useSplitPage();
   const { state } = useSplitState();
@@ -310,30 +308,6 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             myEmail={myEmail}
             onCancel={() => setDialog({ kind: 'settings' })}
           />
-        )}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'photos'}
-        onClose={close}
-        title="Photos"
-        width={560}
-      >
-        {dialog?.kind === 'photos' && (
-          <div className="flex flex-col gap-3">
-            <p className="sf-muted text-sm">
-              Photos of the trip or anything else for everyone in the split. Receipts for an item
-              are added on the item.
-            </p>
-            <PhotoStrip
-              splitId={splitId}
-              photos={photos.photosOf(null)}
-              uploading={photos.uploading[''] ?? []}
-              canRemove={canRemovePhoto}
-              onAdd={(files) => photos.upload(files, null)}
-              onRemove={photos.remove}
-              layout="gallery"
-            />
-          </div>
         )}
       </ResponsiveDialog>
       <ResponsiveDialog

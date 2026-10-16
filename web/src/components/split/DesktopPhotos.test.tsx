@@ -1,0 +1,155 @@
+// @vitest-environment jsdom
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, test } from 'vitest';
+import type { Attachment } from '@shared/api';
+import { fakeServer, item, renderApp, setupAppTests, splitDetail } from '../../testing/app';
+
+// The Photos tab on a computer: the split's photos and item receipts by day, which to
+// show, details beside the open photo, removing several at once, and dropping files
+
+setupAppTests();
+
+const photo = (over: Partial<Attachment> & Pick<Attachment, 'id'>): Attachment => ({
+  itemId: null,
+  size: 2_400_000,
+  contentType: 'image/jpeg',
+  uploadedBy: 'ryan@example.com',
+  createdAt: Date.UTC(2026, 9, 11, 13),
+  ...over,
+});
+
+function trip() {
+  const split = splitDetail('trip', [
+    item({ id: 'dinner', name: 'Seafood dinner', cost: 248 }),
+    item({ id: 'taxi', name: 'Taxi', cost: 30 }),
+  ]);
+  split.members.push({
+    email: 'aisha@example.com',
+    role: 'editor',
+    displayName: 'Aisha',
+    avatarVersion: null,
+    paymentMethods: [],
+  });
+  split.attachments = [
+    photo({ id: 'receipt', itemId: 'dinner', uploadedBy: 'aisha@example.com' }),
+    photo({ id: 'beach', uploadedBy: 'aisha@example.com' }),
+    photo({ id: 'sunset', createdAt: Date.UTC(2026, 9, 10, 13) }),
+  ];
+  return split;
+}
+
+async function openPhotos(server = fakeServer(trip())) {
+  renderApp(server, '/?s=trip');
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('tab', { name: /^Photos/ }));
+  return { server, user };
+}
+
+describe('the Photos tab on a computer', () => {
+  test('shows every photo by day, beside Items, with the page button to add more', async () => {
+    await openPhotos();
+    expect(screen.getByRole('tab', { name: /^Photos/ }).textContent).toBe('Photos3');
+    expect(screen.getByRole('tab', { name: /^Items/ }).textContent).toBe('Items2');
+    expect(screen.getByRole('button', { name: 'Add photos' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add item' })).toBeNull();
+    // The balances step aside
+    expect(screen.queryByText('Who pays who')).toBeNull();
+
+    const days = screen.getAllByRole('region');
+    expect(days).toHaveLength(2);
+    expect(within(days[0]).getByText('2 photos')).toBeTruthy();
+    expect(
+      within(days[0]).getByRole('button', { name: 'Receipt for Seafood dinner' }),
+    ).toBeTruthy();
+    expect(within(days[1]).getByText('1 photo')).toBeTruthy();
+  });
+
+  test('shows only receipts, or only photos of the split', async () => {
+    const { user } = await openPhotos();
+    await user.click(screen.getByRole('radio', { name: /^Receipts/ }));
+    expect(screen.getByRole('button', { name: 'Receipt for Seafood dinner' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Photo of the split' })).toBeNull();
+
+    await user.click(screen.getByRole('radio', { name: /^Split photos/ }));
+    expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /^Receipt for/ })).toBeNull();
+  });
+
+  test('oldest first puts the earlier day on top', async () => {
+    const { user } = await openPhotos();
+    await user.click(screen.getByRole('button', { name: /^Sort photos/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Oldest first' }));
+    await waitFor(() => expect(within(screen.getAllByRole('region')[0]).getByText('1 photo')));
+  });
+
+  test('an open receipt shows its item, your share and who added it, and opens the item', async () => {
+    const { user } = await openPhotos();
+    await user.click(screen.getByRole('button', { name: 'Receipt for Seafood dinner' }));
+    const viewer = within(await screen.findByRole('dialog'));
+    expect(viewer.getByRole('heading', { name: 'Seafood dinner' })).toBeTruthy();
+    expect(viewer.getByText('RM 248.00')).toBeTruthy();
+    // Ryan and Ann share it equally
+    expect(viewer.getByText('RM 124.00')).toBeTruthy();
+    expect(viewer.getByText(/^Aisha, /)).toBeTruthy();
+
+    await user.click(viewer.getByRole('button', { name: 'Open item' }));
+    expect(await screen.findByText('Edit item')).toBeTruthy();
+  });
+
+  test('an open photo of the split says who added it and what file it is', async () => {
+    const { user } = await openPhotos();
+    await user.click(screen.getAllByRole('button', { name: 'Photo of the split' })[0]);
+    const viewer = within(await screen.findByRole('dialog'));
+    expect(viewer.getByText('Added by Aisha')).toBeTruthy();
+    expect(viewer.getByText('JPEG, 2.4 MB')).toBeTruthy();
+    expect(viewer.getByText('Trip')).toBeTruthy();
+    // After the receipt shown before it
+    expect(viewer.getByText('2 of 3')).toBeTruthy();
+  });
+
+  test('selects a whole day and removes it in one go', async () => {
+    const { server, user } = await openPhotos();
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getAllByRole('button', { name: 'Select day' })[0]);
+    expect(screen.getByText('2 selected')).toBeTruthy();
+    expect(
+      screen.getByRole('checkbox', { name: 'Select receipt for Seafood dinner' }).ariaChecked,
+    ).toBe('true');
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.attachments.map((a) => a.id)).toEqual(['sunset']),
+    );
+    expect(screen.getAllByRole('region')).toHaveLength(1);
+    expect(screen.getByRole('tab', { name: /^Photos/ }).textContent).toBe('Photos1');
+  });
+
+  test("someone who isn't the owner can't remove photos others added", async () => {
+    const split = trip();
+    split.role = 'editor';
+    await openPhotos(fakeServer(split));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: 'Select receipt for Seafood dinner' }));
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  test('dragging photos over the tab shows where they go', async () => {
+    await openPhotos();
+    const day = screen.getAllByRole('region')[0];
+    const files = {
+      types: ['Files'],
+      items: [
+        { kind: 'file', type: 'image/jpeg' },
+        { kind: 'file', type: 'image/png' },
+      ],
+      files: [],
+    };
+    fireEvent.dragEnter(day, { dataTransfer: files });
+    expect(screen.getByText('Drop to add 2 photos')).toBeTruthy();
+    expect(screen.getByText(/added as split photos/)).toBeTruthy();
+    fireEvent.dragLeave(day, { dataTransfer: files });
+    expect(screen.queryByText('Drop to add 2 photos')).toBeNull();
+  });
+});

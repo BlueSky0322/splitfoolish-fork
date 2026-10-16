@@ -132,3 +132,33 @@
     display: none;
   }
 }
+
+/* The photo, its bar, arrows and thumbnails; beside it, any details */
+.main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body:has(.details) {
+  flex-direction: row;
+}
+
+.hint {
+  font-size: 12px;
+  color: rgb(255 255 255 / 0.5);
+  padding-right: 12px;
+}
+
+.details {
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  overflow-y: auto;
+  background: #1c1c22;
+  border-left: 1px solid rgb(255 255 255 / 0.08);
+}

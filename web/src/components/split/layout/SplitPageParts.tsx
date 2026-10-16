@@ -117,10 +117,10 @@ export function SaveStatus() {
 }
 
 /** The split's menu (People, Share, Photos...), opened from `target` */
-export function SplitMoreMenu({ target }: { target: ReactNode }) {
+export function SplitMoreMenu({ target, onPhotos }: { target: ReactNode; onPhotos: () => void }) {
   const { meta, openDialog } = useSplitPage();
   const { state } = useSplitState();
-  const splitPhotoCount = meta?.attachments.filter((a) => a.itemId == null).length ?? 0;
+  const photoCount = meta?.attachments.length ?? 0;
   const otherCurrencies = otherCurrencyCount(state.items);
   return (
     <Menu
@@ -143,10 +143,10 @@ export function SplitMoreMenu({ target }: { target: ReactNode }) {
         </Menu.Item>
         <Menu.Item
           leftSection={<Images size={16} />}
-          onClick={() => openDialog({ kind: 'photos' })}
+          onClick={onPhotos}
         >
           Photos
-          {splitPhotoCount > 0 && <span className="sf-muted"> ({splitPhotoCount})</span>}
+          {photoCount > 0 && <span className="sf-muted"> ({photoCount})</span>}
         </Menu.Item>
         {otherCurrencies > 0 && (
           <Menu.Item

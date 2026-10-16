@@ -10,6 +10,7 @@ import {
   SortDescending,
   StackSimple,
 } from '@phosphor-icons/react';
+import { useState } from 'react';
 import { GROUP_LABELS, type SortDir, type SortKey } from '../../../split/grouping';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { currencySymbol } from '../../../utils/money';
@@ -29,8 +30,8 @@ import {
 import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
 import classes from '../Split.module.css';
 import { canChangePeople } from '@shared/rules';
+import DesktopPhotos, { AddPhotosButton } from '../photos/DesktopPhotos';
 
-/** The split page on a computer: the items, with the balances alongside */
 const SORT_LABELS: Record<SortKey, string> = {
   date: 'Date',
   amount: 'Amount',
@@ -46,6 +47,9 @@ const DIRECTION_LABELS: Record<SortKey, Record<SortDir, string>> = {
   payer: { asc: 'A to Z', desc: 'Z to A' },
 };
 
+type DesktopTab = 'items' | 'photos';
+
+/** The split page on a computer: the items, with the balances alongside, or its photos */
 const DesktopSplitLayout = ({
   parts,
   selection,
@@ -59,10 +63,16 @@ const DesktopSplitLayout = ({
   const loaded = meta != null;
   const hasPeople = state.people.length > 0;
   const otherCurrencies = otherCurrencyCount(state.items);
+  const [tab, setTab] = useState<DesktopTab>('items');
+  const photoCount = meta?.attachments.length ?? 0;
+  const onItems = tab === 'items';
 
   return (
     <>
-      <div className={classes.desktop}>
+      <div
+        className={classes.desktop}
+        data-wide={!onItems || undefined}
+      >
         <div className={classes.main}>
           <div className={classes.titleRow}>
             <div className={classes.titleBlock}>
@@ -105,6 +115,7 @@ const DesktopSplitLayout = ({
                 Share
               </Button>
               <SplitMoreMenu
+                onPhotos={() => setTab('photos')}
                 target={
                   <ActionIcon
                     variant="default"
@@ -115,17 +126,21 @@ const DesktopSplitLayout = ({
                   </ActionIcon>
                 }
               />
-              <Button
-                leftSection={<Plus size={16} />}
-                onClick={() => openDialog({ kind: 'add' })}
-                disabled={!loaded || !hasPeople}
-              >
-                Add item
-              </Button>
+              {onItems ? (
+                <Button
+                  leftSection={<Plus size={16} />}
+                  onClick={() => openDialog({ kind: 'add' })}
+                  disabled={!loaded || !hasPeople}
+                >
+                  Add item
+                </Button>
+              ) : (
+                <AddPhotosButton disabled={!loaded} />
+              )}
             </div>
           </div>
 
-          {hasPeople && (
+          {onItems && hasPeople && (
             <div className={classes.peopleLine}>
               <AvatarStack
                 people={state.people}
@@ -147,7 +162,39 @@ const DesktopSplitLayout = ({
 
           <SplitNotices />
 
-          {hasPeople && state.items.length > 0 && (
+          {loaded && (
+            <div
+              className={classes.pageTabs}
+              role="tablist"
+            >
+              {(
+                [
+                  ['items', 'Items', state.items.length],
+                  ['photos', 'Photos', photoCount],
+                ] as const
+              ).map(([key, label, count]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === key}
+                  data-active={tab === key || undefined}
+                  className={classes.pageTab}
+                  onClick={() => {
+                    if (key !== tab && selection.active) selection.clear();
+                    setTab(key);
+                  }}
+                >
+                  {label}
+                  <span className={classes.pageTabCount}>{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!onItems && <DesktopPhotos />}
+
+          {onItems && hasPeople && state.items.length > 0 && (
             <div className={classes.toolbar}>
               <Menu
                 position="bottom-start"
@@ -238,13 +285,15 @@ const DesktopSplitLayout = ({
             </div>
           )}
 
-          <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
-            {parts.list}
-          </ErrorBoundary>
-          {selection.active && <DesktopSelectionBar {...selection.bar} />}
+          {onItems && (
+            <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
+              {parts.list}
+            </ErrorBoundary>
+          )}
+          {onItems && selection.active && <DesktopSelectionBar {...selection.bar} />}
           {selection.moveDialog}
         </div>
-        <aside className={classes.aside}>{parts.panel}</aside>
+        {onItems && <aside className={classes.aside}>{parts.panel}</aside>}
       </div>
       {parts.dialogs}
     </>
