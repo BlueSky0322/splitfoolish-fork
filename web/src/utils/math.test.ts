@@ -14,14 +14,35 @@ describe('evaluateSum', () => {
     ['9 ÷ 2', 4.5],
     ['-5 + 10', 5],
     ['2 * -3', -6],
+    // Same-level operators work left to right
+    ['10-3-2', 5],
+    ['24/4/2', 3],
+    ['100 - 10 + 5', 95],
+    ['12 / 3 * 2', 8],
+    ['2 + 3 * 4 - 6 / 2', 11],
+    ['(2 + 3) * (4 - 1)', 15],
+    ['--5', 5],
+    ['((1.5))', 1.5],
   ])('%s is %d', (text, value) => {
     expect(evaluateSum(text)).toBe(value);
   });
 
-  test.each(['', 'abc', '3 +', '(3 + 4', '3 + 4)', '1 / 0', '2 ** 3', '1e5', 'sqrt(4)'])(
-    "'%s' isn't an amount",
-    (text) => {
-      expect(evaluateSum(text)).toBeNull();
-    },
-  );
+  test.each([
+    '',
+    'abc',
+    '3 +',
+    '(3 + 4',
+    '3 + 4)',
+    '1 / 0',
+    '2 ** 3',
+    '1e5',
+    'sqrt(4)',
+    '()',
+    '*5',
+    '5 5',
+    '1..2',
+    '0 / 0',
+  ])("'%s' isn't an amount", (text) => {
+    expect(evaluateSum(text)).toBeNull();
+  });
 });
