@@ -1153,6 +1153,49 @@ describe('profile, pictures and photos', () => {
     expect((await api.call(editor, 'GET', `/api/splits/${id}`)).data.name).toBe('Renamed');
   });
 
+  it('adds a photo sent again with the same id only once, and keeps that id to its sender', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id } = await splitWith(owner, editor);
+    const { id: other } = await splitWith(owner, editor);
+    const photoId = hex();
+    const path = `/api/splits/${id}/attachments?id=${photoId}`;
+
+    // Sent twice at once (a retry while the first is still going): saved once
+    const both = await Promise.all([upload(editor, 'POST', path), upload(editor, 'POST', path)]);
+    expect(both.map((r) => r.status).sort()).toEqual([200, 201]);
+    const [first] = both;
+    expect(first.data.id).toBe(photoId);
+    expect(both[1].data).toEqual(first.data);
+    // Its answer was lost, so it's sent again later: the same photo comes back
+    const again = await upload(editor, 'POST', path);
+    expect(again.status).toBe(200);
+    expect(again.data).toEqual(first.data);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.attachments).toEqual([
+      first.data,
+    ]);
+
+    // Someone else, another split, or a receipt can't take that id
+    expect((await upload(owner, 'POST', path)).status).toBe(409);
+    expect(
+      (await upload(editor, 'POST', `/api/splits/${other}/attachments?id=${photoId}`)).status,
+    ).toBe(409);
+    const [p, itemId] = [hex(), hex()];
+    await change(
+      owner,
+      id,
+      { op: 'addPerson', id: p, name: 'P' },
+      { op: 'addItem', item: { id: itemId, name: 'X', cost: 1, payerId: p, participantIds: [p] } },
+    );
+    expect((await upload(editor, 'POST', `${path}&itemId=${itemId}`)).status).toBe(409);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.attachments).toHaveLength(1);
+
+    // Ids are what the app makes
+    expect(
+      (await upload(editor, 'POST', `/api/splits/${id}/attachments?id=not-an-id`)).status,
+    ).toBe(400);
+  });
+
   it('lists each photo with its file type and size, and removes several at once', async () => {
     const owner = person('owner');
     const editor = person('editor');

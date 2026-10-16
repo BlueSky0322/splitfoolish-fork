@@ -187,7 +187,8 @@ backoff, given-up jobs),
 [worker/exchange-rates.test.ts](../worker/exchange-rates.test.ts),
 [ConvertPage.test.tsx](../web/src/components/convert/ConvertPage.test.tsx),
 [CurrenciesSheet.test.tsx](../web/src/components/split/CurrenciesSheet.test.tsx), and
-the rate and reconversion cases in [worker/test/api.test.ts](../worker/test/api.test.ts).
+the rate and reconversion cases in [worker/test/api.test.ts](../worker/test/api.test.ts) (including a photo sent
+again with its id).
 
 ## Exporting a split
 
@@ -287,7 +288,7 @@ page or, if it's closed, by the service worker.
 An open split sends its own changes through `useSaveQueue`.
 
 **Parts.** [web/public/sw.js](../web/public/sw.js) keeps the page, the built files and
-pictures, and sends the outbox by background sync. It can't import app code, so the
+pictures, and sends the outbox and kept photos by background sync. It can't import app code, so the
 keys, lock names and limits it shares with `offline/` and `shared/api.ts` are copied in
 it. The build writes `precache.json`, every built file the app needs offline: the entry
 and its styles, and the chunks the app's own code loads later (sharing an image, PDF
@@ -375,24 +376,33 @@ the device as bytes, tagged with the account → shown at once → sent once onl
 split is on the server (`pending-creates.ts`) and, for a receipt, its item is saved
 (the open split's `whenSaved`, and no `addItem` for it left in the outbox) → joins the
 split's photos. Opening a split, signing in, coming back online or to the app picks up
-what's kept, oldest first.
+what's kept, oldest first. With the app closed, the service worker's background sync
+sends them, one at a time and oldest first, after the changes kept with them.
 
 **Invariants.**
 
 - A photo leaves the device only once the server has it, or refused it (any 4xx but
   401 and 429: its item gone, too large, too many photos), which is explained. Anything
   else (offline, 401, 429, 5xx) keeps it to try again.
+- A photo is sent with its own id (`PHOTO_ID_PARAM`), the same each time, so one sent
+  again after its answer was lost (or by the app and the service worker both) is added
+  once: the server answers with the photo it saved. An id already used for another
+  photo is refused.
 - One account never sees or sends another's; they're forgotten with the cache
   (`onCacheCleared`). Where the browser has Web Locks, each upload takes a lock per
-  photo and checks it's still kept, so two tabs don't both send it.
+  photo and checks it's still kept, so two tabs (or a tab and the service worker) don't
+  both send it.
 - The file type comes from the bytes, not what the upload says.
 - A profile picture's, split picture's or QR code's address names its version, and a
   photo never changes once added, so the service worker and browsers can keep them for
   good.
 
 **Tests.** [photo-queue.test.ts](../web/src/offline/photo-queue.test.ts) (kept through a
-reload, accounts kept apart, order, two at a time, refused or retried, waiting for the
-split and the item), [OfflinePhotos.test.tsx](../web/src/components/split/OfflinePhotos.test.tsx)
+reload, accounts kept apart, order, two at a time, refused or retried, the same id when
+sent again, sent by the service worker and not again by the app, waiting for the split
+and the item), [sw.test.ts](../web/src/offline/sw.test.ts) (the service worker's photo
+sending: order, ids, retries and refusals),
+[worker/photos.test.ts](../worker/photos.test.ts) (the same photo sent twice at once), [OfflinePhotos.test.tsx](../web/src/components/split/OfflinePhotos.test.tsx)
 (waiting through the app reopening, removing one, a new item's receipt, online uploads,
 a refusal), [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
 [PhonePhotos.test.tsx](../web/src/components/split/PhonePhotos.test.tsx),

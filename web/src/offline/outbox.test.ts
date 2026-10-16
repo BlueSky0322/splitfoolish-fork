@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
 import { CLIENT_ID_HEADER } from '@shared/api';
 import { backgroundSync, ok, respond } from '../testing/sw';
-import { clearCache, setCacheUser } from './cache';
+import { clearCache, listCacheIds, setCacheUser, writeCache } from './cache';
 import { type PendingCreate, readPendingCreates, savePendingCreate } from './pending-creates';
 import type { Queued } from './outbox';
 import {
@@ -19,6 +19,7 @@ import {
   withOutbox,
   writeOutbox,
 } from './outbox';
+import { PHOTO_LOCK_PREFIX, PHOTO_PREFIX } from './photo-queue';
 import { forgetOfflineWork } from './sync';
 
 const swSource = readFileSync(
@@ -161,6 +162,30 @@ describe('the service worker and the app', () => {
     expect(taken).toEqual(swLock);
   });
 
+  test('both take the same lock for a photo, and read it where the app keeps it', async () => {
+    const taken: string[] = [];
+    const locks = {
+      request: (name: string, fn: () => Promise<unknown>) => {
+        taken.push(name);
+        return fn();
+      },
+    };
+    await setCacheUser('ryan@example.com');
+    const id = '00000000000000a1';
+    await writeCache(`${PHOTO_PREFIX}bali:${id}`, {
+      id,
+      splitId: 'bali',
+      itemId: null,
+      name: 'beach.jpg',
+      createdAt: 1,
+      type: 'image/jpeg',
+      bytes: new ArrayBuffer(4),
+    });
+    runServiceWorker({ navigator: { locks } }).sync();
+    await vi.waitFor(async () => expect(await listCacheIds(PHOTO_PREFIX)).toEqual([]));
+    expect(taken).toEqual([`${PHOTO_LOCK_PREFIX}${id}`]);
+  });
+
   test('the pictures the service worker keeps are the ones the app clears on signing out', async () => {
     const opened: string[] = [];
     const deleted: string[] = [];
@@ -199,9 +224,11 @@ function runServiceWorker(self: object, globals: object = {}) {
     },
     fetch: () => respond(ok),
     indexedDB,
+    Blob,
     Response,
     TextEncoder,
     URL,
+    URLSearchParams,
     ...globals,
   });
   return {

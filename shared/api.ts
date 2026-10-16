@@ -248,6 +248,13 @@ export const MAX_CHANGES = 200;
  */
 export const MAX_CHANGES_BYTES = 48 * 1024;
 
+/**
+ * Sent with a photo upload (`?id=`): the photo's id, chosen by the app (isRowId), so a
+ * photo sent again after its answer was lost is not added twice. A repeat answers with
+ * the photo saved the first time; an id already used for another photo is refused (409).
+ */
+export const PHOTO_ID_PARAM = 'id';
+
 /** Photos removed in one request (D1 takes up to 100 values in one query) */
 export const MAX_PHOTOS_REMOVED = 100;
 

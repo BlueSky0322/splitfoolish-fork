@@ -5,7 +5,7 @@ import { shrinkImage } from '../utils/image';
 import { showError } from '../utils/notify';
 import { listCacheIds, onCacheCleared, readCache, removeCacheEntry, writeCache } from './cache';
 import { reportKept } from './storage-health';
-import { isOffline, isRetryable, readOutbox } from './outbox';
+import { isOffline, isRetryable, readOutbox, requestBackgroundSync } from './outbox';
 import { readPendingCreates, resumeCreates, whenCreated } from './pending-creates';
 
 // Photos of a split and receipts on its items, kept on the device (IndexedDB) until
@@ -50,7 +50,9 @@ interface Held extends QueuedPhoto {
   onDevice: boolean;
 }
 
+// Also used by public/sw.js, which can't import them (photo-queue.test.ts checks they match)
 export const PHOTO_PREFIX = 'photo:';
+export const PHOTO_LOCK_PREFIX = 'sf-photo:';
 const photoKey = (photo: { splitId: string; id: string }) =>
   `${PHOTO_PREFIX}${photo.splitId}:${photo.id}`;
 
@@ -202,10 +204,10 @@ async function loadKept(splitId?: string) {
   if (any) changed();
 }
 
-/** Runs fn holding the photo's lock, so two tabs never send it both */
+/** Runs fn holding the photo's lock, so two tabs (or the service worker) never both send it */
 function withPhotoLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-  return locks ? locks.request(`sf-photo:${id}`, fn) : fn();
+  return locks ? locks.request(`${PHOTO_LOCK_PREFIX}${id}`, fn) : fn();
 }
 
 // ---------- Sending ----------
@@ -249,7 +251,8 @@ async function upload(photo: Held, gen: number): Promise<boolean> {
         letGo(photo);
         return true;
       }
-      const added = await api.uploadAttachment(photo.splitId, image, photo.itemId);
+      // With its own id: if the answer is lost and it's sent again, it isn't added twice
+      const added = await api.uploadAttachment(photo.splitId, image, photo.itemId, photo.id);
       if (gen !== generation) return true;
       await removeCacheEntry(photoKey(photo));
       open.get(photo.splitId)?.onUploaded(added);
@@ -458,6 +461,8 @@ async function prepare(photo: Held, file: Blob, gen: number) {
       });
       // Not kept (storage full, say): the app says so
       reportKept(photo.onDevice);
+      // Kept: the service worker sends it if the app closes first
+      if (photo.onDevice) requestBackgroundSync();
     } catch {
       // Not kept: it's sent from memory, and lost if the app closes first
     }

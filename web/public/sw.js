@@ -13,8 +13,8 @@
 //   changes once added, and a changed font in /fonts gets a new name), so they're
 //   served from here once kept.
 // - The rest of /api always goes to the network, through Cloudflare Access.
-// - Changes made offline are kept by the app (in IndexedDB); background sync sends
-//   them here when the connection is back, even if the app is closed.
+// - Changes and photos made offline are kept by the app (in IndexedDB); background sync
+//   sends them here when the connection is back, even if the app is closed.
 const SHELL = 'splitfoolish-shell-v1';
 const ASSETS = 'splitfoolish-assets-v1';
 /** IMAGE_CACHE in web/src/offline/cache.ts, which clears it on sign-out */
@@ -40,8 +40,17 @@ const CREATE_PREFIX = 'create:';
 const LOCK_PREFIX = 'sf-outbox:';
 /** SW_USER_KEY in web/src/offline/cache.ts; entries there are { email, value } */
 const USER_KEY = 'sf-user';
+/**
+ * PHOTO_PREFIX in web/src/offline/photo-queue.ts; entries there are { email, value } with
+ * value { id, splitId, itemId, createdAt, type, bytes }
+ */
+const PHOTO_PREFIX = 'photo:';
+/** The lock photo-queue.ts takes for a photo while sending it */
+const PHOTO_LOCK_PREFIX = 'sf-photo:';
 /** CLIENT_ID_HEADER in shared/api.ts */
 const CLIENT_ID_HEADER = 'X-Client-Id';
+/** PHOTO_ID_PARAM in shared/api.ts: a photo sent again with its id isn't added twice */
+const PHOTO_ID_PARAM = 'id';
 /** MAX_CHANGES and MAX_CHANGES_BYTES in shared/api.ts: how much one request may carry */
 const MAX_CHANGES = 200;
 const MAX_CHANGES_BYTES = 48 * 1024;
@@ -301,19 +310,24 @@ function idb(db, mode, run) {
   });
 }
 
-/** The same lock the app takes, so a change is never sent twice */
-const withLock = (id, fn) =>
-  self.navigator.locks ? self.navigator.locks.request(`${LOCK_PREFIX}${id}`, fn) : fn();
+/** The same lock the app takes, so a change (or a photo) is never sent twice */
+const withLock = (id, fn, prefix = LOCK_PREFIX) =>
+  self.navigator.locks ? self.navigator.locks.request(`${prefix}${id}`, fn) : fn();
 
 class TryLater extends Error {}
 
+/** Sends JSON, or a photo (a Blob, as its own type) */
 async function post(path, body) {
+  const photo = body instanceof Blob;
   let res;
   try {
     res = await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', [CLIENT_ID_HEADER]: 'background-sync' },
-      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': photo ? body.type || 'image/jpeg' : 'application/json',
+        [CLIENT_ID_HEADER]: 'background-sync',
+      },
+      body: photo ? body : JSON.stringify(body),
     });
   } catch {
     throw new TryLater('No connection');
@@ -378,6 +392,34 @@ async function flushOfflineChanges() {
         }
         await drop(key);
       });
+    }
+
+    // Photos last, so their split and their receipt's item are saved first; oldest first,
+    // one at a time. Each is read again under its lock, in case the app sent it meanwhile.
+    const photos = [];
+    for (const key of keys.filter((k) => typeof k === 'string' && k.startsWith(PHOTO_PREFIX))) {
+      const entry = await read(key);
+      if (mine(entry)) photos.push({ key, id: entry.value.id, createdAt: entry.value.createdAt });
+    }
+    photos.sort((a, b) => a.createdAt - b.createdAt);
+    for (const { key, id } of photos) {
+      await withLock(
+        id,
+        async () => {
+          const entry = await read(key);
+          if (!mine(entry)) return;
+          const { splitId, itemId, type, bytes } = entry.value;
+          const query = new URLSearchParams({ [PHOTO_ID_PARAM]: id });
+          if (itemId != null) query.set('itemId', itemId);
+          await post(
+            `/api/splits/${encodeURIComponent(splitId)}/attachments?${query}`,
+            new Blob([bytes], { type }),
+          );
+          // Saved, or refused (its item gone, the split full): either way it's done
+          await drop(key);
+        },
+        PHOTO_LOCK_PREFIX,
+      );
     }
   } finally {
     db.close();

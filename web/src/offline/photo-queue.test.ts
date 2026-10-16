@@ -18,6 +18,7 @@ import {
   removeQueuedPhoto,
   resumePhotoUploads,
 } from './photo-queue';
+import { backgroundSync } from '../testing/sw';
 import { useKeepingWork } from './storage-health';
 import { forgetOfflineWork } from './sync';
 
@@ -176,6 +177,27 @@ describe('keeping photos on the device', () => {
     keeping.unmount();
   });
 
+  test('one kept while offline is sent by the service worker if the app is closed, and not again by the app', async () => {
+    const upload = serverKeeps();
+    online = false;
+    await addPhotos('trip', 'dinner', [file('beach.jpg')]);
+    const [photo] = queuedPhotos();
+
+    // Back online with the app closed: background sync sends what the app kept
+    const sw = await backgroundSync({ status: 201, body: JSON.stringify({ id: photo.id }) });
+    expect(sw.outcome).toBe('done');
+    expect(sw.photos.map((p) => p.path)).toEqual([
+      `/api/splits/trip/attachments?id=${photo.id}&itemId=dinner`,
+    ]);
+    expect(await readBlob(sw.photos[0].body)).toBe('small beach.jpg');
+    expect(await keptKeys()).toEqual([]);
+
+    // The app opens again: it's gone from what's waiting, and isn't sent twice
+    goOnline();
+    await vi.waitFor(() => expect(queuedPhotos()).toEqual([]));
+    expect(upload).not.toHaveBeenCalled();
+  });
+
   test('a photo removed while it waits is never sent', async () => {
     const upload = serverKeeps();
     online = false;
@@ -312,6 +334,35 @@ describe('sending them', () => {
     expect(shown).toHaveBeenCalledWith(
       expect.objectContaining({ color: 'red', message: refusal.explanation }),
     );
+  });
+
+  test('sent again after its answer was lost, it goes with the same id, so it is added once', async () => {
+    // The server, keeping photos by the id they're sent with; the first answer never arrives
+    const stored = new Map<string, Attachment>();
+    let calls = 0;
+    vi.spyOn(api, 'uploadAttachment').mockImplementation((_splitId, _image, itemId, photoId) => {
+      calls++;
+      const attachment: Attachment = {
+        id: photoId,
+        itemId,
+        size: 10,
+        contentType: 'image/jpeg',
+        uploadedBy: 'ryan@example.com',
+        createdAt: 1,
+      };
+      if (!stored.has(photoId)) stored.set(photoId, attachment);
+      return calls === 1
+        ? Promise.reject(new NetworkError('The answer was lost'))
+        : Promise.resolve(stored.get(photoId)!);
+    });
+    await addPhotos('trip', null, [file('beach.jpg')]);
+    const [photo] = queuedPhotos();
+
+    await vi.waitFor(() => expect(calls).toBe(1));
+    await resumePhotoUploads();
+    await vi.waitFor(() => expect(queuedPhotos()).toEqual([]));
+    expect(calls).toBe(2);
+    expect([...stored.keys()]).toEqual([photo.id]);
   });
 
   test.each([
