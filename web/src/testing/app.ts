@@ -9,7 +9,13 @@ import { cleanup, configure, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { Attachment, MyInvite, Profile, SplitDetail, SplitSummary } from '@shared/api';
-import { DEFAULT_SETTINGS, MAX_CHANGES, MAX_PHOTO_BYTES } from '@shared/api';
+import {
+  DEFAULT_SETTINGS,
+  MAX_CHANGES,
+  MAX_PHOTO_BYTES,
+  PHOTO_ID_PARAM,
+  isRowId,
+} from '@shared/api';
 import { toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
@@ -418,18 +424,32 @@ function answerNow(server: FakeServer) {
           : new Response('Not found', { status: 404 }),
       );
     }
-    // Adding a photo, as worker/photos.ts does: at most 300 to a split, a receipt only on
-    // an item that exists, and no larger than MAX_PHOTO_BYTES
+    // Adding a photo, as worker/photos.ts does: sent again with the same id, the photo
+    // saved then; at most 300 to a split, a receipt only on an item that exists, and no
+    // larger than MAX_PHOTO_BYTES
     const addPhoto = path.match(/^\/api\/splits\/([^/]+)\/attachments$/);
     if (addPhoto && method === 'POST') {
       const split = server.splits.get(addPhoto[1]);
       if (split == null) return json({ error: 'Not found' }, 404);
       const failure = failing('photo');
       if (failure) return failure;
+      const itemId = url.searchParams.get('itemId');
+      const photoId = url.searchParams.get(PHOTO_ID_PARAM);
+      if (photoId != null && !isRowId(photoId)) {
+        return json({ error: 'That photo id is not valid' }, 400);
+      }
+      const savedIn = [...server.splits.values()].find((s) =>
+        s.attachments.some((a) => a.id === photoId),
+      );
+      const saved = savedIn?.attachments.find((a) => a.id === photoId);
+      if (saved) {
+        return savedIn === split && saved.itemId === itemId && saved.uploadedBy === server.me.email
+          ? json(saved)
+          : json({ error: 'That photo id is already used' }, 409);
+      }
       if (split.attachments.length >= 300) {
         return json({ error: 'A split can have up to 300 photos' }, 409);
       }
-      const itemId = url.searchParams.get('itemId');
       if (itemId != null && !split.items.some((i) => i.id === itemId)) {
         return json({ error: 'That item no longer exists' }, 404);
       }
@@ -440,7 +460,7 @@ function answerNow(server: FakeServer) {
       if (image.size > MAX_PHOTO_BYTES) return json({ error: 'That photo is too large' }, 413);
       server.uploads.push({ splitId: split.id, itemId, image });
       const added: Attachment = {
-        id: `photo-${server.uploads.length}`,
+        id: photoId ?? `photo-${server.uploads.length}`,
         itemId,
         size: image.size,
         contentType: 'image/jpeg',

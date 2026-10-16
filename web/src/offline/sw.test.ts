@@ -1,12 +1,13 @@
 import 'fake-indexeddb/auto';
-import { clear, get, set } from 'idb-keyval';
+import { clear, get, keys, set } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
+import { MAX_CHANGES, MAX_CHANGES_BYTES, PHOTO_ID_PARAM } from '@shared/api';
 import { MAX_NOTES_LENGTH } from '@shared/types';
 import type { Change } from '@shared/types';
 import { SW_USER_KEY } from './cache';
 import { api } from '../api';
 import { OUTBOX_PREFIX, classifySaveFailure, nextBatch, type Queued } from './outbox';
+import { PHOTO_PREFIX } from './photo-queue';
 import {
   type Answer,
   backgroundSync,
@@ -132,6 +133,91 @@ describe('the service worker, sending changes too big to go all at once', () => 
     const { outcome, batches } = await backgroundSync(ok);
     expect(outcome).toBe('done');
     expect(batches).toEqual([[huge.change], [change(1), change(2)]]);
+  });
+});
+
+describe('the service worker, sending photos kept on the device', () => {
+  /** A photo the app kept, as photo-queue.ts keeps them */
+  const keepPhoto = (
+    email: string,
+    id: string,
+    createdAt: number,
+    itemId: string | null = null,
+    splitId = 'trip',
+  ) =>
+    set(`${PHOTO_PREFIX}${splitId}:${id}`, {
+      email,
+      value: {
+        id,
+        splitId,
+        itemId,
+        name: `${id}.jpg`,
+        createdAt,
+        type: 'image/jpeg',
+        bytes: new TextEncoder().encode(`bytes of ${id}`).buffer,
+      },
+    });
+  const keptPhotos = async () =>
+    (await keys()).filter((k) => typeof k === 'string' && k.startsWith(PHOTO_PREFIX));
+  const saved = { status: 201, body: '{"id":"saved"}' };
+  const text = (blob: Blob) => blob.text();
+
+  test('sends them oldest first, each with its id, after the changes, and crosses them off', async () => {
+    await keep('ryan@example.com');
+    await keepPhoto('ryan@example.com', '00000000000000b2', 2, 'i1');
+    await keepPhoto('ryan@example.com', '00000000000000a1', 1);
+    const { outcome, fetch, photos } = await backgroundSync([ok, saved]);
+    expect(outcome).toBe('done');
+    // The changes first, so a receipt's item is saved before it
+    expect(fetch.mock.calls.map(([path]) => path.split('?')[0])).toEqual([
+      '/api/splits/trip/changes',
+      '/api/splits/trip/attachments',
+      '/api/splits/trip/attachments',
+    ]);
+    expect(photos.map((p) => p.path)).toEqual([
+      `/api/splits/trip/attachments?${PHOTO_ID_PARAM}=00000000000000a1`,
+      `/api/splits/trip/attachments?${PHOTO_ID_PARAM}=00000000000000b2&itemId=i1`,
+    ]);
+    expect(await Promise.all(photos.map((p) => text(p.body)))).toEqual([
+      'bytes of 00000000000000a1',
+      'bytes of 00000000000000b2',
+    ]);
+    expect(photos[0].body.type).toBe('image/jpeg');
+    expect(await keptPhotos()).toEqual([]);
+  });
+
+  test('leaves another account’s photos alone', async () => {
+    await keepPhoto('ann@example.com', '00000000000000a1', 1);
+    const { photos } = await backgroundSync(saved);
+    expect(photos).toEqual([]);
+    expect(await keptPhotos()).toHaveLength(1);
+  });
+
+  test.each<[string, Answer]>([
+    ['no connection', { networkError: true }],
+    ['signed out', { status: 401 }],
+    ['busy', { status: 429 }],
+    ['down', { status: 503 }],
+  ])('keeps them for next time when there is %s', async (_why, answer) => {
+    await keepPhoto('ryan@example.com', '00000000000000a1', 1);
+    await keepPhoto('ryan@example.com', '00000000000000b2', 2);
+    const { outcome, photos } = await backgroundSync(answer);
+    expect(outcome).toBe('try later');
+    // Stopped at the first, which waits with the rest
+    expect(photos).toHaveLength(1);
+    expect(await keptPhotos()).toHaveLength(2);
+  });
+
+  test.each<[string, Answer]>([
+    ['its item is gone', { status: 404, body: '{"error":"That item no longer exists"}' }],
+    ['the split is full', { status: 409, body: '{"error":"A split can have up to 300 photos"}' }],
+  ])('drops one the server refuses because %s, and sends the next', async (_why, refusal) => {
+    await keepPhoto('ryan@example.com', '00000000000000a1', 1);
+    await keepPhoto('ryan@example.com', '00000000000000b2', 2);
+    const { outcome, photos } = await backgroundSync([refusal, saved]);
+    expect(outcome).toBe('done');
+    expect(photos).toHaveLength(2);
+    expect(await keptPhotos()).toEqual([]);
   });
 });
 

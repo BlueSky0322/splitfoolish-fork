@@ -1,4 +1,4 @@
-import { CLIENT_ID_HEADER, MAX_PHOTOS_REMOVED } from '@shared/api';
+import { CLIENT_ID_HEADER, MAX_PHOTOS_REMOVED, PHOTO_ID_PARAM } from '@shared/api';
 import type {
   AcceptResult,
   ArchiveBody,
@@ -152,13 +152,15 @@ export const api = {
     }),
   updateSplit: (id: string, patch: SplitPatch) =>
     request<UpdateSplitResult>('PATCH', splitPath(id), patch),
-  /** Uploads a photo of an item's receipt, or of the whole split when itemId is null */
-  uploadAttachment: (id: string, photo: Blob, itemId: string | null) =>
-    upload<Attachment>(
-      'POST',
-      `${splitPath(id)}/attachments${itemId ? `?itemId=${encodeURIComponent(itemId)}` : ''}`,
-      photo,
-    ),
+  /**
+   * Uploads a photo of an item's receipt, or of the whole split when itemId is null.
+   * photoId is the photo's own id, so sending it again never adds it twice.
+   */
+  uploadAttachment: (id: string, photo: Blob, itemId: string | null, photoId: string) => {
+    const query = new URLSearchParams({ [PHOTO_ID_PARAM]: photoId });
+    if (itemId) query.set('itemId', itemId);
+    return upload<Attachment>('POST', `${splitPath(id)}/attachments?${query}`, photo);
+  },
   /** Removes photos, as many to a request as the server takes */
   deleteAttachments: async (id: string, attachmentIds: string[]) => {
     for (let at = 0; at < attachmentIds.length; at += MAX_PHOTOS_REMOVED) {

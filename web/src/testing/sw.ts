@@ -48,10 +48,12 @@ function load(fetch: unknown, caches?: unknown): Handlers {
     fetch,
     caches,
     indexedDB,
+    Blob,
     Headers,
     Response,
     TextEncoder,
     URL,
+    URLSearchParams,
     // Through the test's own, so fake timers reach the service worker too
     setTimeout: (run: () => void, ms: number) => setTimeout(run, ms),
   });
@@ -80,7 +82,11 @@ export async function backgroundSync(answers: Answer | Answer[]) {
   const batches = fetch.mock.calls
     .filter(([path]) => path.endsWith('/changes'))
     .map(([, init]) => (JSON.parse(init.body as string) as { changes: Change[] }).changes);
-  return { outcome, fetch, batches };
+  /** The photos sent, as where each went (path and query) */
+  const photos = fetch.mock.calls
+    .filter(([path]) => path.includes('/attachments'))
+    .map(([path, init]) => ({ path, body: init.body as Blob }));
+  return { outcome, fetch, batches, photos };
 }
 
 /** The browser's caches, kept in memory by URL, and shared by each page load in a test */

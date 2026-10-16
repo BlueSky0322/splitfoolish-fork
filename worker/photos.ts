@@ -7,9 +7,11 @@
 import {
   type Attachment,
   type AvatarResult,
+  isRowId,
   MAX_AVATAR_BYTES,
   MAX_PHOTO_BYTES,
   MAX_QR_BYTES,
+  PHOTO_ID_PARAM,
   type PaymentQrResult,
   type SplitPictureResult,
 } from '../shared/api';
@@ -72,17 +74,56 @@ export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
 
 export const assembleAttachments = (result: D1Result) => result.results as Attachment[];
 
+const attachmentByIdStatement = (db: D1Database, id: string) =>
+  db
+    .prepare(
+      `SELECT id, split_id AS splitId, item_id AS itemId, size, content_type AS contentType,
+       uploaded_by AS uploadedBy, created_at AS createdAt
+       FROM attachments WHERE id = ?`,
+    )
+    .bind(id);
+
+/**
+ * A photo sent again with the id it was first sent with (its answer was lost, say): the
+ * photo saved then, if it's the same one; null when that id is new
+ */
+function alreadyUploaded(
+  found: (Attachment & { splitId: string }) | undefined,
+  splitId: string,
+  itemId: string | null,
+  email: string,
+) {
+  if (found == null) return null;
+  const { splitId: savedIn, ...attachment } = found;
+  if (savedIn !== splitId || attachment.itemId !== itemId || attachment.uploadedBy !== email) {
+    return fail('That photo id is already used', 409);
+  }
+  return json<Attachment>(attachment);
+}
+
 export async function uploadAttachment(
   db: D1Database,
   splitId: string,
   email: string,
   req: Request,
 ) {
-  const itemId = new URL(req.url).searchParams.get('itemId');
-  const [count, item] = await db.batch<{ n?: number; id?: string }>([
+  const params = new URL(req.url).searchParams;
+  const itemId = params.get('itemId');
+  // Chosen by the app, so sending a photo again never adds it twice
+  const id = params.get(PHOTO_ID_PARAM);
+  if (id != null && !isRowId(id)) return fail('That photo id is not valid', 400);
+  const [count, item, existing] = await db.batch<{ n?: number; id?: string }>([
     db.prepare('SELECT count(*) AS n FROM attachments WHERE split_id = ?').bind(splitId),
     db.prepare('SELECT id FROM items WHERE id = ? AND split_id = ?').bind(itemId ?? '', splitId),
+    attachmentByIdStatement(db, id ?? ''),
   ]);
+  const again = alreadyUploaded(
+    existing.results[0] as (Attachment & { splitId: string }) | undefined,
+    splitId,
+    itemId,
+    email,
+  );
+  if (again) return again;
   if ((count.results[0]?.n ?? 0) >= MAX_PHOTOS_PER_SPLIT) {
     return fail(`A split can have up to ${MAX_PHOTOS_PER_SPLIT} photos`, 409);
   }
@@ -94,7 +135,7 @@ export async function uploadAttachment(
   if (image instanceof Response) return image;
 
   const attachment: Attachment = {
-    id: newId(),
+    id: id ?? newId(),
     itemId,
     size: image.bytes.length,
     contentType: image.contentType,
@@ -123,8 +164,16 @@ export async function uploadAttachment(
         .bind(attachment.id, image.bytes),
     ]);
   } catch (err) {
-    // The item was removed between the check above and now
     if (isConstraintError(err)) {
+      // The same photo, sent twice at once: the other request saved it
+      if (id != null) {
+        const saved = await attachmentByIdStatement(db, id).first<
+          Attachment & { splitId: string }
+        >();
+        const again = alreadyUploaded(saved ?? undefined, splitId, itemId, email);
+        if (again) return again;
+      }
+      // The item was removed between the check above and now
       return fail('That item no longer exists', 404);
     }
     throw err;
