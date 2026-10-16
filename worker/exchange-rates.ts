@@ -94,6 +94,32 @@ const FETCHERS: Record<FetchedRateSource, typeof fromWise> = {
   frankfurter: fromFrankfurter,
 };
 
+const isRate = (kept: unknown): kept is Rate => {
+  const r = kept as Partial<Rate> | null;
+  return (
+    isValidRate(r?.rate) &&
+    typeof r?.fetchedAt === 'number' &&
+    Object.values(RATE_PROVIDERS).includes(r.source as FetchedRateSource)
+  );
+};
+
+/**
+ * The copy kept in the cache, if there's a usable one. The cache is a bonus, as when
+ * keeping a copy: one that can't be read, or holds something that isn't a rate, is
+ * the same as none, and the services are asked instead.
+ */
+async function readKept(cache: Cache | null, key: string): Promise<Rate | null> {
+  if (!cache) return null;
+  try {
+    const kept = await cache.match(key);
+    const rate = kept ? await kept.json<unknown>() : null;
+    return isRate(rate) ? rate : null;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
+
 /** The rate to convert `from` into `to`: 1 unit of `from` is `rate` units of `to` */
 export async function getRate(
   env: RatesEnv,
@@ -109,8 +135,7 @@ export async function getRate(
   if (from === to) return { rate: 1, source: RATE_PROVIDERS[prefer], fetchedAt: deps.now() };
 
   const key = cacheKey(from, to, prefer);
-  const cached = deps.cache ? await deps.cache.match(key) : undefined;
-  const saved = cached ? await cached.json<Rate>() : null;
+  const saved = await readKept(deps.cache, key);
   if (saved && deps.now() - saved.fetchedAt < maxAgeMs) return saved;
 
   // The ECB doesn't publish every currency, so the other service is always the fallback

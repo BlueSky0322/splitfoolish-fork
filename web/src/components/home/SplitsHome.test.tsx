@@ -2,6 +2,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
+import type { MyInvite } from '@shared/api';
 import { fakeServer, item, renderApp, splitDetail, setupAppTests } from '../../testing/app';
 
 setupAppTests();
@@ -67,40 +68,70 @@ describe('My splits', () => {
     expect(await screen.findByText('Trip')).toBeTruthy();
   });
 
-  test('on a phone, search finds items and splits by name', async () => {
-    renderApp(
-      fakeServer(splitDetail('trip', [item({ id: 'ramen', name: 'Ichiran ramen', cost: 30 })])),
-      '/',
-      { size: 'phone' },
+  test('on a phone, search finds items and splits by name, and opens what you tap', async () => {
+    const server = fakeServer(
+      splitDetail('trip', [
+        item({ id: 'ramen', name: 'Ichiran ramen', cost: 30 }),
+        item({ id: 'taxi', name: 'Taxi', cost: 12 }),
+      ]),
     );
+    server.splits.set('tokyo', {
+      ...splitDetail('tokyo', [
+        item({ id: 'bar', name: 'Ramen bar', cost: 45 }),
+        item({ id: 'hotel', name: 'Hotel', cost: 400 }),
+      ]),
+      name: 'Tokyo',
+    });
+    renderApp(server, '/', { size: 'phone' });
+    const user = userEvent.setup();
+    await screen.findByText('Tokyo', {}, { timeout: 3000 });
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    const search = screen.getByRole('textbox', { name: 'Search' });
+
+    // Items from every split whose name matches, with the split each is in; no split is
+    // called anything like it
+    await user.type(search, 'ram');
+    expect(await screen.findByRole('heading', { name: 'Items', level: 2 })).toBeTruthy();
+    expect(results('Items')).toEqual([
+      expect.stringMatching(/^Ichiran ramenTrip, .*30\.00$/),
+      expect.stringMatching(/^Ramen barTokyo, .*45\.00$/),
+    ]);
+    expect(screen.queryByRole('heading', { name: 'Splits', level: 2 })).toBeNull();
+
+    // Splits by name, and no items when none match
+    await user.clear(search);
+    await user.type(search, 'tri');
+    expect(await screen.findByRole('heading', { name: 'Splits', level: 2 })).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Items', level: 2 })).toBeNull(),
+    );
+    expect(results('Splits')).toEqual([expect.stringMatching(/Trip2 people$/)]);
+
+    // Tapping an item opens the split it's in
+    await user.clear(search);
+    await user.type(search, 'bar');
+    await screen.findByRole('heading', { name: 'Items', level: 2 });
+    await user.click(screen.getByRole('button', { name: /^Ramen bar\s*Tokyo, / }));
+    await waitFor(() => expect(window.location.search).toBe('?s=tokyo'));
+    expect(await screen.findByText('Hotel')).toBeTruthy();
+  });
+
+  test('on a phone, Cancel closes search', async () => {
+    renderApp(fakeServer(splitDetail('trip')), '/', { size: 'phone' });
     const user = userEvent.setup();
     await screen.findByText('Trip', {}, { timeout: 3000 });
     await user.click(screen.getByRole('button', { name: 'Search' }));
-    await user.type(screen.getByRole('textbox', { name: 'Search' }), 'ram');
-    expect(await screen.findByText('Items')).toBeTruthy();
-    expect(screen.getByText('30.00')).toBeTruthy();
-    await user.clear(screen.getByRole('textbox', { name: 'Search' }));
     await user.type(screen.getByRole('textbox', { name: 'Search' }), 'tri');
     expect(await screen.findByRole('heading', { name: 'Splits', level: 2 })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(await screen.findByRole('heading', { name: 'Splits', level: 1 })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Search' })).toBeNull();
   });
 
-  test('on a phone, Invites is a tab of its own with accept and decline', async () => {
+  test('on a phone, Invites is a tab of its own, where an invite can be declined', async () => {
     const server = fakeServer();
-    server.invites = [
-      {
-        kind: 'invite',
-        id: 'inv',
-        splitId: 'penang',
-        splitName: 'Penang',
-        invitedBy: 'mei@example.com',
-        invitedByName: 'Mei',
-        createdAt: Date.now() - 2 * 3_600_000,
-        expiresAt: Date.now() + 86_400_000,
-      },
-    ];
+    server.invites = [invite('penang', 'Penang')];
     renderApp(server, '/?tab=invites', { size: 'phone' });
     const user = userEvent.setup();
     expect(await screen.findByText('Penang', {}, { timeout: 3000 })).toBeTruthy();
@@ -108,6 +139,29 @@ describe('My splits', () => {
     await user.click(screen.getByRole('button', { name: 'Decline Penang' }));
     await waitFor(() => expect(server.invites).toEqual([]));
     expect(await screen.findByText(/No invites right now/)).toBeTruthy();
+    expect(server.splits.has('penang')).toBe(false);
+  });
+
+  test('on a phone, accepting an invite joins that split and opens it, leaving the others', async () => {
+    const server = fakeServer();
+    server.notJoined = [
+      {
+        ...splitDetail('penang', [item({ id: 'laksa', name: 'Laksa', cost: 20 })]),
+        name: 'Penang',
+      },
+      { ...splitDetail('ipoh'), name: 'Ipoh' },
+    ];
+    server.invites = [invite('penang', 'Penang'), invite('ipoh', 'Ipoh')];
+    renderApp(server, '/?tab=invites', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('button', { name: 'Accept Penang' }, { timeout: 3000 }),
+    );
+
+    await waitFor(() => expect(window.location.search).toBe('?s=penang'));
+    expect(await screen.findByText('Laksa')).toBeTruthy();
+    expect([...server.splits.keys()]).toEqual(['penang']);
+    expect(server.invites.map((i) => i.splitId)).toEqual(['ipoh']);
   });
 
   test('on a computer, sorts splits by name, and back to your own order', async () => {
@@ -128,3 +182,21 @@ describe('My splits', () => {
     expect(order()).toEqual(['Trip', 'Alps', 'Zurich']);
   });
 });
+
+/** An invite from Mei to a split you're not in yet */
+const invite = (splitId: string, splitName: string): MyInvite => ({
+  kind: 'invite',
+  id: `invite-${splitId}`,
+  splitId,
+  splitName,
+  invitedBy: 'mei@example.com',
+  invitedByName: 'Mei',
+  createdAt: Date.now() - 2 * 3_600_000,
+  expiresAt: Date.now() + 86_400_000,
+});
+
+/** What each search result under `heading` says, in order */
+const results = (heading: 'Items' | 'Splits') =>
+  within(screen.getByRole('heading', { name: heading, level: 2 }).closest('section')!)
+    .getAllByRole('button')
+    .map((button) => button.textContent);

@@ -1,4 +1,5 @@
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
+import { MAX_CHANGES } from '@shared/api';
 import type { Change } from '@shared/types';
 import { ApiError, NetworkError, api } from '../api';
 
@@ -37,14 +38,29 @@ export function withOutbox<T>(splitId: string, fn: () => Promise<T>): Promise<T>
   return run;
 }
 
-/** Sends queued changes as one batch; the server applies all of them or none */
-export const sendQueued = (splitId: string, queued: Queued[]) =>
-  queued.length > 0
-    ? api.applyChanges(
-        splitId,
-        queued.map((q) => q.change),
-      )
-    : Promise.resolve();
+/** The changes that go in the next request: the server takes at most MAX_CHANGES */
+export const nextBatch = (queued: Queued[]) => queued.slice(0, MAX_CHANGES);
+
+/**
+ * Sends queued changes in order, as many at a time as the server takes. The server
+ * applies each request's changes all or none; `onSaved` hears each request's changes
+ * once saved, to cross them off, so a failure later on leaves only what wasn't sent.
+ */
+export async function sendQueued(
+  splitId: string,
+  queued: Queued[],
+  onSaved: (saved: Queued[]) => Promise<void> = () => Promise.resolve(),
+) {
+  for (let left = queued; left.length > 0; ) {
+    const batch = nextBatch(left);
+    await api.applyChanges(
+      splitId,
+      batch.map((q) => q.change),
+    );
+    left = left.slice(batch.length);
+    await onSaved(batch);
+  }
+}
 
 /**
  * Kept from whichever build queued it, so read as unknown and kept only if it's still a

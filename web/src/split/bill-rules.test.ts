@@ -86,6 +86,51 @@ describe('atRate', () => {
       0.1,
     );
     expect(dinner.cost).toBe(1);
-    expect(Math.round((dinner.exact!.a + dinner.exact!.b) * 100)).toBe(100);
+    // 3.33 and 6.67 PHP at 0.1 are 0.333 and 0.667 MYR: rounded down to 0.33 and 0.66,
+    // and the leftover cent goes to the larger remainder, Ben's
+    expect(dinner.exact).toEqual({ a: 0.33, b: 0.67 });
+    expect(dinner.original?.exact).toEqual({ a: 3.33, b: 6.67 });
+  });
+
+  test('converts each exact amount, the leftover cents going by remainder then by id', () => {
+    const dinner = atRate(
+      item({
+        cost: 3,
+        participants: [ann, ben, cat],
+        splitMode: 'exact',
+        exact: { c: 1, b: 1, a: 1 },
+        original: {
+          currency: 'PHP',
+          amount: 10,
+          exact: { c: 3.34, b: 3.33, a: 3.33 },
+          rate: 0.3,
+        },
+      }),
+      0.25,
+    );
+    // 10.00 PHP at 0.25 is 2.50. 3.34, 3.33 and 3.33 are 0.835, 0.8325 and 0.8325:
+    // 0.83 each is 2.49, and the one leftover cent goes to Cat, whose remainder is largest
+    expect(dinner.cost).toBe(2.5);
+    expect(dinner.exact).toEqual({ a: 0.83, b: 0.83, c: 0.84 });
+  });
+
+  test('breaks an exact tie in the leftover cent by person id', () => {
+    const taxi = atRate(
+      item({
+        cost: 1,
+        splitMode: 'exact',
+        exact: { b: 0.5, a: 0.5 },
+        original: { currency: 'PHP', amount: 0.1, exact: { b: 0.05, a: 0.05 }, rate: 10 },
+      }),
+      0.5,
+    );
+    // 0.10 PHP at 0.5 is 0.05: 0.025 each, so 0.02 each and Ann (id a) gets the last cent
+    expect(taxi.cost).toBe(0.05);
+    expect(taxi.exact).toEqual({ a: 0.03, b: 0.02 });
+  });
+
+  test('leaves an item in the split’s own currency as it is', () => {
+    const lunch = item({ splitMode: 'exact', exact: { a: 10, b: 20 } });
+    expect(atRate(lunch, 2)).toBe(lunch);
   });
 });

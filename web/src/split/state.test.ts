@@ -2,10 +2,11 @@ import { produce } from 'immer';
 import { describe, expect, test } from 'vitest';
 import type { Item, Person } from '@shared/types';
 import type { SplitAction, SplitState } from './state';
-import { splitReducer, toApiItem } from './state';
+import { splitReducer, toApiItem, toClientItem } from './state';
 
 const ann: Person = { id: 'a', name: 'Ann', memberEmail: null };
 const ben: Person = { id: 'b', name: 'Ben', memberEmail: null };
+const cat: Person = { id: 'c', name: 'Cat', memberEmail: 'cat@example.com' };
 
 const apiItem = (over: Partial<Item> = {}): Item => ({
   id: 'i1',
@@ -38,7 +39,75 @@ describe('splitReducer', () => {
   });
 
   test('round-trips an item back to the API shape', () => {
-    expect(toApiItem(loaded().items[0])).toMatchObject(apiItem());
+    expect(toApiItem(loaded().items[0])).toEqual(apiItem());
+  });
+
+  // Every field an item can carry, so one the conversion forgot shows up as a difference
+  test.each<[string, Item]>([
+    [
+      'split by shares',
+      apiItem({
+        id: 'i7',
+        name: 'Boat trip',
+        cost: 123.45,
+        payerId: 'c',
+        participantIds: ['b', 'c', 'a'],
+        splitMode: 'shares',
+        shares: { a: 1, b: 3, c: 2 },
+        category: 'transport',
+        notes: 'Paid at the pier',
+        createdAt: Date.UTC(2026, 9, 11, 7, 45),
+      }),
+    ],
+    [
+      'split by exact amounts in another currency',
+      apiItem({
+        id: 'i8',
+        name: 'Ramen',
+        cost: 30,
+        payerId: 'b',
+        participantIds: ['a', 'b'],
+        splitMode: 'exact',
+        exact: { a: 18, b: 12 },
+        category: 'food',
+        notes: 'Two bowls\nand gyoza',
+        createdAt: Date.UTC(2026, 9, 12, 12),
+        original: {
+          currency: 'JPY',
+          amount: 1000,
+          exact: { a: 600, b: 400 },
+          rate: 0.03,
+          rateSource: 'wise',
+          rateAt: Date.UTC(2026, 9, 12, 11),
+        },
+      }),
+    ],
+  ])('an item %s comes back from the app unchanged', (_, item) => {
+    const client = toClientItem(item, [ann, ben, cat]);
+    expect(client).not.toBeNull();
+    expect(client!.payer).toEqual(item.payerId === 'c' ? cat : ben);
+    expect(client!.participants.map((p) => p.id)).toEqual(item.participantIds);
+    expect(toApiItem(client!)).toEqual(item);
+  });
+
+  test('loading and saving keeps shares and exact amounts', () => {
+    const items = [
+      apiItem({ id: 's', splitMode: 'shares', shares: { a: 2, b: 5 } }),
+      apiItem({
+        id: 'e',
+        splitMode: 'exact',
+        exact: { a: 10.5, b: 19.5 },
+        original: { currency: 'SGD', amount: 9, exact: { a: 3.15, b: 5.85 }, rate: 3.3333 },
+      }),
+    ];
+    const state = run(
+      { people: [], items: [] },
+      { type: 'LOAD_STATE', payload: { people: [ann, ben], items } },
+    );
+    expect(state.items.map(toApiItem)).toEqual(items);
+    expect(state.items[0].shares).toEqual({ a: 2, b: 5 });
+    expect(state.items[1].exact).toEqual({ a: 10.5, b: 19.5 });
+    expect(state.items[1].original?.exact).toEqual({ a: 3.15, b: 5.85 });
   });
 
   test('renaming a person renames them on the items that refer to them', () => {

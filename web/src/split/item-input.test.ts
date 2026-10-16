@@ -80,6 +80,22 @@ describe('buildItemInput', () => {
     });
   });
 
+  test('converts each exact amount, sharing out the leftover cents', () => {
+    const item = buildItemInput({
+      ...fields,
+      costCents: 3330,
+      rate: 0.0333,
+      participantIds: ['c', 'b', 'a'],
+      exact: { a: 333, b: 333, c: 334 },
+    });
+    // 333, 333 and 334 JPY at 0.0333 are 11.0889, 11.0889 and 11.1222 of 33.30:
+    // 11.08, 11.08 and 11.12 make 33.28, and the two leftover cents go to the larger
+    // remainders, Ann's and Ben's
+    expect(item.cost).toBe(33.3);
+    expect(item.exact).toEqual({ a: 11.09, b: 11.09, c: 11.12 });
+    expect(item.original?.exact).toEqual({ a: 333, b: 333, c: 334 });
+  });
+
   test('shows the amounts as typed while there is no rate yet', () => {
     const item = buildItemInput({
       ...fields,

@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest';
 import {
   fakeServer,
   item,
+  liveRoom,
   liveSockets,
   renderApp,
   setupAppTests,
@@ -25,8 +26,11 @@ describe('the split page', () => {
     renderApp(fakeServer(trip()), '/?s=trip');
     expect(await screen.findByText('Dinner')).toBeTruthy();
     expect(screen.getByText('Taxi')).toBeTruthy();
-    // Ryan paid 90 and Ann 30, split evenly: Ann owes Ryan 30
-    expect((await screen.findAllByText(/RM\s?30\.00/)).length).toBeGreaterThan(0);
+    // Ryan paid 90 and Ann 30, split evenly: Ann owes Ryan 30, the one transfer
+    const settling = screen.getByText('Who pays who').closest('section')!;
+    const transfer = within(settling).getByText(/^(Ann pays|Ryan pays|You pay) (Ann|Ryan)$/);
+    expect(transfer.textContent).toBe('Ann pays Ryan');
+    expect(within(transfer.parentElement!).getByText(/^RM\s?30\.00$/)).toBeTruthy();
   });
 
   test('adds an item typed as a sum, and sends it to the server', async () => {
@@ -68,18 +72,51 @@ describe('the split page', () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     await screen.findByText('Dinner');
-    await waitFor(() => expect(liveSockets().at(-1)?.readyState).toBe(1));
+    // Listening at the split's own live endpoint, in its room
+    await waitFor(() => expect(liveRoom('trip')).toHaveLength(1));
+    expect(new URL(liveRoom('trip')[0].url).pathname).toBe('/api/splits/trip/ws');
 
     server.splits.get('trip')!.items.push(item({ id: 'hotel', name: 'Hotel', cost: 200 }));
-    liveSockets().at(-1)!.hear({ type: 'changed', by: 'someone-else' });
+    liveRoom('trip')[0].hear({ type: 'changed', by: 'someone-else' });
     expect(await screen.findByText('Hotel')).toBeTruthy();
+  });
+
+  test('lets go of the live connection while offline, even one that has not opened yet', async () => {
+    let online = true;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => online });
+    try {
+      renderApp(fakeServer(trip()), '/?s=trip');
+      await screen.findByText('Dinner');
+      await waitFor(() => expect(liveRoom('trip')).toHaveLength(1));
+
+      online = false;
+      window.dispatchEvent(new Event('offline'));
+      expect(liveRoom('trip')).toHaveLength(0);
+      // Back for a moment, and gone again before the new connection opens
+      online = true;
+      window.dispatchEvent(new Event('online'));
+      online = false;
+      window.dispatchEvent(new Event('offline'));
+      expect(liveSockets()).toHaveLength(2);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(liveSockets().map((socket) => socket.readyState)).toEqual([3, 3]);
+
+      // Back for good: one connection, to the same room
+      online = true;
+      window.dispatchEvent(new Event('online'));
+      await waitFor(() => expect(liveRoom('trip')).toHaveLength(1));
+      expect(liveSockets()).toHaveLength(3);
+    } finally {
+      // The browser's own answer again
+      delete (navigator as { onLine?: boolean }).onLine;
+    }
   });
 
   test('says so when someone removes you from the split while it is open', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     await screen.findByText('Dinner');
-    await waitFor(() => expect(liveSockets().at(-1)?.readyState).toBe(1));
+    await waitFor(() => expect(liveRoom('trip')).toHaveLength(1));
 
     server.splits.delete('trip');
     liveSockets().at(-1)!.close(LIVE_REMOVED_CODE);
@@ -133,13 +170,14 @@ describe('the split page', () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     await screen.findByText('Dinner');
-    await waitFor(() => expect(liveSockets().at(-1)?.readyState).toBe(1));
+    await waitFor(() => expect(liveRoom('trip')).toHaveLength(1));
 
     liveSockets().at(-1)!.close(1006);
     // Missed while disconnected
     server.splits.get('trip')!.items.push(item({ id: 'hotel', name: 'Hotel', cost: 200 }));
-    // The first retry waits a second
-    await waitFor(() => expect(liveSockets()).toHaveLength(2), { timeout: 3000 });
+    // The first retry waits a second, and joins the same room
+    await waitFor(() => expect(liveRoom('trip')).toHaveLength(1), { timeout: 3000 });
+    expect(liveSockets()).toHaveLength(2);
     expect(await screen.findByText('Hotel')).toBeTruthy();
   });
 
@@ -201,17 +239,81 @@ describe('the split page', () => {
     expect(screen.queryByText('Dinner')).toBeNull();
 
     // A swipe moves on to the next tab
-    const content = screen.getByText('Ann pays Ryan').closest('[class*=content]')!;
-    fireEvent.touchStart(content, { touches: [{ clientX: 300, clientY: 400 }] });
-    fireEvent.touchEnd(content, { changedTouches: [{ clientX: 100, clientY: 410 }] });
-    expect(screen.getByRole('tab', { name: 'Photos' }).getAttribute('aria-selected')).toBe('true');
+    swipe(tabContent('Ann pays Ryan'), [
+      [300, 400],
+      [280, 401],
+      [100, 410],
+    ]);
+    expect(selectedTab()).toBe('Photos');
     expect(await screen.findByText(/No photos yet/)).toBeTruthy();
+  });
 
-    // The split's menu is a sheet
-    await user.click(screen.getByRole('button', { name: 'More' }));
+  test("on a phone, the split's menu is a sheet", async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    const more = await screen.findByRole('button', { name: 'More' });
+    await waitFor(() => expect(more.hasAttribute('disabled')).toBe(false));
+    await user.click(more);
     const menu = await screen.findByRole('dialog');
     expect(within(menu).getByText('People')).toBeTruthy();
     expect(within(menu).getByText('Split settings')).toBeTruthy();
+  });
+
+  test('on a phone, only a long sideways swipe moves between tabs', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    await screen.findByText('Dinner');
+
+    // Scrolling down the list: decided by the first move, so drifting sideways after
+    // doesn't turn it into a swipe
+    swipe(tabContent('Dinner'), [
+      [300, 400],
+      [298, 380],
+      [150, 390],
+    ]);
+    expect(selectedTab()).toBe('Items');
+    // Sideways, but too short
+    swipe(tabContent('Dinner'), [
+      [300, 400],
+      [280, 400],
+      [250, 401],
+    ]);
+    expect(selectedTab()).toBe('Items');
+    // Long enough: on to Settle up, and back again the other way
+    swipe(tabContent('Dinner'), [
+      [300, 400],
+      [280, 400],
+      [200, 402],
+    ]);
+    expect(selectedTab()).toBe('Settle up');
+    expect(await screen.findByText('Ann pays Ryan')).toBeTruthy();
+    swipe(tabContent('Ann pays Ryan'), [
+      [100, 400],
+      [120, 400],
+      [300, 398],
+    ]);
+    expect(selectedTab()).toBe('Items');
+    expect(await screen.findByText('Dinner')).toBeTruthy();
+  });
+
+  test('on a phone, swiping does nothing while picking items', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    // A long press on an item starts picking
+    fireEvent.pointerDown(await screen.findByText('Taxi'), {
+      pointerType: 'touch',
+      clientX: 50,
+      clientY: 300,
+    });
+    const bar = await screen.findByRole('toolbar', { name: 'Selected items' });
+    expect(within(bar).getByText('1 selected')).toBeTruthy();
+
+    swipe(tabContent('Dinner'), [
+      [300, 400],
+      [280, 400],
+      [100, 405],
+    ]);
+    expect(selectedTab()).toBe('Items');
+    expect(screen.getByText('Dinner')).toBeTruthy();
+    expect(screen.queryByText('Ann pays Ryan')).toBeNull();
   });
 
   test('on a computer, sorts items from the toolbar, either way round', async () => {
@@ -227,19 +329,47 @@ describe('the split page', () => {
     await waitFor(() => expect(names()).toEqual(['Taxi', 'Dinner']));
   });
 
-  test('on a phone, an item duplicates from its own sheet', async () => {
+  test('on a phone, an item duplicates from its own sheet, keeping its date', async () => {
     const server = fakeServer(trip());
+    const taxi = structuredClone(server.splits.get('trip')!.items[1]);
     renderApp(server, '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     await user.click(await screen.findByText('Taxi'));
     const detail = await screen.findByRole('dialog');
     await user.click(within(detail).getByRole('button', { name: 'Duplicate item' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Keep its date' }));
-    await waitFor(() =>
-      expect(server.splits.get('trip')!.items.filter((i) => i.name === 'Taxi')).toHaveLength(2),
-    );
-    // The form has no menu of its own on a phone
-    await user.click((await screen.findAllByText('Taxi'))[0]);
+
+    // A new item, the same as the original down to when it was bought
+    await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(3));
+    const copy = server.splits.get('trip')!.items[2];
+    expect(copy.id).not.toBe(taxi.id);
+    expect(copy).toEqual({ ...taxi, id: copy.id });
+    expect(server.splits.get('trip')!.items[1]).toEqual(taxi);
+    expect(await screen.findAllByText('Taxi')).toHaveLength(2);
+  });
+
+  test('on a computer, an item duplicates from the form, dated today', async () => {
+    const server = fakeServer(trip());
+    const taxi = structuredClone(server.splits.get('trip')!.items[1]);
+    const before = Date.now();
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Taxi'));
+    const form = await screen.findByRole('dialog');
+    await user.click(within(form).getByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Dated today' }));
+
+    await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(3));
+    const copy = server.splits.get('trip')!.items[2];
+    expect(copy.id).not.toBe(taxi.id);
+    expect(copy.createdAt).toBeGreaterThanOrEqual(before);
+    expect(copy).toEqual({ ...taxi, id: copy.id, createdAt: copy.createdAt });
+  });
+
+  test('on a phone, the item form has no menu of its own', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Taxi'));
     await user.click(
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Edit item' }),
     );
@@ -385,6 +515,19 @@ describe('the split page', () => {
     expect(server.splits.get('trip')!.invites).toEqual([]);
   });
 });
+
+/** A finger on `el`, moving through `points` ([x, y]) and lifted at the last */
+function swipe(el: Element, points: [number, number][]) {
+  const at = ([clientX, clientY]: [number, number]) => [{ clientX, clientY }];
+  fireEvent.touchStart(el, { touches: at(points[0]) });
+  for (const point of points.slice(1)) fireEvent.touchMove(el, { touches: at(point) });
+  fireEvent.touchEnd(el, { changedTouches: at(points[points.length - 1]) });
+}
+
+/** Under the tabs on a phone, where `shown` is: what's swiped */
+const tabContent = (shown: string) => screen.getByText(shown).closest('[class*=_content_]')!;
+
+const selectedTab = () => screen.getByRole('tab', { selected: true }).textContent;
 
 async function renameTo(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getAllByRole('button', { name: 'More' })[0]);

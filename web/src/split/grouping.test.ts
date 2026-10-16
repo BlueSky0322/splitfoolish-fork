@@ -45,6 +45,31 @@ describe('sorting items', () => {
     ]);
   });
 
+  // Names differing only in case sort as equal, so the one added first comes first,
+  // in either direction
+  test('names differing only in case keep the order they were added in', () => {
+    const same = [
+      item('x', 'TAXI', 10, ann, day(12)),
+      item('y', 'taxi', 10, ann, day(10)),
+      item('z', 'Taxi', 10, ann, day(11)),
+    ];
+    expect(sortItems(same, 'name', 'asc').map((i) => i.id)).toEqual(['y', 'z', 'x']);
+    expect(sortItems(same, 'name', 'desc').map((i) => i.id)).toEqual(['y', 'z', 'x']);
+    expect(
+      sortItems([...same, item('w', 'Bus', 1, ann, day(13))], 'name', 'desc').map((i) => i.id),
+    ).toEqual(['y', 'z', 'x', 'w']);
+  });
+
+  test('by payer ignores case, then keeps the order added', () => {
+    const bea: Person = { id: 'c', name: 'BEN', memberEmail: null };
+    const mixed = [
+      item('1', 'One', 1, bea, day(12)),
+      item('2', 'Two', 1, ben, day(11)),
+      item('3', 'Three', 1, ann, day(13)),
+    ];
+    expect(sortItems(mixed, 'payer', 'asc').map((i) => i.id)).toEqual(['3', '2', '1']);
+  });
+
   test('largest first', () => {
     expect(sortItems(items, 'amount', 'desc').map((i) => i.id)).toEqual(['1', '3', '2', '4']);
   });
@@ -66,9 +91,40 @@ describe('grouping items', () => {
 
   test('by payer names the group after the payer', () => {
     const groups = groupItems(items, 'payer', 'date', 'asc');
-    expect(groups.map((g) => [g.label, g.items.length])).toEqual([
-      ['Ann', 2],
-      ['ben', 2],
+    expect(groups.map((g) => [g.key, g.label, g.items.map((i) => i.id), g.subtotalCents])).toEqual([
+      ['a', 'Ann', ['1', '3'], 36850],
+      ['b', 'ben', ['2', '4'], 10525],
+    ]);
+  });
+
+  test('by payer keeps two people with the same name apart', () => {
+    const otherAnn: Person = { id: 'a2', name: 'Ann', memberEmail: null };
+    const groups = groupItems(
+      [...items, item('5', 'Snacks', 7.5, otherAnn, day(12))],
+      'payer',
+      'date',
+      'asc',
+    );
+    expect(groups.map((g) => [g.key, g.label, g.items.map((i) => i.id)])).toEqual([
+      ['a', 'Ann', ['1', '3']],
+      ['b', 'ben', ['2', '4']],
+      ['a2', 'Ann', ['5']],
+    ]);
+  });
+
+  test('by category keeps categories apart whatever their spelling', () => {
+    const groups = groupItems(
+      [
+        item('1', 'Bus', 2, ann, day(10), 'transport'),
+        item('2', 'Ferry', 3, ann, day(11), 'Transport'),
+      ],
+      'category',
+      'date',
+      'asc',
+    );
+    expect(groups.map((g) => [g.key, g.label])).toEqual([
+      ['transport', 'Transport'],
+      ['Transport', 'Transport'],
     ]);
   });
 
@@ -88,7 +144,10 @@ describe('grouping items', () => {
   });
 
   test('no grouping is one group of everything', () => {
-    const [all] = groupItems(items, 'none', 'amount', 'desc');
+    const groups = groupItems(items, 'none', 'amount', 'desc');
+    expect(groups).toHaveLength(1);
+    const [all] = groups;
+    expect(all).toMatchObject({ key: 'all', label: 'All items' });
     expect(all.items.map((i) => i.id)).toEqual(['1', '3', '2', '4']);
     expect(all.subtotalCents).toBe(47375);
   });

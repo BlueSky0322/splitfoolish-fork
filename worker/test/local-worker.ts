@@ -1,9 +1,13 @@
 // Starts the real Worker with `wrangler dev` against a fresh, empty local D1, for tests
 // that go through the API the way the app does. Access is switched off and requests say
 // who they are with the X-Dev-User header (see auth.ts).
+//
+// Every step has a time limit, and whatever has been started so far is stopped again if
+// a later step fails. Each run has its own ports, database folder and stand-in rate
+// services, so several runs can go at once.
 
 import type { ChildProcess } from 'node:child_process';
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
@@ -11,17 +15,78 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const ROOT = resolve(__dirname, '../..');
+const MIGRATE_TIMEOUT_MS = 60_000;
 const READY_TIMEOUT_MS = 90_000;
+/** How long one "are you up yet" request may take before it's given up and tried again */
+const PROBE_TIMEOUT_MS = 5_000;
+/** How long wrangler and workerd get to exit after being asked, before they're killed */
+const EXIT_TIMEOUT_MS = 10_000;
+/** The pair the readiness check asks for, which only this run's fake services hear about */
+const PROBE_PAIR = ['PRB', 'PRC'] as const;
 
 const freePort = () =>
   new Promise<number>((done, fail) => {
     const server = createServer();
     server.once('error', fail);
-    server.listen(0, () => {
+    server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as { port: number };
       server.close(() => done(port));
     });
   });
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Whether any process in the group led by `pid` is still running */
+function groupAlive(pid: number) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM: something is there, it just isn't ours to signal
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function signalGroup(pid: number, signal: NodeJS.Signals) {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    // Already gone
+  }
+}
+
+/**
+ * Stops a process started with `detached` and everything it started (wrangler starts
+ * workerd), waiting until they have all exited: politely first, then by force.
+ */
+async function stopGroup(child: ChildProcess) {
+  const pid = child.pid;
+  if (pid == null) return;
+  const waitGone = async (ms: number) => {
+    const until = Date.now() + ms;
+    while (groupAlive(pid) && Date.now() < until) await sleep(50);
+    return !groupAlive(pid);
+  };
+  signalGroup(pid, 'SIGTERM');
+  if (await waitGone(EXIT_TIMEOUT_MS)) return;
+  signalGroup(pid, 'SIGKILL');
+  if (!(await waitGone(EXIT_TIMEOUT_MS))) {
+    throw new Error(`wrangler (process group ${pid}) didn't exit`);
+  }
+}
+
+/** Starts a command in its own process group, collecting everything it prints */
+function start(args: string[], env: NodeJS.ProcessEnv) {
+  const child = spawn('npx', args, { cwd: ROOT, env, stdio: 'pipe', detached: true });
+  const output = { text: '' };
+  child.stdout?.on('data', (d) => (output.text += d));
+  child.stderr?.on('data', (d) => (output.text += d));
+  const exited = new Promise<number | null>((done) => {
+    child.once('exit', (code) => done(code));
+    child.once('error', () => done(null));
+  });
+  return { child, output, exited };
+}
 
 export interface LocalWorker {
   /** Calls the API as `who`, returning the status and parsed body */
@@ -32,51 +97,98 @@ export interface LocalWorker {
     body?: unknown,
     headers?: Record<string, string>,
   ) => Promise<{ status: number; data: T }>;
+  /** The same call, answering with the response as it came, for bytes such as a photo */
+  raw: (
+    who: string,
+    method: string,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ) => Promise<Response>;
   /** The stand-in for Wise and Frankfurter that the Worker gets its rates from */
   rates: FakeRates;
   /** Where it's listening, e.g. http://127.0.0.1:1234 */
   base: string;
-  stop: () => void;
+  /** Stops the Worker and the fake services, then deletes the database */
+  stop: () => Promise<void>;
 }
 
+type Service = 'wise' | 'frankfurter';
+
 export interface FakeRates {
-  /** 1 `from` is `rate` `to`, on both services */
-  set: (from: string, to: string, rate: number) => void;
+  /**
+   * 1 `from` is `rate` `to`, on both services or only the one named. The Worker keeps
+   * every rate it fetches for hours, across tests, so a pair is refused a rate other
+   * than one it was given earlier in the run: use newCurrency() for a pair of your own.
+   */
+  set: (from: string, to: string, rate: number, service?: Service) => void;
   /** Makes one service answer 500 */
-  down: (service: 'wise' | 'frankfurter', isDown: boolean) => void;
+  down: (service: Service, isDown: boolean) => void;
   /** Forgets every rate and brings both services back, so tests don't lean on each other */
   reset: () => void;
+  /**
+   * A made-up currency code no other test has, so the rates the Worker keeps from other
+   * tests can't get in the way
+   */
+  newCurrency: () => string;
 }
 
 /** A tiny HTTP server answering like Wise's /v1/rates and Frankfurter's /v1/latest */
-async function startFakeRates(): Promise<FakeRates & { base: string; close: () => void }> {
+async function startFakeRates(): Promise<
+  FakeRates & { base: string; close: () => void; heardProbe: () => boolean }
+> {
   const table = new Map<string, number>();
+  // Every rate a pair was given this run, to catch a test that would get a kept one
+  const given = new Map<string, number>();
   const isDown = { wise: false, frankfurter: false };
+  let probed = false;
+  let codes = 0;
   const server = createHttpServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
     const send = (status: number, body: unknown) => {
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(body));
     };
+    const heard = (from: string | null, to: string | null) => {
+      if (from === PROBE_PAIR[0] && to === PROBE_PAIR[1]) probed = true;
+    };
     if (url.pathname === '/v1/rates') {
       const [from, to] = [url.searchParams.get('source'), url.searchParams.get('target')];
-      const rate = table.get(`${from}${to}`);
+      heard(from, to);
+      const rate = table.get(`wise:${from}${to}`);
       if (isDown.wise || req.headers.authorization !== 'Bearer test-token') return send(500, {});
       return rate == null ? send(400, {}) : send(200, [{ rate, source: from, target: to }]);
     }
     if (url.pathname === '/v1/latest') {
       const [from, to] = [url.searchParams.get('base'), url.searchParams.get('symbols')];
-      const rate = table.get(`${from}${to}`);
+      heard(from, to);
+      const rate = table.get(`frankfurter:${from}${to}`);
       if (isDown.frankfurter) return send(500, {});
       return rate == null ? send(404, {}) : send(200, { base: from, rates: { [to!]: rate } });
     }
     send(404, {});
   });
-  const port = await freePort();
-  await new Promise<void>((done) => server.listen(port, '127.0.0.1', done));
+  await new Promise<void>((done, fail) => {
+    server.once('error', fail);
+    server.listen(0, '127.0.0.1', done);
+  });
+  const { port } = server.address() as { port: number };
   return {
     base: `http://127.0.0.1:${port}`,
-    set: (from, to, rate) => table.set(`${from}${to}`, rate),
+    set: (from, to, rate, service) => {
+      for (const s of service == null ? (['wise', 'frankfurter'] as const) : [service]) {
+        const key = `${s}:${from}${to}`;
+        const before = given.get(key);
+        if (before != null && before !== rate) {
+          throw new Error(
+            `${from} to ${to} on ${s} was already ${before} this run, and the Worker may ` +
+              'still have that rate: use rates.newCurrency() for a pair of your own',
+          );
+        }
+        given.set(key, rate);
+        table.set(key, rate);
+      }
+    },
     down: (service, value) => {
       isDown[service] = value;
     },
@@ -85,98 +197,131 @@ async function startFakeRates(): Promise<FakeRates & { base: string; close: () =
       isDown.wise = false;
       isDown.frankfurter = false;
     },
+    newCurrency: () => {
+      // QBA, QBB, ...: Q codes aren't real currencies, bar QAR, which is never reached
+      const n = 26 + codes++;
+      if (n >= 26 * 26) throw new Error('Out of made-up currency codes');
+      const letter = (i: number) => String.fromCharCode(65 + i);
+      return `Q${letter(Math.floor(n / 26))}${letter(n % 26)}`;
+    },
+    heardProbe: () => probed,
     close: () => server.close(),
   };
 }
 
 export async function startLocalWorker(): Promise<LocalWorker> {
-  const persist = mkdtempSync(join(tmpdir(), 'splitfoolish-test-'));
-  // wrangler dev wants the assets folder to exist, even if the app isn't built
-  mkdirSync(join(ROOT, 'dist'), { recursive: true });
-  const env = { ...process.env, CI: '1', WRANGLER_SEND_METRICS: 'false' };
+  // Undone in reverse order, so the Worker has exited before its database is deleted
+  const cleanups: (() => unknown)[] = [];
+  let stopping: Promise<void> | null = null;
+  const stop = () =>
+    (stopping ??= (async () => {
+      const failures: unknown[] = [];
+      for (const cleanup of cleanups.reverse()) {
+        try {
+          await cleanup();
+        } catch (err) {
+          failures.push(err);
+        }
+      }
+      if (failures.length > 0) throw failures[0];
+    })());
 
-  execFileSync(
-    'npx',
-    [
-      'wrangler',
-      'd1',
-      'migrations',
-      'apply',
-      'splitfoolish-db',
-      '--local',
-      '--persist-to',
-      persist,
-    ],
-    { cwd: ROOT, env, stdio: 'pipe' },
-  );
+  try {
+    const persist = mkdtempSync(join(tmpdir(), 'splitfoolish-test-'));
+    cleanups.push(() => rmSync(persist, { recursive: true, force: true }));
+    // wrangler dev wants the assets folder to exist, even if the app isn't built
+    mkdirSync(join(ROOT, 'dist'), { recursive: true });
+    const env = { ...process.env, CI: '1', WRANGLER_SEND_METRICS: 'false' };
 
-  const rates = await startFakeRates();
-  const port = await freePort();
-  const child: ChildProcess = spawn(
-    'npx',
-    [
-      'wrangler',
-      'dev',
-      '--port',
-      String(port),
-      '--persist-to',
-      persist,
-      '--var',
-      'ACCESS_TEAM_DOMAIN:',
-      '--var',
-      'ACCESS_AUD:',
-      '--var',
-      'DEV_USER_EMAIL:nobody@example.com',
-      '--var',
-      `WISE_BASE:${rates.base}`,
-      '--var',
-      `FRANKFURTER_BASE:${rates.base}`,
-      '--var',
-      'WISE_TOKEN:test-token',
-      '--var',
-      'RECONVERT_RETRY_MS:0',
-      '--log-level',
-      'warn',
-    ],
-    { cwd: ROOT, env, stdio: 'pipe', detached: true },
-  );
-  let output = '';
-  child.stdout?.on('data', (d) => (output += d));
-  child.stderr?.on('data', (d) => (output += d));
-
-  const base = `http://127.0.0.1:${port}`;
-  const stop = () => {
-    // The whole group, so workerd goes too
-    try {
-      process.kill(-child.pid!, 'SIGTERM');
-    } catch {
-      // Already gone
+    const migrate = start(
+      [
+        'wrangler',
+        'd1',
+        'migrations',
+        'apply',
+        'splitfoolish-db',
+        '--local',
+        '--persist-to',
+        persist,
+      ],
+      env,
+    );
+    cleanups.push(() => stopGroup(migrate.child));
+    const migrated = await Promise.race([
+      migrate.exited,
+      sleep(MIGRATE_TIMEOUT_MS).then(() => 'late'),
+    ]);
+    if (migrated !== 0) {
+      throw new Error(
+        migrated === 'late'
+          ? `Migrations took over ${MIGRATE_TIMEOUT_MS / 1000}s:\n${migrate.output.text}`
+          : `Migrations failed:\n${migrate.output.text}`,
+      );
     }
-    rates.close();
-    rmSync(persist, { recursive: true, force: true });
-  };
 
-  const started = Date.now();
-  for (;;) {
-    try {
-      const res = await fetch(`${base}/api/me`);
-      if (res.ok) break;
-    } catch {
-      // Not listening yet
-    }
-    if (child.exitCode != null || Date.now() - started > READY_TIMEOUT_MS) {
-      stop();
-      throw new Error(`wrangler dev didn't start:\n${output}`);
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
+    const rates = await startFakeRates();
+    cleanups.push(() => rates.close());
+    const [port, inspectorPort] = [await freePort(), await freePort()];
+    const worker = start(
+      [
+        'wrangler',
+        'dev',
+        '--ip',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--inspector-port',
+        String(inspectorPort),
+        '--persist-to',
+        persist,
+        '--var',
+        'ACCESS_TEAM_DOMAIN:',
+        '--var',
+        'ACCESS_AUD:',
+        '--var',
+        'DEV_USER_EMAIL:nobody@example.com',
+        '--var',
+        `WISE_BASE:${rates.base}`,
+        '--var',
+        `FRANKFURTER_BASE:${rates.base}`,
+        '--var',
+        'WISE_TOKEN:test-token',
+        '--var',
+        'RECONVERT_RETRY_MS:0',
+        '--log-level',
+        'warn',
+      ],
+      env,
+    );
+    cleanups.push(() => stopGroup(worker.child));
+    let exitCode: number | null | undefined;
+    void worker.exited.then((code) => (exitCode = code));
 
-  return {
-    stop,
-    rates,
-    base,
-    call: async (who, method, path, body, headers = {}) => {
-      const res = await fetch(base + path, {
+    // Ready once it answers a request that reaches this run's fake rate services, so a
+    // Worker from another run that got the same port is never mistaken for this one
+    const base = `http://127.0.0.1:${port}`;
+    const started = Date.now();
+    let answered = false;
+    for (;;) {
+      try {
+        const res = await fetch(`${base}/api/rates?from=${PROBE_PAIR[0]}&to=${PROBE_PAIR[1]}`, {
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        });
+        await res.arrayBuffer();
+        answered = true;
+      } catch {
+        // Not listening yet, or too slow to answer: asked again
+      }
+      if (rates.heardProbe()) break;
+      if (exitCode !== undefined || Date.now() - started > READY_TIMEOUT_MS) {
+        const why = answered ? 'its port answers, but not from this run' : "it didn't start";
+        throw new Error(`wrangler dev on port ${port}: ${why}\n${worker.output.text}`);
+      }
+      await sleep(250);
+    }
+
+    const raw: LocalWorker['raw'] = (who, method, path, body, headers = {}) =>
+      fetch(base + path, {
         method,
         headers: { 'X-Dev-User': who, 'Content-Type': 'application/json', ...headers },
         // Bytes (a photo) and strings go as they are; anything else as JSON
@@ -185,14 +330,26 @@ export async function startLocalWorker(): Promise<LocalWorker> {
             ? (body as BodyInit | undefined)
             : JSON.stringify(body),
       });
-      const text = await res.text();
-      let data: any = null;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-      return { status: res.status, data };
-    },
-  };
+
+    return {
+      stop,
+      rates,
+      base,
+      raw,
+      call: async (who, method, path, body, headers) => {
+        const res = await raw(who, method, path, body, headers);
+        const text = await res.text();
+        let data: any = null;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+        return { status: res.status, data };
+      },
+    };
+  } catch (err) {
+    await stop().catch(() => {});
+    throw err;
+  }
 }
