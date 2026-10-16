@@ -62,6 +62,30 @@ describe('getRate', () => {
     });
   });
 
+  it('fetches as usual when the cache cannot be read, or holds something unreadable', async () => {
+    const failing = {
+      match: () => Promise.reject(new Error('cache unavailable')),
+      put: () => Promise.resolve(),
+    } as unknown as Cache;
+    const s = services(down, ecbRate(4.1));
+    expect(
+      await getRate({}, 'USD', 'MYR', { deps: { fetch: s.fetch, cache: failing, now: () => 1 } }),
+    ).toEqual({ rate: 4.1, source: 'frankfurter', fetchedAt: 1 });
+
+    for (const kept of ['{"rate":', 'null', '{"rate":"lots","source":"wise","fetchedAt":1}']) {
+      const garbled = {
+        match: () => Promise.resolve(new Response(kept)),
+        put: () => Promise.resolve(),
+      } as unknown as Cache;
+      const fresh = services(down, ecbRate(4.3));
+      expect(
+        await getRate({}, 'USD', 'MYR', {
+          deps: { fetch: fresh.fetch, cache: garbled, now: () => 2 },
+        }),
+      ).toEqual({ rate: 4.3, source: 'frankfurter', fetchedAt: 2 });
+    }
+  });
+
   it('uses an old rate when both services are down, and fails with none', async () => {
     let now = 0;
     const cache = memoryCache();
