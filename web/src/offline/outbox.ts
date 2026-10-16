@@ -1,5 +1,6 @@
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
-import { MAX_CHANGES } from '@shared/api';
+import { reportKept } from './storage-health';
+import { MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
 import type { Change } from '@shared/types';
 import { ApiError, NetworkError, api } from '../api';
 
@@ -38,8 +39,25 @@ export function withOutbox<T>(splitId: string, fn: () => Promise<T>): Promise<T>
   return run;
 }
 
-/** The changes that go in the next request: the server takes at most MAX_CHANGES */
-export const nextBatch = (queued: Queued[]) => queued.slice(0, MAX_CHANGES);
+const utf8 = new TextEncoder();
+/** The request body's size around its changes: {"changes":[ and ]} */
+const WRAPPER_BYTES = utf8.encode('{"changes":[]}').length;
+
+/**
+ * The changes that go in the next request, in order: at most MAX_CHANGES, and no more
+ * than MAX_CHANGES_BYTES of JSON, but always at least one
+ */
+export function nextBatch(queued: Queued[]): Queued[] {
+  let bytes = WRAPPER_BYTES;
+  let count = 0;
+  for (const q of queued.slice(0, MAX_CHANGES)) {
+    // Each change after the first also takes a comma
+    bytes += utf8.encode(JSON.stringify(q.change)).length + (count > 0 ? 1 : 0);
+    if (count > 0 && bytes > MAX_CHANGES_BYTES) break;
+    count++;
+  }
+  return queued.slice(0, count);
+}
 
 /**
  * Sends queued changes in order, as many at a time as the server takes. The server
@@ -77,8 +95,16 @@ export async function readOutbox(splitId: string): Promise<Queued[]> {
   return Array.isArray(kept) ? kept.filter(isQueued) : [];
 }
 
-export const writeOutbox = (splitId: string, queued: Queued[]) =>
-  queued.length > 0 ? writeCache(outboxKey(splitId), queued) : removeCacheEntry(outboxKey(splitId));
+/**
+ * Keeps a split's unsent changes, resolving with whether the device did; if it can't,
+ * the app says so (storage-health)
+ */
+export async function writeOutbox(splitId: string, queued: Queued[]): Promise<boolean> {
+  if (queued.length === 0) return removeCacheEntry(outboxKey(splitId));
+  const kept = await writeCache(outboxKey(splitId), queued);
+  reportKept(kept);
+  return kept;
+}
 
 /** Splits with changes kept on this device */
 export const readOutboxIds = () => listCacheIds(OUTBOX_PREFIX);

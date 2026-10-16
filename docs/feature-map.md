@@ -274,7 +274,10 @@ page or, if it's closed, by the service worker.
   per-split lock.
 - [pending-creates.ts](../web/src/offline/pending-creates.ts): splits made offline.
 - [sync.ts](../web/src/offline/sync.ts): sending all of it, started by
-  [main.tsx](../web/src/main.tsx).
+  [main.tsx](../web/src/main.tsx) when the connection or the app comes back, and
+  counting what signing out would lose (Settings asks first).
+- [storage-health.ts](../web/src/offline/storage-health.ts): whether the device kept the
+  latest unsent work; the shell's `OfflineNotice` says when it couldn't.
 
 An open split sends its own changes through `useSaveQueue`.
 
@@ -290,15 +293,21 @@ names and limits it shares with `offline/` and `shared/api.ts` are copied in it.
   batch is dropped with everything queued after it. Where the browser has Web Locks,
   the page and the service worker take the same lock per split, so a change is sent
   once.
-- Batches are at most `MAX_CHANGES`, in order; what's left is kept after each batch.
+- Batches are at most `MAX_CHANGES` and `MAX_CHANGES_BYTES` of JSON (one larger change
+  goes alone), in order; what's left is kept after each batch. Sends while the page is
+  hidden use keepalive, which browsers allow only for small requests.
+- Unsent work the device couldn't keep is still sent from memory while the app is
+  open, and is never taken for sent elsewhere.
+- Signed out (401), an open split stops retrying on a timer until the app is shown
+  again or the connection returns.
 
 **Tests.** [cache.test.ts](../web/src/offline/cache.test.ts),
 [outbox.test.ts](../web/src/offline/outbox.test.ts) (runs `sw.js` against what the app
 writes, so the copied keys and lock names can't drift),
-[sw.test.ts](../web/src/offline/sw.test.ts) (batches of `MAX_CHANGES` and every kind of
-answer, on the page and in `sw.js` alike),
+[sw.test.ts](../web/src/offline/sw.test.ts) (batches by count and size and every kind
+of answer, on the page and in `sw.js` alike),
 [delivery.test.ts](../web/src/offline/delivery.test.ts) (page and service worker
-together), and [pending-creates.test.ts](../web/src/offline/pending-creates.test.ts).
+together, keepalive, coming back to the app, signed-out retries), and [pending-creates.test.ts](../web/src/offline/pending-creates.test.ts).
 
 ## Pictures, photos and payment QR codes
 

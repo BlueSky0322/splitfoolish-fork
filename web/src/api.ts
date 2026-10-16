@@ -140,10 +140,15 @@ export const api = {
   searchItems: (text: string) =>
     request<SearchResult>('GET', `/api/search?q=${encodeURIComponent(text)}`),
   getSplit: (id: string) => request<SplitDetail>('GET', splitPath(id)),
-  /** Sends queued changes; keepalive lets a save finish while the page is closing */
+  /**
+   * Sends queued changes. While the page is hidden or closing, keepalive lets the save
+   * finish after it's gone; browsers allow that only for small requests (nextBatch keeps
+   * each one small enough), so it's not used otherwise. A send that still can't go is
+   * kept on the device and sent later.
+   */
   applyChanges: (id: string, changes: Change[]) =>
     request<Ok>('POST', `${splitPath(id)}/changes`, { changes } satisfies ChangesBody, {
-      keepalive: true,
+      keepalive: typeof document !== 'undefined' && document.visibilityState === 'hidden',
     }),
   updateSplit: (id: string, patch: SplitPatch) =>
     request<UpdateSplitResult>('PATCH', splitPath(id), patch),

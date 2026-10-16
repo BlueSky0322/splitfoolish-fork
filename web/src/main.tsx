@@ -10,7 +10,8 @@ import { reloadMySplits } from './my-splits/my-splits';
 
 // Back to the page that was open last time, before anything reads the address
 restoreLastPage();
-// What's kept on this device while offline is sent once the connection is back
+// What's kept on this device while offline is sent once the connection is back, and on
+// coming back to the app
 syncWhenOnline(() => void reloadMySplits());
 // Bottom sheets stay above the on-screen keyboard
 trackKeyboardInset();

@@ -27,8 +27,23 @@ const LOCK_PREFIX = 'sf-outbox:';
 const USER_KEY = 'sf-user';
 /** CLIENT_ID_HEADER in shared/api.ts */
 const CLIENT_ID_HEADER = 'X-Client-Id';
-/** MAX_CHANGES in shared/api.ts: the most changes the server takes in one request */
+/** MAX_CHANGES and MAX_CHANGES_BYTES in shared/api.ts: how much one request may carry */
 const MAX_CHANGES = 200;
+const MAX_CHANGES_BYTES = 48 * 1024;
+
+const utf8 = new TextEncoder();
+
+/** The next request's changes, as nextBatch in web/src/offline/outbox.ts picks them */
+function nextBatch(queued) {
+  let bytes = utf8.encode('{"changes":[]}').length;
+  let count = 0;
+  for (const q of queued.slice(0, MAX_CHANGES)) {
+    bytes += utf8.encode(JSON.stringify(q.change)).length + (count > 0 ? 1 : 0);
+    if (count > 0 && bytes > MAX_CHANGES_BYTES) break;
+    count++;
+  }
+  return queued.slice(0, count);
+}
 
 // Profile pictures and payment QR codes (always with ?v=), and photos of splits and receipts
 const isImage = (url) =>
@@ -226,7 +241,7 @@ async function flushOfflineChanges() {
         // crossed off once saved, so a failure later on leaves only what wasn't sent.
         let left = entry.value;
         while (left.length > 0) {
-          const batch = left.slice(0, MAX_CHANGES);
+          const batch = nextBatch(left);
           const res = await post(`/api/splits/${encodeURIComponent(id)}/changes`, {
             changes: batch.map((q) => q.change),
           });

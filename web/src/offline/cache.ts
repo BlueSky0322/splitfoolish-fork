@@ -48,12 +48,21 @@ export async function readCache<T>(key: string): Promise<T | undefined> {
   return entry?.email === email ? entry.value : undefined;
 }
 
-export async function writeCache<T>(key: string, value: T): Promise<void> {
+/** Whether `access` worked; storage failing is reported, not thrown */
+const succeeds = (access: () => Promise<unknown>): Promise<boolean> =>
+  access().then(
+    () => true,
+    () => false,
+  );
+
+/** Resolves with whether it was kept */
+export async function writeCache<T>(key: string, value: T): Promise<boolean> {
   const email = await whenCacheUserKnown();
-  await quietlyAsync(() => set(key, { email, value } satisfies Entry<T>));
+  return succeeds(() => set(key, { email, value } satisfies Entry<T>));
 }
 
-export const removeCacheEntry = (key: string) => quietlyAsync(() => del(key));
+/** Resolves with whether it was removed */
+export const removeCacheEntry = (key: string) => succeeds(() => del(key));
 
 /** The ids kept under a key prefix ('outbox:', say), whoever's they are */
 export const listCacheIds = async (prefix: string): Promise<string[]> =>

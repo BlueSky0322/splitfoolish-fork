@@ -16,6 +16,7 @@ import {
   writeOutbox,
 } from '../offline/outbox';
 import { queryClient } from '../query-client';
+import { ApiError } from '../api';
 import { newId } from '../utils/id';
 import { UserError, showError } from '../utils/notify';
 import { ITEM_NAMES_KEY } from './item-names';
@@ -28,6 +29,9 @@ const RETRY_DELAY_MS = 3000;
 const MAX_RETRY_DELAY_MS = 60_000;
 /** How long whenSaved waits before giving up */
 const WHEN_SAVED_TIMEOUT_MS = 20_000;
+
+/** Signed out: trying again on a timer would only fail until they sign in */
+const isSignedOut = (err: unknown) => err instanceof ApiError && err.status === 401;
 
 export interface SaveQueueEvents {
   setStatus: (status: SyncStatus) => void;
@@ -78,8 +82,10 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
     const inOutbox = new Set((await readOutbox(splitId)).map((q) => q.cid));
     const { left, sentElsewhere } = stillToSend(pending.current, stored.current, inOutbox);
     pending.current = left;
-    await writeOutbox(splitId, left);
-    stored.current = new Set(left.map((q) => q.cid));
+    // Not kept (storage full, say): the outbox still holds what it did, and the rest are
+    // sent from here
+    const kept = await writeOutbox(splitId, left);
+    stored.current = new Set(left.filter((q) => kept || inOutbox.has(q.cid)).map((q) => q.cid));
     setWaiting(left.length);
     return sentElsewhere;
   }, [splitId]);
@@ -87,7 +93,8 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
   /**
    * A batch that didn't reach the server, or that the server refused. True when a timed
    * retry should be scheduled (kept, and online); offline, it's kept for the 'online'
-   * event or background sync instead, and this is false.
+   * event or background sync instead, and signed out, for coming back to the app (after
+   * signing in again), so this is false.
    */
   const recoverFromFailure = useCallback(
     async (err: unknown, batch: Queued[]): Promise<boolean> => {
@@ -120,7 +127,7 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
       setWaiting(pending.current.length);
       requestBackgroundSync();
       setStatus(isOfflineFailure(err) ? 'offline' : 'error');
-      return !isOffline();
+      return !isOffline() && !isSignedOut(err);
     },
     [splitId, syncOutbox, notifySavedWaiters],
   );

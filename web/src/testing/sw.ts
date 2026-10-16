@@ -48,6 +48,7 @@ function load(fetch: unknown, caches?: unknown): Handlers {
     caches,
     indexedDB,
     Response,
+    TextEncoder,
     URL,
   });
   return handlers;

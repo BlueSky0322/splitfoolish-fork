@@ -260,6 +260,9 @@ function apply(split: SplitDetail, change: Change) {
   }
 }
 
+/** The most a browser lets keepalive requests carry at once */
+const KEEPALIVE_BYTES = 64 * 1024;
+
 function serve(server: FakeServer) {
   const answer = answerNow(server);
   return (input: RequestInfo | URL, init?: RequestInit) => {
@@ -283,6 +286,14 @@ function answerNow(server: FakeServer) {
     const inviteMatch = path.match(/^\/api\/splits\/([^/]+)\/invites\/([^/]+)$/);
 
     if (server.health === 'unreachable') return Promise.reject(new TypeError('Failed to fetch'));
+    // Browsers refuse a keepalive request bigger than this before it goes anywhere
+    if (
+      init?.keepalive &&
+      typeof init.body === 'string' &&
+      new Blob([init.body]).size > KEEPALIVE_BYTES
+    ) {
+      return Promise.reject(new TypeError('Failed to fetch'));
+    }
     if (server.health === 'signedOut') return json({ error: 'Signed out' }, 401);
     if (server.health === 'down') return json({ error: 'Internal error' }, 500);
     if (path === '/api/me' && method === 'GET') return json(server.me);

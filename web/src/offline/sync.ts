@@ -8,7 +8,13 @@ import {
   isOffline,
   isRetryable,
 } from './outbox';
-import { forgetOfflineCreates, resumeCreates, whenCreated } from './pending-creates';
+import {
+  forgetOfflineCreates,
+  readPendingCreates,
+  resumeCreates,
+  whenCreated,
+} from './pending-creates';
+import { reportKept } from './storage-health';
 
 // Sending what was kept on this device while offline (splits made, changes to them):
 // once the signed-in account is known, and whenever the connection comes back. Then
@@ -59,11 +65,24 @@ export function flushOfflineChanges(): Promise<number> {
   return sending;
 }
 
+/**
+ * How many splits have work on this device the server hasn't got yet (changes, or the
+ * split itself), which signing out would lose
+ */
+export async function countUnsentSplits(): Promise<number> {
+  const unsent = new Set((await readPendingCreates()).map((c) => c.id));
+  for (const id of await readOutboxIds()) {
+    if ((await readOutbox(id)).length > 0) unsent.add(id);
+  }
+  return unsent.size;
+}
+
 /** Lets go of everything kept for this account: on signing out, and between tests */
 export async function forgetOfflineWork() {
   sending = null;
   forgetOfflineCreates();
   await clearCache();
+  reportKept(true);
 }
 
 /**
@@ -80,8 +99,25 @@ export const syncOfflineChanges = (refresh: () => void, { always = false } = {})
 
 /**
  * Called once at start: back online, sends what was kept meanwhile, and refreshes either
- * way, since others' changes may have been missed while offline
+ * way, since others' changes may have been missed while offline. Coming back to the app
+ * (from another app, or reopened from the browser's memory) sends what's kept too, as
+ * the service worker can't on every browser.
  */
 export function syncWhenOnline(refresh: () => void) {
-  window.addEventListener('online', () => syncOfflineChanges(refresh, { always: true }));
+  const online = () => syncOfflineChanges(refresh, { always: true });
+  const shown = () => {
+    if (document.visibilityState === 'visible') syncOfflineChanges(refresh);
+  };
+  const restored = (event: PageTransitionEvent) => {
+    if (event.persisted) syncOfflineChanges(refresh);
+  };
+  window.addEventListener('online', online);
+  document.addEventListener('visibilitychange', shown);
+  window.addEventListener('pageshow', restored);
+  // For tests: the app listens for as long as it's open
+  return () => {
+    window.removeEventListener('online', online);
+    document.removeEventListener('visibilitychange', shown);
+    window.removeEventListener('pageshow', restored);
+  };
 }
