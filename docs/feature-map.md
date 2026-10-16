@@ -491,7 +491,9 @@ retry receipt saved alongside.
 - Sign-in: [mcp/oauth.ts](../worker/mcp/oauth.ts), with
   `@cloudflare/workers-oauth-provider` running discovery, registration, tokens and the
   bearer check; the consent page at `/oauth/authorize` is the app's, behind Access.
-  Grants live in the `OAUTH_KV` namespace (hashed by the library).
+  Grants live in the `OAUTH_KV` namespace (hashed by the library). The page can't
+  import the app, so it keeps copies of the app's colours (`web/src/theme/tokens.css`,
+  the Blurple accent) and icon (`web/public/icon.svg`): change both together.
 - Tools: [mcp/server.ts](../worker/mcp/server.ts) (a fresh stateless MCP server per
   request, the Origin check and scope step-up) and
   [mcp/tools.ts](../worker/mcp/tools.ts). Reads reuse `listSplitSummaries`,
@@ -512,6 +514,8 @@ receipt → the split's room tells open apps.
 - The acting account is the one Access verified on the consent page, carried in the
   grant; nothing the agent sends can change it. Each request builds its own server and
   tools for its own account.
+- Clients are told to ask for both scopes, and the consent page offers both, ticked,
+  whatever the client asked for; the person decides what the grant carries.
 - Membership, scope and roles are checked on every call, retries included; a split
   you're not in is `not_found`, like a missing one.
 - An expense write and its receipt are saved in one transaction: a retry with the same
