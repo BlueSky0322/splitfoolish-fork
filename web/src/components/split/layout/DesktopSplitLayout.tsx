@@ -49,6 +49,9 @@ const DIRECTION_LABELS: Record<SortKey, Record<SortDir, string>> = {
 
 type DesktopTab = 'items' | 'photos';
 
+/** Add item and Add photos take the same room, so the buttons beside them stay put */
+const MAIN_BUTTON_WIDTH = 136;
+
 /** The split page on a computer: the items, with the balances alongside, or its photos */
 const DesktopSplitLayout = ({
   parts,
@@ -73,7 +76,8 @@ const DesktopSplitLayout = ({
         className={classes.desktop}
         data-wide={!onItems || undefined}
       >
-        <div className={classes.main}>
+        {/* Across the page on both tabs, so switching tabs only changes what's below */}
+        <div className={classes.head}>
           <div className={classes.titleRow}>
             <div className={classes.titleBlock}>
               <div className={classes.title}>
@@ -128,6 +132,7 @@ const DesktopSplitLayout = ({
               />
               {onItems ? (
                 <Button
+                  miw={MAIN_BUTTON_WIDTH}
                   leftSection={<Plus size={16} />}
                   onClick={() => openDialog({ kind: 'add' })}
                   disabled={!loaded || !hasPeople}
@@ -135,12 +140,16 @@ const DesktopSplitLayout = ({
                   Add item
                 </Button>
               ) : (
-                <AddPhotosButton disabled={!loaded} />
+                <AddPhotosButton
+                  disabled={!loaded}
+                  miw={MAIN_BUTTON_WIDTH}
+                />
               )}
             </div>
           </div>
 
-          {onItems && hasPeople && (
+          {/* On both tabs, so switching tabs doesn't move them */}
+          {hasPeople && (
             <div className={classes.peopleLine}>
               <AvatarStack
                 people={state.people}
@@ -191,7 +200,9 @@ const DesktopSplitLayout = ({
               ))}
             </div>
           )}
+        </div>
 
+        <div className={classes.main}>
           {!onItems && <DesktopPhotos />}
 
           {onItems && hasPeople && state.items.length > 0 && (

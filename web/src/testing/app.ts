@@ -380,6 +380,16 @@ function answerNow(server: FakeServer) {
         ? json({ error: 'No rate' }, 503)
         : json({ from, to, rate, source: 'wise', fetchedAt: Date.now() });
     }
+    // A photo's bytes: its id, so a test can tell which one it got
+    const photoFile = path.match(/^\/api\/splits\/([^/]+)\/attachments\/([^/]+)$/);
+    if (photoFile && method === 'GET') {
+      const photo = server.splits.get(photoFile[1])?.attachments.find((a) => a.id === photoFile[2]);
+      return Promise.resolve(
+        photo
+          ? new Response(`photo ${photo.id}`, { headers: { 'Content-Type': photo.contentType } })
+          : new Response('Not found', { status: 404 }),
+      );
+    }
     const removePhotos = path.match(/^\/api\/splits\/([^/]+)\/attachments\/remove$/);
     if (removePhotos && method === 'POST') {
       const split = server.splits.get(removePhotos[1]);

@@ -1,14 +1,46 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { Attachment } from '@shared/api';
+import { photoFileName } from '../../split/photo-download';
 import { fakeServer, item, renderApp, setupAppTests, splitDetail } from '../../testing/app';
 
 // The Photos tab on a computer: the split's photos and item receipts by day, which to
 // show, details beside the open photo, removing several at once, and dropping files
 
 setupAppTests();
+
+/** Files the page saves: each link it clicks to download, and any zip it made */
+function watchDownloads() {
+  const saved: { name: string; href: string }[] = [];
+  const zips: Blob[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    saved.push({ name: this.download, href: this.getAttribute('href') ?? '' });
+  });
+  Object.assign(URL, {
+    createObjectURL: vi.fn((blob: Blob) => {
+      zips.push(blob);
+      return 'blob:zip';
+    }),
+    revokeObjectURL: vi.fn(),
+  });
+  return { saved, zips };
+}
+
+/** A blob's bytes as text; jsdom's Blob can only be read through a FileReader */
+const readBlob = (blob: Blob) =>
+  new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new TextDecoder('latin1').decode(reader.result as ArrayBuffer));
+    reader.readAsArrayBuffer(blob);
+  });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const photo = (over: Partial<Attachment> & Pick<Attachment, 'id'>): Attachment => ({
   itemId: null,
@@ -53,8 +85,9 @@ describe('the Photos tab on a computer', () => {
     expect(screen.getByRole('tab', { name: /^Items/ }).textContent).toBe('Items2');
     expect(screen.getByRole('button', { name: 'Add photos' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add item' })).toBeNull();
-    // The balances step aside
+    // The balances step aside; the people stay, so the tabs don't move
     expect(screen.queryByText('Who pays who')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit people' })).toBeTruthy();
 
     const days = screen.getAllByRole('region');
     expect(days).toHaveLength(2);
@@ -123,6 +156,37 @@ describe('the Photos tab on a computer', () => {
     );
     expect(screen.getAllByRole('region')).toHaveLength(1);
     expect(screen.getByRole('tab', { name: /^Photos/ }).textContent).toBe('Photos1');
+  });
+
+  test('downloads several photos as one zip, each named for when it was added', async () => {
+    const { saved, zips } = watchDownloads();
+    const { user } = await openPhotos();
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getAllByRole('button', { name: 'Select day' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Download zip' }));
+
+    await waitFor(() => expect(saved).toEqual([{ name: 'Trip photos.zip', href: 'blob:zip' }]));
+    // Both were added in the same second, so the second is numbered
+    const name = photoFileName(photo({ id: 'receipt' }));
+    const zip = await readBlob(zips[0]);
+    expect(zip).toContain(`${name}photo receipt`);
+    expect(zip).toContain(`${name.replace('.jpg', ' (2).jpg')}photo beach`);
+  });
+
+  test('one photo downloads on its own, named for when it was added', async () => {
+    const { saved, zips } = watchDownloads();
+    const { user } = await openPhotos();
+    await user.click(screen.getByRole('checkbox', { name: 'Select receipt for Seafood dinner' }));
+    await user.click(screen.getByRole('button', { name: 'Download' }));
+    await waitFor(() =>
+      expect(saved).toEqual([
+        {
+          name: photoFileName(photo({ id: 'receipt' })),
+          href: '/api/splits/trip/attachments/receipt',
+        },
+      ]),
+    );
+    expect(zips).toEqual([]);
   });
 
   test("someone who isn't the owner can't remove photos others added", async () => {

@@ -4,6 +4,7 @@ import type { Attachment } from '@shared/api';
 import { toCents } from '@shared/rates';
 import { attachmentUrl } from '../../../api';
 import { dayLabel } from '../../../split/grouping';
+import { photoFileName } from '../../../split/photo-download';
 import { fileLabel } from '../../../split/photo-days';
 import type { SplitItem } from '../../../split/state';
 import { formatMoney } from '../../../utils/money';
@@ -112,7 +113,7 @@ const PhotoDetails = ({
         <Button
           component="a"
           href={attachmentUrl(splitId, photo.id)}
-          download
+          download={photoFileName(photo)}
           variant="default"
           className={classes.button}
           leftSection={<DownloadSimple size={16} />}
