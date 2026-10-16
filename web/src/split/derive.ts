@@ -60,3 +60,14 @@ export const otherCurrencies = (items: { original?: { currency: string } | null 
 /** How many currencies besides the split's own its items were paid in */
 export const otherCurrencyCount = (items: { original?: { currency: string } | null }[]) =>
   otherCurrencies(items).length;
+
+/** "10 Oct 2026 – 14 Oct 2026": from the first item to the last, or null with none dated */
+export function dateRange(items: { createdAt: number }[]) {
+  const times = items.map((i) => i.createdAt).filter((t) => t > 0);
+  if (times.length === 0) return null;
+  const fmt = (t: number) =>
+    new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const first = fmt(Math.min(...times));
+  const last = fmt(Math.max(...times));
+  return first === last ? first : `${first} – ${last}`;
+}

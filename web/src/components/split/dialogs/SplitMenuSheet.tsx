@@ -2,6 +2,7 @@ import { UnstyledButton } from '@mantine/core';
 import {
   ArrowsLeftRight,
   CaretRight,
+  Export,
   GearSix,
   ShareNetwork,
   UsersThree,
@@ -53,8 +54,8 @@ function peopleLine(names: string[]) {
   return `${names.slice(0, 3).join(', ')} and ${plural(names.length - 3, 'other')}`;
 }
 
-// The split's menu on a phone: who's in it, sharing, currencies, then its settings.
-// Photos aren't here; they're a tab of the split.
+// The split's menu on a phone: who's in it, sharing, currencies, exporting, then its
+// settings. Photos aren't here; they're a tab of the split.
 const SplitMenuSheet = () => {
   const { splitId, meta, me, currency, pictureVersion, openDialog } = useSplitPage();
   const { people, items } = useSplitState().state;
@@ -117,6 +118,16 @@ const SplitMenuSheet = () => {
               : `Everything is in ${currency} so far`
           }
           onClick={() => openDialog({ kind: 'currencies' })}
+        />
+        <Row
+          icon={<Export size={20} />}
+          title="Export"
+          detail={
+            meta.converting
+              ? `Once amounts are converted to ${currency}`
+              : 'CSV for spreadsheets, or PDF'
+          }
+          onClick={() => openDialog({ kind: 'export' })}
         />
       </div>
       <div className={classes.group}>

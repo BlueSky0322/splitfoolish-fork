@@ -1,10 +1,10 @@
-import { isShareCancelled } from '../../../utils/share';
 import { Button, Loader } from '@mantine/core';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { SplitItem } from '../../../split/state';
 import type { Person } from '@shared/types';
-import type { SplitTotals } from '../../../split/derive';
+import { type SplitTotals, dateRange } from '../../../split/derive';
+import { deliverFile, saveFile } from '../../../utils/deliver-file';
 import { formatMoney } from '../../../utils/money';
 import TransferRow from '../balances/TransferRow';
 import classes from './ShareImage.module.css';
@@ -21,16 +21,6 @@ interface ShareImageProps {
 
 const WIDTH = 1080;
 const HEIGHT = 1350;
-
-function dateRange(items: SplitItem[]) {
-  const times = items.map((i) => i.createdAt).filter((t) => t > 0);
-  if (times.length === 0) return null;
-  const fmt = (t: number) =>
-    new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-  const first = fmt(Math.min(...times));
-  const last = fmt(Math.max(...times));
-  return first === last ? first : `${first} – ${last}`;
-}
 
 // The settle-up summary as a 1080x1350 picture to post in a group chat. Drawn from a
 // hidden copy of the card, in the theme and accent on screen.
@@ -75,23 +65,12 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
   const share = async () => {
     if (image == null) return;
     const file = new File([image.blob], fileName, { type: 'image/png' });
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: name });
-        return;
-      } catch (err) {
-        if (isShareCancelled(err)) return;
-      }
-    }
-    download();
+    await deliverFile(file, { title: name, save: download });
   };
 
   const download = () => {
     if (image == null) return;
-    const a = document.createElement('a');
-    a.href = image.url;
-    a.download = fileName;
-    a.click();
+    saveFile(image.url, fileName);
   };
 
   return (

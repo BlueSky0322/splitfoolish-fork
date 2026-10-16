@@ -13,6 +13,7 @@ offline.
 | `shared/`     | Code both use: settling up, payment methods, rates and the API's data shapes |
 | `migrations/` | D1 (SQLite) schema changes, applied in order on deploy                       |
 | `docs/`       | The data model (`erd.md`)                                                    |
+| `scripts/`    | Tools run by hand: `subset-font.sh` makes the font for PDF exports           |
 
 `web/` and `worker/` never import each other; anything both need lives in `shared/`,
 which the app imports as `@shared/...`.

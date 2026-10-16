@@ -6,7 +6,14 @@ import type { Change } from '@shared/types';
 import { SW_USER_KEY } from './cache';
 import { api } from '../api';
 import { OUTBOX_PREFIX, classifySaveFailure, type Queued } from './outbox';
-import { type Answer, backgroundSync, ok, respond } from '../testing/sw';
+import {
+  type Answer,
+  backgroundSync,
+  fakeCaches,
+  fetchThroughWorker,
+  ok,
+  respond,
+} from '../testing/sw';
 
 // The service worker (public/sw.js) sends what the app kept while offline, when the
 // browser says the connection is back and the app isn't open. It runs here as it would
@@ -130,5 +137,45 @@ describe('reading the answer to sending changes', () => {
       expect(outcome).toBe('done');
       expect(await kept()).toBeUndefined();
     }
+  });
+});
+
+// The PDF export's font is fetched from the app's own address the first time a PDF is
+// made, and kept so a PDF can be made offline after
+describe('the service worker, keeping the PDF font', () => {
+  const FONT = '/fonts/NotoSansJP-subset.ttf';
+
+  test('keeps the font once fetched, and answers from the device after', async () => {
+    const caches = fakeCaches();
+    const font = { status: 200, body: 'font bytes', contentType: 'font/ttf' };
+    const first = await fetchThroughWorker(FONT, font, caches);
+    expect(first.fetch).toHaveBeenCalledTimes(1);
+    expect(await first.response?.text()).toBe('font bytes');
+
+    const offline = await fetchThroughWorker(FONT, { networkError: true }, caches);
+    expect(offline.fetch).not.toHaveBeenCalled();
+    expect(await offline.response?.text()).toBe('font bytes');
+  });
+
+  test('never keeps the app’s page, sent for a font it does not have', async () => {
+    const caches = fakeCaches();
+    const page = { status: 200, body: '<html>Splitfoolish</html>', contentType: 'text/html' };
+    await fetchThroughWorker(FONT, page, caches);
+
+    const next = await fetchThroughWorker(FONT, { networkError: true }, caches);
+    expect(next.fetch).toHaveBeenCalledTimes(1);
+    expect(next.response).toBeNull();
+  });
+
+  test('never keeps a failed answer', async () => {
+    const caches = fakeCaches();
+    await fetchThroughWorker(FONT, { status: 503, contentType: 'font/ttf' }, caches);
+    const next = await fetchThroughWorker(
+      FONT,
+      { status: 200, body: 'font bytes', contentType: 'font/ttf' },
+      caches,
+    );
+    expect(next.fetch).toHaveBeenCalledTimes(1);
+    expect(await next.response?.text()).toBe('font bytes');
   });
 });

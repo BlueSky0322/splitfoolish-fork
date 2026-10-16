@@ -22,6 +22,8 @@ export type Dialog =
   | { kind: 'people'; personId?: string }
   | { kind: 'settle' }
   | { kind: 'share' }
+  /** Saving the split as a CSV or a PDF */
+  | { kind: 'export' }
   | { kind: 'members' }
   | { kind: 'reset' }
   /** Opened from Split settings, where Cancel goes back to */

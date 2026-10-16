@@ -3,6 +3,8 @@
 
 // IndexedDB, for the offline cache
 import 'fake-indexeddb/auto';
+import { readFileSync } from 'node:fs';
+import { URL as NodeURL, fileURLToPath } from 'node:url';
 import { cleanup, configure, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
@@ -222,6 +224,13 @@ const summaryOf = (s: SplitDetail, archived: boolean): SplitSummary => ({
   updatedAt: 1,
 });
 
+/** The PDF export's font, from web/public as the app is served it; read when first asked for */
+let font: Buffer | null = null;
+const fontFile = () =>
+  (font ??= readFileSync(
+    fileURLToPath(new NodeURL('../../public/fonts/NotoSansJP-subset.ttf', import.meta.url)),
+  ));
+
 const json = (body: unknown, status = 200) =>
   Promise.resolve(
     new Response(JSON.stringify(body), {
@@ -277,6 +286,9 @@ function answerNow(server: FakeServer) {
     if (server.health === 'signedOut') return json({ error: 'Signed out' }, 401);
     if (server.health === 'down') return json({ error: 'Internal error' }, 500);
     if (path === '/api/me' && method === 'GET') return json(server.me);
+    if (path === '/fonts/NotoSansJP-subset.ttf') {
+      return Promise.resolve(new Response(fontFile(), { headers: { 'Content-Type': 'font/ttf' } }));
+    }
     const failing = (kind: keyof FakeServer['failNext']) => {
       const status = server.failNext[kind];
       delete server.failNext[kind];

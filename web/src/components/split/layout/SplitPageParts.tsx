@@ -4,6 +4,7 @@ import {
   ArrowsLeftRight,
   CloudCheck,
   CloudSlash,
+  Export,
   GearSix,
   Images,
   UserPlus,
@@ -116,7 +117,7 @@ export function SaveStatus() {
   );
 }
 
-/** The split's menu (People, Share, Photos...), opened from `target` */
+/** The split's menu (People, Share, Photos, Export...), opened from `target` */
 export function SplitMoreMenu({ target, onPhotos }: { target: ReactNode; onPhotos: () => void }) {
   const { meta, openDialog } = useSplitPage();
   const { state } = useSplitState();
@@ -157,6 +158,12 @@ export function SplitMoreMenu({ target, onPhotos }: { target: ReactNode; onPhoto
             Currencies
           </Menu.Item>
         )}
+        <Menu.Item
+          leftSection={<Export size={16} />}
+          onClick={() => openDialog({ kind: 'export' })}
+        >
+          Export
+        </Menu.Item>
         <Menu.Item
           leftSection={<GearSix size={16} />}
           onClick={() => openDialog({ kind: 'settings' })}
