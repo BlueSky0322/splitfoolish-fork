@@ -34,8 +34,11 @@ const ORIGIN = 'https://splitfoolish.test';
 
 type Handlers = Record<string, (event: unknown) => void>;
 
-/** Runs the service worker's script, returning the events it listens for */
-function load(fetch: unknown, caches?: unknown): Handlers {
+/**
+ * Runs the service worker's script, returning the events it listens for. `globals` (fetch,
+ * caches) and `self` (navigator.locks, say) add to or replace what it is given here.
+ */
+export function load(globals: object, self: object = {}): Handlers {
   const handlers: Handlers = {};
   runInNewContext(source, {
     self: {
@@ -44,9 +47,8 @@ function load(fetch: unknown, caches?: unknown): Handlers {
       navigator: {},
       location: new URL(ORIGIN),
       skipWaiting: () => Promise.resolve(),
+      ...self,
     },
-    fetch,
-    caches,
     indexedDB,
     Blob,
     Headers,
@@ -56,6 +58,7 @@ function load(fetch: unknown, caches?: unknown): Handlers {
     URLSearchParams,
     // Through the test's own, so fake timers reach the service worker too
     setTimeout: (run: () => void, ms: number) => setTimeout(run, ms),
+    ...globals,
   });
   return handlers;
 }
@@ -71,7 +74,7 @@ export async function backgroundSync(answers: Answer | Answer[]) {
   const fetch = vi.fn<[string, RequestInit], Promise<Response>>(() =>
     respond(list[Math.min(answered++, list.length - 1)]),
   );
-  const handlers = load(fetch);
+  const handlers = load({ fetch });
   let done: Promise<unknown> = Promise.resolve();
   handlers.sync({ tag: SYNC_TAG, waitUntil: (work: Promise<unknown>) => (done = work) });
   const outcome = await done.then(
@@ -88,6 +91,22 @@ export async function backgroundSync(answers: Answer | Answer[]) {
     .map(([path, init]) => ({ path, body: init.body as Blob }));
   return { outcome, fetch, batches, photos };
 }
+
+/** A photo as the app keeps it on the device until it is uploaded */
+export const photoOnDevice = (
+  id: string,
+  splitId: string,
+  createdAt: number,
+  itemId: string | null = null,
+) => ({
+  id,
+  splitId,
+  itemId,
+  name: `${id}.jpg`,
+  createdAt,
+  type: 'image/jpeg',
+  bytes: new TextEncoder().encode(`small ${id}.jpg`).buffer,
+});
 
 /** The browser's caches, kept in memory by URL, and shared by each page load in a test */
 export function fakeCaches() {
@@ -156,7 +175,7 @@ export function openPage(path: string, site: Site, caches: ReturnType<typeof fak
       await site(new URL(typeof request === 'string' ? request : request.url, ORIGIN).pathname),
     ),
   );
-  const handlers = load(fetch, caches);
+  const handlers = load({ fetch, caches });
   const background: Promise<unknown>[] = [];
   let answered: Promise<Response> | null = null;
   handlers.fetch({
@@ -176,7 +195,7 @@ export function openPage(path: string, site: Site, caches: ReturnType<typeof fak
 /** The service worker being installed, as after a deploy, with the server answering as `site` says */
 export async function install(site: Site, caches: ReturnType<typeof fakeCaches>) {
   const fetch = vi.fn(async (request: string) => siteResponse(await site(request)));
-  const handlers = load(fetch, caches);
+  const handlers = load({ fetch, caches });
   let done: Promise<unknown> = Promise.resolve();
   handlers.install({ waitUntil: (work: Promise<unknown>) => (done = work) });
   await done;
@@ -199,7 +218,7 @@ export async function fetchThroughWorker(
     Object.defineProperty(res, 'type', { value: 'basic' });
     return res;
   });
-  const handlers = load(fetch, caches);
+  const handlers = load({ fetch, caches });
   let answered: Promise<Response> | null = null;
   handlers.fetch({
     request: new Request(`${ORIGIN}${path}`),
