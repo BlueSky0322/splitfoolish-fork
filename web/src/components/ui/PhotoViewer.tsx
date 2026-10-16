@@ -206,10 +206,8 @@ const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
                       size={40}
                       className={classes.tool}
                       aria-label="Remove photo"
-                      onClick={() => {
-                        photo.onRemove!();
-                        if (count === 1) close();
-                      }}
+                      // Once the last photo is gone, the viewer closes by itself
+                      onClick={() => photo.onRemove!()}
                     >
                       <Trash size={20} />
                     </ActionIcon>
