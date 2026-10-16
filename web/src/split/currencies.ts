@@ -23,10 +23,13 @@ export function usedCurrencies(items: SplitItem[]): UsedCurrency[] {
   }
   return [...byCode]
     .map(([code, list]) => {
-      const manual = list.every((o) => o.rateSource === 'manual');
+      // A rate saved without a source (by an older build) counts as typed, as it does
+      // everywhere else
+      const typed = (o: ItemOriginal) => savedRateSource(o.rateSource) === 'manual';
+      const manual = list.every(typed);
       // The newest live rate, or the newest typed one when there's no live one
       const [shown] = list
-        .filter((o) => manual || o.rateSource !== 'manual')
+        .filter((o) => manual || !typed(o))
         .sort((a, b) => (b.rateAt ?? 0) - (a.rateAt ?? 0));
       return {
         code,
