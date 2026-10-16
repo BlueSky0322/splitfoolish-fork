@@ -7,7 +7,7 @@ import { cleanup, configure, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { MyInvite, Profile, SplitDetail, SplitSummary } from '@shared/api';
-import { DEFAULT_SETTINGS } from '@shared/api';
+import { DEFAULT_SETTINGS, MAX_CHANGES } from '@shared/api';
 import { toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
@@ -336,6 +336,10 @@ function serve(server: FakeServer) {
         const failure = failing('changes');
         if (failure) return failure;
         const { changes } = body as { changes: Change[] };
+        // The real API's limit, so a test can't pass by sending more than it takes
+        if (changes.length === 0 || changes.length > MAX_CHANGES) {
+          return json({ error: `Send 1-${MAX_CHANGES} changes` }, 400);
+        }
         server.sent.push({ splitId: split.id, changes });
         for (const change of changes) apply(split, change);
         return json({ ok: true });

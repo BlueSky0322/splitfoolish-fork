@@ -34,10 +34,15 @@ export function flushOfflineChanges(): Promise<number> {
       }
       // Under the lock, so an open split (or the service worker) never sends them too
       const stop = await withOutbox(id, async () => {
-        const queued = await readOutbox(id);
-        if (queued.length === 0) return false;
+        let left = await readOutbox(id);
+        if (left.length === 0) return false;
         try {
-          await sendQueued(id, queued);
+          // Each request's changes are crossed off as it's saved, so a failure on a
+          // later one keeps only what's still to send
+          await sendQueued(id, left, async (saved) => {
+            left = left.slice(saved.length);
+            await writeOutbox(id, left);
+          });
           sent++;
         } catch (err) {
           if (isRetryable(err)) return true;

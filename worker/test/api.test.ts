@@ -4,6 +4,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { LocalWorker } from './local-worker';
 import { startLocalWorker } from './local-worker';
+import { MAX_CHANGES } from '../../shared/api';
 
 let api: LocalWorker;
 let n = 0;
@@ -115,6 +116,25 @@ describe('changing a split', () => {
     );
     expect(res.status).toBe(409);
     expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.people).toEqual([]);
+  });
+
+  it(`takes up to ${MAX_CHANGES} changes in one request, all applied, and refuses more`, async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const amy = hex();
+    await change(owner, id, { op: 'addPerson', id: amy, name: 'Amy' });
+    const renames = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ op: 'renamePerson', id: amy, name: `Amy ${i + 1}` }));
+
+    expect((await change(owner, id, ...renames(MAX_CHANGES))).status).toBe(200);
+    const people = async () => (await api.call(owner, 'GET', `/api/splits/${id}`)).data.people;
+    expect((await people())[0].name).toBe(`Amy ${MAX_CHANGES}`);
+
+    const tooMany = await change(owner, id, ...renames(MAX_CHANGES + 1));
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.data.error).toBe(`Send 1-${MAX_CHANGES} changes`);
+    // None of them applied
+    expect((await people())[0].name).toBe(`Amy ${MAX_CHANGES}`);
   });
 
   it('requires exact amounts to add up to the cost', async () => {

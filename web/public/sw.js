@@ -26,6 +26,8 @@ const LOCK_PREFIX = 'sf-outbox:';
 const USER_KEY = 'sf-user';
 /** CLIENT_ID_HEADER in shared/api.ts */
 const CLIENT_ID_HEADER = 'X-Client-Id';
+/** MAX_CHANGES in shared/api.ts: the most changes the server takes in one request */
+const MAX_CHANGES = 200;
 
 // Profile pictures and payment QR codes (always with ?v=), and photos of splits and receipts
 const isImage = (url) =>
@@ -174,14 +176,9 @@ async function post(path, body) {
   }
   // Signed out (Cloudflare Access sends a sign-in page): the app sends it once signed in
   if (res.redirected || res.type === 'opaqueredirect') throw new TryLater('Signed out');
-  // Answered by something other than the API (a proxy, say), as the app sees it too
-  if (
-    res.ok &&
-    !(await res.json().then(
-      () => true,
-      () => false,
-    ))
-  ) {
+  // Answered by something other than the API (a proxy, say), as the app sees it too:
+  // anything that isn't JSON, or is JSON null
+  if (res.ok && (await res.json().catch(() => null)) == null) {
     throw new TryLater('Not answered with JSON');
   }
   // Otherwise done; a refusal (4xx) is dropped, and the app shows the split as the
@@ -215,9 +212,21 @@ async function flushOfflineChanges() {
       await withLock(id, async () => {
         const entry = await read(key);
         if (!mine(entry) || entry.value.length === 0) return;
-        await post(`/api/splits/${encodeURIComponent(id)}/changes`, {
-          changes: entry.value.map((q) => q.change),
-        });
+        // In order, as many at a time as the server takes. Each request's changes are
+        // crossed off once saved, so a failure later on leaves only what wasn't sent.
+        let left = entry.value;
+        while (left.length > 0) {
+          const batch = left.slice(0, MAX_CHANGES);
+          const res = await post(`/api/splits/${encodeURIComponent(id)}/changes`, {
+            changes: batch.map((q) => q.change),
+          });
+          // Refused: the rest was built on top of it, so it goes too
+          left = res.ok ? left.slice(batch.length) : [];
+          if (left.length > 0) {
+            const now = left;
+            await idb(db, 'readwrite', (s) => s.put({ ...entry, value: now }, key));
+          }
+        }
         await drop(key);
       });
     }

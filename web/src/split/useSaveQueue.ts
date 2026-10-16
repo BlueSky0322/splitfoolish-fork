@@ -7,6 +7,7 @@ import {
   classifySaveFailure,
   isOfflineFailure,
   isOffline,
+  nextBatch,
   readOutbox,
   sendQueued,
   requestBackgroundSync,
@@ -146,8 +147,9 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
       // Held while sending, so the service worker can't send the same changes
       await withOutbox(splitId, async () => {
         if (await syncOutbox()) reloadAfterSave.current = true;
-        batch = pending.current;
-        pending.current = [];
+        // As many as the server takes in one request; the rest go next, in order
+        batch = nextBatch(pending.current);
+        pending.current = pending.current.slice(batch.length);
         await sendQueued(splitId, batch);
         sent = true;
         await syncOutbox();
