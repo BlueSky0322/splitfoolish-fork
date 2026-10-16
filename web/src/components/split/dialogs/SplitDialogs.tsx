@@ -1,6 +1,7 @@
 import { BalanceHero } from '../balances/BalancePanel';
 import CurrenciesSheet from './CurrenciesSheet';
 import EndSplit, { EndSplitTitle } from './EndSplit';
+import ExportDialog from './ExportDialog';
 import ItemDetail from '../items/ItemDetail';
 import ItemForm from '../items/ItemForm';
 import PeopleSheet from '../people/PeopleSheet';
@@ -260,6 +261,14 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
             totals={totals}
           />
         )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'export'}
+        onClose={close}
+        title="Export"
+        width={420}
+      >
+        {dialog?.kind === 'export' && <ExportDialog onDone={close} />}
       </ResponsiveDialog>
       <ResponsiveDialog
         opened={dialog?.kind === 'members'}
