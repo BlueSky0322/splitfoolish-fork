@@ -213,9 +213,9 @@ splits.patch(
       if (!isCurrency(body.currency)) return fail('Invalid currency', 400);
       changes.currency = body.currency;
     }
-    const { statements, converting } = await planSplitSettings(db, id, changes);
+    const { statements, converting, since } = await planSplitSettings(db, id, changes);
     if (statements.length > 0) await db.batch(statements);
-    if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email);
+    if (converting) startReconvert(c.env, c.executionCtx, id, c.var.email, since);
     return json<UpdateSplitResult>({ ok: true, converting });
   },
 );
