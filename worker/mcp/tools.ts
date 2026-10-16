@@ -9,7 +9,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { type Attachment, MAX_PHOTO_BYTES, isRowId } from '../../shared/api';
-import { toCents } from '../../shared/rates';
+import { isCurrency, toCents } from '../../shared/rates';
 import type { SettleItem } from '../../shared/settle';
 import { SPLIT_MODES, balances, transfers } from '../../shared/settle';
 import type { Item } from '../../shared/types';
@@ -20,9 +20,10 @@ import { contentStatements, assembleContent } from '../bill/read';
 import { saveChanges } from '../bill/changes';
 import { isItemDate } from '../bill/input';
 import { RatesUnavailable } from '../currency/exchange-rates';
-import { newId } from '../http';
+import { isConstraintError, newId, readName } from '../http';
 import { addAttachment, listAttachmentsStatement, readAttachment } from '../photos/attachments';
 import { checkImage } from '../photos/images';
+import { createSplitStatements } from '../splits/lifecycle';
 import { listSplitSummaries } from '../splits/summaries';
 import { notifySplit } from '../splits/room';
 import {
@@ -57,11 +58,12 @@ export const TOOL_SCOPES: Record<string, string> = {
   route_payments: WRITE_SCOPE,
   add_photo: WRITE_SCOPE,
   get_photo: READ_SCOPE,
+  create_split: WRITE_SCOPE,
 };
 
 type WriteTool = Exclude<
   keyof typeof TOOL_SCOPES,
-  'list_splits' | 'get_split' | 'get_photo' | 'add_photo'
+  'list_splits' | 'get_split' | 'get_photo' | 'add_photo' | 'create_split'
 >;
 
 type ErrorCode =
@@ -893,6 +895,47 @@ export function registerTools(server: McpServer, caller: Caller) {
       };
     },
   );
+
+  server.registerTool(
+    'create_split',
+    {
+      title: 'Create a split',
+      description:
+        'Creates a split owned by this account, in a currency (a 3-letter code such as MYR), ' +
+        'with the people in its bill: you (linked to your account, under your name) unless ' +
+        'includeMe is false, and anyone named in people. Others join with their own account ' +
+        "through the app's share link. Retrying with the same requestId returns the first " +
+        'answer instead of creating another.',
+      inputSchema: {
+        requestId,
+        name: z.string().min(1).max(MAX_NAME_LENGTH).describe("The split's name"),
+        currency: z
+          .string()
+          .regex(/^[A-Z]{3}$/)
+          .describe('Its currency, a 3-letter code such as MYR'),
+        people: z
+          .array(personName)
+          .max(MAX_NEW_PEOPLE)
+          .optional()
+          .describe('Names of the others in the bill, each different'),
+        includeMe: z.boolean().optional().describe('Put you in the bill too (default true)'),
+      },
+      outputSchema: {
+        status: z.literal('saved'),
+        splitId: z.string().describe('The new split; read it with get_split'),
+        requestId: z.string(),
+        savedAt: z.string(),
+        actor: z.string(),
+        replayed: z.boolean(),
+      },
+      annotations: { ...expenseWrite, destructiveHint: false },
+    },
+    async (input) => {
+      const denied = allowed('create_split');
+      if (denied) return denied;
+      return writeSplit(caller, input);
+    },
+  );
 }
 
 // Photos
@@ -1012,4 +1055,146 @@ async function writePhoto(
   }
   if (res.status === 409) return toolError('refused', error);
   return toolError('invalid_input', error);
+}
+
+// New splits
+
+/** The most people a new split can be given at once */
+const MAX_NEW_PEOPLE = 50;
+
+/**
+ * The id a request's split is made under: the same for every retry, so a retry that
+ * finds it already made finishes that one rather than making another
+ */
+const splitIdFor = async (email: string, requestId: string) =>
+  (await fingerprint({ splitFor: email, requestId })).slice(0, 16);
+
+/**
+ * Makes a split and puts its people in the bill. The split comes first; its people come
+ * with the receipt, through the bill's own save path, so the receipt exists exactly when
+ * the split is finished. A retry after the first step finishes the same split.
+ */
+async function writeSplit(
+  caller: Caller,
+  input: {
+    requestId: string;
+    name: string;
+    currency: string;
+    people?: string[];
+    includeMe?: boolean;
+  },
+): Promise<CallToolResult> {
+  const { env, email } = caller;
+  const db = env.DB;
+  if (await overLimit(caller)) {
+    return toolError(
+      'rate_limited',
+      'Too many changes from this account; wait a minute and retry.',
+    );
+  }
+  const name = readName(input.name);
+  if (name == null)
+    return toolError('invalid_input', `Name must be 1-${MAX_NAME_LENGTH} characters`);
+  if (!isCurrency(input.currency))
+    return toolError('invalid_input', 'That is not a currency code.');
+  const includeMe = input.includeMe ?? true;
+
+  // Every name checked now, so the save below can't refuse them and leave the split empty
+  const others = (input.people ?? []).map((n) => readName(n));
+  if (others.some((n) => n == null)) {
+    return toolError('invalid_input', `Names must be 1-${MAX_NAME_LENGTH} characters`);
+  }
+  const profile = await db
+    .prepare('SELECT display_name AS displayName FROM profiles WHERE email = ?')
+    .bind(email)
+    .first<{ displayName: string | null }>();
+  const myName = profile?.displayName?.trim() || email.split('@')[0];
+  const names = [...(includeMe ? [myName] : []), ...(others as string[])];
+  const repeated = names.find((n, i) => names.indexOf(n) !== i);
+  if (repeated != null) {
+    return toolError(
+      'invalid_input',
+      repeated === myName && includeMe
+        ? `${repeated} is your name in the split; name the others differently.`
+        : `${repeated} is named twice; names in a split are unique.`,
+    );
+  }
+
+  const print = await fingerprint({
+    tool: 'create_split',
+    name,
+    currency: input.currency,
+    people: others,
+    includeMe,
+  });
+  const answer = (outcome: Answered) =>
+    'conflict' in outcome
+      ? toolError(
+          'idempotency_conflict',
+          'This requestId was already used for a different change. Use a new requestId.',
+        )
+      : result({
+          status: 'saved' as const,
+          splitId: outcome.receipt.splitId,
+          requestId: input.requestId,
+          savedAt: new Date(outcome.receipt.savedAt).toISOString(),
+          actor: email,
+          replayed: outcome.replayed,
+        });
+  const earlier = await findReceipt(db, email, input.requestId);
+  if (earlier != null) return answer(sameRequest(earlier, print));
+
+  const splitId = await splitIdFor(email, input.requestId);
+  const made = await db.batch(createSplitStatements(db, splitId, name, input.currency, email)).then(
+    () => true,
+    (err: unknown) => {
+      if (isConstraintError(err)) return false;
+      throw err;
+    },
+  );
+  // Already made by an earlier try of this request, which stopped before its people
+  if (!made && (await getRole(db, splitId, email)) !== 'owner') {
+    return answer({ conflict: { splitId } as Receipt });
+  }
+
+  const receipt: Receipt = {
+    email,
+    requestId: input.requestId,
+    fingerprint: print,
+    tool: 'create_split',
+    splitId,
+    expenseId: '',
+    savedAt: Date.now(),
+  };
+  const changes = names.map((n, i) => ({
+    op: 'addPerson',
+    id: newId(),
+    name: n,
+    memberEmail: includeMe && i === 0 ? email : null,
+  }));
+  if (changes.length === 0) {
+    const kept = await db.batch([receiptStatement(db, receipt)]).then(
+      () => true,
+      (err: unknown) => {
+        if (isConstraintError(err)) return false;
+        throw err;
+      },
+    );
+    if (kept) return answer({ receipt, replayed: false });
+  } else {
+    const outcome = await saveOnce(db, receipt, (alongside) =>
+      saveChanges(db, splitId, { email, role: 'owner' }, changes, noRates, alongside),
+    );
+    if ('refused' in outcome) {
+      // Sent twice at once, the other finished first: its people are in, so ours are refused
+      const other = await findReceipt(db, email, input.requestId);
+      if (other != null) return answer(sameRequest(other, print));
+      const { status, error } = outcome.refused;
+      return toolError(status === 503 ? 'temporarily_unavailable' : 'refused', error);
+    }
+    return answer(outcome);
+  }
+  // The same request sent twice at once: the other one's receipt is the answer
+  const other = await findReceipt(db, email, input.requestId);
+  return other != null ? answer(sameRequest(other, print)) : answer({ conflict: receipt });
 }

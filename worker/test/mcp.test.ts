@@ -23,6 +23,7 @@ const TOOLS = [
   'add_expense',
   'add_person',
   'add_photo',
+  'create_split',
   'get_photo',
   'get_split',
   'list_splits',
@@ -554,6 +555,74 @@ describe('the tools', () => {
       (await tool(client, 'get_split', { splitId: split.id })).split.routePaymentsThrough,
     ).toBeNull();
     expect((await route('route-ghost1', hex())).error?.code).toBe('not_found');
+  });
+});
+
+describe('new splits', () => {
+  it('create a split with its people, once, however often it is sent', async () => {
+    const alice = person('alice');
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const bali = {
+      requestId: 'bali-create1',
+      name: 'Bali',
+      currency: 'IDR',
+      people: ['Bob', 'Cat'],
+    };
+
+    const made = await tool(client, 'create_split', bali);
+    expect(made).toMatchObject({ status: 'saved', actor: alice, replayed: false });
+    expect(await tool(client, 'create_split', bali)).toEqual({ ...made, replayed: true });
+    const together = await Promise.all(
+      [1, 2, 3].map(() => tool(client, 'create_split', { ...bali, requestId: 'bali-create2' })),
+    );
+    expect(new Set(together.map((t) => t.splitId)).size).toBe(1);
+    expect(together.filter((t) => t.replayed === false)).toHaveLength(1);
+    expect((await tool(client, 'list_splits', {})).splits).toHaveLength(2);
+
+    const read = await tool(client, 'get_split', { splitId: made.splitId });
+    expect(read.split).toMatchObject({ name: 'Bali', currency: 'IDR', role: 'owner' });
+    // You come first, linked to your account; the others are guests
+    expect(read.people.map((p: { name: string; isYou: boolean }) => [p.name, p.isYou])).toEqual([
+      [alice.split('@')[0], true],
+      ['Bob', false],
+      ['Cat', false],
+    ]);
+    // The app opens it as its owner, with the same people
+    const inApp = (await api.call(alice, 'GET', `/api/splits/${made.splitId}`)).data;
+    expect(inApp).toMatchObject({ role: 'owner', name: 'Bali' });
+    expect(inApp.people).toHaveLength(3);
+
+    expect((await tool(client, 'create_split', { ...bali, name: 'Lombok' })).error?.code).toBe(
+      'idempotency_conflict',
+    );
+  });
+
+  it('refuse names that repeat before making anything, and make one with no one in it', async () => {
+    const alice = person('alice');
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    expect(
+      (
+        await tool(client, 'create_split', {
+          requestId: 'twice-bob-01',
+          name: 'Trip',
+          currency: 'MYR',
+          people: ['Bob', 'Bob'],
+        })
+      ).error,
+    ).toEqual({
+      code: 'invalid_input',
+      message: 'Bob is named twice; names in a split are unique.',
+      retryable: false,
+    });
+    expect((await tool(client, 'list_splits', {})).splits).toEqual([]);
+
+    const empty = await tool(client, 'create_split', {
+      requestId: 'empty-trip-1',
+      name: 'Later',
+      currency: 'MYR',
+      includeMe: false,
+    });
+    expect((await tool(client, 'get_split', { splitId: empty.splitId })).people).toEqual([]);
   });
 });
 
