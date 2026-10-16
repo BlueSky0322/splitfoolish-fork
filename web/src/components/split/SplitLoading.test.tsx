@@ -97,6 +97,27 @@ describe('loading a split', () => {
   });
 
   test.each([
+    ['a phone keeps saying Saved', 'phone', /Saved · 1 item/],
+    ['a computer says it is updating', 'desktop', /Updating · 1 item/],
+  ] as const)('while a kept copy is fetched again, %s', async (_what, size, whileFetching) => {
+    await setCacheUser('ryan@example.com');
+    await writeCache<SplitDetail>(splitCacheKey('trip'), withItem('trip', 'Kept'));
+    const server = fakeServer(withItem('trip', 'Kept'));
+    const held = holdNext(server, 'GET', '/api/splits/trip');
+    renderApp(server, '/?s=trip', { size });
+
+    expect(await screen.findByText('Kept')).toBeTruthy();
+    expect(await screen.findByText(whileFetching)).toBeTruthy();
+    if (size === 'phone') expect(screen.queryByText(/Updating/)).toBeNull();
+
+    await act(async () => {
+      held.release();
+      await Promise.resolve();
+    });
+    expect(await screen.findByText(/Saved · 1 item/)).toBeTruthy();
+  });
+
+  test.each([
     ['on a computer', 'desktop'],
     ['on a phone', 'phone'],
   ] as const)(

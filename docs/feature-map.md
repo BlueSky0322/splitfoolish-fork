@@ -371,7 +371,8 @@ method through a profile change.
   [PhotoViewer](../web/src/components/ui/PhotoViewer.tsx), and
   [ProfileSection](../web/src/components/settings/ProfileSection.tsx) and
   [PaymentMethods](../web/src/components/settings/PaymentMethods.tsx) in settings.
-- Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) and
+- Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) (the
+  orders and kinds shown, the same on phones and computers) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)

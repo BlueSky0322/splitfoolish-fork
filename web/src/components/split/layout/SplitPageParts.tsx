@@ -75,8 +75,12 @@ export function AvatarStack({
   );
 }
 
-/** Whether changes are saved, or waiting on a connection */
-export function SaveStatus() {
+/**
+ * Whether changes are saved, or waiting on a connection. With `quietRefresh`, the copy
+ * kept on this device still reads Saved while the latest is fetched behind it (it is
+ * saved), so the line doesn't change and change back on every visit.
+ */
+export function SaveStatus({ quietRefresh = false }: { quietRefresh?: boolean }) {
   const { status, waiting, retry, meta } = useSplitPage();
   const count = useSplitState().state.items.length;
   if (status === 'loading' && meta == null) {
@@ -116,7 +120,7 @@ export function SaveStatus() {
   const label =
     status === 'loading'
       ? 'Loading'
-      : status === 'refreshing'
+      : status === 'refreshing' && !quietRefresh
         ? 'Updating'
         : status === 'saving'
           ? 'Saving'

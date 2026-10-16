@@ -238,7 +238,7 @@ const MobileSplitLayout = ({
                       <ArrowsLeftRight size={12} />+{others}
                     </UnstyledButton>
                   )}
-                  <SaveStatus />
+                  <SaveStatus quietRefresh />
                 </div>
               )}
             </div>

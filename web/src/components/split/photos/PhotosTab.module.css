@@ -5,6 +5,12 @@
   padding: 16px 16px 96px;
 }
 
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .day {
   margin: 0 0 10px;
   font-size: 14px;
