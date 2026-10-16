@@ -9,17 +9,17 @@ The data model is in [erd.md](erd.md). How the Worker's routes and modules fit t
 is at the top of [worker/app.ts](../worker/app.ts). The rules every change follows are
 in [AGENTS.md](../AGENTS.md).
 
-| Feature                                                                        | State owner (app)                                                       | Worker                                                                       |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                            | `auth.ts`, `profiles.ts`, `routes/me.ts`                                     |
-| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts`                     |
-| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`        | `split-content.ts`, `split-detail.ts`                                        |
-| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                | `exchange-rates.ts`, `reconvert.ts`, `reconvert-queue.ts`, `routes/rates.ts` |
-| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                         | (none)                                                                       |
-| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`  | `sharing.ts`, `room.ts`, `routes/invites.ts`                                 |
-| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                              | (none; the API is the same)                                                  |
-| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                                                  |
-| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                          | (none)                                                                       |
+| Feature                                                                        | State owner (app)                                                                                 | Worker                                                                       |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                                                      | `auth.ts`, `profiles.ts`, `routes/me.ts`                                     |
+| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                                          | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts`                     |
+| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`                                  | `split-content.ts`, `split-detail.ts`                                        |
+| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                                          | `exchange-rates.ts`, `reconvert.ts`, `reconvert-queue.ts`, `routes/rates.ts` |
+| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                                                   | (none)                                                                       |
+| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`                            | `sharing.ts`, `room.ts`, `routes/invites.ts`                                 |
+| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                                                        | (none; the API is the same)                                                  |
+| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `offline/photo-queue.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                                                  |
+| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                                                    | (none)                                                                       |
 
 App paths are under `web/src/`, Worker paths under `worker/`.
 
@@ -273,6 +273,8 @@ page or, if it's closed, by the service worker.
 - [outbox.ts](../web/src/offline/outbox.ts): unsent changes, batching and the
   per-split lock.
 - [pending-creates.ts](../web/src/offline/pending-creates.ts): splits made offline.
+- [photo-queue.ts](../web/src/offline/photo-queue.ts): photos and receipts still to
+  upload (see Pictures below).
 - [sync.ts](../web/src/offline/sync.ts): sending all of it, started by
   [main.tsx](../web/src/main.tsx).
 
@@ -305,9 +307,11 @@ together), and [pending-creates.test.ts](../web/src/offline/pending-creates.test
 **What it is.** Profile pictures, split pictures, photos of a split and receipts on its
 items (the Photos tab), and QR codes on payment methods.
 
-**Owner.** Split photos: [split/usePhotos.ts](../web/src/split/usePhotos.ts) (upload,
-remove, remove several) keeping the split's details in step (`addAttachment`, and
-`changeMeta` for removals). Split pictures: [split/pictures.ts](../web/src/split/pictures.ts),
+**Owner.** Split photos and receipts: [split/usePhotos.ts](../web/src/split/usePhotos.ts)
+(add, remove, remove several, and the photos still to upload) keeping the split's
+details in step (`addAttachment` once one is uploaded, and `changeMeta` for removals).
+Adding goes through [offline/photo-queue.ts](../web/src/offline/photo-queue.ts), which
+keeps each photo on the device until it's uploaded. Split pictures: [split/pictures.ts](../web/src/split/pictures.ts),
 through My splits and `patchSettings`. Profile pictures:
 [ProfileContext](../web/src/profile/ProfileContext.tsx) changes, with the upload as the
 `save`. QR codes are uploaded first (`api.setPaymentQr`), then saved with their payment
@@ -323,19 +327,39 @@ method through a profile change.
 - Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
+- Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
+  on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
+  in the item form, with a spinner on their way up or marked as waiting.
 - API: [worker/photos.ts](../worker/photos.ts) stores images in D1 and serves them
   only to members (or to people who share a split, for profile pictures and QR codes).
 - Shared: size limits and `Attachment` in [shared/api.ts](../shared/api.ts), and
   `canRemovePhoto` in [shared/rules.ts](../shared/rules.ts).
 
+**Flow.** Picked → shrunk once (at most two photos shrunk or sent at a time) → kept on
+the device as bytes, tagged with the account → shown at once → sent once online, the
+split is on the server (`pending-creates.ts`) and, for a receipt, its item is saved
+(the open split's `whenSaved`, and no `addItem` for it left in the outbox) → joins the
+split's photos. Opening a split, signing in, coming back online or to the app picks up
+what's kept, oldest first.
+
 **Invariants.**
 
+- A photo leaves the device only once the server has it, or refused it (any 4xx but
+  401 and 429: its item gone, too large, too many photos), which is explained. Anything
+  else (offline, 401, 429, 5xx) keeps it to try again.
+- One account never sees or sends another's; they're forgotten with the cache
+  (`onCacheCleared`). Where the browser has Web Locks, each upload takes a lock per
+  photo and checks it's still kept, so two tabs don't both send it.
 - The file type comes from the bytes, not what the upload says.
 - A profile picture's, split picture's or QR code's address names its version, and a
   photo never changes once added, so the service worker and browsers can keep them for
   good.
 
-**Tests.** [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
+**Tests.** [photo-queue.test.ts](../web/src/offline/photo-queue.test.ts) (kept through a
+reload, accounts kept apart, order, two at a time, refused or retried, waiting for the
+split and the item), [OfflinePhotos.test.tsx](../web/src/components/split/OfflinePhotos.test.tsx)
+(waiting through the app reopening, removing one, a new item's receipt, online uploads,
+a refusal), [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
 [PhonePhotos.test.tsx](../web/src/components/split/PhonePhotos.test.tsx),
 [photo-days.test.ts](../web/src/split/photo-days.test.ts),
 [photo-download.test.ts](../web/src/split/photo-download.test.ts), and the image

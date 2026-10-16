@@ -75,7 +75,7 @@ const ItemForm = ({
   const { people } = useSplitState().state;
   // Receipt photos are added to a saved item straight away; a new item's wait until it's added
   const photos = item ? splitPhotos.photosOf(item.id) : [];
-  const uploading = item ? splitPhotos.uploading[item.id] ?? [] : [];
+  const queued = item ? splitPhotos.queuedOf(item.id) : [];
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isDesktop = useIsDesktop();
@@ -504,20 +504,21 @@ const ItemForm = ({
       <div className={classes.field}>
         <div className={classes.label}>
           Images
-          {photos.length + newPhotos.length + uploading.length > 0 &&
-            ` · ${photos.length + newPhotos.length + uploading.length}`}
+          {photos.length + newPhotos.length + queued.length > 0 &&
+            ` · ${photos.length + newPhotos.length + queued.length}`}
         </div>
         <PhotoStrip
           splitId={splitId}
           photos={photos}
           pending={newPhotos}
-          uploading={uploading}
+          queued={queued}
           canRemove={canRemovePhoto}
           onAdd={(files) =>
             item ? splitPhotos.upload(files, item.id) : setNewPhotos((p) => [...p, ...files])
           }
           onRemove={splitPhotos.remove}
           onRemovePending={(file) => setNewPhotos((p) => p.filter((f) => f !== file))}
+          onRemoveQueued={splitPhotos.removeQueued}
         />
       </div>
 
