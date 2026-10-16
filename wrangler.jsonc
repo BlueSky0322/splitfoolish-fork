@@ -10,12 +10,15 @@
   "vars": {
     "ACCESS_TEAM_DOMAIN": "ryanng-0611.cloudflareaccess.com",
     "ACCESS_AUD": "0b9d523eaa0a5d680e662443a9922d5be39edf752659882fef24b4f1dda5438b",
+    // Where the app lives: names the MCP resource (MCP_ORIGIN/mcp) and its OAuth issuer
+    "MCP_ORIGIN": "https://splitfoolish.shitty-app.workers.dev",
   },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"],
+    // The API, and MCP with its OAuth routes, which must never get the app's page
+    "run_worker_first": ["/api/*", "/mcp", "/mcp/*", "/oauth/*", "/.well-known/*"],
   },
   // A room per split that tells everyone with it open when it changes
   "durable_objects": { "bindings": [{ "name": "SPLIT_ROOM", "class_name": "SplitRoom" }] },
@@ -41,6 +44,8 @@
       { "queue": "reconvert-dlq", "max_batch_size": 10, "max_retries": 0 },
     ],
   },
+  // OAuth clients, grants and tokens for MCP (worker/mcp/oauth.ts). Locally it's simulated.
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "463af12a36d3433f87e44fbd4a6221b6" }],
   "d1_databases": [
     {
       "binding": "DB",

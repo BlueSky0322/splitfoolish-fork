@@ -293,6 +293,9 @@ export async function startLocalWorker(): Promise<LocalWorker> {
         'WISE_TOKEN:test-token',
         '--var',
         'RECONVERT_RETRY_MS:0',
+        // MCP and its OAuth routes on, at this run's address (worker/mcp/oauth.ts)
+        '--var',
+        `MCP_ORIGIN:http://127.0.0.1:${port}`,
         // Queued conversion retries every second, rather than after minutes
         '--var',
         'RECONVERT_RETRY_DELAY_S:1',

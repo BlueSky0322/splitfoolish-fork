@@ -268,8 +268,18 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  // Signing in and out with Cloudflare Access is left to the browser
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/cdn-cgi/')) return;
+  // Signing in and out with Cloudflare Access, and connecting an agent (the OAuth pages
+  // and MCP, worker/mcp/oauth.ts), are left to the browser: never the app's kept page
+  if (
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith('/cdn-cgi/') ||
+    url.pathname.startsWith('/oauth/') ||
+    url.pathname.startsWith('/.well-known/') ||
+    url.pathname === '/mcp' ||
+    url.pathname.startsWith('/mcp/')
+  ) {
+    return;
+  }
 
   if (event.request.mode === 'navigate') {
     event.respondWith(page(event));

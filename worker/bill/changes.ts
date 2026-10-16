@@ -349,17 +349,36 @@ interface ApplyOptions {
   onAccessRemoved?: (emails: string[]) => void;
 }
 
-/** Applies a batch of changes all-or-nothing. On refusal, says why. */
-export async function applyChanges(
+/**
+ * What saving a batch came to: saved, with the accounts it took out of the split; or
+ * refused, with the status and reason the API answers with. `constraint` marks a write
+ * the database refused, which a caller saving something alongside may need to look into.
+ */
+export type SaveResult =
+  | { saved: true; accessRemoved: string[] }
+  | { saved: false; status: 400 | 403 | 409 | 503; error: string; constraint?: true };
+
+const refused = (status: 400 | 403 | 409 | 503, error: string) => ({
+  saved: false as const,
+  status,
+  error,
+});
+
+/**
+ * Checks a batch of changes against the split as it is now and saves it all-or-nothing.
+ * `alongside` is written in the same transaction, so it is saved exactly when the
+ * changes are (the MCP tools keep their retry receipts this way).
+ */
+export async function saveChanges(
   db: D1Database,
   splitId: string,
   actor: Actor,
-  body: Unchecked<ChangesBody>,
-  { fetchRate, onAccessRemoved }: ApplyOptions,
-) {
-  const changes = body.changes;
+  changes: unknown,
+  fetchRate: ApplyOptions['fetchRate'],
+  alongside: D1PreparedStatement[] = [],
+): Promise<SaveResult> {
   if (!Array.isArray(changes) || changes.length === 0 || changes.length > MAX_CHANGES) {
-    return fail(`Send 1-${MAX_CHANGES} changes`, 400);
+    return refused(400, `Send 1-${MAX_CHANGES} changes`);
   }
 
   const model = await loadModel(db, splitId);
@@ -369,7 +388,7 @@ export async function applyChanges(
   // the app keeps the change and sends it again shortly
   const batch = changes as Batch;
   if (model.converting && batch.some((c) => c != null && CONVERTING_OPS.has(c.op))) {
-    return fail('Converting amounts to the new currency. Saving in a moment.', 503);
+    return refused(503, 'Converting amounts to the new currency. Saving in a moment.');
   }
 
   // Rates for items in other currencies, fetched before anything is checked or saved
@@ -386,7 +405,7 @@ export async function applyChanges(
   } catch (err) {
     // Not the change's fault: the app keeps it and tries again
     if (err instanceof RatesUnavailable) {
-      return fail("Couldn't get an exchange rate. We'll keep trying.", 503);
+      return refused(503, "Couldn't get an exchange rate. We'll keep trying.");
     }
     throw err;
   }
@@ -396,23 +415,44 @@ export async function applyChanges(
     try {
       statements.push(...changeStatements(db, splitId, model, change, actor, rates));
     } catch (err) {
-      if (err instanceof Refused) return fail(err.message, err instanceof Forbidden ? 403 : 409);
+      if (err instanceof Refused) return refused(err instanceof Forbidden ? 403 : 409, err.message);
       throw err;
     }
   }
-  if (statements.length === 0) return ok();
+  if (statements.length === 0 && alongside.length === 0) {
+    return { saved: true, accessRemoved: [] };
+  }
 
   try {
-    await db.batch([...statements, touchSplitStatement(db, splitId)]);
+    await db.batch([...statements, ...alongside, touchSplitStatement(db, splitId)]);
   } catch (err) {
     // Someone else's change landed between our read and write (e.g. a person we
     // referenced was just removed); the database's constraints caught it
     if (isConstraintError(err)) {
-      return fail('Someone else changed this split at the same time.', 409);
+      return {
+        ...refused(409, 'Someone else changed this split at the same time.'),
+        constraint: true,
+      };
     }
     throw err;
   }
-  onAccessRemoved?.([...membersBefore].filter((email) => !model.members.has(email)));
+  return {
+    saved: true,
+    accessRemoved: [...membersBefore].filter((email) => !model.members.has(email)),
+  };
+}
+
+/** Applies a batch of changes all-or-nothing, answering as the API does. On refusal, says why. */
+export async function applyChanges(
+  db: D1Database,
+  splitId: string,
+  actor: Actor,
+  body: Unchecked<ChangesBody>,
+  { fetchRate, onAccessRemoved }: ApplyOptions,
+) {
+  const result = await saveChanges(db, splitId, actor, body.changes, fetchRate);
+  if (!result.saved) return fail(result.error, result.status);
+  onAccessRemoved?.(result.accessRemoved);
   return ok();
 }
 
