@@ -22,7 +22,7 @@ import Fab from '../../ui/Fab';
 import { BalanceHero } from '../balances/BalancePanel';
 import { MobileSelectionBar } from '../items/ItemSelection';
 import { useItemViewPrefs } from '../items/useItemViewPrefs';
-import PhotosTab from '../photos/PhotosTab';
+import PhotosTab, { AddPhotosFab } from '../photos/PhotosTab';
 import { useSplitPage } from '../SplitPageContext';
 import { SaveStatus, type SelectionUi, type SplitPageParts, SplitNotices } from './SplitPageParts';
 import page from '../Split.module.css';
@@ -175,6 +175,12 @@ const MobileSplitLayout = ({
           <header
             className={classes.header}
             hidden={selection.active}
+            // Tapping the bar (not its buttons) goes back to Items, at the top
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest('button, a')) return;
+              goTo('items');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           >
             {meta && (
               <SplitAvatar
@@ -308,6 +314,7 @@ const MobileSplitLayout = ({
           onClick={() => openDialog({ kind: 'add' })}
         />
       )}
+      {tab === 'photos' && !selection.active && <AddPhotosFab />}
       {parts.dialogs}
     </>
   );
