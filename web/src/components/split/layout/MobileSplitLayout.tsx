@@ -9,6 +9,7 @@ import {
   StackSimple,
 } from '@phosphor-icons/react';
 import { type CSSProperties, type TouchEvent, useEffect, useRef, useState } from 'react';
+import { useBackDismiss } from '../../../hooks/useBackDismiss';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
 import { navigate } from '../../../hooks/useRoute';
 import { otherCurrencyCount } from '../../../split/derive';
@@ -23,6 +24,7 @@ import { BalanceHero } from '../balances/BalancePanel';
 import { MobileSelectionBar } from '../items/ItemSelection';
 import { useItemViewPrefs } from '../items/useItemViewPrefs';
 import PhotosTab, { AddPhotosFab } from '../photos/PhotosTab';
+import { usePhotoSelection } from '../photos/usePhotoSelection';
 import { useSplitPage } from '../SplitPageContext';
 import { SaveStatus, type SelectionUi, type SplitPageParts, SplitNotices } from './SplitPageParts';
 import page from '../Split.module.css';
@@ -101,16 +103,23 @@ const MobileSplitLayout = ({
   const noPeople = loaded && state.people.length === 0;
   const others = otherCurrencyCount(state.items);
 
-  // Picking items takes the bottom of the screen from the tabs
+  // Photos picked on the Photos tab; picking them or items puts a bar over the header
+  const photoPick = usePhotoSelection();
+  const picking = selection.active || photoPick.active;
+  // Back lets go of the picked photos, rather than leaving the split
+  useBackDismiss(photoPick.active, photoPick.clear);
+
+  // Picking takes the bottom of the screen from the tabs
   useEffect(() => {
-    if (!selection.active) return;
+    if (!picking) return;
     setTabsHidden(true);
     return () => setTabsHidden(false);
-  }, [selection.active]);
+  }, [picking]);
 
   const goTo = (next: SplitTab) => {
     const to = TABS.findIndex((x) => x.key === next);
     if (to === at) return;
+    photoPick.clear();
     setEnter(to > at ? 'right' : 'left');
     setTab(next);
   };
@@ -121,7 +130,7 @@ const MobileSplitLayout = ({
   };
   const swipeMove = (e: TouchEvent) => {
     const start = touch.current;
-    if (start == null || selection.active) return;
+    if (start == null || picking) return;
     const t = e.touches[0];
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
@@ -138,7 +147,7 @@ const MobileSplitLayout = ({
     const start = touch.current;
     touch.current = null;
     setDragX(null);
-    if (start == null || selection.active || start.sideways === false) return;
+    if (start == null || picking || start.sideways === false) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - start.x;
     if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < 2 * Math.abs(t.clientY - start.y)) return;
@@ -158,8 +167,8 @@ const MobileSplitLayout = ({
         {selection.moveDialog}
         <div
           className={classes.sticky}
-          // Picking items: the bar above takes the header's place
-          data-selecting={selection.active || undefined}
+          // Picking: the bar above takes the header's place
+          data-selecting={picking || undefined}
         >
           {!isMobile && (
             <Button
@@ -174,7 +183,7 @@ const MobileSplitLayout = ({
           )}
           <header
             className={classes.header}
-            hidden={selection.active}
+            hidden={picking}
             // Tapping the bar (not its buttons) goes back to Items, at the top
             onClick={(e) => {
               if ((e.target as HTMLElement).closest('button, a')) return;
@@ -304,7 +313,7 @@ const MobileSplitLayout = ({
               </>
             )}
             {tab === 'settle' && <SettleTab panel={parts.panel} />}
-            {tab === 'photos' && <PhotosTab />}
+            {tab === 'photos' && <PhotosTab pick={photoPick} />}
           </div>
         </div>
       </div>
@@ -314,7 +323,7 @@ const MobileSplitLayout = ({
           onClick={() => openDialog({ kind: 'add' })}
         />
       )}
-      {tab === 'photos' && !selection.active && <AddPhotosFab />}
+      {tab === 'photos' && !picking && <AddPhotosFab />}
       {parts.dialogs}
     </>
   );

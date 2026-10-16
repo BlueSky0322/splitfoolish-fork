@@ -9,6 +9,8 @@ export interface ViewerPhoto {
   src: string;
   /** Removes it; absent when this person can't */
   onRemove?: () => void;
+  /** What Download saves it as; the browser picks a name without one */
+  fileName?: string;
   /**
    * About the photo, in a panel beside it (on a computer). The panel then has the
    * photo's own buttons, so the bar above the photo only closes it.
@@ -186,7 +188,7 @@ const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
                   <ActionIcon
                     component="a"
                     href={photo.src}
-                    download
+                    download={photo.fileName ?? true}
                     variant="subtle"
                     color="gray"
                     size={40}

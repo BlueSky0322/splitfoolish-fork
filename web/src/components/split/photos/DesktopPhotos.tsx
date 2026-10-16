@@ -12,7 +12,6 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { type DragEvent, useMemo, useRef, useState } from 'react';
-import type { Attachment } from '@shared/api';
 import { attachmentUrl } from '../../../api';
 import {
   DEFAULT_PHOTO_VIEW,
@@ -23,6 +22,7 @@ import {
   photoCounts,
   photoDays,
 } from '../../../split/photo-days';
+import { usePhotoDownload } from '../../../split/photo-download';
 import { useSplitState } from '../../../split/SplitStateContext';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
 import UserAvatar from '../../ui/UserAvatar';
@@ -47,16 +47,6 @@ const imagesIn = (list: DataTransfer) =>
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Saves each photo to the computer, as if its Download had been clicked */
-function download(splitId: string, photos: Attachment[]) {
-  for (const photo of photos) {
-    const link = document.createElement('a');
-    link.href = attachmentUrl(splitId, photo.id);
-    link.download = '';
-    link.click();
-  }
-}
-
 // The split's Photos tab on a computer: every photo, the split's own and each item's
 // receipts, by day in rows that keep each photo's shape. Choose which to show and in
 // what order, select some to download or remove, and drop files on it to add them.
@@ -68,6 +58,8 @@ const DesktopPhotos = () => {
   const [open, setOpen] = useState<number | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Several photos are saved as one zip
+  const saving = usePhotoDownload(splitId, meta?.name ?? '', { zip: true });
   // How many photos are being dragged over the tab, while they are
   const [dragging, setDragging] = useState(0);
   const dragDepth = useRef(0);
@@ -173,10 +165,11 @@ const DesktopPhotos = () => {
             color="gray"
             size="xs"
             leftSection={<DownloadSimple size={14} />}
-            onClick={() => download(splitId, chosen)}
+            onClick={() => void saving.download(chosen)}
             disabled={chosen.length === 0}
+            loading={saving.busy}
           >
-            Download
+            {chosen.length > 1 ? 'Download zip' : 'Download'}
           </Button>
           <Tooltip
             label="You can only remove photos you added"
