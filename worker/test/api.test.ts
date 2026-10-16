@@ -55,6 +55,12 @@ const personOf = async (who: string, id: string, email: string): Promise<string>
     (p: { memberEmail: string | null }) => p.memberEmail === email,
   ).id;
 
+/** How split `id` shows in `who`'s My splits */
+const listed = async (who: string, id: string) =>
+  ((await api.call(who, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
+    (s) => s.id === id,
+  );
+
 describe('who can see a split', () => {
   it('hides it from people who are not in it', async () => {
     const owner = person('owner');
@@ -687,25 +693,21 @@ describe('My splits', () => {
       },
     );
     expect(res.status).toBe(200);
-    const listed = async (who: string) =>
-      ((await api.call(who, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
-        (s) => s.id === id,
-      );
 
     // The owner paid 10 and owes 30 + 4; the member paid 90 and owes 30 + 6
-    expect(await listed(owner)).toMatchObject({
+    expect(await listed(owner, id)).toMatchObject({
       totalCents: 10_000,
       peopleCount: 3,
       myBalanceCents: -2400,
     });
-    expect(await listed(member)).toMatchObject({ myBalanceCents: 5400 });
+    expect(await listed(member, id)).toMatchObject({ myBalanceCents: 5400 });
     // Nobody in the bill is this account yet
     const empty = (await splitWith(owner)).id;
-    expect(
-      ((await api.call(owner, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
-        (s) => s.id === empty,
-      ),
-    ).toMatchObject({ totalCents: 0, peopleCount: 0, myBalanceCents: null });
+    expect(await listed(owner, empty)).toMatchObject({
+      totalCents: 0,
+      peopleCount: 0,
+      myBalanceCents: null,
+    });
   });
 });
 
@@ -739,11 +741,6 @@ describe('ordering my splits', () => {
 });
 
 describe('archiving and search', () => {
-  const listed = async (who: string, id: string) =>
-    ((await api.call(who, 'GET', '/api/splits')).data.splits as Record<string, unknown>[]).find(
-      (s) => s.id === id,
-    );
-
   it('archives a split for one person only', async () => {
     const owner = person('owner');
     const member = person('member');
@@ -772,51 +769,27 @@ describe('archiving and search', () => {
     );
   });
 
-  it('says a split is settled once spending is square', async () => {
+  // Each bill is 30, paid by one person in the split for everyone in it
+  it.each<[string, number, number[], Record<string, unknown>]>([
+    ['one person paid for themselves', 1, [0], { settled: true, itemCount: 1, totalCents: 3000 }],
+    // The other two owe the first 10 each
+    ['one of three paid for all', 3, [0], { settled: false, itemCount: 1, totalCents: 3000 }],
+    ['each of three paid for all', 3, [0, 1, 2], { settled: true, itemCount: 3, totalCents: 9000 }],
+  ])('says whether a split is settled when %s', async (_bills, count, payers, expected) => {
     const owner = person('owner');
     const { id } = await splitWith(owner);
-    const me = hex();
-    await change(owner, id, { op: 'addPerson', id: me, name: 'Me' });
-    await change(owner, id, {
-      op: 'addItem',
-      item: { id: hex(), name: 'Solo lunch', cost: 12, payerId: me, participantIds: [me] },
-    });
-    expect(await listed(owner, id)).toMatchObject({ settled: true, itemCount: 1 });
-  });
-
-  it('says a split with money still owed is not settled, and one where it evens out is', async () => {
-    const owner = person('owner');
-    /** A split with three people, and a 30 bill shared by all three paid by each of `payers` */
-    const billed = async (...payers: number[]) => {
-      const { id } = await splitWith(owner);
-      const people = [hex(), hex(), hex()];
-      const res = await change(
-        owner,
-        id,
-        ...people.map((p, i) => ({ op: 'addPerson', id: p, name: `P${i}` })),
-        ...payers.map((i) => ({
-          op: 'addItem',
-          item: { id: hex(), name: 'X', cost: 30, payerId: people[i], participantIds: people },
-        })),
-      );
-      expect(res.status).toBe(200);
-      return id;
-    };
-
-    // The first paid 30 for all three: the other two owe them 10 each
-    const unpaid = await billed(0);
-    expect(await listed(owner, unpaid)).toMatchObject({
-      settled: false,
-      itemCount: 1,
-      totalCents: 3000,
-    });
-    // Each paid 30 for all three: everyone has paid their share
-    const even = await billed(0, 1, 2);
-    expect(await listed(owner, even)).toMatchObject({
-      settled: true,
-      itemCount: 3,
-      totalCents: 9000,
-    });
+    const people = Array.from({ length: count }, hex);
+    const res = await change(
+      owner,
+      id,
+      ...people.map((p, i) => ({ op: 'addPerson', id: p, name: `P${i}` })),
+      ...payers.map((i) => ({
+        op: 'addItem',
+        item: { id: hex(), name: 'X', cost: 30, payerId: people[i], participantIds: people },
+      })),
+    );
+    expect(res.status).toBe(200);
+    expect(await listed(owner, id)).toMatchObject(expected);
   });
 
   it('finds items by name in your own splits only', async () => {
@@ -1676,15 +1649,9 @@ describe('changing a split currency', () => {
   }
 
   /** The split's total in My splits, which (unlike opening it) never retries a conversion */
-  const listedTotal = async (who: string, id: string) =>
-    (
-      (await api.call(who, 'GET', '/api/splits')).data.splits as {
-        id: string;
-        totalCents: number;
-      }[]
-    ).find((s) => s.id === id)?.totalCents;
+  const listedTotal = async (who: string, id: string) => (await listed(who, id))?.totalCents;
 
-  /** A split with one 10 MYR item, its owner, and a currency of its own to change to */
+  /** A split with one 10 MYR item paid by A, its owner, and A */
   async function splitToConvert() {
     const owner = person('owner');
     const { id } = await splitWith(owner);
@@ -1694,7 +1661,7 @@ describe('changing a split currency', () => {
       op: 'addItem',
       item: { id: hex(), name: 'Tea', cost: 10, payerId: a, participantIds: [a] },
     });
-    return { owner, id };
+    return { owner, id, a };
   }
 
   it('finishes on its own once rates are back, without anyone opening the split', async () => {
@@ -1747,14 +1714,7 @@ describe('changing a split currency', () => {
   }, 60_000);
 
   it('holds item changes until converted, and finishes once rates are back', async () => {
-    const owner = person('owner');
-    const { id } = await splitWith(owner);
-    const a = hex();
-    await change(owner, id, { op: 'addPerson', id: a, name: 'A' });
-    await change(owner, id, {
-      op: 'addItem',
-      item: { id: hex(), name: 'Tea', cost: 10, payerId: a, participantIds: [a] },
-    });
+    const { owner, id, a } = await splitToConvert();
 
     api.rates.down('wise', true);
     api.rates.down('frankfurter', true);
