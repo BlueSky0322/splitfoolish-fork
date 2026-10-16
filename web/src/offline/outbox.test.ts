@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { readFileSync } from 'node:fs';
-import { URL as NodeURL, fileURLToPath } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
 import { CLIENT_ID_HEADER } from '@shared/api';
-import { backgroundSync, ok, respond } from '../testing/sw';
+import { backgroundSync, load, ok, photoOnDevice, respond } from '../testing/sw';
 import { clearCache, listCacheIds, setCacheUser, writeCache } from './cache';
 import { type PendingCreate, readPendingCreates, savePendingCreate } from './pending-creates';
 import type { Queued } from './outbox';
@@ -21,11 +18,6 @@ import {
 } from './outbox';
 import { PHOTO_LOCK_PREFIX, PHOTO_PREFIX } from './photo-queue';
 import { forgetOfflineWork } from './sync';
-
-const swSource = readFileSync(
-  fileURLToPath(new NodeURL('../../public/sw.js', import.meta.url)),
-  'utf8',
-);
 
 const q = (cid: string): Queued => ({ cid, change: { op: 'removeItem', id: cid } });
 
@@ -111,6 +103,14 @@ describe('the service worker and the app', () => {
     summary: {} as PendingCreate['summary'],
   };
 
+  /** Web Locks that note the name of each lock taken */
+  const noteLocks = (taken: string[]) => ({
+    request: (name: string, fn: () => Promise<unknown>) => {
+      taken.push(name);
+      return fn();
+    },
+  });
+
   beforeEach(() => setCacheUser('ryan@example.com'));
   afterEach(async () => {
     vi.unstubAllGlobals();
@@ -145,12 +145,7 @@ describe('the service worker and the app', () => {
 
   test('both take the same lock for a split', async () => {
     const taken: string[] = [];
-    const locks = {
-      request: (name: string, fn: () => Promise<unknown>) => {
-        taken.push(name);
-        return fn();
-      },
-    };
+    const locks = noteLocks(taken);
     await writeOutbox('bali', [q('a')]);
     runServiceWorker({ navigator: { locks } }).sync();
     await vi.waitFor(async () => expect(await readOutbox('bali')).toEqual([]));
@@ -164,24 +159,9 @@ describe('the service worker and the app', () => {
 
   test('both take the same lock for a photo, and read it where the app keeps it', async () => {
     const taken: string[] = [];
-    const locks = {
-      request: (name: string, fn: () => Promise<unknown>) => {
-        taken.push(name);
-        return fn();
-      },
-    };
-    await setCacheUser('ryan@example.com');
     const id = '00000000000000a1';
-    await writeCache(`${PHOTO_PREFIX}bali:${id}`, {
-      id,
-      splitId: 'bali',
-      itemId: null,
-      name: 'beach.jpg',
-      createdAt: 1,
-      type: 'image/jpeg',
-      bytes: new ArrayBuffer(4),
-    });
-    runServiceWorker({ navigator: { locks } }).sync();
+    await writeCache(`${PHOTO_PREFIX}bali:${id}`, photoOnDevice(id, 'bali', 1));
+    runServiceWorker({ navigator: { locks: noteLocks(taken) } }).sync();
     await vi.waitFor(async () => expect(await listCacheIds(PHOTO_PREFIX)).toEqual([]));
     expect(taken).toEqual([`${PHOTO_LOCK_PREFIX}${id}`]);
   });
@@ -210,27 +190,11 @@ describe('the service worker and the app', () => {
 });
 
 /**
- * public/sw.js loaded on its own, with `self` and globals of a test's choosing, answering
- * every request with ok: for what backgroundSync doesn't stand in for
+ * public/sw.js loaded with `self` and globals of a test's choosing, answering every
+ * request with ok: for what backgroundSync doesn't stand in for
  */
 function runServiceWorker(self: object, globals: object = {}) {
-  const handlers: Record<string, (event: unknown) => void> = {};
-  runInNewContext(swSource, {
-    self: {
-      addEventListener: (type: string, handler: (event: unknown) => void) =>
-        (handlers[type] = handler),
-      navigator: {},
-      ...self,
-    },
-    fetch: () => respond(ok),
-    indexedDB,
-    Blob,
-    Response,
-    TextEncoder,
-    URL,
-    URLSearchParams,
-    ...globals,
-  });
+  const handlers = load({ fetch: () => respond(ok), ...globals }, self);
   return {
     sync: () => handlers.sync({ tag: SYNC_TAG, waitUntil: () => {} }),
     /** A page asking for `url`; resolves once the service worker has answered */

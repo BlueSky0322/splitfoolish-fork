@@ -80,16 +80,7 @@ afterEach(async () => {
 });
 
 describe('the page catching up on changes kept for splits not open', () => {
-  test(`sends ${MAX_CHANGES} in one request, and more in several, in order`, async () => {
-    const { sent } = server();
-    await writeOutbox('trip', queued(MAX_CHANGES + 1));
-    await flushOfflineChanges();
-    expect(sent.map((b) => b.length)).toEqual([MAX_CHANGES, 1]);
-    expect(sent.flat()).toEqual(queued(MAX_CHANGES + 1).map((q) => q.change));
-    expect(await readOutbox('trip')).toEqual([]);
-  });
-
-  test('keeps only what was not sent when a later request fails, for next time', async () => {
+  test(`sends ${MAX_CHANGES} a request, in order, and keeps what a failed one left for next time`, async () => {
     const all = queued(2 * MAX_CHANGES + 1);
     const first = server(['ok', busy]);
     await writeOutbox('trip', all);
@@ -101,6 +92,7 @@ describe('the page catching up on changes kept for splits not open', () => {
     vi.restoreAllMocks();
     const second = server();
     await flushOfflineChanges();
+    expect(second.sent.map((b) => b.length)).toEqual([MAX_CHANGES, 1]);
     expect(second.sent.flat()).toEqual(all.slice(MAX_CHANGES).map((q) => q.change));
     expect(await readOutbox('trip')).toEqual([]);
   });

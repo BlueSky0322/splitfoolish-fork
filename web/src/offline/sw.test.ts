@@ -14,6 +14,7 @@ import {
   fakeCaches,
   fetchThroughWorker,
   ok,
+  photoOnDevice,
   respond,
 } from '../testing/sw';
 
@@ -137,25 +138,11 @@ describe('the service worker, sending changes too big to go all at once', () => 
 });
 
 describe('the service worker, sending photos kept on the device', () => {
-  /** A photo the app kept, as photo-queue.ts keeps them */
-  const keepPhoto = (
-    email: string,
-    id: string,
-    createdAt: number,
-    itemId: string | null = null,
-    splitId = 'trip',
-  ) =>
-    set(`${PHOTO_PREFIX}${splitId}:${id}`, {
+  /** A photo the app kept for `email`, as photo-queue.ts keeps them */
+  const keepPhoto = (email: string, id: string, createdAt: number, itemId: string | null = null) =>
+    set(`${PHOTO_PREFIX}trip:${id}`, {
       email,
-      value: {
-        id,
-        splitId,
-        itemId,
-        name: `${id}.jpg`,
-        createdAt,
-        type: 'image/jpeg',
-        bytes: new TextEncoder().encode(`bytes of ${id}`).buffer,
-      },
+      value: photoOnDevice(id, 'trip', createdAt, itemId),
     });
   const keptPhotos = async () =>
     (await keys()).filter((k) => typeof k === 'string' && k.startsWith(PHOTO_PREFIX));
@@ -179,8 +166,8 @@ describe('the service worker, sending photos kept on the device', () => {
       `/api/splits/trip/attachments?${PHOTO_ID_PARAM}=00000000000000b2&itemId=i1`,
     ]);
     expect(await Promise.all(photos.map((p) => text(p.body)))).toEqual([
-      'bytes of 00000000000000a1',
-      'bytes of 00000000000000b2',
+      'small 00000000000000a1.jpg',
+      'small 00000000000000b2.jpg',
     ]);
     expect(photos[0].body.type).toBe('image/jpeg');
     expect(await keptPhotos()).toEqual([]);

@@ -18,7 +18,7 @@ import {
   removeQueuedPhoto,
   resumePhotoUploads,
 } from './photo-queue';
-import { backgroundSync } from '../testing/sw';
+import { backgroundSync, photoOnDevice } from '../testing/sw';
 import { useKeepingWork } from './storage-health';
 import { forgetOfflineWork } from './sync';
 
@@ -90,16 +90,8 @@ const goOnline = () => {
 };
 
 /** A photo kept on the device by an earlier visit, as the queue keeps them */
-const keptPhoto = (id: string, splitId: string, createdAt: number, itemId: string | null = null) =>
-  writeCache(`photo:${splitId}:${id}`, {
-    id,
-    splitId,
-    itemId,
-    name: `${id}.jpg`,
-    createdAt,
-    type: 'image/jpeg',
-    bytes: new TextEncoder().encode(`small ${id}.jpg`).buffer,
-  });
+const keptPhoto = (id: string, splitId: string, createdAt: number) =>
+  writeCache(`photo:${splitId}:${id}`, photoOnDevice(id, splitId, createdAt));
 
 beforeEach(async () => {
   online = true;
@@ -217,15 +209,7 @@ describe('keeping photos on the device', () => {
     const upload = serverKeeps();
     await set('photo:trip:anns', {
       email: 'ann@example.com',
-      value: {
-        id: 'anns',
-        splitId: 'trip',
-        itemId: null,
-        name: 'anns.jpg',
-        createdAt: 1,
-        type: 'image/jpeg',
-        bytes: new TextEncoder().encode('ann').buffer,
-      },
+      value: photoOnDevice('anns', 'trip', 1),
     });
 
     // Not shown while offline, nor sent once online
