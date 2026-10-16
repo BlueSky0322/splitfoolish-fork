@@ -63,7 +63,8 @@ h3,
   letter-spacing: -0.02em;
 }
 
-/* A split being dragged into a new place */
+/* A split being dragged into a new place (useSortableSplit); a swipe between tabs is
+   data-swiping, which must not look like this */
 [data-dragging] {
   cursor: grabbing;
   background: var(--sf-surface);

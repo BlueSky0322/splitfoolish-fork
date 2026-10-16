@@ -95,7 +95,7 @@
   transition: left 220ms ease-out;
 }
 
-.indicator[data-dragging] {
+.indicator[data-swiping] {
   transition: none;
 }
 
@@ -114,7 +114,7 @@
   transition: transform 200ms ease-out;
 }
 
-.pane[data-dragging] {
+.pane[data-swiping] {
   transition: none;
 }
 

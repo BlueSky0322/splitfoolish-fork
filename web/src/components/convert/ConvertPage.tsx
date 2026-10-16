@@ -34,6 +34,7 @@ import classes from './Convert.module.css';
 import { type SplitSummary } from '@shared/api';
 import { showError } from '../../utils/notify';
 import { useRate } from '../../hooks/useRate';
+import { useSelectOnFocus } from '../../hooks/useSelectOnFocus';
 import { quietly } from '../../utils/quietly';
 
 const RECENT_KEY = 'sf-convert-recent';
@@ -191,6 +192,7 @@ const ConvertPage = () => {
   const [from, setFrom] = useState(() => recent[0]?.[0] ?? (home === 'USD' ? 'MYR' : 'USD'));
   const [to, setTo] = useState(() => recent[0]?.[1] ?? home);
   const [amountText, setAmountText] = useState('100');
+  const selectOnFocus = useSelectOnFocus();
   const [splitId, setSplitId] = useState<string | null>(null);
   const amount = readAmount(amountText);
 
@@ -359,6 +361,7 @@ const ConvertPage = () => {
                 placeholder="0"
                 value={amountText}
                 onChange={(e) => setAmountText(e.target.value)}
+                {...selectOnFocus}
                 aria-label="Amount"
                 aria-invalid={amount == null && amountText.trim() !== ''}
               />
@@ -452,6 +455,7 @@ const ConvertPage = () => {
         inputMode="decimal"
         value={amountText}
         onChange={(e) => setAmountText(e.target.value)}
+        {...selectOnFocus}
         error={amount == null && amountText.trim() !== '' ? 'Enter a number' : undefined}
       />
       <div className={classes.pair}>

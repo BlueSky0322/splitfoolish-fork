@@ -2,15 +2,17 @@ import { Button } from '@mantine/core';
 import { useState } from 'react';
 import { api } from '../../../api';
 import { showError } from '../../../utils/notify';
+import classes from './SplitMembers.module.css';
 
 interface ResetLinkProps {
   splitId: string;
-  /** Back to the share dialog, with the new link once it's made */
-  onDone: () => void;
+  /** The link was reset; resolves once the new one is shown */
+  onDone: () => Promise<void>;
   onCancel: () => void;
 }
 
-// Confirm before the share link changes
+// Asks before the share link changes, in place under the link, so the share dialog
+// stays open around it
 const ResetLink = ({ splitId, onDone, onCancel }: ResetLinkProps) => {
   const [busy, setBusy] = useState(false);
 
@@ -18,7 +20,7 @@ const ResetLink = ({ splitId, onDone, onCancel }: ResetLinkProps) => {
     setBusy(true);
     try {
       await api.resetShareLinks(splitId);
-      onDone();
+      await onDone();
     } catch (err) {
       showError(err, 'Could not reset the link');
       setBusy(false);
@@ -26,20 +28,33 @@ const ResetLink = ({ splitId, onDone, onCancel }: ResetLinkProps) => {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="sf-muted text-sm">
+    <div
+      className={classes.confirm}
+      role="group"
+      aria-labelledby="reset-link-title"
+    >
+      <p
+        id="reset-link-title"
+        className={classes.confirmTitle}
+      >
+        Reset the share link?
+      </p>
+      <p className={classes.help}>
         The current link stops working. People already in the split keep access.
       </p>
       <div className="flex gap-2 justify-end">
         <Button
           variant="default"
+          size="xs"
           onClick={onCancel}
+          disabled={busy}
         >
           Cancel
         </Button>
         <Button
+          size="xs"
           loading={busy}
-          onClick={reset}
+          onClick={() => void reset()}
         >
           Reset link
         </Button>

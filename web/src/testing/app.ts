@@ -349,6 +349,18 @@ function answerNow(server: FakeServer) {
       return json({ id }, 201);
     }
     if (path === '/api/invites') return json({ invites: server.invites });
+    // New share links, as worker/routes/splits.ts makes them: the owner only, and the old
+    // link stops working
+    const resetMatch = path.match(/^\/api\/splits\/([^/]+)\/invite$/);
+    if (resetMatch && method === 'POST') {
+      const split = server.splits.get(resetMatch[1]);
+      if (split == null) return json({ error: 'Not found' }, 404);
+      if (split.role !== 'owner') {
+        return json({ error: 'Only the owner can reset the invite link' }, 403);
+      }
+      split.shareToken = `${split.shareToken}-new`;
+      return json({ shareToken: split.shareToken });
+    }
     const joinMatch = path.match(/^\/api\/join\/([^/]+)$/);
     if (joinMatch && method === 'POST') {
       const failure = failing('join');

@@ -262,7 +262,7 @@ const MobileSplitLayout = ({
             <span
               className={classes.indicator}
               aria-hidden
-              data-dragging={dragX != null || undefined}
+              data-swiping={dragX != null || undefined}
               style={{ '--tab-at': indicatorAt } as CSSProperties}
             />
           </div>
@@ -281,7 +281,7 @@ const MobileSplitLayout = ({
             key={tab}
             className={classes.pane}
             data-enter={enter ?? undefined}
-            data-dragging={dragX != null || undefined}
+            data-swiping={dragX != null || undefined}
             style={dragX == null ? undefined : { transform: `translateX(${dragX}px)` }}
           >
             {tab === 'items' && (
