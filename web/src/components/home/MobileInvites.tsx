@@ -1,8 +1,9 @@
-import { ActionIcon, Button, Loader } from '@mantine/core';
+import { ActionIcon, Button } from '@mantine/core';
 import { Check, X } from '@phosphor-icons/react';
 import { useMySplits } from '../../my-splits/useMySplits';
 import SplitAvatar from '../common/SplitAvatar';
 import { describeInvite, linkedInviteId, useAnswerInvite } from './invite-answers';
+import { InviteRowsSkeleton } from './HomeSkeletons';
 import classes from './MobileHome.module.css';
 
 /** The Invites tab on phones (10f): splits you're invited to, and people asking to join yours */
@@ -16,7 +17,7 @@ const MobileInvites = () => {
     <div className={classes.page}>
       <h1 className={classes.title}>Invites</h1>
       {error && <div className="sf-negative">{error}</div>}
-      {invites == null && error == null && <Loader size="sm" />}
+      {invites == null && error == null && <InviteRowsSkeleton phone />}
       {invites?.length === 0 && (
         <p className="sf-muted text-center py-10">
           No invites right now. Open a share link from a split to get one.

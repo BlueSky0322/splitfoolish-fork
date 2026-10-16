@@ -19,6 +19,8 @@ import { formatAmount } from '../../../utils/money';
 import SplitAvatar from '../../common/SplitAvatar';
 import { setTabsHidden } from '../../shell/tabs-visibility';
 import ErrorBoundary from '../../ui/ErrorBoundary';
+import Skeleton from '../../ui/Skeleton';
+import { ToolbarSkeleton } from './SplitSkeletons';
 import Fab from '../../ui/Fab';
 import { BalanceHero } from '../balances/BalancePanel';
 import { MobileSelectionBar } from '../items/ItemSelection';
@@ -87,7 +89,7 @@ const MobileSplitLayout = ({
   parts: SplitPageParts;
   selection: SelectionUi;
 }) => {
-  const { splitId, myEmail, meta, currency, pictureVersion, openDialog } = useSplitPage();
+  const { splitId, myEmail, meta, status, currency, pictureVersion, openDialog } = useSplitPage();
   const { state } = useSplitState();
   const { prefs, shownSort, cycleMobileSort, cycleGroup } = useItemViewPrefs();
   const isMobile = useIsMobile();
@@ -199,8 +201,31 @@ const MobileSplitLayout = ({
                 size={36}
               />
             )}
+            {meta == null && status === 'loading' && (
+              <Skeleton
+                circle
+                width={36}
+                height={36}
+              />
+            )}
             <div className="min-w-0 flex-1">
-              <h1 className={classes.name}>{meta?.name ?? ' '}</h1>
+              {meta == null && status === 'loading' ? (
+                <div
+                  className="flex flex-col justify-center gap-2"
+                  style={{ minHeight: 51 }}
+                >
+                  <Skeleton
+                    width={140}
+                    height={16}
+                  />
+                  <Skeleton
+                    width={110}
+                    height={10}
+                  />
+                </div>
+              ) : (
+                <h1 className={classes.name}>{meta?.name ?? ' '}</h1>
+              )}
               {meta && (
                 <div className={classes.tags}>
                   <span className="sf-tag">{currency}</span>
@@ -306,6 +331,7 @@ const MobileSplitLayout = ({
                     {parts.viewToggle}
                   </div>
                 )}
+                {meta == null && status === 'loading' && <ToolbarSkeleton />}
                 {parts.filterChip}
                 <ErrorBoundary fallback={<div>Something went wrong showing the items.</div>}>
                   {parts.list}

@@ -1,4 +1,4 @@
-import { ActionIcon, Loader, Radio, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Radio, UnstyledButton } from '@mantine/core';
 import {
   Archive,
   ArrowCounterClockwise,
@@ -27,6 +27,7 @@ import { isSplitSort, SPLIT_SORT_LABELS, SPLIT_SORTS, type SplitSort } from './s
 import { SortableSplits } from './SortableSplits';
 import { justDragged, useSortableSplitParts } from './useSortableSplit';
 import { useOpenNewSplit } from './NewSplitDialog';
+import { MobileSplitRowsSkeleton } from './HomeSkeletons';
 import classes from './MobileHome.module.css';
 
 type Show = 'active' | 'settled' | 'archived' | 'all';
@@ -299,7 +300,7 @@ const MobileHome = () => {
 
       <InstallCard />
       {error && <div className="sf-negative">{error}</div>}
-      {shown == null && error == null && <Loader size="sm" />}
+      {shown == null && error == null && <MobileSplitRowsSkeleton />}
       {shown?.length === 0 && <p className="sf-muted text-center py-10">{EMPTY[prefs.show]}</p>}
       {shown != null && shown.length > 0 && (
         <SortableSplits

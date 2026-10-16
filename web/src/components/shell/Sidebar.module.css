@@ -184,6 +184,12 @@
   background: var(--sf-divider);
 }
 
+.railSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .railSplits {
   display: flex;
   flex-direction: column;

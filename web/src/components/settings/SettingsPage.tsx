@@ -17,6 +17,7 @@ import { navigate } from '../../hooks/useRoute';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { InstallField } from '../common/InstallApp';
 import UserAvatar from '../common/UserAvatar';
+import Skeleton, { Loading } from '../ui/Skeleton';
 import AppearanceSection from './AppearanceSection';
 import CurrencySection from './CurrencySection';
 import PaymentsSection from './PaymentsSection';
@@ -114,6 +115,71 @@ function useSectionHash() {
   return section;
 }
 
+/** Your picture, name and email on the phone's Settings list, until your account loads */
+const IdentitySkeleton = () => (
+  <Loading
+    label="Loading your account"
+    className={classes.mobileIdentity}
+  >
+    <Skeleton
+      circle
+      width={52}
+      height={52}
+    />
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <Skeleton
+        width="45%"
+        height={15}
+      />
+      <Skeleton
+        width="65%"
+        height={11}
+      />
+    </div>
+  </Loading>
+);
+
+/** A settings page's card with a few fields, until your account loads */
+const SectionSkeleton = () => (
+  <Loading
+    label="Loading your settings"
+    className={classes.card}
+  >
+    <div className="flex items-center gap-3">
+      <Skeleton
+        circle
+        width={44}
+        height={44}
+      />
+      <div className="flex flex-1 flex-col gap-2">
+        <Skeleton
+          width="35%"
+          height={14}
+        />
+        <Skeleton
+          width="50%"
+          height={10}
+        />
+      </div>
+    </div>
+    {[0, 1].map((i) => (
+      <div
+        key={i}
+        className="flex flex-col gap-2"
+      >
+        <Skeleton
+          width={90}
+          height={11}
+        />
+        <Skeleton
+          height={36}
+          radius={8}
+        />
+      </div>
+    ))}
+  </Loading>
+);
+
 /** Opened from the phone's Settings list, so Back returns to it */
 const FROM_LIST = 'sfSettingsFromList';
 
@@ -132,8 +198,8 @@ const SettingsPage = () => {
   const hashed = useSectionHash();
   const { track, note } = useSaveIndicator();
   const { askToSignOut, dialog: signOutDialog } = useConfirmSignOut();
-  if (profile == null) return null;
-  const myName = nameFor(profile.email, profile.displayName);
+  // The menu shows straight away; what depends on your account waits for it
+  const myName = profile ? nameFor(profile.email, profile.displayName) : '';
 
   const page = (section: Section) => (
     <div
@@ -154,7 +220,7 @@ const SettingsPage = () => {
         </div>
         {isDesktop && note}
       </div>
-      {section.render(track)}
+      {profile == null ? <SectionSkeleton /> : section.render(track)}
     </div>
   );
 
@@ -243,24 +309,28 @@ const SettingsPage = () => {
         page(hashed)
       ) : (
         <>
-          <UnstyledButton
-            className={classes.mobileIdentity}
-            onClick={() => open('profile', true)}
-          >
-            <UserAvatar
-              name={myName}
-              email={profile.email}
-              avatarVersion={profile.avatarVersion}
-              previewSrc={profile.avatarPreview}
-              size={52}
-              preview={false}
-            />
-            <span className="min-w-0 flex-1">
-              <span className={classes.identityName}>{myName}</span>
-              <span className={classes.identityEmail}>{profile.email}</span>
-            </span>
-            <CaretRight size={16} />
-          </UnstyledButton>
+          {profile == null ? (
+            <IdentitySkeleton />
+          ) : (
+            <UnstyledButton
+              className={classes.mobileIdentity}
+              onClick={() => open('profile', true)}
+            >
+              <UserAvatar
+                name={myName}
+                email={profile.email}
+                avatarVersion={profile.avatarVersion}
+                previewSrc={profile.avatarPreview}
+                size={52}
+                preview={false}
+              />
+              <span className="min-w-0 flex-1">
+                <span className={classes.identityName}>{myName}</span>
+                <span className={classes.identityEmail}>{profile.email}</span>
+              </span>
+              <CaretRight size={16} />
+            </UnstyledButton>
+          )}
           {GROUPS.map((group) => (
             <div key={group.label}>
               <div className={classes.listLabel}>{group.label}</div>
