@@ -206,7 +206,7 @@ from `computeTotals` in `split/derive.ts`.
 - Formats: [csv.ts](../web/src/split/export/csv.ts) and
   [pdf.ts](../web/src/split/export/pdf.ts) (jspdf, loaded only when Export opens).
 - Font: [font.ts](../web/src/split/export/font.ts) fetches
-  `web/public/fonts/NotoSansJP-subset.ttf` (Latin and Japanese, made by
+  `web/public/fonts/NotoSansJP-subset-v2.ttf` (Latin, kana, and the everyday and name kanji, made by
   [scripts/subset-font.sh](../scripts/subset-font.sh)); `sw.js` keeps it offline.
 - Delivery: [utils/deliver-file.ts](../web/src/utils/deliver-file.ts), the share sheet
   or a download, also used by Share image.

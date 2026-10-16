@@ -228,7 +228,7 @@ const summaryOf = (s: SplitDetail, archived: boolean): SplitSummary => ({
 let font: Buffer | null = null;
 const fontFile = () =>
   (font ??= readFileSync(
-    fileURLToPath(new NodeURL('../../public/fonts/NotoSansJP-subset.ttf', import.meta.url)),
+    fileURLToPath(new NodeURL('../../public/fonts/NotoSansJP-subset-v2.ttf', import.meta.url)),
   ));
 
 const json = (body: unknown, status = 200) =>
@@ -286,7 +286,7 @@ function answerNow(server: FakeServer) {
     if (server.health === 'signedOut') return json({ error: 'Signed out' }, 401);
     if (server.health === 'down') return json({ error: 'Internal error' }, 500);
     if (path === '/api/me' && method === 'GET') return json(server.me);
-    if (path === '/fonts/NotoSansJP-subset.ttf') {
+    if (path === '/fonts/NotoSansJP-subset-v2.ttf') {
       return Promise.resolve(new Response(fontFile(), { headers: { 'Content-Type': 'font/ttf' } }));
     }
     const failing = (kind: keyof FakeServer['failNext']) => {

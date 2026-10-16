@@ -2,7 +2,7 @@
 // (scripts/subset-font.sh). Fetched the first time someone makes a PDF and kept for
 // the rest of the visit; the service worker keeps it on the device after that.
 
-export const FONT_URL = '/fonts/NotoSansJP-subset.ttf';
+export const FONT_URL = '/fonts/NotoSansJP-subset-v2.ttf';
 
 let loading: Promise<string> | null = null;
 
