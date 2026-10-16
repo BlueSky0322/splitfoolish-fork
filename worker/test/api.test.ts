@@ -4,6 +4,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { LocalWorker } from './local-worker';
 import { startLocalWorker } from './local-worker';
+import { MAX_CHANGES } from '../../shared/api';
 
 let api: LocalWorker;
 let n = 0;
@@ -14,14 +15,15 @@ const hex = () =>
     b.toString(16).padStart(2, '0'),
   ).join('');
 
+// Within the harness's own limits: migrations, then the Worker starting
 beforeAll(async () => {
   api = await startLocalWorker();
-}, 120_000);
+}, 180_000);
 
 // Each test sets the rates it needs
 afterEach(() => api.rates.reset());
 
-afterAll(() => api?.stop());
+afterAll(() => api?.stop(), 30_000);
 
 /** A split owned by `owner`, with `members` already in it through the share link */
 async function splitWith(owner: string, ...members: string[]) {
@@ -73,9 +75,13 @@ describe('who can see a split', () => {
     ).toBe(403);
     expect((await api.call(editor, 'POST', `/api/splits/${id}/invite`)).status).toBe(403);
     expect((await api.call(editor, 'DELETE', `/api/splits/${id}`)).status).toBe(403);
-    expect(
-      (await api.call(editor, 'DELETE', `/api/splits/${id}/members/${owner}`)).status,
-    ).not.toBe(200);
+    // Nobody removes the owner, whatever their role
+    for (const who of [editor, owner]) {
+      const removeOwner = await api.call(who, 'DELETE', `/api/splits/${id}/members/${owner}`);
+      expect(removeOwner.status).toBe(400);
+      expect(removeOwner.data.error).toBe('The owner cannot be removed');
+    }
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.role).toBe('owner');
     // Members share with a link of their own, never the owner's
     const ownToken = (await api.call(editor, 'GET', `/api/splits/${id}`)).data.shareToken;
     const ownerToken = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.shareToken;
@@ -101,20 +107,56 @@ describe('changing a split', () => {
     expect((await change(editor, id, { op: 'addItem', item })).status).toBe(200);
   });
 
-  it('refuses a payer who is not in the split, and applies nothing from a refused batch', async () => {
+  it('refuses a payer who is not in the split', async () => {
     const owner = person('owner');
     const { id } = await splitWith(owner);
+    const amy = hex();
+    await change(owner, id, { op: 'addPerson', id: amy, name: 'Amy' });
+    // Everything else about the item is fine, so the payer is what's refused
+    const res = await change(owner, id, {
+      op: 'addItem',
+      item: { id: hex(), name: 'X', cost: 5, payerId: hex(), participantIds: [amy] },
+    });
+    expect(res.status).toBe(409);
+    expect(res.data.error).toBe('Who paid must be someone in this split');
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.items).toEqual([]);
+  });
+
+  it('applies nothing from a batch when one change in it is refused', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const amy = hex();
     const res = await change(
       owner,
       id,
-      { op: 'addPerson', id: hex(), name: 'Amy' },
+      { op: 'addPerson', id: amy, name: 'Amy' },
       {
         op: 'addItem',
-        item: { id: hex(), name: 'X', cost: 5, payerId: hex(), participantIds: [] },
+        item: { id: hex(), name: 'X', cost: 5, payerId: hex(), participantIds: [amy] },
       },
     );
     expect(res.status).toBe(409);
+    // Amy, added first and fine on her own, isn't saved either
     expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.people).toEqual([]);
+  });
+
+  it(`takes up to ${MAX_CHANGES} changes in one request, all applied, and refuses more`, async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const amy = hex();
+    await change(owner, id, { op: 'addPerson', id: amy, name: 'Amy' });
+    const renames = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ op: 'renamePerson', id: amy, name: `Amy ${i + 1}` }));
+
+    expect((await change(owner, id, ...renames(MAX_CHANGES))).status).toBe(200);
+    const people = async () => (await api.call(owner, 'GET', `/api/splits/${id}`)).data.people;
+    expect((await people())[0].name).toBe(`Amy ${MAX_CHANGES}`);
+
+    const tooMany = await change(owner, id, ...renames(MAX_CHANGES + 1));
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.data.error).toBe(`Send 1-${MAX_CHANGES} changes`);
+    // None of them applied
+    expect((await people())[0].name).toBe(`Amy ${MAX_CHANGES}`);
   });
 
   it('requires exact amounts to add up to the cost', async () => {
@@ -142,6 +184,44 @@ describe('changing a split', () => {
     });
     expect((await change(owner, id, item({ [a]: 10, [b]: 10 }))).status).toBe(409);
     expect((await change(owner, id, item({ [a]: 10, [b]: 20 }))).status).toBe(200);
+  });
+
+  it('keeps how many shares each person has in an item split by shares', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [a, b, itemId] = [hex(), hex(), hex()];
+    const item = (shares: Record<string, number>) => ({
+      id: itemId,
+      name: 'Rent',
+      cost: 40,
+      payerId: a,
+      participantIds: [a, b],
+      splitMode: 'shares',
+      shares,
+    });
+    expect(
+      (
+        await change(
+          owner,
+          id,
+          { op: 'addPerson', id: a, name: 'A' },
+          { op: 'addPerson', id: b, name: 'B' },
+          { op: 'addItem', item: item({ [a]: 1, [b]: 3 }) },
+        )
+      ).status,
+    ).toBe(200);
+    const saved = async () => (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0];
+    expect(await saved()).toMatchObject({ splitMode: 'shares', shares: { [a]: 1, [b]: 3 } });
+
+    expect(
+      (await change(owner, id, { op: 'updateItem', item: item({ [a]: 2, [b]: 1 }) })).status,
+    ).toBe(200);
+    expect((await saved()).shares).toEqual({ [a]: 2, [b]: 1 });
+    // Each share is a whole number of at least one
+    expect(
+      (await change(owner, id, { op: 'updateItem', item: item({ [a]: 0, [b]: 1 }) })).status,
+    ).toBe(409);
+    expect((await saved()).shares).toEqual({ [a]: 2, [b]: 1 });
   });
 
   it('moves an item to another day, but not to one still to come', async () => {
@@ -352,9 +432,34 @@ describe('share link invites', () => {
     const { inviteId } = (await api.call(ben, 'POST', `/api/join/${token}`)).data;
 
     const reset = await api.call(owner, 'POST', `/api/splits/${id}/invite`);
-    expect(reset.data.shareToken).not.toBe(token);
+    const newToken: string = reset.data.shareToken;
+    expect(newToken).toEqual(expect.any(String));
+    expect(newToken).not.toBe(token);
     expect((await api.call(ben, 'POST', `/api/invites/${inviteId}/accept`)).status).toBe(404);
     expect((await api.call(ben, 'POST', `/api/join/${token}`)).status).toBe(404);
+
+    // The new link is the one the split now shows, and it works
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.shareToken).toBe(newToken);
+    const opened = await api.call(ben, 'POST', `/api/join/${newToken}`);
+    expect(opened.data).toMatchObject({ status: 'invited', id });
+    expect(opened.data.inviteId).not.toBe(inviteId);
+    expect(
+      (await api.call(ben, 'POST', `/api/invites/${opened.data.inviteId}/accept`)).status,
+    ).toBe(200);
+    expect((await api.call(ben, 'GET', `/api/splits/${id}`)).status).toBe(200);
+  });
+
+  it("doesn't let one member remove another, who keeps their access", async () => {
+    const owner = person('owner');
+    const [amy, ben] = [person('amy'), person('ben')];
+    const { id } = await splitWith(owner, amy, ben);
+
+    const res = await api.call(amy, 'DELETE', `/api/splits/${id}/members/${ben}`);
+    expect(res.status).toBe(403);
+    expect(res.data.error).toBe('Only the owner can remove members');
+    const split = await api.call(ben, 'GET', `/api/splits/${id}`);
+    expect(split.status).toBe(200);
+    expect(split.data.role).toBe('editor');
   });
 
   it('removing someone ends their access and changes the link', async () => {
@@ -679,6 +784,41 @@ describe('archiving and search', () => {
     expect(await listed(owner, id)).toMatchObject({ settled: true, itemCount: 1 });
   });
 
+  it('says a split with money still owed is not settled, and one where it evens out is', async () => {
+    const owner = person('owner');
+    /** A split with three people, and a 30 bill shared by all three paid by each of `payers` */
+    const billed = async (...payers: number[]) => {
+      const { id } = await splitWith(owner);
+      const people = [hex(), hex(), hex()];
+      const res = await change(
+        owner,
+        id,
+        ...people.map((p, i) => ({ op: 'addPerson', id: p, name: `P${i}` })),
+        ...payers.map((i) => ({
+          op: 'addItem',
+          item: { id: hex(), name: 'X', cost: 30, payerId: people[i], participantIds: people },
+        })),
+      );
+      expect(res.status).toBe(200);
+      return id;
+    };
+
+    // The first paid 30 for all three: the other two owe them 10 each
+    const unpaid = await billed(0);
+    expect(await listed(owner, unpaid)).toMatchObject({
+      settled: false,
+      itemCount: 1,
+      totalCents: 3000,
+    });
+    // Each paid 30 for all three: everyone has paid their share
+    const even = await billed(0, 1, 2);
+    expect(await listed(owner, even)).toMatchObject({
+      settled: true,
+      itemCount: 3,
+      totalCents: 9000,
+    });
+  });
+
   it('finds items by name in your own splits only', async () => {
     const owner = person('owner');
     const outsider = person('outsider');
@@ -782,6 +922,19 @@ describe('safeguards', () => {
         )
       ).status,
     ).toBe(403);
+    // The same writes from the app's own page go through, whichever header says so
+    const created = await api.call(
+      owner,
+      'POST',
+      '/api/splits',
+      { id: hex(), name: 'X', currency: 'MYR' },
+      { Origin: api.base },
+    );
+    expect(created.status).toBe(201);
+    const sameOrigin = { 'Sec-Fetch-Site': 'same-origin' };
+    const joined = await api.call(person('y'), 'POST', `/api/join/${token}`, undefined, sameOrigin);
+    expect(joined.status).toBe(200);
+    expect(joined.data.status).toBe('invited');
     // Reads, and the app's own requests, are fine
     expect((await api.call(owner, 'GET', '/api/splits', undefined, crossSite)).status).toBe(200);
     expect(
@@ -836,15 +989,29 @@ describe('profile, pictures and photos', () => {
       (await api.call(me, 'PATCH', '/api/me', { displayName: 'Mei', settings: { theme: 'light' } }))
         .status,
     ).toBe(200);
-    const methods = [{ id: hex(), type: 'DuitNow', detail: '012-345' }];
+    const methods = [
+      { id: hex(), type: 'DuitNow', detail: '012-345' },
+      { id: hex(), type: 'Touch n Go', detail: '019-876' },
+    ];
+    // The second is preferred: it's kept as picked, not the first in the list
     const put = await api.call(me, 'PUT', '/api/me/payment-methods', {
       methods,
-      preferredId: methods[0].id,
+      preferredId: methods[1].id,
     });
     expect(put.status).toBe(200);
     const profile = (await api.call(me, 'GET', '/api/me')).data;
     expect(profile.displayName).toBe('Mei');
     expect(profile.settings.theme).toBe('light');
+    expect(profile.preferredPaymentMethodId).toBe(methods[1].id);
+    expect(profile.paymentMethods.map((m: { id: string }) => m.id)).toEqual(
+      methods.map((m) => m.id),
+    );
+    // People in a split with you see the preferred one first
+    const friend = person('friend');
+    const { id } = await splitWith(me, friend);
+    const members = (await api.call(friend, 'GET', `/api/splits/${id}`)).data.members;
+    const mine = members.find((m: { email: string }) => m.email === me).paymentMethods;
+    expect(mine.map((m: { id: string }) => m.id)).toEqual([methods[1].id, methods[0].id]);
   });
 
   it("keeps a bank transfer's bank and account name, and lets cash go without details", async () => {
@@ -914,6 +1081,12 @@ describe('profile, pictures and photos', () => {
       'Content-Type': 'text/plain',
     });
     expect(bad.status).toBe(415);
+    // What the bytes are counts, not what they're labelled
+    const disguised = await api.call(me, 'PUT', '/api/me/avatar', new Uint8Array(68).fill(7), {
+      'Content-Type': 'image/jpeg',
+    });
+    expect(disguised.status).toBe(415);
+    expect(disguised.data.error).toBe('Only JPEG, PNG and WebP photos are supported');
   });
 
   it('keeps QR code payment methods, shown only to people who share a split', async () => {
@@ -929,6 +1102,8 @@ describe('profile, pictures and photos', () => {
     expect((await save(me, [qr])).status).toBe(400);
     const uploaded = await upload(me, 'PUT', `/api/me/payment-qr/${id}`);
     expect(uploaded.status).toBe(200);
+    // Checked before comparing, as two missing versions would be equal too
+    expect(uploaded.data.qrVersion).toEqual(expect.any(Number));
     const saved = await save(me, [qr]);
     expect(saved.status).toBe(200);
     expect(saved.data.paymentMethods[0].qrVersion).toBe(uploaded.data.qrVersion);
@@ -959,9 +1134,11 @@ describe('profile, pictures and photos', () => {
 
     const added = await upload(editor, 'POST', `/api/splits/${id}/attachments`);
     expect(added.status).toBe(201);
-    expect(
-      (await api.call(owner, 'GET', `/api/splits/${id}/attachments/${added.data.id}`)).status,
-    ).toBe(200);
+    // Others in the split get back exactly the bytes that were sent
+    const photo = await api.raw(owner, 'GET', `/api/splits/${id}/attachments/${added.data.id}`);
+    expect(photo.status).toBe(200);
+    expect(photo.headers.get('Content-Type')).toBe('image/jpeg');
+    expect(new Uint8Array(await photo.arrayBuffer())).toEqual(jpeg);
     expect(
       (await api.call(stranger, 'GET', `/api/splits/${id}/attachments/${added.data.id}`)).status,
     ).toBe(404);
@@ -984,17 +1161,24 @@ describe('profile, pictures and photos', () => {
 });
 
 describe('exchange rates', () => {
+  // The Worker keeps the rates it fetches for hours, for every test after: these tests
+  // look at which service a rate came from, so each uses currencies of its own
   it('converts with Wise, falls back to Frankfurter, and says when neither has a rate', async () => {
     const me = person('me');
-    api.rates.set('USD', 'MYR', 4.2);
-    const res = await api.call(me, 'GET', '/api/rates?from=usd&to=MYR&amount=10.5');
+    const [first, second] = [api.rates.newCurrency(), api.rates.newCurrency()];
+    api.rates.set(first, 'MYR', 4.2);
+    const res = await api.call(
+      me,
+      'GET',
+      `/api/rates?from=${first.toLowerCase()}&to=MYR&amount=10.5`,
+    );
     expect(res.status).toBe(200);
-    expect(res.data).toMatchObject({ from: 'USD', to: 'MYR', rate: 4.2, source: 'wise' });
+    expect(res.data).toMatchObject({ from: first, to: 'MYR', rate: 4.2, source: 'wise' });
     expect(res.data.convertedCents).toBe(4410);
 
-    api.rates.set('SGD', 'MYR', 3.3);
+    api.rates.set(second, 'MYR', 3.3);
     api.rates.down('wise', true);
-    const fallback = await api.call(me, 'GET', '/api/rates?from=SGD&to=MYR');
+    const fallback = await api.call(me, 'GET', `/api/rates?from=${second}&to=MYR`);
     api.rates.down('wise', false);
     expect(fallback.data).toMatchObject({ rate: 3.3, source: 'frankfurter' });
 
@@ -1004,21 +1188,23 @@ describe('exchange rates', () => {
   it("lists the other currencies in your splits with today's rate, for Settings", async () => {
     const me = person('me');
     const stranger = person('stranger');
-    api.rates.set('JPY', 'MYR', 0.03);
-    api.rates.set('SGD', 'MYR', 3.4);
-    api.rates.set('SGD', 'JPY', 113);
+    // Standing in for Singapore dollars and yen
+    const [sgd, jpy] = [api.rates.newCurrency(), api.rates.newCurrency()];
+    api.rates.set(jpy, 'MYR', 0.03);
+    api.rates.set(sgd, 'MYR', 3.4);
+    api.rates.set(sgd, jpy, 113);
     await api.call(me, 'POST', '/api/splits', { id: hex(), name: 'Home', currency: 'MYR' });
     const { data: tokyo } = await api.call(me, 'POST', '/api/splits', {
       id: hex(),
       name: 'Tokyo',
-      currency: 'JPY',
+      currency: jpy,
     });
-    // An item in Singapore dollars in the MYR split... and one in the JPY split
+    // An item in Singapore dollars in the MYR split... and one in the yen split
     const { data: home } = await api.call(me, 'GET', '/api/splits');
     const homeId = home.splits.find((s: { name: string }) => s.name === 'Home').id;
     for (const id of [homeId, tokyo.id]) {
       const p = hex();
-      await change(
+      const added = await change(
         me,
         id,
         { op: 'addPerson', id: p, name: 'Me' },
@@ -1030,24 +1216,27 @@ describe('exchange rates', () => {
             cost: 10,
             payerId: p,
             participantIds: [p],
-            original: { currency: 'SGD', amount: 10 },
+            original: { currency: sgd, amount: 10 },
           },
         },
       );
+      expect(added.status).toBe(200);
     }
     const res = await api.call(me, 'GET', '/api/me/rates?to=MYR');
     expect(res.status).toBe(200);
-    // Most-used first, each with a rate; MYR itself isn't listed. (Rates are cached across
-    // tests, so only their presence is checked.)
+    // Most-used first, each with its rate into MYR; MYR itself isn't listed
     expect(
-      res.data.currencies.map((c: { currency: string; splits: number; rate: number }) => [
-        c.currency,
-        c.splits,
-        typeof c.rate,
-      ]),
+      res.data.currencies.map(
+        (c: { currency: string; splits: number; rate: number; source: string }) => [
+          c.currency,
+          c.splits,
+          c.rate,
+          c.source,
+        ],
+      ),
     ).toEqual([
-      ['SGD', 2, 'number'],
-      ['JPY', 1, 'number'],
+      [sgd, 2, 3.4, 'wise'],
+      [jpy, 1, 0.03, 'wise'],
     ]);
     // Only your own splits count
     expect((await api.call(stranger, 'GET', '/api/me/rates?to=MYR')).data.currencies).toEqual([]);
@@ -1056,16 +1245,22 @@ describe('exchange rates', () => {
   it('uses the rate source each person picked in Settings', async () => {
     const wiseFan = person('wisefan');
     const ecbFan = person('ecbfan');
-    // A pair no other test uses, so no cached rate gets in the way
-    api.rates.set('NZD', 'MYR', 2.75);
+    const nzd = api.rates.newCurrency();
+    // The two services differ, so each answer shows where it came from
+    api.rates.set(nzd, 'MYR', 2.75, 'wise');
+    api.rates.set(nzd, 'MYR', 2.7, 'frankfurter');
     const patch = await api.call(ecbFan, 'PATCH', '/api/me', {
       settings: { ratePreference: 'ecb', defaultCurrency: 'SGD' },
     });
     expect(patch.data.settings).toMatchObject({ ratePreference: 'ecb', defaultCurrency: 'SGD' });
-    expect((await api.call(ecbFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe(
-      'frankfurter',
-    );
-    expect((await api.call(wiseFan, 'GET', '/api/rates?from=NZD&to=MYR')).data.source).toBe('wise');
+    expect((await api.call(ecbFan, 'GET', `/api/rates?from=${nzd}&to=MYR`)).data).toMatchObject({
+      rate: 2.7,
+      source: 'frankfurter',
+    });
+    expect((await api.call(wiseFan, 'GET', `/api/rates?from=${nzd}&to=MYR`)).data).toMatchObject({
+      rate: 2.75,
+      source: 'wise',
+    });
     expect(
       (await api.call(ecbFan, 'PATCH', '/api/me', { settings: { ratePreference: 'xe' } })).status,
     ).toBe(400);
@@ -1125,15 +1320,45 @@ describe('items in another currency', () => {
 
   it('keeps the saved rate when an edit leaves the amount alone, and reconverts when it changes', async () => {
     const { owner, id, item, items } = await myrSplit();
-    api.rates.set('KRW', 'MYR', 0.0034);
-    const bbq = item({ name: 'BBQ', original: { currency: 'KRW', amount: 50000 } });
-    await change(owner, id, { op: 'addItem', item: bbq });
-    expect((await items())[0].cost).toBe(170);
+    // Standing in for won and Taiwan dollars. Wise and the ECB disagree on the won, so
+    // once the owner picks the ECB, today's rate is not the one the item was saved at.
+    const [krw, twd] = [api.rates.newCurrency(), api.rates.newCurrency()];
+    api.rates.set(krw, 'MYR', 0.0034, 'wise');
+    api.rates.set(krw, 'MYR', 0.005, 'frankfurter');
+    api.rates.set(twd, 'MYR', 0.14, 'frankfurter');
+    const bbq = item({ name: 'BBQ', original: { currency: krw, amount: 50000 } });
+    expect((await change(owner, id, { op: 'addItem', item: bbq })).status).toBe(200);
+    expect((await items())[0]).toMatchObject({
+      cost: 170,
+      original: { rate: 0.0034, rateSource: 'wise' },
+    });
+    const ecb = await api.call(owner, 'PATCH', '/api/me', { settings: { ratePreference: 'ecb' } });
+    expect(ecb.status).toBe(200);
 
-    // Wait out the cached rate isn't needed: an unchanged amount never asks for one
-    api.rates.set('KRW', 'MYR', 0.01);
-    await change(owner, id, { op: 'updateItem', item: { ...bbq, name: 'Korean BBQ' } });
-    expect((await items())[0]).toMatchObject({ name: 'Korean BBQ', cost: 170 });
+    // Renaming leaves the amount alone: the saved rate stays
+    const renamed = { ...bbq, name: 'Korean BBQ' };
+    expect((await change(owner, id, { op: 'updateItem', item: renamed })).status).toBe(200);
+    expect((await items())[0]).toMatchObject({
+      name: 'Korean BBQ',
+      cost: 170,
+      original: { amount: 50000, rate: 0.0034, rateSource: 'wise' },
+    });
+
+    // A new amount is converted at today's rate
+    const more = { ...renamed, original: { currency: krw, amount: 60000 } };
+    expect((await change(owner, id, { op: 'updateItem', item: more })).status).toBe(200);
+    expect((await items())[0]).toMatchObject({
+      cost: 300,
+      original: { currency: krw, amount: 60000, rate: 0.005, rateSource: 'frankfurter' },
+    });
+
+    // So is the same amount in a new currency
+    const moved = { ...renamed, original: { currency: twd, amount: 60000 } };
+    expect((await change(owner, id, { op: 'updateItem', item: moved })).status).toBe(200);
+    expect((await items())[0]).toMatchObject({
+      cost: 8400,
+      original: { currency: twd, amount: 60000, rate: 0.14, rateSource: 'frankfurter' },
+    });
   });
 
   it('uses a rate people type in', async () => {
@@ -1161,6 +1386,9 @@ describe('items in another currency', () => {
     expect((await change(owner, id, { op: 'addItem', item: dinner })).status).toBe(200);
     const [saved] = await items();
     expect(saved.cost).toBe(33.3);
+    // 3.33 and 6.67 HKD are 11.0889 and 22.2111 MYR: each rounds down, and the cent left
+    // over goes to the larger remainder, A's
+    expect(saved.exact).toEqual({ [a]: 11.09, [b]: 22.21 });
     expect(Math.round((saved.exact[a] + saved.exact[b]) * 100)).toBe(3330);
     expect(saved.original.exact).toEqual({ [a]: 3.33, [b]: 6.67 });
   });

@@ -1,5 +1,10 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { getUserEmail } from './auth';
+import worker from './index';
+import type { Env } from './app';
+
+// The Worker's entry also exports the split rooms, which need the Workers runtime
+vi.mock('cloudflare:workers', () => ({ DurableObject: class {} }));
 
 const TEAM = 'splitfoolish.cloudflareaccess.com';
 const AUD = 'app-audience-tag';
@@ -29,6 +34,19 @@ const generateKey = () =>
 let teamKey: CryptoKeyPair;
 let otherKey: CryptoKeyPair;
 
+const CERTS_URL = `https://${TEAM}/cdn-cgi/access/certs`;
+
+/** The team's published key set, as Access serves it at CERTS_URL */
+const publishedKeys = async (...keys: [CryptoKeyPair, string][]) =>
+  Response.json({
+    keys: await Promise.all(
+      keys.map(async ([pair, kid]) => ({
+        ...(await crypto.subtle.exportKey('jwk', pair.publicKey)),
+        kid,
+      })),
+    ),
+  });
+
 async function sign(payload: Record<string, unknown>, key = teamKey, kid = 'team-key') {
   const unsigned = `${encode({ alg: 'RS256', kid, typ: 'JWT' })}.${encode(payload)}`;
   const signature = await crypto.subtle.sign(
@@ -52,20 +70,16 @@ const requestWith = (token?: string, headers: Record<string, string> = {}) =>
     headers: token ? { 'Cf-Access-Jwt-Assertion': token, ...headers } : headers,
   });
 
+/** Access publishing just the team key */
+const defaultFetch = (url: string | URL | Request) =>
+  (url instanceof Request ? url.url : url.toString()) === CERTS_URL
+    ? publishedKeys([teamKey, 'team-key'])
+    : Promise.resolve(new Response('not found', { status: 404 }));
+
 beforeAll(async () => {
   teamKey = await generateKey();
   otherKey = await generateKey();
-  const jwk = await crypto.subtle.exportKey('jwk', teamKey.publicKey);
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((url: string) =>
-      Promise.resolve(
-        url === `https://${TEAM}/cdn-cgi/access/certs`
-          ? Response.json({ keys: [{ ...jwk, kid: 'team-key' }] })
-          : new Response('not found', { status: 404 }),
-      ),
-    ),
-  );
+  vi.stubGlobal('fetch', vi.fn(defaultFetch));
 });
 
 afterEach(() => {
@@ -137,9 +151,108 @@ describe('getUserEmail with Cloudflare Access configured', () => {
   });
 });
 
+describe("the team's signing keys", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  test('accepts a token signed with a newly published key once the key set changes', async () => {
+    // Access has rotated: the new key is published alongside the old one
+    vi.mocked(fetch).mockImplementationOnce(() =>
+      publishedKeys([teamKey, 'team-key'], [otherKey, 'next-key']),
+    );
+    const token = await sign(validClaims(), otherKey, 'next-key');
+    expect(await getUserEmail(requestWith(token), env)).toBe('ryan@example.com');
+    expect(fetch).toHaveBeenCalledWith(CERTS_URL);
+
+    // The new key is now known, so it is not fetched again
+    vi.mocked(fetch).mockClear();
+    expect(await getUserEmail(requestWith(token), env)).toBe('ryan@example.com');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test('stops accepting a retired key once the key set is next fetched', async () => {
+    vi.mocked(fetch).mockImplementation(() => publishedKeys([otherKey, 'next-key']));
+    try {
+      // A token naming a key not kept yet makes the key set be fetched again
+      await getUserEmail(requestWith(await sign(validClaims(), otherKey, 'unseen-key')), env);
+      expect(await getUserEmail(requestWith(await sign(validClaims())), env)).toBeNull();
+    } finally {
+      vi.mocked(fetch).mockReset().mockImplementation(defaultFetch);
+    }
+  });
+
+  test('keeps the key set for an hour, then fetches it again', async () => {
+    const start = Date.now() + 2 * HOUR;
+    const clock = vi.spyOn(Date, 'now');
+    try {
+      // Anything kept before `start` is over an hour old by then, so this fetches
+      clock.mockReturnValue(start);
+      expect(await getUserEmail(requestWith(await sign(validClaims())), env)).toBe(
+        'ryan@example.com',
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      clock.mockReturnValue(start + HOUR - 1);
+      expect(await getUserEmail(requestWith(await sign(validClaims())), env)).toBe(
+        'ryan@example.com',
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      clock.mockReturnValue(start + HOUR);
+      expect(await getUserEmail(requestWith(await sign(validClaims())), env)).toBe(
+        'ryan@example.com',
+      );
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+});
+
+describe('getUserEmail configuration', () => {
+  test('verifies tokens only when both the team domain and the audience are set', async () => {
+    const token = await sign(validClaims());
+    expect(await getUserEmail(requestWith(token), env)).toBe('ryan@example.com');
+    // The team domain may be given as a URL
+    expect(
+      await getUserEmail(requestWith(token), { ...env, ACCESS_TEAM_DOMAIN: `https://${TEAM}/` }),
+    ).toBe('ryan@example.com');
+  });
+
+  test.each([
+    ['only the team domain is set', { ACCESS_TEAM_DOMAIN: TEAM }],
+    ['only the audience is set', { ACCESS_AUD: AUD }],
+    ['both are blank', { ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '' }],
+    ['nothing is set', {}],
+  ])('refuses everyone, even with a valid token, when %s', async (_name, partial) => {
+    const token = await sign(validClaims());
+    expect(await getUserEmail(requestWith(token, { 'X-Dev-User': 'a@b.c' }), partial)).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // A deploy missing one Access value must not fall back to the local dev user, or
+  // anyone could name themselves with X-Dev-User
+  test.each([
+    ['only the team domain is set', { ACCESS_TEAM_DOMAIN: TEAM, ACCESS_AUD: '' }],
+    ['only the audience is set', { ACCESS_AUD: AUD }],
+  ])('refuses everyone when %s, even with a local dev user set', async (_name, partial) => {
+    const halfSet = { ...partial, DEV_USER_EMAIL: 'dev@example.com' };
+    expect(
+      await getUserEmail(requestWith(undefined, { 'X-Dev-User': 'a@b.c' }), halfSet),
+    ).toBeNull();
+    expect(await getUserEmail(requestWith(), halfSet)).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe('getUserEmail without Cloudflare Access configured', () => {
   test('refuses everyone unless a local dev user is set', async () => {
     expect(await getUserEmail(requestWith(undefined, { 'X-Dev-User': 'a@b.c' }), {})).toBeNull();
+  });
+
+  test('uses the local dev user when .dev.vars blanks the Access values', async () => {
+    const localEnv = { ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '', DEV_USER_EMAIL: 'you@example.com' };
+    expect(await getUserEmail(requestWith(), localEnv)).toBe('you@example.com');
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   test('uses the local dev user, overridable per request', async () => {
@@ -148,5 +261,43 @@ describe('getUserEmail without Cloudflare Access configured', () => {
     expect(
       await getUserEmail(requestWith(undefined, { 'X-Dev-User': 'Sam@Example.com' }), devEnv),
     ).toBe('sam@example.com');
+  });
+});
+
+describe('signing in to the API', () => {
+  const callApi = (headers: Record<string, string> = {}) =>
+    worker.fetch(
+      new Request('https://splitfoolish.example/api/no-such-route', { headers }),
+      env as unknown as Env,
+      {} as ExecutionContext,
+    );
+
+  test.each([
+    ['no token', () => Promise.resolve({})],
+    [
+      'an invalid token',
+      async () => ({ 'Cf-Access-Jwt-Assertion': await sign(validClaims(), otherKey) }),
+    ],
+  ])('answers 401 Not signed in for %s', async (_name, makeHeaders) => {
+    const res = await callApi(await makeHeaders());
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Not signed in' });
+  });
+
+  test('lets a valid token through to the routes', async () => {
+    const res = await callApi({ 'Cf-Access-Jwt-Assertion': await sign(validClaims()) });
+    expect(res.status).toBe(404);
+  });
+
+  test("answers 500, not 401, when the team's keys can't be fetched", async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('down', { status: 503 }));
+    const res = await callApi({
+      'Cf-Access-Jwt-Assertion': await sign(validClaims(), otherKey, 'unseen-key'),
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Something went wrong. Try again in a moment.' });
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 });

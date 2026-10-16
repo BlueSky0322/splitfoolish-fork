@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type { Change, Item, Person } from '@shared/types';
 import { makeSplitActions } from './actions';
 import type { SplitAction, SplitMeta, SplitState } from './state';
-import { splitReducer } from './state';
+import { splitReducer, toApiItem } from './state';
 
 vi.mock('../utils/notify', () => ({ showRefusal: vi.fn() }));
 const { showRefusal } = await import('../utils/notify');
@@ -60,6 +60,91 @@ function setup(items: Item[] = [item()]) {
 }
 
 describe('split actions', () => {
+  // What shows straight away and what is saved must be the same change; a change queued
+  // without being shown (or shown differently) fails these
+  test('renaming shows the new name and queues that same name', () => {
+    const { actions, queued, state } = setup();
+    expect(actions.renamePerson('b', '  Benny ')).toBe(true);
+    expect(state().people.find((p) => p.id === 'b')?.name).toBe('Benny');
+    expect(state().items[0].participants.map((p) => p.name)).toEqual(['Ryan', 'Benny']);
+    expect(queued).toEqual([{ op: 'renamePerson', id: 'b', name: 'Benny' }]);
+  });
+
+  test('adding someone shows the person that is queued, with the same id', () => {
+    const { actions, queued, state } = setup();
+    expect(actions.addPerson(' Cat ')).toBe(true);
+    const added = state().people[3];
+    expect(added).toMatchObject({ name: 'Cat', memberEmail: null });
+    expect(queued).toEqual([{ op: 'addPerson', ...added }]);
+  });
+
+  test('linking an account shows the account’s name and queues the link', () => {
+    const { actions, queued, state } = setup();
+    expect(actions.linkPerson('a', null)).toBe(true);
+    expect(actions.linkPerson('b', 'ann@example.com')).toBe(true);
+    expect(state().people.map((p) => [p.id, p.name, p.memberEmail])).toEqual([
+      ['r', 'Ryan', 'ryan@example.com'],
+      ['a', 'Ann', null],
+      ['b', 'Ann', 'ann@example.com'],
+    ]);
+    expect(state().items[0].participants[1]).toEqual(state().people[2]);
+    expect(queued).toEqual([
+      { op: 'linkPerson', id: 'a', memberEmail: null },
+      { op: 'linkPerson', id: 'b', memberEmail: 'ann@example.com' },
+    ]);
+  });
+
+  test('an added item shows exactly what is queued to be saved', () => {
+    const { actions, queued, state } = setup([]);
+    const input = {
+      name: 'Boat',
+      cost: 90,
+      payerId: 'b',
+      participantIds: ['r', 'a', 'b'],
+      splitMode: 'shares' as const,
+      shares: { r: 1, a: 1, b: 2 },
+      category: 'transport',
+      notes: 'Island hop',
+      original: null,
+    };
+    expect(actions.addItem(input, { id: 'new', createdAt: 5 })).toBe(true);
+    expect(queued).toEqual([{ op: 'addItem', item: { id: 'new', createdAt: 5, ...input } }]);
+    expect(state().items.map(toApiItem)).toEqual([{ id: 'new', createdAt: 5, ...input }]);
+  });
+
+  test('an edited item shows exactly what is queued, keeping its date', () => {
+    const { actions, queued, state } = setup();
+    const {
+      id: _,
+      createdAt: __,
+      ...input
+    } = item({
+      name: 'Late dinner',
+      cost: 45.5,
+      splitMode: 'exact',
+      exact: { r: 20, b: 25.5 },
+    });
+    expect(actions.updateItem('i1', input)).toBe(true);
+    const change = queued[0];
+    expect(change).toMatchObject({
+      op: 'updateItem',
+      item: { id: 'i1', createdAt: item().createdAt },
+    });
+    expect(change.op === 'updateItem' && change.item).toEqual(toApiItem(state().items[0]));
+    expect(state().items[0]).toMatchObject({
+      name: 'Late dinner',
+      cost: 45.5,
+      exact: { r: 20, b: 25.5 },
+    });
+  });
+
+  test('a removed item is gone from the bill and its removal is queued', () => {
+    const { actions, queued, state } = setup([item(), item({ id: 'i2' })]);
+    expect(actions.removeItem('i1')).toBe(true);
+    expect(state().items.map((i) => i.id)).toEqual(['i2']);
+    expect(queued).toEqual([{ op: 'removeItem', id: 'i1' }]);
+  });
+
   test('a name already in the split is refused, and nothing is queued', () => {
     const { actions, queued } = setup();
     expect(actions.addPerson(' Ben ')).toBe(false);
@@ -111,7 +196,11 @@ describe('split actions', () => {
 
     actions.moveItemsToDay(['i2'], future);
     expect(state().items[1].createdAt).toBeLessThanOrEqual(Date.now());
-    expect(queued.map((c) => c.op)).toEqual(['setItemDate', 'setItemDate']);
+    // The dates queued are the ones shown
+    expect(queued).toEqual([
+      { op: 'setItemDate', id: 'i1', createdAt: state().items[0].createdAt },
+      { op: 'setItemDate', id: 'i2', createdAt: state().items[1].createdAt },
+    ]);
   });
 
   test('a typed rate converts every item in that currency straight away', () => {

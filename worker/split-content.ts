@@ -20,7 +20,7 @@ import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../shared/types';
 import { type Unchecked, fail, ok, readName, isConstraintError } from './http';
 import type { Actor } from '../shared/rules';
 import { touchSplitStatement } from './app';
-import type { ChangesBody } from '../shared/api';
+import { type ChangesBody, MAX_CHANGES } from '../shared/api';
 import { canChangePeople, canLinkPerson, removalBlocker } from '../shared/rules';
 import { type Rate, RatesUnavailable } from './exchange-rates';
 import { revokeMemberStatements } from './sharing';
@@ -130,8 +130,6 @@ export function assembleContent([people, items, participants]: D1Result[]) {
     }),
   };
 }
-
-const MAX_CHANGES = 200;
 
 /** A change that can't be applied to the split as it is now */
 class Refused extends Error {}

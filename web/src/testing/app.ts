@@ -7,7 +7,7 @@ import { cleanup, configure, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
 import type { MyInvite, Profile, SplitDetail, SplitSummary } from '@shared/api';
-import { DEFAULT_SETTINGS } from '@shared/api';
+import { DEFAULT_SETTINGS, MAX_CHANGES } from '@shared/api';
 import { toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
@@ -48,27 +48,48 @@ function stubBrowser() {
   vi.stubGlobal('WebSocket', FakeSocket);
 }
 
-/** A live-updates socket: opens straight away, and hears what a test tells it */
+/** Where a split's live updates come from: /api/splits/<id>/ws, on ws: or wss: */
+const LIVE_PATH = /^\/api\/splits\/([^/]+)\/ws$/;
+
+/**
+ * A live-updates socket. One to a split's live endpoint joins that split's room and opens
+ * straight away; one to anywhere else fails, as the server would turn it away. A socket
+ * closed before it opened stays closed.
+ */
 class FakeSocket {
   static readonly OPEN = 1;
+  static readonly CLOSED = 3;
   readyState = 0;
+  /** The split whose room this joined, or null when the address isn't a live endpoint */
+  readonly room: string | null;
   onopen: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
   onclose: ((e: { code: number }) => void) | null = null;
   constructor(readonly url: string) {
+    const address = new URL(url);
+    const live = /^wss?:$/.test(address.protocol) ? LIVE_PATH.exec(address.pathname) : null;
+    this.room = live ? decodeURIComponent(live[1]) : null;
     sockets.push(this);
     setTimeout(() => {
+      // Closed meanwhile: it never opens
+      if (this.readyState !== 0) return;
+      if (this.room == null) {
+        this.close(1006);
+        return;
+      }
       this.readyState = FakeSocket.OPEN;
       this.onopen?.();
     });
   }
   send() {}
   close(code = 1000) {
-    this.readyState = 3;
+    if (this.readyState === FakeSocket.CLOSED) return;
+    this.readyState = FakeSocket.CLOSED;
     this.onclose?.({ code });
   }
-  /** As the server says someone saved a change */
+  /** As the server says someone saved a change; only an open socket hears it */
   hear(message: unknown) {
+    if (this.readyState !== FakeSocket.OPEN) return;
     this.onmessage?.({ data: JSON.stringify(message) });
   }
 }
@@ -77,6 +98,10 @@ const sockets: FakeSocket[] = [];
 
 /** The live-updates sockets the app has opened, newest last */
 export const liveSockets = (): readonly FakeSocket[] => sockets;
+
+/** The sockets open now in a split's room, as the server would tell them about changes */
+export const liveRoom = (splitId: string): readonly FakeSocket[] =>
+  sockets.filter((s) => s.room === splitId && s.readyState === FakeSocket.OPEN);
 
 /** The data the stand-in server holds; tests set it up and read it back */
 export interface FakeServer {
@@ -98,6 +123,19 @@ export interface FakeServer {
   failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join', number>>;
   /** Splits the signed-in account has archived */
   archived: Set<string>;
+  /** Answers being held back until a test releases them (see holdNext) */
+  held: { method: string; path: string; release: Promise<void> }[];
+}
+
+/**
+ * Holds back the answer to the next `method` request for `path`: it's worked out when
+ * the request arrives (so it shows the server as it was then) and delivered once
+ * `release` is called. For putting answers in a different order than their requests.
+ */
+export function holdNext(server: FakeServer, method: string, path: string) {
+  let release = () => {};
+  server.held.push({ method, path, release: new Promise<void>((r) => (release = r)) });
+  return { release };
 }
 
 export const person = (id: string, name: string, memberEmail: string | null = null) => ({
@@ -214,6 +252,19 @@ function apply(split: SplitDetail, change: Change) {
 }
 
 function serve(server: FakeServer) {
+  const answer = answerNow(server);
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = answer(input, init);
+    const method = init?.method ?? 'GET';
+    const path = new URL(input instanceof Request ? input.url : input, 'http://app').pathname;
+    const at = server.held.findIndex((h) => h.method === method && h.path === path);
+    if (at < 0) return response;
+    const [{ release }] = server.held.splice(at, 1);
+    return release.then(() => response);
+  };
+}
+
+function answerNow(server: FakeServer) {
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : input, 'http://app');
     const method = init?.method ?? 'GET';
@@ -336,6 +387,10 @@ function serve(server: FakeServer) {
         const failure = failing('changes');
         if (failure) return failure;
         const { changes } = body as { changes: Change[] };
+        // The real API's limit, so a test can't pass by sending more than it takes
+        if (changes.length === 0 || changes.length > MAX_CHANGES) {
+          return json({ error: `Send 1-${MAX_CHANGES} changes` }, 400);
+        }
         server.sent.push({ splitId: split.id, changes });
         for (const change of changes) apply(split, change);
         return json({ ok: true });
@@ -378,6 +433,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     sent: [],
     failNext: {},
     archived: new Set(),
+    held: [],
   };
 }
 

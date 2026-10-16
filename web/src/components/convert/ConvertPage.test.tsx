@@ -15,6 +15,9 @@ describe('Convert', () => {
     const amount = await screen.findByRole('textbox', { name: 'Amount' });
     await user.clear(amount);
     await user.type(amount, '20');
+    // 20 US dollars, into ringgit
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'From' }).value).toBe('USD');
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'To' }).value).toBe('MYR');
     expect(await screen.findByText(/RM\s?90\.00/)).toBeTruthy();
   });
 
@@ -36,8 +39,24 @@ describe('Convert', () => {
 
     const form = await screen.findByRole('dialog', {}, { timeout: 3000 });
     expect(window.location.search).toMatch(/^\?s=trip/);
+    // 100 US dollars, not 100 ringgit
     expect(within(form).getByRole<HTMLInputElement>('textbox', { name: 'Amount' }).value).toBe(
       '100',
     );
+    expect(within(form).getByRole<HTMLInputElement>('textbox', { name: 'Currency' }).value).toBe(
+      'USD',
+    );
+    expect(await within(form).findByText(/RM\s?450\.00/)).toBeTruthy();
+
+    // Saved as paid in dollars, and worth 450 ringgit in the split
+    await user.type(within(form).getByRole('textbox', { name: 'What it was for' }), 'Tickets');
+    await user.click(within(form).getByRole('button', { name: /^(Add|Add item)$/ }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.map((i) => i.name)).toEqual(['Tickets']),
+    );
+    expect(server.splits.get('trip')!.items[0]).toMatchObject({
+      cost: 450,
+      original: { currency: 'USD', amount: 100 },
+    });
   });
 });

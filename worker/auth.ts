@@ -135,6 +135,9 @@ export async function getUserEmail(req: Request, env: AuthEnv): Promise<string |
     return verifyAccessJwt(token, env.ACCESS_TEAM_DOMAIN, env.ACCESS_AUD);
   }
 
+  // Only one of the two set is a broken deploy, not a local setup: refuse everyone
+  if (env.ACCESS_TEAM_DOMAIN || env.ACCESS_AUD) return null;
+
   if (env.DEV_USER_EMAIL) {
     return (req.headers.get('X-Dev-User') ?? env.DEV_USER_EMAIL).toLowerCase();
   }

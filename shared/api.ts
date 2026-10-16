@@ -231,6 +231,12 @@ export const MAX_QR_BYTES = 512_000;
 // ---------- Live updates ----------
 
 /** The header a request names its tab in, so the tab can skip news of its own change */
+/**
+ * The most changes one request may carry. The app sends a longer queue in several
+ * requests, in order. public/sw.js keeps its own copy (sw.test.ts checks they agree).
+ */
+export const MAX_CHANGES = 200;
+
 export const CLIENT_ID_HEADER = 'X-Client-Id';
 
 /** A row the app makes before it's saved (a person, item, payment method): 16 hex characters */

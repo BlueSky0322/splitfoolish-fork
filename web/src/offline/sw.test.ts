@@ -1,47 +1,23 @@
 import 'fake-indexeddb/auto';
-import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
 import { clear, get, set } from 'idb-keyval';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { MAX_CHANGES } from '@shared/api';
+import type { Change } from '@shared/types';
 import { SW_USER_KEY } from './cache';
-import { ApiError } from '../api';
-import { OUTBOX_PREFIX, SYNC_TAG, isRetryable } from './outbox';
+import { api } from '../api';
+import { OUTBOX_PREFIX, classifySaveFailure, type Queued } from './outbox';
+import { type Answer, backgroundSync, ok, respond } from '../testing/sw';
 
 // The service worker (public/sw.js) sends what the app kept while offline, when the
 // browser says the connection is back and the app isn't open. It runs here as it would
 // in the browser: against the same IndexedDB the app writes, with the server stood in for.
 
-const source = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
-
-/** Loads the service worker with `answer` as the server, and fires its background sync */
-async function backgroundSync(answer: number, body?: string) {
-  const handlers: Record<string, (event: unknown) => void> = {};
-  const fetch = vi.fn((_path: string, init: RequestInit) =>
-    Promise.resolve(new Response(body ?? init.body ?? null, { status: answer })),
-  );
-  runInNewContext(source, {
-    self: {
-      addEventListener: (type: string, handler: (event: unknown) => void) =>
-        (handlers[type] = handler),
-      navigator: {},
-    },
-    fetch,
-    indexedDB,
-    Response,
-    URL,
-  });
-  let done: Promise<unknown> = Promise.resolve();
-  handlers.sync({ tag: SYNC_TAG, waitUntil: (work: Promise<unknown>) => (done = work) });
-  const outcome = await done.then(
-    () => 'done',
-    () => 'try later',
-  );
-  return { outcome, fetch };
-}
-
-const change = { op: 'removeItem', id: 'i1' };
-const keep = (email: string) =>
-  set(`${OUTBOX_PREFIX}trip`, { email, value: [{ cid: 'c1', change }] });
+const change = (n: number): Change => ({ op: 'removeItem', id: `i${n}` });
+const queued = (count: number, from = 1): Queued[] =>
+  Array.from({ length: count }, (_, i) => ({ cid: `c${from + i}`, change: change(from + i) }));
+const keep = (email: string, value: Queued[] = queued(1)) =>
+  set(`${OUTBOX_PREFIX}trip`, { email, value });
+const kept = async () => (await get<{ value: Queued[] }>(`${OUTBOX_PREFIX}trip`))?.value;
 
 beforeEach(async () => {
   await clear();
@@ -51,43 +27,108 @@ beforeEach(async () => {
 describe('the service worker, sending offline changes', () => {
   test('sends the signed-in account’s changes, and crosses them off', async () => {
     await keep('ryan@example.com');
-    const { outcome, fetch } = await backgroundSync(200);
+    const { outcome, fetch, batches } = await backgroundSync(ok);
     expect(outcome).toBe('done');
     expect(fetch).toHaveBeenCalledWith('/api/splits/trip/changes', expect.anything());
-    expect(JSON.parse(fetch.mock.calls[0][1].body as string)).toEqual({ changes: [change] });
-    expect(await get(`${OUTBOX_PREFIX}trip`)).toBeUndefined();
-  });
-
-  test.each([401, 429, 500, 503])(
-    'keeps them to try later on %i, as the app does',
-    async (status) => {
-      await keep('ryan@example.com');
-      const { outcome } = await backgroundSync(status);
-      expect(outcome).toBe('try later');
-      expect(await get(`${OUTBOX_PREFIX}trip`)).toBeDefined();
-      expect(isRetryable(new ApiError(status, ''))).toBe(true);
-    },
-  );
-
-  test('keeps them when something other than the API answers, as the app does', async () => {
-    await keep('ryan@example.com');
-    const { outcome } = await backgroundSync(200, '<html>Gateway</html>');
-    expect(outcome).toBe('try later');
-    expect(await get(`${OUTBOX_PREFIX}trip`)).toBeDefined();
-  });
-
-  test('drops changes the server refuses; the app shows the split as the server has it', async () => {
-    await keep('ryan@example.com');
-    const { outcome } = await backgroundSync(409);
-    expect(outcome).toBe('done');
-    expect(isRetryable(new ApiError(409, ''))).toBe(false);
-    expect(await get(`${OUTBOX_PREFIX}trip`)).toBeUndefined();
+    expect(batches).toEqual([[change(1)]]);
+    expect(await kept()).toBeUndefined();
   });
 
   test('leaves another account’s changes alone', async () => {
     await keep('ann@example.com');
-    const { fetch } = await backgroundSync(200);
+    const { fetch } = await backgroundSync(ok);
     expect(fetch).not.toHaveBeenCalled();
-    expect(await get(`${OUTBOX_PREFIX}trip`)).toBeDefined();
+    expect(await kept()).toEqual(queued(1));
+  });
+});
+
+describe('the service worker, sending more changes than one request takes', () => {
+  test(`sends ${MAX_CHANGES} in one request`, async () => {
+    await keep('ryan@example.com', queued(MAX_CHANGES));
+    const { outcome, batches } = await backgroundSync(ok);
+    expect(outcome).toBe('done');
+    expect(batches.map((b) => b.length)).toEqual([MAX_CHANGES]);
+    expect(await kept()).toBeUndefined();
+  });
+
+  test('sends a longer queue in order, in requests the server takes', async () => {
+    await keep('ryan@example.com', queued(2 * MAX_CHANGES + 50));
+    const { outcome, batches } = await backgroundSync(ok);
+    expect(outcome).toBe('done');
+    expect(batches.map((b) => b.length)).toEqual([MAX_CHANGES, MAX_CHANGES, 50]);
+    expect(batches.flat()).toEqual(queued(2 * MAX_CHANGES + 50).map((q) => q.change));
+    expect(await kept()).toBeUndefined();
+  });
+
+  test('keeps what was not sent when a later request fails, and sends only that next time', async () => {
+    const all = queued(MAX_CHANGES + 1);
+    await keep('ryan@example.com', all);
+    const first = await backgroundSync([ok, { status: 503 }]);
+    expect(first.outcome).toBe('try later');
+    expect(first.batches.map((b) => b.length)).toEqual([MAX_CHANGES, 1]);
+    // The first request's changes are crossed off; the last waits, as it was
+    expect(await kept()).toEqual(all.slice(MAX_CHANGES));
+
+    const second = await backgroundSync(ok);
+    expect(second.batches).toEqual([[all[MAX_CHANGES].change]]);
+    expect(await kept()).toBeUndefined();
+  });
+
+  test('drops what is left when the server refuses a request, since it was built on it', async () => {
+    await keep('ryan@example.com', queued(MAX_CHANGES + 1));
+    const { outcome, batches } = await backgroundSync([{ status: 409, body: '{"error":"No"}' }]);
+    expect(outcome).toBe('done');
+    expect(batches).toHaveLength(1);
+    expect(await kept()).toBeUndefined();
+  });
+});
+
+// How the app and the service worker each read an answer to sending changes. They must
+// agree, or one keeps a change the other drops.
+const answers: [string, Answer, 'sent' | 'retry' | 'refused' | 'gone'][] = [
+  ['saved', ok, 'sent'],
+  ['a JSON null', { status: 200, body: 'null' }, 'retry'],
+  ['broken JSON', { status: 200, body: '{"ok":' }, 'retry'],
+  ['a web page from a proxy', { status: 200, body: '<html>Gateway</html>' }, 'retry'],
+  ['a sign-in redirect', { status: 200, body: '<html>Sign in</html>', redirected: true }, 'retry'],
+  ['no connection', { networkError: true }, 'retry'],
+  ['401', { status: 401, body: '{"error":"Not signed in"}' }, 'retry'],
+  ['429', { status: 429, body: '{"error":"Too many"}' }, 'retry'],
+  ['500', { status: 500, body: '{"error":"Oops"}' }, 'retry'],
+  ['503', { status: 503, body: '{"error":"Converting"}' }, 'retry'],
+  ['400', { status: 400, body: '{"error":"Invalid change"}' }, 'refused'],
+  ['403', { status: 403, body: '{"error":"Not allowed"}' }, 'refused'],
+  ['409', { status: 409, body: '{"error":"Changed meanwhile"}' }, 'refused'],
+  ['404', { status: 404, body: '{"error":"Not found"}' }, 'gone'],
+];
+
+describe('reading the answer to sending changes', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test.each(answers)('the app: %s', async (_name, answer, expected) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => respond(answer)),
+    );
+    const outcome = await api.applyChanges('trip', [change(1)]).then(
+      () => 'sent',
+      (err: unknown) => classifySaveFailure(err),
+    );
+    expect(outcome).toBe(expected);
+  });
+
+  test.each(answers)('the service worker: %s', async (_name, answer, expected) => {
+    await keep('ryan@example.com');
+    const { outcome } = await backgroundSync(answer);
+    if (expected === 'retry') {
+      expect(outcome).toBe('try later');
+      expect(await kept()).toEqual(queued(1));
+    } else {
+      // Sent, or refused (the split gone included): either way not sent again
+      expect(outcome).toBe('done');
+      expect(await kept()).toBeUndefined();
+    }
   });
 });

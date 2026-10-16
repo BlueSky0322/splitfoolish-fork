@@ -30,4 +30,31 @@ describe('usedCurrencies', () => {
       { code: 'THB', count: 1, rate: 0.13, source: 'manual', at: 1, manual: true },
     ]);
   });
+
+  it('reads a rate saved without a source (older builds) as typed, like everywhere else', () => {
+    const used = usedCurrencies([item({ currency: 'JPY', amount: 1, rate: 0.5, rateAt: 3 })]);
+    expect(used).toEqual([
+      { code: 'JPY', count: 1, rate: 0.5, source: 'manual', at: 3, manual: true },
+    ]);
+  });
+
+  it('never lets an older build’s typed rate stand in for a live one', () => {
+    const used = usedCurrencies([
+      item({ currency: 'JPY', amount: 1, rate: 0.031, rateSource: 'wise', rateAt: 2 }),
+      // Newer, but typed (saved before sources were kept)
+      item({ currency: 'JPY', amount: 1, rate: 0.5, rateAt: 3 }),
+    ]);
+    expect(used).toEqual([
+      { code: 'JPY', count: 2, rate: 0.031, source: 'wise', at: 2, manual: false },
+    ]);
+  });
+
+  it('lists currencies A to Z, whatever order their items came in', () => {
+    const used = usedCurrencies([
+      item({ currency: 'USD', amount: 1, rate: 4.4, rateSource: 'frankfurter', rateAt: 1 }),
+      item({ currency: 'JPY', amount: 1, rate: 0.03, rateSource: 'wise', rateAt: 1 }),
+      item({ currency: 'EUR', amount: 1, rate: 5.1, rateSource: 'wise', rateAt: 1 }),
+    ]);
+    expect(used.map((u) => u.code)).toEqual(['EUR', 'JPY', 'USD']);
+  });
 });
