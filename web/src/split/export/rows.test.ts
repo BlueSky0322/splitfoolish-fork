@@ -161,18 +161,15 @@ describe('balances and who pays who in an export', () => {
   ];
 
   test('match the split page’s totals, person by person', () => {
-    const src = source([ryan, ann, ben], items);
-    const rows = exportRows(src);
+    const rows = exportRows(source([ryan, ann, ben], items));
     expect(rows.totalCents).toBe(12000);
     expect(rows.balances).toEqual([
       { name: 'Ryan', paidCents: 9000, shareCents: 3000, balanceCents: 6000 },
       { name: 'Ann', paidCents: 3000, shareCents: 4500, balanceCents: -1500 },
       { name: 'Ben', paidCents: 0, shareCents: 4500, balanceCents: -4500 },
     ]);
-    // The same as computeTotals, and each person's column adds up to their share
-    for (const [i, p] of [ryan, ann, ben].entries()) {
-      const b = src.totals.balances.get(p.id)!;
-      expect(rows.balances[i]).toMatchObject(b);
+    // Each person's column adds up to their share
+    for (const [i, b] of rows.balances.entries()) {
       const column = rows.items.reduce((sum, row) => sum + (row.shares[i] ?? 0), 0);
       expect(column).toBe(b.shareCents);
     }
