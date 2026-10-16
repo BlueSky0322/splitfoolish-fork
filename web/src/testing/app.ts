@@ -333,6 +333,17 @@ function answerNow(server: FakeServer) {
       };
       return json(server.me);
     }
+    // Your own order, as worker/routes/splits.ts keeps it: listed first to last after this
+    if (path === '/api/splits/order' && method === 'PUT') {
+      const { ids } = body as { ids: string[] };
+      if (!Array.isArray(ids)) return json({ error: 'Send the split ids in order' }, 400);
+      const ordered = ids.filter((id) => server.splits.has(id));
+      const rest = [...server.splits.keys()].filter((id) => !ordered.includes(id));
+      server.splits = new Map(
+        [...ordered, ...rest].map((id) => [id, server.splits.get(id)!] as const),
+      );
+      return json({ ok: true });
+    }
     if (path === '/api/splits' && method === 'GET') {
       return json({
         splits: [...server.splits.values()].map((s) => summaryOf(s, server.archived.has(s.id))),

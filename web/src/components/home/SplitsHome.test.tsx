@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import type { MyInvite } from '@shared/api';
 import { fakeServer, item, renderApp, splitDetail, setupAppTests } from '../../testing/app';
 
@@ -66,6 +66,46 @@ describe('My splits', () => {
     const sheet = await screen.findByRole('dialog');
     await user.click(within(sheet).getByRole('radio', { name: 'Archived' }));
     expect(await screen.findByText('Trip')).toBeTruthy();
+  });
+
+  test('on a phone, tap and hold a split to drag it into your own order, which is saved', async () => {
+    const server = fakeServer(splitDetail('trip'));
+    for (const [id, name] of [
+      ['alps', 'Alps'],
+      ['zurich', 'Zurich'],
+    ]) {
+      server.splits.set(id, { ...splitDetail(id), name });
+    }
+    renderApp(server, '/', { size: 'phone' });
+    await screen.findByText('Zurich', {}, { timeout: 3000 });
+    const order = () => screen.getAllByText(/^(Trip|Alps|Zurich)$/).map((el) => el.textContent);
+    // Your order is where splits start, and where they can be moved
+    expect(order()).toEqual(['Trip', 'Alps', 'Zurich']);
+    const rows = layOutRows(['Trip', 'Alps', 'Zurich']);
+
+    // Held, then dragged down past Zurich
+    const trip = screen.getByText('Trip').closest('button')!;
+    fireEvent.touchStart(trip, { touches: [{ clientX: 100, clientY: rows.center(0) }] });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const y of [rows.center(1), rows.center(2), rows.center(2) + 10]) {
+      fireEvent.touchMove(trip, { touches: [{ clientX: 100, clientY: y }] });
+    }
+    // Touches stay with what the finger first touched, wherever it moves
+    fireEvent.touchEnd(trip, { changedTouches: [{ clientX: 100, clientY: rows.center(2) }] });
+
+    await waitFor(() => expect(order()).toEqual(['Alps', 'Zurich', 'Trip']));
+    await waitFor(() => expect([...server.splits.keys()]).toEqual(['alps', 'zurich', 'trip']));
+    // Still on My splits: the drop didn't open the split
+    expect(window.location.search).toBe('');
+  });
+
+  test('on a phone, a quick swipe still shows Archive rather than dragging', async () => {
+    renderApp(fakeServer(splitDetail('trip')), '/', { size: 'phone' });
+    const row = (await screen.findByText('Trip', {}, { timeout: 3000 })).closest('button')!;
+    fireEvent.touchStart(row, { touches: [{ clientX: 300, clientY: 34 }] });
+    fireEvent.touchMove(row, { touches: [{ clientX: 120, clientY: 38 }] });
+    fireEvent.touchEnd(row);
+    expect(await screen.findByRole('button', { name: 'Archive' })).toBeTruthy();
   });
 
   test('on a phone, search finds items and splits by name, and opens what you tap', async () => {
@@ -200,3 +240,25 @@ const results = (heading: 'Items' | 'Splits') =>
   within(screen.getByRole('heading', { name: heading, level: 2 }).closest('section')!)
     .getAllByRole('button')
     .map((button) => button.textContent);
+
+/**
+ * Where the phone's split rows are on screen, as the browser lays them out (jsdom has no
+ * layout): one under the other, 68 pixels tall, in the order of `names`
+ */
+function layOutRows(names: string[]) {
+  const ROW = 68;
+  const rowOf = (el: Element) => names.findIndex((name) => el.textContent?.includes(name));
+  const measured = vi.spyOn(Element.prototype, 'getBoundingClientRect');
+  onTestFinished(() => measured.mockRestore());
+  measured.mockImplementation(function (this: Element) {
+    // The rows themselves (each holds one split's button), and the list around them
+    const at = this.parentElement?.children.length === names.length ? rowOf(this) : -1;
+    if (at >= 0) return new DOMRect(0, at * ROW, 390, ROW);
+    if ([...this.children].some((child) => rowOf(child) >= 0)) {
+      return new DOMRect(0, 0, 390, names.length * ROW);
+    }
+    // Everything else, as jsdom measures it
+    return new DOMRect();
+  });
+  return { center: (i: number) => i * ROW + ROW / 2 };
+}

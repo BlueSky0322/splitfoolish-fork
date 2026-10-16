@@ -11,7 +11,7 @@ import type { SplitSummary } from '@shared/api';
 import { canDeleteSplit } from '@shared/rules';
 import { type TouchEvent, useRef, useState } from 'react';
 import { navigate } from '../../hooks/useRoute';
-import { archiveSplit } from '../../my-splits/my-splits';
+import { archiveSplit, moveSplit } from '../../my-splits/my-splits';
 import { useMySplits } from '../../my-splits/useMySplits';
 import { useProfile } from '../../profile/ProfileContext';
 import { formatAmount } from '../../utils/money';
@@ -24,11 +24,14 @@ import ResponsiveDialog from '../ui/ResponsiveDialog';
 import { InstallCard } from '../common/InstallApp';
 import HomeSearch from './HomeSearch';
 import { isSplitSort, SPLIT_SORT_LABELS, SPLIT_SORTS, type SplitSort } from './split-sorts';
+import { SortableSplits } from './SortableSplits';
+import { justDragged, useSortableSplitParts } from './useSortableSplit';
 import { useOpenNewSplit } from './NewSplitDialog';
 import classes from './MobileHome.module.css';
 
 type Show = 'active' | 'settled' | 'archived' | 'all';
-type Sort = SplitSort;
+/** Your own order (tap and hold a split to drag it), or one of the sorts */
+type Sort = SplitSort | 'yours';
 
 const SHOW_LABELS: Record<Show, string> = {
   active: 'Active',
@@ -36,7 +39,7 @@ const SHOW_LABELS: Record<Show, string> = {
   archived: 'Archived',
   all: 'All',
 };
-const SORT_LABELS = SPLIT_SORT_LABELS;
+const SORT_LABELS: Record<Sort, string> = { yours: 'Your order', ...SPLIT_SORT_LABELS };
 const EMPTY: Record<Show, string> = {
   active: 'Nothing open. Start a split with New split.',
   settled: 'No settled splits yet.',
@@ -44,7 +47,9 @@ const EMPTY: Record<Show, string> = {
   all: 'No splits yet. Start one with New split.',
 };
 
-const PREFS_KEY = 'splitfoolish:home-view';
+// Versioned: the first kept the sort it started with (Recent activity) at any change of
+// filter, so everyone starts again on Your order, where splits can be dragged
+const PREFS_KEY = 'splitfoolish:home-view-v2';
 
 const readPrefs = (): { show: Show; sort: Sort } => {
   const saved = quietly(
@@ -58,7 +63,7 @@ const readPrefs = (): { show: Show; sort: Sort } => {
   const sort = saved?.sort ?? '';
   return {
     show: Object.keys(SHOW_LABELS).includes(show) ? (show as Show) : 'active',
-    sort: isSplitSort(sort) ? sort : 'recent',
+    sort: isSplitSort(sort) ? sort : 'yours',
   };
 };
 
@@ -68,8 +73,6 @@ const showsIn = (split: SplitSummary, show: Show) =>
   (show === 'archived'
     ? split.archived
     : !split.archived && (show === 'settled') === split.settled);
-
-const SORTS = SPLIT_SORTS;
 
 /** Width of the two actions a row shows when swiped left */
 const ACTIONS_PX = 168;
@@ -98,7 +101,10 @@ function RowBalance({ split }: { split: SplitSummary }) {
   );
 }
 
-/** A split; swipe it left for Archive and Leave (or Delete, for its owner) */
+/**
+ * A split; swipe it left for Archive and Leave (or Delete, for its owner), or tap and
+ * hold to drag it into your own order
+ */
 function SplitRow({
   split,
   open,
@@ -115,15 +121,20 @@ function SplitRow({
   const start = useRef<{ x: number; y: number; sideways: boolean | null } | null>(null);
   const moved = useRef(false);
   const offset = drag ?? (open ? -ACTIONS_PX : 0);
+  // Tap and hold to drag it up or down, in Your order
+  const sortable = useSortableSplitParts(split.id);
+  const { dragging } = sortable;
 
   const touchStart = (e: TouchEvent) => {
+    sortable.onTouchStart?.(e);
     const t = e.touches[0];
     start.current = { x: t.clientX, y: t.clientY, sideways: null };
     moved.current = false;
   };
   const touchMove = (e: TouchEvent) => {
     const s = start.current;
-    if (s == null) return;
+    // Being dragged up or down: it doesn't swipe as well
+    if (s == null || dragging) return;
     const t = e.touches[0];
     const dx = t.clientX - s.x;
     const dy = t.clientY - s.y;
@@ -143,6 +154,7 @@ function SplitRow({
   const canDelete = canDeleteSplit(split.role);
   return (
     <div
+      {...sortable.node}
       className={classes.swipe}
       data-revealed={offset < 0 || undefined}
     >
@@ -179,11 +191,13 @@ function SplitRow({
           transform: `translateX(${offset}px)`,
           transition: drag == null ? 'transform 180ms ease-out' : 'none',
         }}
+        onMouseDown={sortable.onMouseDown}
         onTouchStart={touchStart}
         onTouchMove={touchMove}
         onTouchEnd={touchEnd}
         onClick={() => {
-          if (moved.current) return;
+          // A swipe or a drag ends with a click, which doesn't open it
+          if (moved.current || justDragged()) return;
           if (open) onOpen(false);
           else navigate(`?s=${split.id}`);
         }}
@@ -232,7 +246,9 @@ const MobileHome = () => {
     );
   }
 
-  const shown = splits?.filter((s) => showsIn(s, prefs.show)).sort(SORTS[prefs.sort]) ?? null;
+  const listed = splits?.filter((s) => showsIn(s, prefs.show)) ?? null;
+  // Your order is the order they come in
+  const shown = prefs.sort === 'yours' ? listed : listed?.sort(SPLIT_SORTS[prefs.sort]) ?? null;
   // Archived is chosen from Sort and filter; it shows as a chip while it's on
   const chips: Show[] =
     prefs.show === 'archived'
@@ -286,17 +302,24 @@ const MobileHome = () => {
       {shown == null && error == null && <Loader size="sm" />}
       {shown?.length === 0 && <p className="sf-muted text-center py-10">{EMPTY[prefs.show]}</p>}
       {shown != null && shown.length > 0 && (
-        <div className={classes.list}>
-          {shown.map((s) => (
-            <SplitRow
-              key={s.id}
-              split={s}
-              open={openRow === s.id}
-              onOpen={(open) => setOpenRow(open ? s.id : null)}
-              onEnd={() => setEnding(s)}
-            />
-          ))}
-        </div>
+        <SortableSplits
+          onMove={moveSplit}
+          ids={shown.map((s) => s.id)}
+          // Only your own order can be dragged; the sorts are worked out
+          disabled={prefs.sort !== 'yours'}
+        >
+          <div className={classes.list}>
+            {shown.map((s) => (
+              <SplitRow
+                key={s.id}
+                split={s}
+                open={openRow === s.id}
+                onOpen={(open) => setOpenRow(open ? s.id : null)}
+                onEnd={() => setEnding(s)}
+              />
+            ))}
+          </div>
+        </SortableSplits>
       )}
 
       <Fab
@@ -320,6 +343,7 @@ const MobileHome = () => {
                 key={sort}
                 value={sort}
                 label={SORT_LABELS[sort]}
+                description={sort === 'yours' ? 'Tap and hold a split to move it' : undefined}
                 classNames={{ root: classes.radio }}
               />
             ))}
