@@ -86,6 +86,67 @@ describe('between the app, the Worker and shared code', () => {
     refused('web/src/a.ts', 'const load = (name) => import(name);', 'computed'));
 });
 
+describe('ways round the boundaries the review found', () => {
+  test.each([
+    // Vite pulls these files into the bundle too
+    ['web/src/a.ts', "const files = import.meta.glob('../../worker/*.ts');"],
+    ['web/src/a.ts', "const files = import.meta.glob(['./x/*.ts', '../../worker/*.ts']);"],
+    ['web/src/a.ts', "const url = new URL('../../worker/app.ts', import.meta.url);"],
+    // Every kind of source file is checked, not only .ts
+    ['worker/a.tsx', "import { api } from '../web/src/api';"],
+    ['shared/a.mts', "import { api } from '../web/src/api';"],
+    ['web/public/a.mjs', "import { api } from '../src/api';"],
+  ])('%s may not: %s', (file, code) => refused(file, code, 'crossArea'));
+
+  test.each([
+    ['web/src/a.ts', "const files = import.meta.glob('./locales/*.json');"],
+    ['web/src/a.ts', "const url = new URL('./worker-script.js', import.meta.url);"],
+    ['web/src/split/a.ts', "import { MAX_CHANGES } from '@shared/api';"],
+  ])('%s may: %s', (file, code) => allowed(file, code));
+
+  test('a require() whose path is worked out at run time is refused', () =>
+    refused('worker/a.ts', 'const load = (name) => require(name);', 'computed'));
+
+  test('a folder named without its trailing slash is still that folder', async () => {
+    await refused(
+      'web/src/split/a.ts',
+      "import * as all from '../components';",
+      'stateImportsComponent',
+    );
+    await refused('web/src/split/a.ts', "import * as all from '../testing';", 'testHarness');
+  });
+
+  test('state never reaches screens through the entry points', async () => {
+    await refused('web/src/split/a.ts', "import App from '../App';", 'stateImportsComponent');
+    await refused('web/src/hooks/a.ts', "import { Root } from '../Root';", 'stateImportsComponent');
+  });
+
+  test.each([
+    ['worker/a.ts', "import { startLocalWorker } from './test/local-worker';"],
+    ['web/src/split/a.ts', "import { trip } from './actions.test';"],
+    ['shared/a.ts', "import { cases } from './settle.test';"],
+  ])('production code never imports tests: %s %s', (file, code) =>
+    refused(file, code, 'testHarness'),
+  );
+
+  test('components/ui may use only the hooks that know nothing of the app', async () => {
+    await refused(
+      'web/src/components/ui/a.tsx',
+      "import { useRate } from '../../hooks/useRate';",
+      'uiImportsApp',
+    );
+    await refused(
+      'web/src/components/ui/a.tsx',
+      "import { navigate } from '../../hooks/useRoute';",
+      'uiImportsApp',
+    );
+    await allowed(
+      'web/src/components/ui/a.tsx',
+      "import { useIsMobile } from '../../hooks/useBreakpoints';",
+    );
+  });
+});
+
 describe('Node and Worker runtimes', () => {
   test.each([
     ['shared/a.ts', "import { readFileSync } from 'node:fs';"],
@@ -176,6 +237,24 @@ describe('the repository config', () => {
   ])('checks %s', async (file) => {
     const config = await new ESLint({ cwd: root }).calculateConfigForFile(file);
     expect(config.rules['architecture/boundaries']?.[0]).toBe(2);
+  });
+
+  test('refuses a bad import through the real lint config, not only switches the rule on', async () => {
+    // Real files, so the type-aware rules can parse them; only this rule's verdict counts
+    const real = new ESLint({ cwd: root });
+    const cases = [
+      ['shared/rates.ts', "import { api } from '../web/src/api';\nexport const x = api;\n"],
+      ['worker/http.ts', "import { api } from '../web/src/api';\nexport const x = api;\n"],
+      ['web/src/api.ts', "import { json } from '../../worker/http';\nexport const x = json;\n"],
+    ];
+    for (const [file, code] of cases) {
+      const [result] = await real.lintText(code, { filePath: path.join(root, file) });
+      const verdicts = result.messages.filter((m) => m.ruleId === 'architecture/boundaries');
+      expect(
+        verdicts.map((m) => m.messageId),
+        file,
+      ).toEqual(['crossArea']);
+    }
   });
 
   test('knows the same path aliases as the app', () => {

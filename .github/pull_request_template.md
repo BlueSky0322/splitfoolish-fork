@@ -6,10 +6,11 @@
 
 ## How to test
 
-<!--
-Architecture: "No ownership or contract change", or what changed (an owner, entry
-point, shared contract, invariant or boundary), why, and that docs/feature-map.md
-says so. See AGENTS.md.
--->
+**Architecture:**
 
-**Architecture:** No ownership or contract change.
+<!-- "No ownership or contract change", or which owner, entry point, shared contract,
+invariant or boundary changed, why, and that docs/feature-map.md says so (AGENTS.md). -->
+
+**Checks run:**
+
+<!-- The checks you actually ran and what they showed. -->

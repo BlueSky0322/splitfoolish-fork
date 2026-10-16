@@ -4,8 +4,11 @@
 // Every import is resolved to the file it names (relative paths, the @shared alias and
 // absolute paths alike, with any extra ../ worked out) before it's judged, so the rules
 // hold however the path is spelled. Covered: import and export ... from (types too),
-// import() with a literal path, import('x').Type, import x = require('x') and require().
-// An import() whose path is worked out at run time can't be checked, so it's refused.
+// import() and require() with a literal path, import('x').Type, import x = require('x'),
+// and Vite's import.meta.glob('...') and new URL('...', import.meta.url). An import() or
+// require() whose path is worked out at run time can't be checked, so it's refused.
+// Not covered: /// <reference> comments (TypeScript's settings keep runtimes apart),
+// and paths differing only in letter case (the typecheck refuses those).
 // See AGENTS.md and docs/feature-map.md for why these boundaries exist.
 
 import { builtinModules } from 'node:module';
@@ -33,17 +36,27 @@ const AREA_NAMES = {
 /** The app's entry points, which put the screens together */
 const WEB_ENTRY_POINTS = ['web/src/main.tsx', 'web/src/Root.tsx', 'web/src/App.tsx'];
 
-/** What generic building blocks (components/ui) may lean on besides each other */
-const UI_MAY_IMPORT = ['web/src/components/ui/', 'web/src/hooks/', 'web/src/utils/'];
+/** What generic building blocks (components/ui) may lean on besides each other: the
+ * hooks that know nothing of the app, and utilities */
+const UI_MAY_IMPORT = [
+  'web/src/components/ui/',
+  'web/src/hooks/useBackDismiss',
+  'web/src/hooks/useBreakpoints',
+  'web/src/utils/',
+];
 
 const NODE_BUILTINS = new Set(builtinModules.filter((m) => !m.startsWith('_')));
 
 const posix = (p) => p.split(path.sep).join('/');
 
+/** Whether a path is this folder or inside it */
+const within = (p, dir) => p === dir || p.startsWith(`${dir}/`);
+
 /** Which part a file belongs to, and whether it's a test or test harness */
 export function classify(relativePath) {
   const p = posix(relativePath);
-  const isTestFile = /\.test\.[cm]?[jt]sx?$/.test(p);
+  // With or without its extension, as an import names it
+  const isTestFile = /\.test(\.[cm]?[jt]sx?)?$/.test(p);
   if (p.startsWith('web/src/testing/')) return { area: 'web', test: true, path: p };
   if (p.startsWith('web/src/')) return { area: 'web', test: isTestFile, path: p };
   if (p.startsWith('web/public/')) return { area: 'serviceWorker', test: false, path: p };
@@ -56,7 +69,8 @@ export function classify(relativePath) {
 /** What an import specifier names: a file in the repository, a Node built-in or a package */
 export function resolveSpecifier(specifier, fromFile, root, aliases = ALIASES) {
   for (const [prefix, dir] of Object.entries(aliases)) {
-    if (specifier.startsWith(prefix)) {
+    // '@shared/x', and '@shared' itself
+    if (specifier.startsWith(prefix) || specifier === prefix.replace(/\/$/, '')) {
       return { kind: 'file', file: path.resolve(root, dir, specifier.slice(prefix.length)) };
     }
   }
@@ -94,14 +108,20 @@ export function checkImport(specifier, fromFile, root, aliases = ALIASES) {
       data: { from: AREA_NAMES[from.area], to: AREA_NAMES[to.area] },
     };
   }
-  if (from.area !== 'web' || from.test) return null;
+  if (from.test) return null;
+  // Production code never reaches into tests or their harness, which run in Node
+  if (to.test || within(to.path, 'web/src/testing') || within(to.path, 'worker/test')) {
+    return { messageId: 'testHarness' };
+  }
+  if (from.area !== 'web') return null;
 
-  // Inside the app: production code never reaches into the test harness...
-  if (to.path.startsWith('web/src/testing/')) return { messageId: 'testHarness' };
-  // ...only screens and the entry points draw screens...
-  const fromComponents = from.path.startsWith('web/src/components/');
+  // Inside the app, only screens and the entry points draw screens...
+  const fromComponents = within(from.path, 'web/src/components');
+  const toEntryPoint = WEB_ENTRY_POINTS.some((entry) =>
+    within(to.path, entry.replace(/\.tsx$/, '')),
+  );
   if (
-    to.path.startsWith('web/src/components/') &&
+    (within(to.path, 'web/src/components') || toEntryPoint) &&
     !fromComponents &&
     !WEB_ENTRY_POINTS.includes(from.path)
   ) {
@@ -109,7 +129,7 @@ export function checkImport(specifier, fromFile, root, aliases = ALIASES) {
   }
   // ...and generic building blocks know nothing of the app's features or its API
   if (
-    from.path.startsWith('web/src/components/ui/') &&
+    within(from.path, 'web/src/components/ui') &&
     to.area === 'web' &&
     !UI_MAY_IMPORT.some((dir) => to.path.startsWith(dir))
   ) {
@@ -149,13 +169,14 @@ const boundaries = {
       nodeBuiltin:
         '{{from}} may not import Node built-ins: it does not run in Node. Only tests and their harness may.',
       cloudflareModule: '{{from}} may not import cloudflare: modules; only the Worker runs there.',
-      testHarness: 'The app may not import its test harness (web/src/testing).',
+      testHarness:
+        'Production code may not import tests or their harness (web/src/testing, worker/test).',
       stateImportsComponent:
         'Only screens (web/src/components) and the entry points may import components; state, hooks and utilities sit below them.',
       uiImportsApp:
         'components/ui knows nothing of the app: it may not import {{to}}. Put this in components/common, or pass it in.',
       computed:
-        "An import() whose path is worked out at run time can't be checked against the boundaries; use a literal path.",
+        "An import() or require() whose path is worked out at run time can't be checked against the boundaries; use a literal path.",
     },
   },
   create(context) {
@@ -181,8 +202,34 @@ const boundaries = {
       TSImportType: (node) => check(node.source ?? node.argument, node),
       TSExternalModuleReference: (node) => check(node.expression),
       CallExpression(node) {
-        if (node.callee.type === 'Identifier' && node.callee.name === 'require') {
-          check(node.arguments[0], node);
+        const { callee } = node;
+        const [first] = node.arguments;
+        if (callee.type === 'Identifier' && callee.name === 'require') {
+          if (literalPath(first) === undefined) context.report({ node, messageId: 'computed' });
+          else check(first, node);
+        }
+        // Vite: import.meta.glob('./a/*.ts') or import.meta.glob(['./a/*', './b/*'])
+        if (
+          callee.type === 'MemberExpression' &&
+          callee.object.type === 'MetaProperty' &&
+          callee.property.type === 'Identifier' &&
+          callee.property.name === 'glob' &&
+          first
+        ) {
+          const patterns = first.type === 'ArrayExpression' ? first.elements : [first];
+          for (const pattern of patterns) check(pattern, node);
+        }
+      },
+      // A file's address, which Vite bundles: new URL('../x.ts', import.meta.url)
+      NewExpression(node) {
+        const [first, second] = node.arguments;
+        if (
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'URL' &&
+          second?.type === 'MemberExpression' &&
+          second.object.type === 'MetaProperty'
+        ) {
+          check(first, node);
         }
       },
     };
@@ -193,12 +240,9 @@ export const plugin = { rules: { boundaries } };
 
 /** The lint config that applies the rule to every part, tests included */
 export const architectureConfig = (root) => ({
-  files: [
-    'web/src/**/*.{js,mjs,ts,tsx}',
-    'web/public/**/*.js',
-    'worker/**/*.{js,mjs,ts}',
-    'shared/**/*.{js,mjs,ts}',
-  ],
+  files: ['web/src', 'web/public', 'worker', 'shared'].map(
+    (dir) => `${dir}/**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}`,
+  ),
   plugins: { architecture: plugin },
   rules: { 'architecture/boundaries': ['error', { root, aliases: ALIASES }] },
 });

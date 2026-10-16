@@ -25,22 +25,24 @@ types and `shared/` gets neither. Files are named for what they do on their side
 
 Inside `web/src`, what the app knows is kept apart from how it looks:
 
-| Folder                     | What it holds                                                                |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| `split/`, `my-splits/`, …  | Shared state (the open bill, My splits, the profile): loading, saving, rules |
-| `components/<screen>/`     | What a screen draws, reading from the folders above                          |
-| `components/common/`       | What more than one screen draws that knows the app (a split's picture)       |
-| `components/ui/`           | Plain building blocks that know nothing of splits or accounts (dialogs)      |
-| `offline/`, `utils/`, etc. | What every feature leans on: the device cache, money, dates                  |
+| Folder                                         | What it holds                                                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------------------- |
+| `split/`, `my-splits/`, `profile/`, `offline/` | Shared state (the open split, My splits, the profile, what's kept on the device) |
+| `components/<screen>/`                         | What a screen draws, reading from the folders above                              |
+| `components/common/`                           | What more than one screen draws that knows the app (a split's picture, avatars)  |
+| `components/ui/`                               | Plain building blocks that know nothing of splits or accounts (dialogs)          |
+| `hooks/`, `utils/`                             | What every feature leans on: screen sizes, the page address, money, dates        |
+
+So `split/` is the open split and `components/split/` is the split page: its parts sit in
+subfolders (`items/`, `people/`, `dialogs/`, `layout/`, …) and read the page's context
+from the folder above them.
 
 Anything the rest of the app shows is loaded and changed by the folder that owns it. A
 screen may still make the request itself, either inside the owner's change (saving a
 payment method goes through the profile's, which shows it at once and undoes it if the
 save fails) or for something nothing else shows, such as a search; when such an action
 changes what other screens show, the screen tells the owner to refresh. The rules are in
-`AGENTS.md`, and each feature's owner in `docs/feature-map.md`. So `split/` is the bill and `components/split/` is the split page:
-its parts sit in subfolders (`items/`, `people/`, `dialogs/`, `layout/`, …) and read the
-page's context from the folder above them.
+`AGENTS.md`, and each feature's owner in `docs/feature-map.md`.
 
 ## Running it
 

@@ -28,18 +28,23 @@ The pre-commit hook runs `yarn build`, then eslint, prettier and the related tes
 ## Boundaries checked by lint
 
 `tools/lint/architecture.js` resolves every import (relative, `@shared/...`, re-exports,
-type imports, literal `import()`) and refuses these. Its tests show each case.
+type imports, literal `import()` and `require()`, `import.meta.glob`, `new URL(..., import.meta.url)`)
+and refuses these. Its tests show each case, and what it can't see.
 
 - `web/src` and `worker/` never import each other; what both need lives in `shared/`
   (`@shared/...` in the app, a relative path in the Worker). Tests are held to this too.
-- `shared/` imports only `shared/` and packages that run anywhere: no Node built-ins, no
-  `cloudflare:` modules. It also uses no browser or Worker globals (`shared/tsconfig.json`
-  has no runtime types).
+- `shared/` imports nothing from the app or the Worker, no Node built-ins and no
+  `cloudflare:` modules.
 - Node built-ins only in tests and their harness (`*.test.*`, `web/src/testing/`,
   `worker/test/`). The Worker runs without `nodejs_compat`.
-- In `web/src`: state, hooks and utilities never import components (only screens and
-  the entry points do); production code never imports `web/src/testing/`;
-  `components/ui/` imports only itself, `hooks/`, `utils/`, `shared/` and packages.
+- Production code never imports tests or their harness.
+- In `web/src`: state, hooks and utilities never import components or the entry points
+  (only screens and the entry points draw screens); `components/ui/` imports only
+  itself, `hooks/useBackDismiss` and `hooks/useBreakpoints`, `utils/`, `shared/` and
+  packages.
+
+Not checked by lint, so kept by review: `shared/` uses no browser or Worker globals
+(`yarn typecheck` gives it no runtime types) and only packages that run anywhere.
 
 ## State and components
 
@@ -48,9 +53,10 @@ type imports, literal `import()`) and refuses these. Its tests show each case.
   and settings) and `offline/` (device cache, outbox, splits made offline).
 - The bill (people, items) changes only through `split/actions.ts` and the save queue
   (`split/useSaveQueue.ts`), so changes show at once, survive going offline and sync
-  later. The split's other details change through `changeMeta` or `refreshMeta`
-  (`split/useSplit.ts`). My splits changes go through `my-splits/my-splits.ts`;
-  profile and settings through `useProfile().change`.
+  later. The split's other details change through its `metaChanges` (`changeMeta` when
+  a request needs undoing if it fails) or `refreshMeta` (`split/useSplit.ts`). My
+  splits changes go through `my-splits/my-splits.ts`; profile and settings through
+  `useProfile().change(show, save)`.
 - Components draw and keep local interaction state (what's open, drafts, selection).
   A component may call the API itself only:
   - as the request inside an owner's change (`useProfile().change`, `changeMeta`,
@@ -80,10 +86,12 @@ type imports, literal `import()`) and refuses these. Its tests show each case.
   Worker enforces it and is the authority.
 - Offline: device copies and the outbox are tagged with the signed-in account, and one
   account never sees another's. Changes are sent in order, at most `MAX_CHANGES` at a
-  time, and leave the outbox only once the server answers with JSON. The page and the
-  service worker take the same lock per split. `web/public/sw.js` can't import app
-  code, so it keeps copies of the keys, locks and limits it shares: change both
-  together (`offline/outbox.test.ts` runs it against the app's).
+  time. A batch leaves the outbox once the server accepts it with a JSON answer; one the
+  server refuses is dropped with everything queued after it, and the split reloads.
+  Where the browser has Web Locks, the page and the service worker take the same lock
+  per split. `web/public/sw.js` can't import app code, so it keeps copies of the keys,
+  locks and limits it shares: change both together (`offline/outbox.test.ts` and
+  `offline/sw.test.ts` run it against the app's).
 - `useIsMobile()` is under 768px (phones), `useIsDesktop()` is 1024px and up. Tablets in
   between show one page at a time with back buttons (no sidebar, no bottom tabs), and
   the phone split page. Phones have their own layouts

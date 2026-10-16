@@ -9,16 +9,16 @@ The data model is in [erd.md](erd.md). How the Worker's routes and modules fit t
 is at the top of [worker/app.ts](../worker/app.ts). The rules every change follows are
 in [AGENTS.md](../AGENTS.md).
 
-| Feature                                                                        | State owner (app)                                                | Worker                                                   |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------- |
-| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                     | `auth.ts`, `profiles.ts`, `routes/me.ts`                 |
-| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                         | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts` |
-| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts` | `split-content.ts`, `split-detail.ts`                    |
-| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                         | `exchange-rates.ts`, `reconvert.ts`, `routes/rates.ts`   |
-| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplitLive.ts`, `my-splits/my-splits.ts`                | `sharing.ts`, `room.ts`, `routes/invites.ts`             |
-| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                       | (none; the API is the same)                              |
-| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `profile/ProfileContext.tsx`               | `photos.ts`                                              |
-| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                   | (none)                                                   |
+| Feature                                                                        | State owner (app)                                                       | Worker                                                   |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------- |
+| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                            | `auth.ts`, `profiles.ts`, `routes/me.ts`                 |
+| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts` |
+| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`        | `split-content.ts`, `split-detail.ts`                    |
+| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                | `exchange-rates.ts`, `reconvert.ts`, `routes/rates.ts`   |
+| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`  | `sharing.ts`, `room.ts`, `routes/invites.ts`             |
+| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                              | (none; the API is the same)                              |
+| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                              |
+| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                          | (none)                                                   |
 
 App paths are under `web/src/`, Worker paths under `worker/`.
 
@@ -30,8 +30,8 @@ payment methods) and private settings (currency, rate source, appearance).
 
 **Owner.** [profile/ProfileContext.tsx](../web/src/profile/ProfileContext.tsx) loads
 the profile, keeps a device copy, and owns every change through
-`useProfile().change(optimistic, request, message)`, which shows the change at once
-and undoes it if the request fails.
+`useProfile().change(show, save)`, which shows the change at once and undoes it if
+`save` fails (the caller says what went wrong).
 
 **Parts.**
 
@@ -72,7 +72,7 @@ balance, pending invites, archive, your own order, and search across items and s
 - UI: [components/home/](../web/src/components/home/SplitsHome.tsx) (desktop and
   [MobileHome](../web/src/components/home/MobileHome.tsx), search, sorting, invites)
   and the [sidebar](../web/src/components/shell/Sidebar.tsx).
-- API: [worker/summaries.ts](../worker/summaries.ts) (the list with totals, item name
+- API: [worker/summaries.ts](../worker/summaries.ts) (the list with totals, search, item name
   suggestions, used currencies), [worker/split-lifecycle.ts](../worker/split-lifecycle.ts)
   (create, rename, order, delete), and [worker/routes/splits.ts](../worker/routes/splits.ts)
   (archive, search).
@@ -101,7 +101,9 @@ duplicated, moved to another day, deleted) and its details.
 [split/actions.ts](../web/src/split/actions.ts), which updates
 [split/state.ts](../web/src/split/state.ts) at once and queues the matching `Change` in
 [split/useSaveQueue.ts](../web/src/split/useSaveQueue.ts). The split's other details
-(name, members, photos) change through `metaChanges.changeMeta` or `refreshMeta` from
+(name, members, photos, routing) change through its `metaChanges` (`changeMeta` for
+a request to undo if it fails, and helpers such as `addAttachment` and `patchSettings`)
+or `refreshMeta` from
 [split/useSplit.ts](../web/src/split/useSplit.ts), which also loads the split and keeps
 it current.
 
@@ -204,8 +206,8 @@ changes to the open split and asks `useSplit` to reload.
 
 **Invariants.**
 
-- A removed member's sockets are closed and the owner's share link changes, so the old
-  link can't bring them back (`sharing.ts`).
+- A removed member's live sockets are closed (`evictFromRoom` in `routes/splits.ts`) and
+  the owner's share link changes, so the old link can't bring them back (`sharing.ts`).
 - The room carries no data, only "changed"; each app fetches the split again.
 
 **Tests.** [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx)
@@ -239,14 +241,17 @@ names and limits it shares with `offline/` and `shared/api.ts` are copied in it.
 
 - Nothing kept on the device is shown before the signed-in account is known, and one
   account never sees another's.
-- Changes leave the outbox only after the server answers with JSON; the page and the
-  service worker take the same lock per split, so a change is sent once.
+- A batch leaves the outbox once the server accepts it with a JSON answer; a refused
+  batch is dropped with everything queued after it. Where the browser has Web Locks,
+  the page and the service worker take the same lock per split, so a change is sent
+  once.
 - Batches are at most `MAX_CHANGES`, in order; what's left is kept after each batch.
 
 **Tests.** [cache.test.ts](../web/src/offline/cache.test.ts),
 [outbox.test.ts](../web/src/offline/outbox.test.ts) (runs `sw.js` against what the app
-writes, so the copied constants can't drift),
-[sw.test.ts](../web/src/offline/sw.test.ts),
+writes, so the copied keys and lock names can't drift),
+[sw.test.ts](../web/src/offline/sw.test.ts) (batches of `MAX_CHANGES` and every kind of
+answer, on the page and in `sw.js` alike),
 [delivery.test.ts](../web/src/offline/delivery.test.ts) (page and service worker
 together), and [pending-creates.test.ts](../web/src/offline/pending-creates.test.ts).
 
@@ -256,10 +261,12 @@ together), and [pending-creates.test.ts](../web/src/offline/pending-creates.test
 items (the Photos tab), and QR codes on payment methods.
 
 **Owner.** Split photos: [split/usePhotos.ts](../web/src/split/usePhotos.ts) (upload,
-remove, remove several) keeping the split's details in step through `changeMeta`.
-Split pictures: [split/pictures.ts](../web/src/split/pictures.ts). Profile pictures and
-QR codes: [ProfileContext](../web/src/profile/ProfileContext.tsx) changes, with the
-upload as the request.
+remove, remove several) keeping the split's details in step (`addAttachment`, and
+`changeMeta` for removals). Split pictures: [split/pictures.ts](../web/src/split/pictures.ts),
+through My splits and `patchSettings`. Profile pictures:
+[ProfileContext](../web/src/profile/ProfileContext.tsx) changes, with the upload as the
+`save`. QR codes are uploaded first (`api.setPaymentQr`), then saved with their payment
+method through a profile change.
 
 **Parts.**
 
@@ -279,8 +286,9 @@ upload as the request.
 **Invariants.**
 
 - The file type comes from the bytes, not what the upload says.
-- A picture's address names its version, so the service worker and browsers can keep
-  it for good.
+- A profile picture's, split picture's or QR code's address names its version, and a
+  photo never changes once added, so the service worker and browsers can keep them for
+  good.
 
 **Tests.** [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
 [PhonePhotos.test.tsx](../web/src/components/split/PhonePhotos.test.tsx),
