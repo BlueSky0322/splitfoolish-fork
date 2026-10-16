@@ -14,7 +14,6 @@ const PhotosTab = () => {
   const { splitId, meta, photos, canRemovePhoto } = useSplitPage();
   const { items } = useSplitState().state;
   const [open, setOpen] = useState<number | null>(null);
-  const picker = useRef<HTMLInputElement>(null);
   const uploading = photos.uploading[''] ?? [];
 
   const all = useMemo(
@@ -79,6 +78,26 @@ const PhotosTab = () => {
           </div>
         </section>
       ))}
+      <PhotoViewer
+        photos={viewer}
+        index={open}
+        onIndexChange={setOpen}
+      />
+    </div>
+  );
+};
+
+export default PhotosTab;
+
+/**
+ * The Photos tab's Add photos button. Kept outside the tab itself, which slides as tabs
+ * change: a fixed button inside it would slide too, then jump to its corner.
+ */
+export function AddPhotosFab() {
+  const { photos } = useSplitPage();
+  const picker = useRef<HTMLInputElement>(null);
+  return (
+    <>
       <input
         ref={picker}
         type="file"
@@ -95,13 +114,6 @@ const PhotosTab = () => {
         label="Add photos"
         onClick={() => picker.current?.click()}
       />
-      <PhotoViewer
-        photos={viewer}
-        index={open}
-        onIndexChange={setOpen}
-      />
-    </div>
+    </>
   );
-};
-
-export default PhotosTab;
+}
