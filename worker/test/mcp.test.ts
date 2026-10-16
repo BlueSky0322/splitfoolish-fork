@@ -22,6 +22,8 @@ const REDIRECT = 'http://127.0.0.1:9/callback';
 const TOOLS = [
   'add_expense',
   'add_person',
+  'add_photo',
+  'get_photo',
   'get_split',
   'list_splits',
   'remove_expense',
@@ -319,6 +321,7 @@ describe('the tools', () => {
       'expenses',
       'nextOffset',
       'people',
+      'photos',
       'split',
       'transfers',
     ]);
@@ -551,6 +554,121 @@ describe('the tools', () => {
       (await tool(client, 'get_split', { splitId: split.id })).split.routePaymentsThrough,
     ).toBeNull();
     expect((await route('route-ghost1', hex())).error?.code).toBe('not_found');
+  });
+});
+
+describe('photos', () => {
+  // A 1x1 PNG
+  const PNG =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const OTHER_PNG =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('add a receipt to an expense and a photo of the split, once, and look at them', async () => {
+    const alice = person('alice');
+    const stranger = person('stranger');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const { expenseId } = await tool(client, 'add_expense', {
+      splitId: split.id,
+      requestId: 'cafe-add-001',
+      currency: 'MYR',
+      name: 'Cafe',
+      cost: 18,
+      payerId: split.bob,
+      participantIds: [split.bob, split.cat],
+    });
+
+    const receipt = {
+      splitId: split.id,
+      expenseId,
+      requestId: 'cafe-photo-1',
+      image: `data:image/png;base64,${PNG}`,
+    };
+    const first = await tool(client, 'add_photo', receipt);
+    expect(first).toMatchObject({ status: 'saved', expenseId, actor: alice, replayed: false });
+    // The answer was lost: sent again, and three times at once, it is still one photo
+    expect(await tool(client, 'add_photo', receipt)).toEqual({ ...first, replayed: true });
+    const together = await Promise.all(
+      [1, 2, 3].map(() => tool(client, 'add_photo', { ...receipt, requestId: 'cafe-photo-2' })),
+    );
+    expect(new Set(together.map((t) => t.photoId)).size).toBe(1);
+    expect(together.filter((t) => t.replayed === false)).toHaveLength(1);
+    // The same request id with another image is refused
+    expect((await tool(client, 'add_photo', { ...receipt, image: OTHER_PNG })).error?.code).toBe(
+      'idempotency_conflict',
+    );
+
+    const ofSplit = await tool(client, 'add_photo', {
+      splitId: split.id,
+      requestId: 'trip-photo-1',
+      image: OTHER_PNG,
+    });
+    expect(ofSplit).toMatchObject({ status: 'saved', expenseId: null });
+
+    const read = await tool(client, 'get_split', { splitId: split.id });
+    expect(read.expenses[0].photos.map((p: { id: string }) => p.id).sort()).toEqual(
+      [first.photoId, together[0].photoId].sort(),
+    );
+    expect(read.expenses[0].photos[0]).toMatchObject({
+      contentType: 'image/png',
+      addedByYou: true,
+    });
+    expect(read.photos.map((p: { id: string }) => p.id)).toEqual([ofSplit.photoId]);
+    // The app shows the same photos
+    const inApp = (await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments;
+    expect(inApp).toHaveLength(3);
+
+    const look = await client.callTool({
+      name: 'get_photo',
+      arguments: { splitId: split.id, photoId: first.photoId },
+    });
+    expect(look.content).toEqual([{ type: 'image', data: PNG, mimeType: 'image/png' }]);
+    const strangers = await connect((await grant(stranger, [READ, WRITE])).access);
+    expect(
+      (await tool(strangers, 'get_photo', { splitId: split.id, photoId: first.photoId })).error
+        ?.code,
+    ).toBe('not_found');
+
+    // Removing the expense takes its receipts with it
+    await tool(client, 'remove_expense', {
+      splitId: split.id,
+      expenseId,
+      requestId: 'cafe-remove1',
+    });
+    expect((await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments).toEqual([
+      expect.objectContaining({ id: ofSplit.photoId, itemId: null }),
+    ]);
+  });
+
+  it('refuse what is not a photo, and an expense that is not there', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    expect(
+      (
+        await tool(client, 'add_photo', {
+          splitId: split.id,
+          requestId: 'text-photo-1',
+          image: btoa('hello, not a photo'),
+        })
+      ).error,
+    ).toEqual({
+      code: 'invalid_input',
+      message: 'Only JPEG, PNG and WebP photos are supported',
+      retryable: false,
+    });
+    expect(
+      (
+        await tool(client, 'add_photo', {
+          splitId: split.id,
+          expenseId: hex(),
+          requestId: 'ghost-photo1',
+          image: PNG,
+        })
+      ).error?.code,
+    ).toBe('not_found');
+    expect((await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments).toEqual([]);
   });
 });
 

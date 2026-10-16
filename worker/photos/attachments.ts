@@ -5,7 +5,7 @@ import { type Attachment, isRowId, MAX_PHOTO_BYTES, PHOTO_ID_PARAM } from '../..
 import type { Actor } from '../../shared/rules';
 import { canRemovePhoto } from '../../shared/rules';
 import { json, newId, fail, notFound, ok, isConstraintError } from '../http';
-import { imageResponse, readImage } from './images';
+import { type Image, imageResponse, readImage } from './images';
 
 const MAX_PHOTOS_PER_SPLIT = 300;
 
@@ -47,17 +47,32 @@ function alreadyUploaded(
   return json<Attachment>(attachment);
 }
 
-export async function uploadAttachment(
-  db: D1Database,
-  splitId: string,
-  email: string,
-  req: Request,
-) {
+export function uploadAttachment(db: D1Database, splitId: string, email: string, req: Request) {
   const params = new URL(req.url).searchParams;
-  const itemId = params.get('itemId');
   // Chosen by the app, so sending a photo again never adds it twice
   const id = params.get(PHOTO_ID_PARAM);
   if (id != null && !isRowId(id)) return fail('That photo id is not valid', 400);
+  return addAttachment(db, splitId, email, params.get('itemId'), id, () =>
+    readImage(req, MAX_PHOTO_BYTES),
+  );
+}
+
+/**
+ * Adds a photo to the split, or to one of its items: the app's uploads and the agents'
+ * (mcp/tools.ts). `read` gives the checked image, and is only called once the split has
+ * room and the item is there. `alongside` is saved in the same batch, so it exists
+ * exactly when the photo does. A photo sent again under its first id answers with the
+ * one saved then.
+ */
+export async function addAttachment(
+  db: D1Database,
+  splitId: string,
+  email: string,
+  itemId: string | null,
+  id: string | null,
+  read: () => Promise<Image | Response>,
+  alongside: D1PreparedStatement[] = [],
+) {
   const [count, item, existing] = await db.batch<{ n?: number; id?: string }>([
     db.prepare('SELECT count(*) AS n FROM attachments WHERE split_id = ?').bind(splitId),
     db.prepare('SELECT id FROM items WHERE id = ? AND split_id = ?').bind(itemId ?? '', splitId),
@@ -77,7 +92,7 @@ export async function uploadAttachment(
     return fail('That item no longer exists', 404);
   }
 
-  const image = await readImage(req, MAX_PHOTO_BYTES);
+  const image = await read();
   if (image instanceof Response) return image;
 
   const attachment: Attachment = {
@@ -108,6 +123,7 @@ export async function uploadAttachment(
       db
         .prepare('INSERT INTO attachment_data (id, data) VALUES (?, ?)')
         .bind(attachment.id, image.bytes),
+      ...alongside,
     ]);
   } catch (err) {
     if (isConstraintError(err)) {
@@ -127,14 +143,18 @@ export async function uploadAttachment(
   return json<Attachment>(attachment, 201);
 }
 
-export async function serveAttachment(db: D1Database, splitId: string, id: string) {
-  const row = await db
+/** A photo of this split and its bytes; null when there's no such photo in it */
+export const readAttachment = (db: D1Database, splitId: string, id: string) =>
+  db
     .prepare(
       `SELECT a.content_type AS contentType, d.data FROM attachments a
        JOIN attachment_data d ON d.id = a.id WHERE a.id = ? AND a.split_id = ?`,
     )
     .bind(id, splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
+
+export async function serveAttachment(db: D1Database, splitId: string, id: string) {
+  const row = await readAttachment(db, splitId, id);
   if (row == null) return notFound();
   return imageResponse(row.data, row.contentType);
 }
