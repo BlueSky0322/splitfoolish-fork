@@ -12,10 +12,12 @@ offline.
 | `worker/`     | The API: a Hono app on Cloudflare Workers that also serves `dist/`           |
 | `shared/`     | Code both use: settling up, payment methods, rates and the API's data shapes |
 | `migrations/` | D1 (SQLite) schema changes, applied in order on deploy                       |
-| `docs/`       | The data model (`erd.md`)                                                    |
+| `docs/`       | The data model (`erd.md`) and where each feature lives (`feature-map.md`)    |
+| `tools/`      | Repository checks, such as the import boundaries `yarn lint` enforces        |
 
 `web/` and `worker/` never import each other; anything both need lives in `shared/`,
-which the app imports as `@shared/...`.
+which the app imports as `@shared/...`. `yarn lint` checks this
+(`tools/lint/architecture.js`).
 Each has its own `tsconfig.json`, so the app gets browser types, the Worker gets Worker
 types and `shared/` gets neither. Files are named for what they do on their side:
 `shared/rates.ts` holds the arithmetic, `worker/exchange-rates.ts` fetches rates and
@@ -28,12 +30,15 @@ Inside `web/src`, what the app knows is kept apart from how it looks:
 | `split/`, `my-splits/`, …  | Shared state (the open bill, My splits, the profile): loading, saving, rules |
 | `components/<screen>/`     | What a screen draws, reading from the folders above                          |
 | `components/common/`       | What more than one screen draws that knows the app (a split's picture)       |
-| `components/ui/`           | Plain building blocks that know nothing of splits (dialogs, a state card)    |
+| `components/ui/`           | Plain building blocks that know nothing of splits or accounts (dialogs)      |
 | `offline/`, `utils/`, etc. | What every feature leans on: the device cache, money, dates                  |
 
-A screen may call the API itself for a one-off action that changes no shared state
-(saving a payment method, say); anything the rest of the app shows goes through the
-folder that owns it. So `split/` is the bill and `components/split/` is the split page:
+Anything the rest of the app shows is loaded and changed by the folder that owns it. A
+screen may still make the request itself, either inside the owner's change (saving a
+payment method goes through the profile's, which shows it at once and undoes it if the
+save fails) or for something nothing else shows, such as a search; when such an action
+changes what other screens show, the screen tells the owner to refresh. The rules are in
+`AGENTS.md`, and each feature's owner in `docs/feature-map.md`. So `split/` is the bill and `components/split/` is the split page:
 its parts sit in subfolders (`items/`, `people/`, `dialogs/`, `layout/`, …) and read the
 page's context from the folder above them.
 
@@ -55,7 +60,7 @@ There is no Cloudflare Access locally, so every request is the `DEV_USER_EMAIL` 
 
 ```sh
 yarn typecheck   # app, Worker, Worker tests, shared code and configs
-yarn lint
+yarn lint        # includes the import boundaries between app, Worker and shared code
 yarn vitest run  # unit tests, plus API tests against a local Worker
 ```
 
