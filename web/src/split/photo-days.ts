@@ -1,8 +1,8 @@
 import type { Attachment } from '@shared/api';
 import { dayKey, dayLabel } from './grouping';
 
-// How the Photos tab on a computer orders and groups a split's photos: by the day they
-// were added, or by their item's date, newest or oldest first, and which kinds it shows
+// How the Photos tab orders and groups a split's photos: by the day they were added, or
+// by their item's date, newest or oldest first, and which kinds it shows
 
 export type PhotoSortKey = 'added' | 'item';
 export type PhotoSortDir = 'desc' | 'asc';
@@ -15,6 +15,26 @@ export interface PhotoView {
 }
 
 export const DEFAULT_PHOTO_VIEW: PhotoView = { sortKey: 'added', sortDir: 'desc', filter: 'all' };
+
+/** The orders a phone's sort button steps through, as a computer's sort menu offers */
+export const PHONE_PHOTO_SORTS: { sortKey: PhotoSortKey; sortDir: PhotoSortDir; label: string }[] =
+  [
+    { sortKey: 'added', sortDir: 'desc', label: 'Newest' },
+    { sortKey: 'added', sortDir: 'asc', label: 'Oldest' },
+    { sortKey: 'item', sortDir: 'desc', label: 'Item date, newest' },
+    { sortKey: 'item', sortDir: 'asc', label: 'Item date, oldest' },
+  ];
+
+/** The kinds a phone's filter button steps through, in order */
+export const PHOTO_FILTERS: { filter: PhotoFilter; label: string }[] = [
+  { filter: 'all', label: 'All' },
+  { filter: 'receipts', label: 'Receipts' },
+  { filter: 'split', label: 'Split photos' },
+];
+
+/** The next in a list after the one that matches, back to the first after the last */
+export const nextOf = <T>(list: T[], matches: (entry: T) => boolean) =>
+  list[(list.findIndex(matches) + 1) % list.length];
 
 export interface PhotoDay {
   key: string;

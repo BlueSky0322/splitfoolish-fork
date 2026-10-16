@@ -21,18 +21,27 @@ export const TitleSkeleton = ({ size }: { size: number }) => (
 );
 
 /** Where you stand: a label over a large amount */
+// Each bar sits in a line as tall as the text it stands for, so the card keeps its
+// height when the balance arrives
 export const HeroSkeleton = ({ size }: { size: number }) => (
   <div className="flex flex-col gap-1">
-    <Skeleton
-      width={90}
-      height={11}
-      style={{ margin: '4px 0' }}
-    />
-    <Skeleton
-      width={Math.round(size * 3.6)}
-      height={Math.round(size * 0.85)}
-      style={{ margin: `${Math.round(size * 0.13)}px 0` }}
-    />
+    <div className="flex items-center text-[13px]">
+      {'\u200b'}
+      <Skeleton
+        width={90}
+        height={11}
+      />
+    </div>
+    <div
+      className="flex items-center"
+      style={{ fontSize: size, lineHeight: 1.1 }}
+    >
+      {'\u200b'}
+      <Skeleton
+        width={Math.round(size * 3.6)}
+        height={Math.round(size * 0.85)}
+      />
+    </div>
   </div>
 );
 

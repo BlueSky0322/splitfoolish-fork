@@ -1,16 +1,33 @@
 import { ActionIcon, Button, Portal, UnstyledButton } from '@mantine/core';
-import { Check, DownloadSimple, Trash, X } from '@phosphor-icons/react';
+import {
+  Check,
+  DownloadSimple,
+  FunnelSimple,
+  SortAscending,
+  SortDescending,
+  Trash,
+  X,
+} from '@phosphor-icons/react';
 import type { Attachment } from '@shared/api';
 import { useMemo, useRef, useState } from 'react';
 import { attachmentUrl } from '../../../api';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
-import { dayKey, dayLabel } from '../../../split/grouping';
+import {
+  DEFAULT_PHOTO_VIEW,
+  PHONE_PHOTO_SORTS,
+  PHOTO_FILTERS,
+  type PhotoView,
+  nextOf,
+  photoCounts,
+  photoDays,
+} from '../../../split/photo-days';
 import { photoFileName, usePhotoDownload } from '../../../split/photo-download';
 import { useSplitState } from '../../../split/SplitStateContext';
 import Fab from '../../ui/Fab';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
 import { useLongPress } from '../items/useItemSelection';
 import bar from '../items/ItemSelection.module.css';
+import page from '../Split.module.css';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './PhotosTab.module.css';
 import QueuedPhotoTile from './QueuedPhotoTile';
@@ -62,37 +79,47 @@ function PhotoTile({
 }
 
 // The split's Photos tab on a phone: every photo, the split's own and each item's
-// receipts, by the day it was added, newest first, with the item it belongs to. A long
-// press picks photos, to download or remove them together.
+// receipts, by day, with the item it belongs to. Its buttons step through the orders and
+// kinds a computer's Photos tab offers. A long press picks photos, to download or remove
+// them together.
 const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
   const { splitId, meta, photos, canRemovePhoto } = useSplitPage();
   // Phones save each photo as usual; a tablet gets one zip, as a computer does
   const saving = usePhotoDownload(splitId, meta?.name ?? '', { zip: !useIsMobile() });
   const { items } = useSplitState().state;
   const [open, setOpen] = useState<number | null>(null);
+  const [view, setView] = useState<PhotoView>(DEFAULT_PHOTO_VIEW);
   const queued = photos.queuedOf(null);
 
-  const all = useMemo(
-    () => [...(meta?.attachments ?? [])].sort((a, b) => b.createdAt - a.createdAt),
-    [meta?.attachments],
+  const all = useMemo(() => meta?.attachments ?? [], [meta?.attachments]);
+  const days = useMemo(
+    () => photoDays(all, new Map(items.map((i) => [i.id, i.createdAt])), view),
+    [all, items, view],
   );
+  // The photos shown, in order: what the viewer steps through and All picks
+  const shown = days.flatMap((d) => d.photos);
+  // Where each day's photos start among them
+  const startOf = new Map<string, number>();
+  let start = 0;
+  for (const day of days) {
+    startOf.set(day.key, start);
+    start += day.photos.length;
+  }
+  const counts = photoCounts(all);
+  const sort =
+    PHONE_PHOTO_SORTS.find((o) => o.sortKey === view.sortKey && o.sortDir === view.sortDir) ??
+    PHONE_PHOTO_SORTS[0];
+  const filter = PHOTO_FILTERS.find((f) => f.filter === view.filter) ?? PHOTO_FILTERS[0];
   const nameOf = new Map(items.map((i) => [i.id, i.name]));
-  const days: { key: string; label: string; start: number; count: number }[] = [];
-  all.forEach((photo, index) => {
-    const key = dayKey(photo.createdAt);
-    const last = days.at(-1);
-    if (last?.key === key) last.count++;
-    else days.push({ key, label: dayLabel(photo.createdAt), start: index, count: 1 });
-  });
   const { confirm, dialog: confirmDialog } = useConfirmRemovePhotos();
-  const viewer: ViewerPhoto[] = all.map((photo) => ({
+  const viewer: ViewerPhoto[] = shown.map((photo) => ({
     key: photo.id,
     src: attachmentUrl(splitId, photo.id),
     onRemove: canRemovePhoto(photo) ? () => confirm(1, () => photos.remove(photo)) : undefined,
     fileName: photoFileName(photo),
   }));
   // Picked photos still there (one removed elsewhere drops out)
-  const chosen = all.filter((p) => pick.selected.has(p.id));
+  const chosen = shown.filter((p) => pick.selected.has(p.id));
   const canRemoveAll = chosen.length > 0 && chosen.every(canRemovePhoto);
 
   return (
@@ -119,10 +146,10 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
               variant="subtle"
               size="compact-md"
               onClick={() =>
-                chosen.length === all.length ? pick.clear() : pick.pick(all.map((p) => p.id))
+                chosen.length === shown.length ? pick.clear() : pick.pick(shown.map((p) => p.id))
               }
             >
-              {chosen.length === all.length ? 'None' : 'All'}
+              {chosen.length === shown.length ? 'None' : 'All'}
             </Button>
             <ActionIcon
               variant="subtle"
@@ -152,6 +179,40 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
           </div>
         </Portal>
       )}
+      {all.length > 0 && !pick.active && (
+        <div className={classes.toolbar}>
+          <UnstyledButton
+            className={page.pill}
+            onClick={() =>
+              setView((v) => {
+                const next = nextOf(
+                  PHONE_PHOTO_SORTS,
+                  (o) => o.sortKey === v.sortKey && o.sortDir === v.sortDir,
+                );
+                return { ...v, sortKey: next.sortKey, sortDir: next.sortDir };
+              })
+            }
+            aria-label={`Sort photos: ${sort.label}`}
+          >
+            {sort.sortDir === 'asc' ? <SortAscending size={14} /> : <SortDescending size={14} />}
+            {sort.label}
+          </UnstyledButton>
+          <UnstyledButton
+            className={page.pill}
+            onClick={() =>
+              setView((v) => ({
+                ...v,
+                filter: nextOf(PHOTO_FILTERS, (f) => f.filter === v.filter).filter,
+              }))
+            }
+            aria-label={`Show: ${filter.label}, ${counts[filter.filter]}`}
+          >
+            <FunnelSimple size={14} />
+            {filter.label}
+            <span className="sf-muted">{counts[filter.filter]}</span>
+          </UnstyledButton>
+        </div>
+      )}
       {queued.length > 0 && (
         <div className={classes.grid}>
           {queued.map((photo) => (
@@ -164,23 +225,27 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
           ))}
         </div>
       )}
-      {all.length === 0 && queued.length === 0 && (
+      {shown.length === 0 && queued.length === 0 && (
         <p className="sf-muted text-sm text-center py-10">
-          No photos yet. Add some of the trip here, or a receipt on its item.
+          {all.length === 0
+            ? 'No photos yet. Add some of the trip here, or a receipt on its item.'
+            : view.filter === 'receipts'
+              ? 'No receipts yet. Add one on its item.'
+              : 'No photos of the split yet. Add some here.'}
         </p>
       )}
       {days.map((day) => (
         <section key={day.key}>
           <h2 className={classes.day}>{day.label}</h2>
           <div className={classes.grid}>
-            {all.slice(day.start, day.start + day.count).map((photo, i) => (
+            {day.photos.map((photo, i) => (
               <PhotoTile
                 key={photo.id}
                 photo={photo}
                 label={photo.itemId ? nameOf.get(photo.itemId) : null}
                 picking={pick.active}
                 picked={pick.selected.has(photo.id)}
-                onOpen={() => setOpen(day.start + i)}
+                onOpen={() => setOpen(startOf.get(day.key)! + i)}
                 onToggle={() => pick.toggle(photo.id)}
               />
             ))}
