@@ -42,7 +42,7 @@ async function tokenRequest(fields: Record<string, string>) {
  * (signed in as `email`) allows `scope` on the consent page, and the code is exchanged
  * with its PKCE verifier
  */
-async function grant(email: string, scope: string[]) {
+async function grant(email: string, scope: string[], requested = scope) {
   const registered = await fetch(`${api.base}/oauth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -62,7 +62,7 @@ async function grant(email: string, scope: string[]) {
     response_type: 'code',
     client_id: clientId,
     redirect_uri: REDIRECT,
-    scope: scope.join(' '),
+    scope: requested.join(' '),
     state: 'state-1',
     code_challenge: b64url(createHash('sha256').update(verifier).digest()),
     code_challenge_method: 'S256',
@@ -75,6 +75,10 @@ async function grant(email: string, scope: string[]) {
   // The page says who is granting what, to which app
   expect(html).toContain(`Signed in as <strong>${email}</strong>`);
   expect(html).toContain('Test agent');
+  // Both scopes are offered and ticked, whatever the client asked for
+  for (const s of [READ, WRITE]) {
+    expect(html).toContain(`name="scope" value="${s}" checked`);
+  }
   const handle = /name="handle" value="([^"]+)"/.exec(html)![1];
   const cookie = page.headers
     .getSetCookie()
@@ -182,8 +186,9 @@ describe('signing in', () => {
     expect(resource).toMatchObject({
       resource: `${api.base}/mcp`,
       authorization_servers: [api.base],
-      scopes_supported: [READ],
+      scopes_supported: [READ, WRITE],
     });
+    expect(res.headers.get('WWW-Authenticate')).toContain(`scope="${READ} ${WRITE}"`);
     const server = (await (
       await fetch(`${api.base}/.well-known/oauth-authorization-server`)
     ).json()) as Record<string, unknown>;
@@ -479,6 +484,25 @@ describe('who may do what', () => {
     expect(challenge).toContain('insufficient_scope');
     expect(challenge).toContain(WRITE);
     expect(await itemsOf(alice, split.id)).toEqual([]);
+  });
+
+  it('a client that asks only to read can still be allowed to add expenses', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const { access } = await grant(alice, [READ, WRITE], [READ]);
+    const saved = await tool(await connect(access), 'add_expense', {
+      splitId: split.id,
+      requestId: 'asked-read-01',
+      currency: 'MYR',
+      name: 'Dinner',
+      cost: 10,
+      payerId: split.bob,
+      participantIds: [split.me, split.bob],
+    });
+    expect(saved).toMatchObject({ status: 'saved', replayed: false });
+    expect(await itemsOf(alice, split.id)).toEqual([
+      expect.objectContaining({ name: 'Dinner', cost: 10, payerId: split.bob }),
+    ]);
   });
 
   it('a split is out of reach to anyone not in it, including someone removed after granting', async () => {

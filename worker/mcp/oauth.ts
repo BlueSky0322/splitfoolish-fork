@@ -46,9 +46,10 @@ const problem = (status: number, message: string) =>
 /** The consent page: who is asking, where access goes, and what it may do */
 async function showConsent(oauth: OAuthHelpers, request: AuthRequest, email: string) {
   const details = await oauth.describeConsent(request);
-  // Only what this server grants; anything else the client asked for is left out
-  const scopes = details.scope.filter((s) => SCOPES.includes(s));
-  const offered = scopes.length > 0 ? scopes : [READ_SCOPE];
+  // Everything this server grants, ticked, whatever the client asked for, so an app
+  // that asked for less can still be allowed to add expenses; the person unticks what
+  // it shouldn't do. Other scopes the client asked for are left out.
+  const offered = SCOPES;
   const consent = await oauth.beginConsent(request);
   const name = escape(details.clientName);
   return page(
@@ -162,7 +163,9 @@ function providerFor(origin: string) {
         authorization_servers: [origin],
         resource_name: 'Splitfoolish',
       },
-      requiredScopes: [READ_SCOPE],
+      // What clients are told to ask for (resource metadata and the 401 challenge); the
+      // provider doesn't hold tokens to it, each tool checks its own scope
+      requiredScopes: SCOPES,
     });
     providers.set(origin, provider);
   }
