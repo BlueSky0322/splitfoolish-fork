@@ -34,8 +34,9 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   account the agent acts as is the one Access signed in there, verified again on the
   page; nothing the agent or the form sends can change it.
 - **Scopes:** `splits:read` (list and read splits) and `splits:write` (add and edit
-  expenses). The page offers what the client asked for, and the person can untick
-  either. Each tool checks its own scope; a call the grant doesn't cover gets a `403`
+  expenses). Both are advertised to clients (resource metadata and the `401` challenge),
+  and the page always offers both, ticked, whatever the client asked for; the person
+  can untick either. Each tool checks its own scope; a call the grant doesn't cover gets a `403`
   with `error="insufficient_scope"`, so the client can ask for more.
 - **Lifetimes:** access tokens last an hour; refresh tokens rotate on use and the
   grant ends 30 days after sign-in. Authorizing the same app again replaces its earlier

@@ -30,50 +30,84 @@ const SCOPE_LABELS: Record<string, string> = {
 
 const escape = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
+// The app's look (web/src/theme/tokens.css and theme.ts, Blurple accent), copied here
+// because the Worker can't import the app. It follows the device's light or dark
+// setting, since the page can't see the account's.
+const STYLE = `
+:root{--bg:#161826;--surface:#232532;--text:#e9e9ed;--accent:#9184d9;--shadow:0 0 0 1px #3f424d;color-scheme:dark}
+@media (prefers-color-scheme:light){:root{--bg:#eceef6;--surface:#f8f9fd;--text:#1e202b;--accent:#6a5db3;--shadow:0 0 0 1px #cfd3e5;color-scheme:light}}
+:root{--border:color-mix(in srgb,var(--text) 22%,transparent);--muted:color-mix(in srgb,var(--text) 58%,transparent);--tint:color-mix(in srgb,var(--text) 5%,transparent)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,sans-serif;font-optical-sizing:auto;letter-spacing:-0.006em;-webkit-font-smoothing:antialiased}
+main{width:100%;max-width:440px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:28px 24px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-weight:500}
+.brand svg{width:28px;height:28px}
+h1{font-size:20px;font-weight:500;letter-spacing:-0.02em;line-height:1.3;margin:0 0 12px}
+p{margin:0 0 12px}
+.muted{color:var(--muted);font-size:13px}
+.warn{border:1px solid var(--accent);border-radius:8px;padding:10px 12px}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:20px 0 8px}
+.scope{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;border-radius:8px;background:var(--tint);cursor:pointer}
+.scope input{width:18px;height:18px;margin:0;accent-color:var(--accent)}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+button{font:inherit;font-weight:500;padding:8px 18px;border-radius:8px;background:transparent;cursor:pointer;border:1px solid var(--border);color:var(--text)}
+button:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+button.primary{border-color:var(--accent);color:var(--accent)}
+button.primary:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}`;
+
+// The app icon (web/public/icon.svg)
+const LOGO = `<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#161826"/><g transform="translate(112 112) scale(1.125)"><path fill="#9184d9" d="M232.49,192.49l-32,32a12,12,0,0,1-17,0l-32-32a12,12,0,0,1,17-17L180,187V141L128,89,76,141V187l11.51-11.52a12,12,0,0,1,17,17l-32,32a12,12,0,0,1-17,0l-32-32a12,12,0,1,1,17-17L52,187V136a12,12,0,0,1,3.51-8.49L116,67V24a12,12,0,0,1,24,0V67l60.49,60.48A12,12,0,0,1,204,136v51l11.51-11.52a12,12,0,0,1,17,17Z"/></g></svg>`;
+
 const page = (status: number, body: string, headers = new Headers()) => {
   headers.set('Content-Type', 'text/html; charset=utf-8');
   headers.set('Cache-Control', 'no-store');
   return new Response(
-    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">` +
-      `<title>Splitfoolish</title><body style="font:16px system-ui;max-width:32rem;margin:2rem auto;padding:0 1rem">${body}`,
+    `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+      `<title>Splitfoolish</title><link rel="icon" type="image/svg+xml" href="/icon.svg">` +
+      `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..600&display=swap">` +
+      `<style>${STYLE}</style><body><main><div class="brand">${LOGO}Splitfoolish</div>${body}</main>`,
     { status, headers },
   );
 };
 
 const problem = (status: number, message: string) =>
-  page(status, `<h1>Can't connect this app</h1><p>${escape(message)}</p>`);
+  page(status, `<h1>Can't connect this app</h1><p class="muted">${escape(message)}</p>`);
 
 /** The consent page: who is asking, where access goes, and what it may do */
 async function showConsent(oauth: OAuthHelpers, request: AuthRequest, email: string) {
   const details = await oauth.describeConsent(request);
-  // Only what this server grants; anything else the client asked for is left out
-  const scopes = details.scope.filter((s) => SCOPES.includes(s));
-  const offered = scopes.length > 0 ? scopes : [READ_SCOPE];
+  // Everything this server grants, ticked, whatever the client asked for, so an app
+  // that asked for less can still be allowed to add expenses; the person unticks what
+  // it shouldn't do. Other scopes the client asked for are left out.
+  const offered = SCOPES;
   const consent = await oauth.beginConsent(request);
   const name = escape(details.clientName);
   return page(
     200,
     `<h1>Allow ${name} to use Splitfoolish as you?</h1>
-<p>Signed in as <strong>${escape(email)}</strong>. ${
+<p>Signed in as <strong>${escape(email)}</strong>.</p>
+<p class="muted">${
       details.clientDomain
         ? `Published by <strong>${escape(details.clientDomain)}</strong>.`
         : 'This app named itself; its name is not verified.'
     } Access will be sent to <strong>${escape(details.redirectHost)}</strong>.</p>
 ${
   details.redirectIsLoopback
-    ? '<p><strong>This sends access to an app on your computer.</strong> Continue only if you just started connecting it.</p>'
+    ? '<p class="warn"><strong>This sends access to an app on your computer.</strong> Continue only if you just started connecting it.</p>'
     : ''
 }
 <form method="post">
 <input type="hidden" name="handle" value="${escape(consent.handle)}">
+<div class="label">It may</div>
 ${offered
   .map(
     (s) =>
-      `<p><label><input type="checkbox" name="scope" value="${escape(s)}" checked> ${escape(SCOPE_LABELS[s] ?? s)}</label></p>`,
+      `<label class="scope"><input type="checkbox" name="scope" value="${escape(s)}" checked> ${escape(SCOPE_LABELS[s] ?? s)}</label>`,
   )
   .join('\n')}
-<p>It acts as you: anything it adds or changes is saved under your account, whoever asked it to.</p>
-<p><button name="decision" value="approve">Allow</button> <button name="decision" value="deny">Deny</button></p>
+<p class="muted">It acts as you: anything it adds or changes is saved under your account, whoever asked it to.</p>
+<div class="actions"><button name="decision" value="deny">Deny</button><button class="primary" name="decision" value="approve">Allow</button></div>
 </form>`,
     consent.headers,
   );
@@ -162,7 +196,9 @@ function providerFor(origin: string) {
         authorization_servers: [origin],
         resource_name: 'Splitfoolish',
       },
-      requiredScopes: [READ_SCOPE],
+      // What clients are told to ask for (resource metadata and the 401 challenge); the
+      // provider doesn't hold tokens to it, each tool checks its own scope
+      requiredScopes: SCOPES,
     });
     providers.set(origin, provider);
   }
