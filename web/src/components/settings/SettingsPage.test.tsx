@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { keys } from 'idb-keyval';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import { writeOutbox } from '../../offline/outbox';
+import { flushOfflineChanges } from '../../offline/sync';
 import { fakeServer, holdNext, renderApp, setupAppTests } from '../../testing/app';
 
 setupAppTests();
@@ -73,11 +74,15 @@ describe('Settings', () => {
   };
 
   test('asks before signing out when changes have not reached the server, which signing out removes', async () => {
-    renderApp(fakeServer(), '/?settings');
+    const server = fakeServer();
+    renderApp(server, '/?settings');
     const user = userEvent.setup();
     await screen.findByRole('textbox', { name: 'Display name' });
-    // Made offline, not sent yet
+    // Made offline, not sent yet: the server can't be reached, so trying to send it again
+    // (as the app does once signed in) keeps it
+    server.health = 'unreachable';
     await writeOutbox('trip', [{ cid: 'c1', change: { op: 'removeItem', id: 'dinner' } }]);
+    await flushOfflineChanges();
     const signedOut = watchSignOut();
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
