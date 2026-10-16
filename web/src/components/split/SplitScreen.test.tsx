@@ -23,6 +23,15 @@ const trip = () =>
   ]);
 
 describe('the split page', () => {
+  // Adds Snacks from the item form, for the amount typed
+  const addSnacks = async (user: ReturnType<typeof userEvent.setup>, amount = '16') => {
+    await user.click(screen.getAllByRole('button', { name: /^Add item$/ })[0]);
+    const form = await screen.findByRole('dialog');
+    await user.type(within(form).getByRole('textbox', { name: 'What it was for' }), 'Snacks');
+    await user.type(within(form).getByRole('textbox', { name: 'Amount' }), amount);
+    await user.click(within(form).getByRole('button', { name: /^(Add|Add item)$/ }));
+  };
+
   test('shows the items and who owes whom', async () => {
     renderApp(fakeServer(trip()), '/?s=trip');
     expect(await screen.findByText('Dinner')).toBeTruthy();
@@ -39,12 +48,7 @@ describe('the split page', () => {
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();
     await screen.findByText('Dinner');
-
-    await user.click(screen.getAllByRole('button', { name: /^Add item$/ })[0]);
-    const form = await screen.findByRole('dialog');
-    await user.type(within(form).getByRole('textbox', { name: 'What it was for' }), 'Snacks');
-    await user.type(within(form).getByRole('textbox', { name: 'Amount' }), '8*2');
-    await user.click(within(form).getByRole('button', { name: /^(Add|Add item)$/ }));
+    await addSnacks(user, '8*2');
 
     expect(await screen.findByText('Snacks')).toBeTruthy();
     await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(3));
@@ -126,14 +130,6 @@ describe('the split page', () => {
   });
 
   // What the app does when a save doesn't go through
-  const addSnacks = async (user: ReturnType<typeof userEvent.setup>) => {
-    await user.click(screen.getAllByRole('button', { name: /^Add item$/ })[0]);
-    const form = await screen.findByRole('dialog');
-    await user.type(within(form).getByRole('textbox', { name: 'What it was for' }), 'Snacks');
-    await user.type(within(form).getByRole('textbox', { name: 'Amount' }), '16');
-    await user.click(within(form).getByRole('button', { name: /^(Add|Add item)$/ }));
-  };
-
   test('a change the server refuses is explained and undone', async () => {
     const server = fakeServer(trip());
     server.failNext.changes = 409;
@@ -430,18 +426,7 @@ describe('the split page', () => {
     expect(copy).toEqual({ ...taxi, id: copy.id, createdAt: copy.createdAt });
   });
 
-  test('on a phone, the item form has no menu of its own', async () => {
-    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
-    const user = userEvent.setup();
-    await user.click(await screen.findByText('Taxi'));
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Edit item' }),
-    );
-    expect(await screen.findByText('Edit item')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
-  });
-
-  test('on a phone, an item opens as it stands, with Edit a tap away', async () => {
+  test('on a phone, an item opens as it stands, with Edit a tap away and no menu in the form', async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     await user.click(await screen.findByText('Taxi'));
@@ -452,6 +437,8 @@ describe('the split page', () => {
     await user.click(within(detail).getByRole('button', { name: 'Edit item' }));
     expect(await screen.findByText('Edit item')).toBeTruthy();
     expect(screen.getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '30');
+    // Its actions are on the sheet it opened from
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
   });
 
   test('on a phone, the item sheet shows who it is split between and asks before losing an entry', async () => {
