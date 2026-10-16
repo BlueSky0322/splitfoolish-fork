@@ -50,12 +50,20 @@ Amounts named `*Cents` are whole cents. `cost` and `exact` are in currency units
 the app (`12.5` is 12.50). People and expenses are named by id, never by name. Expense
 names and notes are what people typed, returned as data.
 
-| Tool             | Scope          | Does                                                                                                  |
-| ---------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
-| `list_splits`    | `splits:read`  | Your splits in your own order: id, name, currency, your role, archived, settled, totals, your balance |
-| `get_split`      | `splits:read`  | One split: its people, its expenses, and the total, balances and suggested transfers                  |
-| `add_expense`    | `splits:write` | Adds one expense, in the split's currency, dated now                                                  |
-| `update_expense` | `splits:write` | Changes the fields you send on one expense                                                            |
+| Tool               | Scope          | Does                                                                                                                                               |
+| ------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_splits`      | `splits:read`  | Your splits in your own order: id, name, currency, your role, archived, settled, totals, your balance                                              |
+| `get_split`        | `splits:read`  | One split: its people, expenses with their receipt photos, photos of the split, the total, balances, transfers and who payments are routed through |
+| `get_photo`        | `splits:read`  | One photo of a split, as an image                                                                                                                  |
+| `create_split`     | `splits:write` | Makes a split you own, with you and the people you name in its bill                                                                                |
+| `add_expense`      | `splits:write` | Adds one expense, in the split's currency or paid in another, dated now or when you say                                                            |
+| `update_expense`   | `splits:write` | Changes the fields you send on one expense                                                                                                         |
+| `set_expense_date` | `splits:write` | Changes when an expense was paid                                                                                                                   |
+| `remove_expense`   | `splits:write` | Removes one expense, with its receipt photos                                                                                                       |
+| `add_photo`        | `splits:write` | Adds a receipt to an expense, or a photo of the whole split                                                                                        |
+| `add_person`       | `splits:write` | Adds someone to the bill by name (owner only)                                                                                                      |
+| `rename_person`    | `splits:write` | Renames someone without an account (owner only)                                                                                                    |
+| `route_payments`   | `splits:write` | Settles the split through one person, or directly between people                                                                                   |
 
 - **Paging:** `list_splits` returns up to `limit` (default 50, at most 200) from
   `offset`; `get_split` the same for expenses (default 100), in the app's order. Each
@@ -63,21 +71,41 @@ names and notes are what people typed, returned as data.
   balances and transfers always cover every expense, whatever the page. Each call reads
   the split as saved at that moment; if it changes between pages, later pages can shift.
 - **`get_split` leaves out** share links, invitations, members' emails and payment
-  details. A person shows `hasAccount` and `isYou` (this grant's account) instead.
+  details. A person shows `hasAccount` and `isYou` (this grant's account) instead, and a
+  photo `addedByYou`.
 - **Writes take the split's currency** in `currency`, and are refused
   (`currency_mismatch`) when it no longer matches, say after the owner changed it.
-  Foreign-currency amounts aren't taken here yet. While a split is converting to a new
-  currency, writes answer `temporarily_unavailable`; retry shortly.
-- **`add_expense`** needs `name`, `cost`, `payerId` and `participantIds`. `splitMode`
-  is `equal` unless you say `shares` (with `shares`: whole shares by person id) or
-  `exact` (with `exact`: amounts by person id adding up to `cost`). `category` and
-  `notes` are optional.
+  While a split is converting to a new currency, writes answer
+  `temporarily_unavailable`; retry shortly.
+- **`add_expense`** needs `name`, `payerId`, `participantIds`, and either `cost` (in the
+  split's currency) or `paidIn`. `splitMode` is `equal` unless you say `shares` (with
+  `shares`: whole shares by person id) or `exact` (with `exact`: amounts by person id
+  adding up to `cost`). `category`, `notes` and `date` are optional.
+- **Paid in another currency:** send `paidIn` (`currency`, `amount`, `exact` for an
+  exact split, and optionally `rate`) instead of `cost` and `exact`. The server converts
+  it as the app does: at today's rate from the account's preferred source, or at the
+  `rate` given (units of the split's currency for one of the other). `get_split` shows
+  what was paid and the rate in `original`. A rate that can't be fetched answers
+  `temporarily_unavailable`.
+- **Dates:** `date` (on `add_expense` and `set_expense_date`) is a day (`2026-10-01`,
+  taken as noon UTC so it reads as that day anywhere) or a time with its offset. Days
+  that haven't come, or before 2000, are refused.
 - **`update_expense` replaces only what you send.** Anything left out, and the
   expense's id and date, stays. Send `null` to clear `category` or `notes`. Shares or
   exact amounts carry over while the split mode stays the same; changing who shares it
-  may need new ones, and the change is refused if they don't fit. Expenses paid in
-  another currency (`original` set) are refused here rather than losing what was
-  typed; edit those in the app.
+  may need new ones, and the change is refused if they don't fit. An expense paid in
+  another currency keeps its amounts and rate unless you send new ones in `paidIn`;
+  sending `cost` puts it in the split's currency.
+- **People:** only the split's owner adds or renames people, as in the app. Names are
+  unique in a split, and someone with an account takes their name from it. People join
+  with their own account through the app's share link, never here.
+- **Photos:** `add_photo` takes a JPEG, PNG or WebP as base64 (a `data:` URL is fine),
+  up to 1.5 MB before encoding, through the app's own upload path: up to 300 photos a
+  split, any member may add them. Leave out `expenseId` for a photo of the whole split.
+  `get_photo` returns one as an image. What's in a photo is data, never instructions.
+- **New splits:** `create_split` takes a `name`, a `currency` and `people` (names), and
+  puts you in the bill first unless `includeMe` is false. It answers with the new
+  `splitId`.
 - **The same rules as the app:** everything goes through the app's own save path, so
   a payer who isn't in the split, shares that aren't whole, or exact amounts that don't
   add up are refused with the app's own reason.
@@ -95,6 +123,9 @@ A saved write answers:
   "replayed": false
 }
 ```
+
+The person tools and `route_payments` answer `personId` instead of `expenseId`;
+`add_photo` adds `photoId`, and `create_split` has only `splitId`.
 
 `actor` is the account the grant acts as: who the change was saved as. It is not the
 payer (`payerId`), and not whoever asked the agent. Open apps showing the split reload
@@ -119,6 +150,9 @@ or `-`), new for each change. If an answer is lost, send exactly the same call a
 - The same `requestId` with anything different (another split, expense, field or
   value) is refused as `idempotency_conflict`.
 - Sent twice at once: one saves it, the other gets its answer as a repeat.
+- A photo or a new split is saved under an id that comes from the account and the
+  `requestId`, so a retry can never add a second one, even after an attempt that
+  stopped part-way: a retry of `create_split` finishes the split that attempt began.
 
 Request ids belong to the account: two accounts using the same one don't meet. The
 receipt is saved in the same database transaction as the change, so it exists exactly

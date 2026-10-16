@@ -378,7 +378,8 @@ method through a profile change.
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
   in the item form, with a spinner on their way up or marked as waiting.
 - API: [worker/photos/](../worker/photos/) stores images in D1 and serves them only to
-  members: photos on a split in `attachments.ts`; profile, split and payment QR pictures
+  members: photos on a split in `attachments.ts` (`addAttachment` checks and saves one,
+  for the app's uploads and the MCP's `add_photo`); profile, split and payment QR pictures
   in `pictures.ts` (profile pictures and QR codes also to people who share a split);
   checking and serving the bytes in `images.ts`.
 - Shared: size limits and `Attachment` in [shared/api.ts](../shared/api.ts), and
@@ -473,14 +474,18 @@ cases (`{ size: 'phone' }`) in
 
 ## Agents over MCP
 
-**What it is.** An agent signs in over OAuth as one account and uses four tools at
-`/mcp`: `list_splits`, `get_split`, `add_expense`, `update_expense`. The contracts,
-units, retries and deployment steps are in [mcp.md](mcp.md).
+**What it is.** An agent signs in over OAuth as one account and uses tools at `/mcp`
+to read splits and their photos, create splits, add, edit, date and remove expenses
+(in the split's currency or another), add receipts and split photos, add and rename
+people, and route payments. The contracts, units, retries and deployment steps are in
+[mcp.md](mcp.md).
 
 **Owner.** The Worker only; the app doesn't use MCP. A split's bill still changes only
 through [bill/changes.ts](../worker/bill/changes.ts): `saveChanges` checks and saves a
 batch, `applyChanges` answers the API with it, and the expense tools call it with their
-retry receipt saved alongside.
+retry receipt saved alongside. Photos go through `addAttachment` in
+[photos/attachments.ts](../worker/photos/attachments.ts), new splits through
+`createSplitStatements` (`splits/lifecycle.ts`), as for the app.
 
 **Parts.**
 
@@ -497,7 +502,8 @@ retry receipt saved alongside.
 - Tools: [mcp/server.ts](../worker/mcp/server.ts) (a fresh stateless MCP server per
   request, the Origin check and scope step-up) and
   [mcp/tools.ts](../worker/mcp/tools.ts). Reads reuse `listSplitSummaries`,
-  `contentStatements` and `shared/settle.ts`.
+  `contentStatements`, `listAttachmentsStatement` and `shared/settle.ts`; rates come
+  from `getRate` with the account's preference, as for the API.
 - Receipts: [mcp/receipts.ts](../worker/mcp/receipts.ts) and the `mcp_receipts` table
   ([0019](../migrations/0019_mcp_receipts.sql)), deleted with their split
   (`splits/lifecycle.ts`).
@@ -521,11 +527,15 @@ receipt → the split's room tells open apps.
 - An expense write and its receipt are saved in one transaction: a retry with the same
   `requestId` returns the first answer and never applies the change again, and the same
   id for a different change is refused.
-- Writes use the split's own currency only, and never touch an expense paid in another
-  currency.
+- Writes name the split's currency and are refused when it's another. An expense paid
+  in another currency keeps its amounts and rate unless new ones are sent.
+- A photo or a new split is saved under an id that comes from the account and request
+  id, so a retry never adds a second one; a split's people are saved with its receipt,
+  so a retry finishes a split an earlier try began.
 - `/api/*` keeps its own sign-in and cross-site checks; MCP never goes through them,
   and they never accept an OAuth token.
-- Answers leave out share links, invitations, emails and payment details.
+- Answers leave out share links, invitations, emails and payment details; a photo says
+  only whether this account added it.
 
 **Tests.** [worker/test/mcp.test.ts](../worker/test/mcp.test.ts) (sign-in through the
 provider, every tool through a real MCP client, retries, scopes and membership against
