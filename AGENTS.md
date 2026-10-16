@@ -129,6 +129,9 @@ Not checked by lint, so kept by review: `shared/` uses no browser or Worker glob
 - No emojis in code, UI text, commits or pull requests.
 - Commit titles: `<type>(<scope>): <summary>`, with at most three bullets in the body.
   Pull requests are squash-merged; a push to `main` deploys.
+- Branches are named for the change, in kebab-case (`share-link-reset`,
+  `export-test-consolidation`), never a generated or session name. Merged branches are
+  deleted.
 - Commits, pull requests and merge messages carry no AI attribution: no
   `Co-authored-by` or `Generated with` lines for an assistant.
 - A change to a boundary or invariant, or a new dependency or abstraction, says why
