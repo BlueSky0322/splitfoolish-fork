@@ -13,7 +13,7 @@ import type { ExportItem, ExportRows } from './rows';
 
 /** What the font is called inside the PDF */
 export const FONT = 'NotoSansJP';
-const FONT_FILE = 'NotoSansJP-subset.ttf';
+const FONT_FILE = 'NotoSansJP-subset-v2.ttf';
 
 /** In millimetres */
 const MARGIN = 14;

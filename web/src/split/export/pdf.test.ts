@@ -127,10 +127,10 @@ describe('a split as a PDF', () => {
     expect(calls[0]).toEqual(['new', { unit: 'mm', format: 'a4', orientation: 'portrait' }]);
     expect(calls[index('addFileToVFS')]).toEqual([
       'addFileToVFS',
-      'NotoSansJP-subset.ttf',
+      'NotoSansJP-subset-v2.ttf',
       'Rk9OVA==',
     ]);
-    expect(calls[index('addFont')]).toEqual(['addFont', 'NotoSansJP-subset.ttf', FONT, 'normal']);
+    expect(calls[index('addFont')]).toEqual(['addFont', 'NotoSansJP-subset-v2.ttf', FONT, 'normal']);
     expect(calls[index('setFont')]).toEqual(['setFont', FONT, 'normal']);
     expect(index('addFileToVFS')).toBeLessThan(index('addFont'));
     expect(index('addFont')).toBeLessThan(index('setFont'));

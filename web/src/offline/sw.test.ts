@@ -143,7 +143,7 @@ describe('reading the answer to sending changes', () => {
 // The PDF export's font is fetched from the app's own address the first time a PDF is
 // made, and kept so a PDF can be made offline after
 describe('the service worker, keeping the PDF font', () => {
-  const FONT = '/fonts/NotoSansJP-subset.ttf';
+  const FONT = '/fonts/NotoSansJP-subset-v2.ttf';
 
   test('keeps the font once fetched, and answers from the device after', async () => {
     const caches = fakeCaches();
