@@ -69,10 +69,11 @@
   cursor: zoom-out;
 }
 
+/* Centred without a transform: a pressed button nudges itself down with one, which
+   would replace this and drop the arrow by half its height */
 .nav {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: calc(50% - 22px);
 }
 
 .nav:global(.mantine-ActionIcon-root) {
