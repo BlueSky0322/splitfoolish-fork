@@ -5,7 +5,7 @@ import { countActionableInvites } from '../../api';
 import { type Route, type Tab, goToTab, tabOf } from '../../hooks/useRoute';
 import { useMySplits } from '../../my-splits/useMySplits';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
-import UserAvatar from '../ui/UserAvatar';
+import UserAvatar from '../common/UserAvatar';
 import classes from './BottomTabs.module.css';
 import { useTabsHidden } from './tabs-visibility';
 

@@ -6,7 +6,7 @@ import { useIsMobile } from '../../../hooks/useBreakpoints';
 import type { MetaChanges } from '../../../split/state';
 import type { SplitMeta } from '../../../split/state';
 import { nameFor } from '../../../profile/ProfileContext';
-import UserAvatar from '../../ui/UserAvatar';
+import UserAvatar from '../../common/UserAvatar';
 import classes from './SplitMembers.module.css';
 import type { SplitInvite } from '@shared/api';
 import { reloadMySplits } from '../../../my-splits/my-splits';

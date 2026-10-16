@@ -7,6 +7,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import { architectureConfig } from './tools/lint/architecture.js';
 
 export default tseslint.config(
   { ignores: ['dist', 'coverage', '.wrangler', 'node_modules'] },
@@ -104,6 +105,10 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+
+  // What may import what, between the app, the Worker and shared code, tests included
+  // (tools/lint/architecture.js)
+  architectureConfig(import.meta.dirname),
 
   // The service worker and other plain JavaScript: no type information
   {

@@ -21,7 +21,7 @@ import SplitAvatar from '../common/SplitAvatar';
 import ThemeToggle from '../common/ThemeToggle';
 import { justDragged, useSortableSplit } from '../home/useSortableSplit';
 import { SortableSplits } from '../home/SortableSplits';
-import UserAvatar from '../ui/UserAvatar';
+import UserAvatar from '../common/UserAvatar';
 import classes from './Sidebar.module.css';
 import type { SplitSummary } from '@shared/api';
 import { moveSplit } from '../../my-splits/my-splits';

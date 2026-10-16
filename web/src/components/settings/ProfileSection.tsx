@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { api } from '../../api';
 import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { shrinkAvatar } from '../../utils/image';
-import UserAvatar from '../ui/UserAvatar';
+import UserAvatar from '../common/UserAvatar';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import classes from './SettingsLayout.module.css';

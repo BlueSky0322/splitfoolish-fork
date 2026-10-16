@@ -31,7 +31,7 @@ import { justDragged, useSortableSplit } from './useSortableSplit';
 import { SortableSplits } from './SortableSplits';
 import ThemeToggle from '../common/ThemeToggle';
 import SplitAvatar from '../common/SplitAvatar';
-import UserAvatar from '../ui/UserAvatar';
+import UserAvatar from '../common/UserAvatar';
 import classes from './SplitsHome.module.css';
 import { InstallCard } from '../common/InstallApp';
 import type { MyInvite, SplitSummary } from '@shared/api';

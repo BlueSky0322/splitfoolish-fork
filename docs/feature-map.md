@@ -1,0 +1,379 @@
+# Feature map
+
+Where each feature lives, which module owns its state and changes, what it must keep
+true, and which tests hold it to that. Read the entry for a feature before extending
+it, and update the entry in the same change when its owner, entry points, data flow or
+contracts change. Presentation-only changes need no update here.
+
+The data model is in [erd.md](erd.md). How the Worker's routes and modules fit together
+is at the top of [worker/app.ts](../worker/app.ts). The rules every change follows are
+in [AGENTS.md](../AGENTS.md).
+
+| Feature                                                                        | State owner (app)                                                       | Worker                                                                       |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                            | `auth.ts`, `profiles.ts`, `routes/me.ts`                                     |
+| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts`                     |
+| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`        | `split-content.ts`, `split-detail.ts`                                        |
+| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                | `exchange-rates.ts`, `reconvert.ts`, `reconvert-queue.ts`, `routes/rates.ts` |
+| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                         | (none)                                                                       |
+| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`  | `sharing.ts`, `room.ts`, `routes/invites.ts`                                 |
+| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                              | (none; the API is the same)                                                  |
+| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                                                  |
+| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                          | (none)                                                                       |
+
+App paths are under `web/src/`, Worker paths under `worker/`.
+
+## Sign-in, profile and settings
+
+**What it is.** Cloudflare Access signs people in before the app loads. Settings (the
+You tab on phones, `?settings`) edit the profile others see (display name, picture,
+payment methods) and private settings (currency, rate source, appearance).
+
+**Owner.** [profile/ProfileContext.tsx](../web/src/profile/ProfileContext.tsx) loads
+the profile, keeps a device copy, and owns every change through
+`useProfile().change(show, save)`, which shows the change at once and undoes it if
+`save` fails (the caller says what went wrong).
+
+**Parts.**
+
+- UI: [components/settings/](../web/src/components/settings/SettingsPage.tsx).
+- API: [worker/auth.ts](../worker/auth.ts) checks the Access token (or the local dev
+  user), [worker/routes/me.ts](../worker/routes/me.ts) serves `/api/me`, and
+  [worker/profiles.ts](../worker/profiles.ts) stores profiles and settings.
+- Shared: `Settings`, `DEFAULT_SETTINGS` and the profile shapes in
+  [shared/api.ts](../shared/api.ts); payment method shapes in
+  [shared/payments.ts](../shared/payments.ts).
+
+**Invariants.**
+
+- Without both Access values set, the API refuses everyone, unless both are blank and a
+  local dev user is set (`getUserEmail` in `auth.ts`).
+- A new settings row takes every value from `DEFAULT_SETTINGS`, so defaults change in
+  `shared/api.ts` alone (`profiles.ts`).
+- A stale save answer never overwrites a newer change (`ProfileContext.tsx`).
+
+**Tests.** [worker/auth.test.ts](../worker/auth.test.ts) (tokens, keys, configuration,
+401 versus 500), [SettingsPage.test.tsx](../web/src/components/settings/SettingsPage.test.tsx)
+(saving, out-of-order answers), and the profile and payment cases in
+[worker/test/api.test.ts](../worker/test/api.test.ts).
+
+## My splits: archive, search and order
+
+**What it is.** The list of splits on the home page and sidebar, with totals and your
+balance, pending invites, archive, your own order, and search across items and splits.
+
+**Owner.** [my-splits/my-splits.ts](../web/src/my-splits/my-splits.ts) holds the list
+(through React Query, with a device copy) and its changes: `createSplit`, `moveSplit`,
+`archiveSplit`, `patchListedSplit`, `removeListedSplit`, `sendMySplitsChange` and
+`reloadMySplits`. Screens read it through
+[useMySplits](../web/src/my-splits/useMySplits.ts).
+
+**Parts.**
+
+- UI: [components/home/](../web/src/components/home/SplitsHome.tsx) (desktop and
+  [MobileHome](../web/src/components/home/MobileHome.tsx), search, sorting, invites)
+  and the [sidebar](../web/src/components/shell/Sidebar.tsx).
+- API: [worker/summaries.ts](../worker/summaries.ts) (the list with totals, search, item name
+  suggestions, used currencies), [worker/split-lifecycle.ts](../worker/split-lifecycle.ts)
+  (create, rename, order, delete), and [worker/routes/splits.ts](../worker/routes/splits.ts)
+  (archive, search).
+- Shared: `SplitSummary` and the list shapes in [shared/api.ts](../shared/api.ts).
+
+**Flow.** A change shows in the list at once, is sent, and the list is reloaded or the
+change undone. Splits made offline are added from `offline/pending-creates.ts` until the
+server has them.
+
+**Invariants.**
+
+- Totals and balances use the same arithmetic as the split page
+  ([shared/settle.ts](../shared/settle.ts)), so both always agree.
+- Archive and order are per person: only the caller's own `split_members` rows change.
+
+**Tests.** [SplitsHome.test.tsx](../web/src/components/home/SplitsHome.test.tsx)
+(sorting, search, archive, invites) and the listing, search and order cases in
+[worker/test/api.test.ts](../worker/test/api.test.ts).
+
+## Editing a split: items and people
+
+**What it is.** The split page (`?s=<id>`): its people, its items (added, edited,
+duplicated, moved to another day, deleted) and its details.
+
+**Owner.** The bill (people and items) is changed only through
+[split/actions.ts](../web/src/split/actions.ts), which updates
+[split/state.ts](../web/src/split/state.ts) at once and queues the matching `Change` in
+[split/useSaveQueue.ts](../web/src/split/useSaveQueue.ts). The split's other details
+(name, members, photos, routing) change through its `metaChanges` (`changeMeta` for
+a request to undo if it fails, and helpers such as `addAttachment` and `patchSettings`)
+or `refreshMeta` from
+[split/useSplit.ts](../web/src/split/useSplit.ts), which also loads the split and keeps
+it current.
+
+**Parts.**
+
+- UI: [components/split/](../web/src/components/split/SplitScreen.tsx) (items, people,
+  dialogs and the two layouts), reading the page's context from
+  [SplitPageContext](../web/src/components/split/SplitPageContext.tsx) and the bill from
+  [SplitStateContext](../web/src/split/SplitStateContext.tsx).
+- Form logic: [split/item-input.ts](../web/src/split/item-input.ts) and
+  [split/bill-rules.ts](../web/src/split/bill-rules.ts).
+- API: [worker/split-content.ts](../worker/split-content.ts) applies a batch of changes
+  (all or none) and reads the bill; [worker/split-detail.ts](../worker/split-detail.ts)
+  reads a whole split in one round trip.
+- Shared: `Item` and `Change` in [shared/types.ts](../shared/types.ts), who may do what
+  in [shared/rules.ts](../shared/rules.ts), `MAX_CHANGES` in [shared/api.ts](../shared/api.ts).
+
+**Flow.** Action → state shows it → change queued and written to the outbox → sent in
+order, at most `MAX_CHANGES` at a time → the server checks each batch against the
+split as it is now. A refused batch drops what was queued after it and reloads the split.
+
+**Invariants.**
+
+- Changes are applied in the order they were made, and a refused batch never applies
+  part of itself (`split-content.ts`).
+- Only the newest load of a split is shown, and a device copy never replaces what the
+  server said (`useSplit.ts`).
+
+**Tests.** [actions.test.ts](../web/src/split/actions.test.ts),
+[state.test.ts](../web/src/split/state.test.ts),
+[item-input.test.ts](../web/src/split/item-input.test.ts),
+[SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx),
+[SplitLoading.test.tsx](../web/src/components/split/SplitLoading.test.tsx) (load
+order), and the change and permission cases in
+[worker/test/api.test.ts](../worker/test/api.test.ts).
+
+## Settling up and currencies
+
+**What it is.** Who owes whom and how they pay, items paid in other currencies, the
+Currencies sheet, and the Convert page (`?convert`).
+
+**Owner.** Settling is worked out, not stored: [split/derive.ts](../web/src/split/derive.ts)
+turns the bill into totals, balances and transfers with
+[shared/settle.ts](../shared/settle.ts). Converted items keep their original amount and
+rate; [split/currencies.ts](../web/src/split/currencies.ts) lists them for the
+Currencies sheet, and rate changes go through the split's actions.
+
+**Parts.**
+
+- UI: [components/split/balances/](../web/src/components/split/balances/BalancePanel.tsx),
+  [CurrenciesSheet](../web/src/components/split/dialogs/CurrenciesSheet.tsx),
+  [components/convert/](../web/src/components/convert/ConvertPage.tsx), and the rate
+  hook [hooks/useRate.ts](../web/src/hooks/useRate.ts).
+- API: [worker/exchange-rates.ts](../worker/exchange-rates.ts) (Wise and the ECB,
+  cached), [worker/routes/rates.ts](../worker/routes/rates.ts), and
+  [worker/reconvert.ts](../worker/reconvert.ts) (converting every item after the
+  split's currency changes, in the background). A failed conversion is retried by the
+  `reconvert` queue with growing waits ([worker/reconvert-queue.ts](../worker/reconvert-queue.ts),
+  wired in `worker/index.ts` and `wrangler.jsonc`); opening a split retries one stuck
+  for 10 minutes.
+- Shared: [shared/rates.ts](../shared/rates.ts) (`toCents`, `convertCents`,
+  `convertParts`, rate validity) and [shared/settle.ts](../shared/settle.ts).
+
+**Invariants.**
+
+- Item amounts are currency units; settling and storage are integer cents (see Money in
+  [AGENTS.md](../AGENTS.md)).
+- Converted exact parts add up to the converted total, the leftover cents going by
+  largest remainder (`convertParts`).
+- A rate someone typed is kept as typed; only live rates are refreshed.
+- Every conversion run is idempotent and only finishes the change it was started for
+  (`converting_since`), so the first attempt, queued retries and the open-split retry
+  can overlap safely.
+
+**Tests.** [shared/settle.test.ts](../shared/settle.test.ts),
+[worker/reconvert-queue.test.ts](../worker/reconvert-queue.test.ts) (acks, retries,
+backoff, given-up jobs),
+[derive.test.ts](../web/src/split/derive.test.ts),
+[currencies.test.ts](../web/src/split/currencies.test.ts),
+[worker/exchange-rates.test.ts](../worker/exchange-rates.test.ts),
+[ConvertPage.test.tsx](../web/src/components/convert/ConvertPage.test.tsx),
+[CurrenciesSheet.test.tsx](../web/src/components/split/CurrenciesSheet.test.tsx), and
+the rate and reconversion cases in [worker/test/api.test.ts](../worker/test/api.test.ts).
+
+## Exporting a split
+
+**What it is.** Export in the split's menu (More on computers, ⋯ on phones): a CSV for
+spreadsheets or a PDF to keep or send, shared on phones and saved elsewhere.
+
+**Owner.** [split/export/](../web/src/split/export/export.ts) builds both from the
+split as this device shows it (unsaved changes included); nothing is sent to the
+server. [rows.ts](../web/src/split/export/rows.ts) works out the rows both formats use,
+from `computeTotals` in `split/derive.ts`.
+
+**Parts.**
+
+- UI: [ExportDialog](../web/src/components/split/dialogs/ExportDialog.tsx), opened as
+  the `export` dialog of the split page.
+- Formats: [csv.ts](../web/src/split/export/csv.ts) and
+  [pdf.ts](../web/src/split/export/pdf.ts) (jspdf, loaded only when Export opens).
+- Font: [font.ts](../web/src/split/export/font.ts) fetches
+  `web/public/fonts/NotoSansJP-subset.ttf` (Latin and Japanese, made by
+  [scripts/subset-font.sh](../scripts/subset-font.sh)); `sw.js` keeps it offline.
+- Delivery: [utils/deliver-file.ts](../web/src/utils/deliver-file.ts), the share sheet
+  or a download, also used by Share image.
+
+**Invariants.**
+
+- Amounts come from cents: the CSV writes plain decimals to the cent, the PDF uses
+  `formatMoney`.
+- CSV text a spreadsheet would run as a formula starts with `'`; amounts stay numbers.
+- A font change gets a new file name, since the service worker keeps `/fonts/*` for good.
+
+**Tests.** [rows.test.ts](../web/src/split/export/rows.test.ts),
+[csv.test.ts](../web/src/split/export/csv.test.ts),
+[pdf.test.ts](../web/src/split/export/pdf.test.ts),
+[font.test.ts](../web/src/split/export/font.test.ts),
+[ExportDialog.test.tsx](../web/src/components/split/ExportDialog.test.tsx), and the font
+cases in [sw.test.ts](../web/src/offline/sw.test.ts).
+
+## Sharing, invites and live updates
+
+**What it is.** Share links, requests to join and their approval, invites on the home
+page (`?tab=invites` on phones), removing members, and seeing other people's changes
+as they happen.
+
+**Owner.** Membership is the server's: the app shows it from the split's details
+(`useSplit.ts`) and from My splits (pending invites). Answering an invite goes through
+`sendMySplitsChange`; changes to a split's members go through `changeMeta` or
+`refreshMeta`. [split/useSplitLive.ts](../web/src/split/useSplitLive.ts) listens for
+changes to the open split and asks `useSplit` to reload.
+
+**Parts.**
+
+- UI: [SplitMembers](../web/src/components/split/people/SplitMembers.tsx),
+  [JoinSplit](../web/src/components/split/JoinSplit.tsx) and
+  [invite-answers.ts](../web/src/components/home/invite-answers.ts).
+- API: [worker/sharing.ts](../worker/sharing.ts) (links, invites, removing someone),
+  [worker/routes/invites.ts](../worker/routes/invites.ts), and
+  [worker/room.ts](../worker/room.ts), one Durable Object per split that tells open
+  apps a change was saved. [worker/index.ts](../worker/index.ts) tells the room after
+  a successful change (`changedSplit`).
+- Shared: roles and permissions in [shared/rules.ts](../shared/rules.ts).
+
+**Invariants.**
+
+- A removed member's live sockets are closed (`evictFromRoom` in `routes/splits.ts`) and
+  the owner's share link changes, so the old link can't bring them back (`sharing.ts`).
+- The room carries no data, only "changed"; each app fetches the split again.
+
+**Tests.** [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx)
+(live reloads and reconnecting), [SplitsHome.test.tsx](../web/src/components/home/SplitsHome.test.tsx)
+(answering invites), and the sharing and removal cases in
+[worker/test/api.test.ts](../worker/test/api.test.ts).
+
+## Offline start and delivery
+
+**What it is.** The app opens and works offline: pages show the last copy seen, splits
+can be made and changed, and everything is sent once the connection is back, by the
+page or, if it's closed, by the service worker.
+
+**Owner.** [offline/](../web/src/offline/cache.ts):
+
+- [cache.ts](../web/src/offline/cache.ts): device copies tagged with the signed-in
+  account.
+- [outbox.ts](../web/src/offline/outbox.ts): unsent changes, batching and the
+  per-split lock.
+- [pending-creates.ts](../web/src/offline/pending-creates.ts): splits made offline.
+- [sync.ts](../web/src/offline/sync.ts): sending all of it, started by
+  [main.tsx](../web/src/main.tsx).
+
+An open split sends its own changes through `useSaveQueue`.
+
+**Parts.** [web/public/sw.js](../web/public/sw.js) keeps the built files and pictures,
+and sends the outbox by background sync. It can't import app code, so the keys, lock
+names and limits it shares with `offline/` and `shared/api.ts` are copied in it.
+
+**Invariants.**
+
+- Nothing kept on the device is shown before the signed-in account is known, and one
+  account never sees another's.
+- A batch leaves the outbox once the server accepts it with a JSON answer; a refused
+  batch is dropped with everything queued after it. Where the browser has Web Locks,
+  the page and the service worker take the same lock per split, so a change is sent
+  once.
+- Batches are at most `MAX_CHANGES`, in order; what's left is kept after each batch.
+
+**Tests.** [cache.test.ts](../web/src/offline/cache.test.ts),
+[outbox.test.ts](../web/src/offline/outbox.test.ts) (runs `sw.js` against what the app
+writes, so the copied keys and lock names can't drift),
+[sw.test.ts](../web/src/offline/sw.test.ts) (batches of `MAX_CHANGES` and every kind of
+answer, on the page and in `sw.js` alike),
+[delivery.test.ts](../web/src/offline/delivery.test.ts) (page and service worker
+together), and [pending-creates.test.ts](../web/src/offline/pending-creates.test.ts).
+
+## Pictures, photos and payment QR codes
+
+**What it is.** Profile pictures, split pictures, photos of a split and receipts on its
+items (the Photos tab), and QR codes on payment methods.
+
+**Owner.** Split photos: [split/usePhotos.ts](../web/src/split/usePhotos.ts) (upload,
+remove, remove several) keeping the split's details in step (`addAttachment`, and
+`changeMeta` for removals). Split pictures: [split/pictures.ts](../web/src/split/pictures.ts),
+through My splits and `patchSettings`. Profile pictures:
+[ProfileContext](../web/src/profile/ProfileContext.tsx) changes, with the upload as the
+`save`. QR codes are uploaded first (`api.setPaymentQr`), then saved with their payment
+method through a profile change.
+
+**Parts.**
+
+- UI: [components/split/photos/](../web/src/components/split/photos/PhotosTab.tsx),
+  [UserAvatar](../web/src/components/common/UserAvatar.tsx),
+  [PhotoViewer](../web/src/components/ui/PhotoViewer.tsx), and
+  [ProfileSection](../web/src/components/settings/ProfileSection.tsx) and
+  [PaymentMethods](../web/src/components/settings/PaymentMethods.tsx) in settings.
+- Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) and
+  [split/photo-download.ts](../web/src/split/photo-download.ts).
+- Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
+- API: [worker/photos.ts](../worker/photos.ts) stores images in D1 and serves them
+  only to members (or to people who share a split, for profile pictures and QR codes).
+- Shared: size limits and `Attachment` in [shared/api.ts](../shared/api.ts), and
+  `canRemovePhoto` in [shared/rules.ts](../shared/rules.ts).
+
+**Invariants.**
+
+- The file type comes from the bytes, not what the upload says.
+- A profile picture's, split picture's or QR code's address names its version, and a
+  photo never changes once added, so the service worker and browsers can keep them for
+  good.
+
+**Tests.** [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
+[PhonePhotos.test.tsx](../web/src/components/split/PhonePhotos.test.tsx),
+[photo-days.test.ts](../web/src/split/photo-days.test.ts),
+[photo-download.test.ts](../web/src/split/photo-download.test.ts), and the image
+cases in [worker/test/api.test.ts](../worker/test/api.test.ts).
+
+## Pages, layouts and Back
+
+**What it is.** Which page shows, the layouts for phones, tablets and computers, and
+what Back does.
+
+**Owner.**
+
+- [hooks/useRoute.ts](../web/src/hooks/useRoute.ts): pages come from the query string
+  (`?s=<id>`, `?settings`, `?convert`, `?tab=invites`) through `navigate()`, and the
+  last page reopens on a fresh start.
+- [hooks/useBreakpoints.ts](../web/src/hooks/useBreakpoints.ts): `useIsMobile` (under
+  768px) and `useIsDesktop` (1024px and up).
+- [hooks/useBackDismiss.ts](../web/src/hooks/useBackDismiss.ts): Back closes the top
+  sheet on phones.
+
+**Parts.**
+
+- [components/shell/](../web/src/components/shell/AppLayout.tsx): sidebar, bottom tabs,
+  notices.
+- [ResponsiveDialog](../web/src/components/ui/ResponsiveDialog.tsx): a sheet on phones,
+  a dialog elsewhere.
+- [DesktopSplitLayout](../web/src/components/split/layout/DesktopSplitLayout.tsx) and
+  [MobileSplitLayout](../web/src/components/split/layout/MobileSplitLayout.tsx) (also
+  used on tablets).
+
+**Invariants.**
+
+- Sheets and dialogs never push history entries themselves; they open through
+  `ResponsiveDialog` or `useBackDismiss`, so Back closes the top one first.
+- The split's tabs on phones are not history entries, so Back leaves the split rather
+  than stepping through tabs.
+
+**Tests.** [App.test.tsx](../web/src/App.test.tsx) (pages and Back), and the phone
+cases (`{ size: 'phone' }`) in
+[SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx) and
+[SplitsHome.test.tsx](../web/src/components/home/SplitsHome.test.tsx).
