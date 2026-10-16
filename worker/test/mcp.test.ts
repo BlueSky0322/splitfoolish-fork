@@ -270,7 +270,11 @@ describe('the tools', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(TOOLS);
     const add = tools.find((t) => t.name === 'add_expense')!;
     expect(add.inputSchema.required).toEqual(
-      expect.arrayContaining(['splitId', 'requestId', 'currency', 'name', 'cost', 'payerId']),
+      expect.arrayContaining(['splitId', 'requestId', 'currency', 'name', 'payerId']),
+    );
+    // One of cost or paidIn, checked when it's called
+    expect(Object.keys(add.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining(['cost', 'paidIn', 'date']),
     );
     expect(add.outputSchema?.properties).toHaveProperty('replayed');
 
@@ -371,7 +375,7 @@ describe('the tools', () => {
         .error?.code,
     ).toBe('currency_mismatch');
 
-    // Paid in another currency: left to the app rather than losing what was typed
+    // Paid in another currency: an edit that sends no amounts keeps them, and the rate
     const foreign = hex();
     await api.call(alice, 'POST', `/api/splits/${split.id}/changes`, {
       changes: [
@@ -396,9 +400,116 @@ describe('the tools', () => {
           currency: 'MYR',
           name: 'Cab',
         })
+      ).status,
+    ).toBe('saved');
+    expect(await itemsOf(alice, split.id)).toEqual([
+      expect.objectContaining({
+        name: 'Cab',
+        cost: 20,
+        original: expect.objectContaining({ currency: 'USD', amount: 5, rate: 4 }),
+      }),
+    ]);
+  });
+
+  it('take expenses paid in another currency, converted as the app converts them', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const code = api.rates.newCurrency();
+    api.rates.set(code, 'MYR', 0.5);
+    const base = {
+      splitId: split.id,
+      currency: 'MYR',
+      payerId: split.bob,
+      participantIds: [split.bob, split.cat],
+    };
+    const expenseOf = async (expenseId: string) =>
+      (await tool(client, 'get_split', { splitId: split.id })).expenses.find(
+        (e: { id: string }) => e.id === expenseId,
+      );
+
+    // Today's rate, fetched by the server
+    const live = await tool(client, 'add_expense', {
+      ...base,
+      requestId: 'fx-live-0001',
+      name: 'Market',
+      paidIn: { currency: code, amount: 30 },
+    });
+    expect(await expenseOf(live.expenseId)).toMatchObject({
+      cost: 15,
+      costCents: 1500,
+      original: { currency: code, amount: 30, rate: 0.5 },
+    });
+    // A rate given, and exact amounts in the currency paid in
+    const typed = await tool(client, 'add_expense', {
+      ...base,
+      requestId: 'fx-typed-001',
+      name: 'Ferry',
+      splitMode: 'exact',
+      paidIn: { currency: 'USD', amount: 10, rate: 4.5, exact: { [split.bob]: 6, [split.cat]: 4 } },
+    });
+    expect(await expenseOf(typed.expenseId)).toMatchObject({
+      cost: 45,
+      exact: { [split.bob]: 27, [split.cat]: 18 },
+      original: { currency: 'USD', amount: 10, rate: 4.5 },
+    });
+
+    const edit = (requestId: string, fields: Record<string, unknown>) =>
+      tool(client, 'update_expense', {
+        splitId: split.id,
+        expenseId: typed.expenseId,
+        requestId,
+        currency: 'MYR',
+        ...fields,
+      });
+    expect(
+      (
+        await edit('fx-edit-0001', {
+          paidIn: {
+            currency: 'USD',
+            amount: 20,
+            rate: 4.5,
+            exact: { [split.bob]: 12, [split.cat]: 8 },
+          },
+        })
+      ).status,
+    ).toBe('saved');
+    expect(await expenseOf(typed.expenseId)).toMatchObject({ cost: 90 });
+    // Exact amounts in the split's currency can't go on one paid in another
+    expect(
+      (await edit('fx-edit-0002', { exact: { [split.bob]: 50, [split.cat]: 40 } })).error,
+    ).toEqual({
+      code: 'invalid_input',
+      message: 'This expense is in USD: send its exact amounts in paidIn.',
+      retryable: false,
+    });
+    // A cost puts it in the split's currency
+    await edit('fx-edit-0003', { cost: 50, splitMode: 'equal' });
+    expect(await expenseOf(typed.expenseId)).toMatchObject({ cost: 50, original: null });
+
+    // Amounts in both currencies, or the split's own as paidIn, are refused
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          ...base,
+          requestId: 'fx-both-0001',
+          name: 'Both',
+          cost: 5,
+          paidIn: { currency: 'USD', amount: 1 },
+        })
       ).error?.code,
-    ).toBe('refused');
-    expect((await itemsOf(alice, split.id)).map((i) => i.name)).toEqual(['Taxi']);
+    ).toBe('invalid_input');
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          ...base,
+          requestId: 'fx-same-0001',
+          name: 'Same',
+          paidIn: { currency: 'MYR', amount: 1 },
+        })
+      ).error?.code,
+    ).toBe('invalid_input');
+    expect(await itemsOf(alice, split.id)).toHaveLength(2);
   });
 
   it('date an expense when it was paid, and remove one, once', async () => {

@@ -8,7 +8,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { type Attachment, MAX_PHOTO_BYTES, isRowId } from '../../shared/api';
+import { type Attachment, MAX_PHOTO_BYTES, type RatePreference, isRowId } from '../../shared/api';
 import { isCurrency, toCents } from '../../shared/rates';
 import type { SettleItem } from '../../shared/settle';
 import { SPLIT_MODES, balances, transfers } from '../../shared/settle';
@@ -19,7 +19,8 @@ import { ID_PATTERN, getRole } from '../app';
 import { contentStatements, assembleContent } from '../bill/read';
 import { saveChanges } from '../bill/changes';
 import { isItemDate } from '../bill/input';
-import { RatesUnavailable } from '../currency/exchange-rates';
+import { getRatePreference } from '../accounts/profiles';
+import { REFRESH_MAX_AGE_MS, getRate } from '../currency/exchange-rates';
 import { isConstraintError, newId, readName } from '../http';
 import { addAttachment, listAttachmentsStatement, readAttachment } from '../photos/attachments';
 import { checkImage } from '../photos/images';
@@ -153,6 +154,29 @@ const expenseFields = {
     .describe('An optional label, such as Food; null for none'),
   notes: z.string().max(MAX_NOTES_LENGTH).nullable().describe('Optional notes; null for none'),
 };
+const paidIn = z
+  .object({
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .describe("The currency it was paid in, not the split's"),
+    amount: amount.describe('What was paid, in that currency'),
+    exact: z
+      .record(z.string(), amount)
+      .optional()
+      .describe('For splitMode "exact": each participant\'s amount by person id, in that currency'),
+    rate: z
+      .number()
+      .positive()
+      .optional()
+      .describe(
+        "Units of the split's currency for one of this one, to use instead of today's rate",
+      ),
+  })
+  .describe(
+    "Paid in another currency: the amount as paid. It's converted to the split's currency at " +
+      "today's rate (or the rate given), which get_split shows in original.",
+  );
 const page = {
   limit: z.number().int().min(1).max(200).optional(),
   offset: z.number().int().min(0).optional(),
@@ -297,8 +321,18 @@ async function overLimit(caller: Caller) {
   return !success;
 }
 
-/** No rate is fetched: the tools only take amounts in the split's own currency */
-const noRates = () => Promise.reject(new RatesUnavailable());
+type FetchRate = Parameters<typeof saveChanges>[4];
+
+/** Rates as the app gets them for this account: from its preferred source, cached */
+function ratesFor(caller: Caller): FetchRate {
+  // Looked up only if a change needs a rate
+  let prefer: Promise<RatePreference> | null = null;
+  return async (from, to, { fresh }) =>
+    getRate(caller.env, from, to, {
+      prefer: await (prefer ??= getRatePreference(caller.env.DB, caller.email)),
+      maxAgeMs: fresh ? REFRESH_MAX_AGE_MS : undefined,
+    });
+}
 
 type Intent = Record<string, unknown>;
 type Split = NonNullable<Awaited<ReturnType<typeof readSplit>>>;
@@ -307,6 +341,24 @@ type Prepared = { change: unknown; rowId: string | null } | { refusal: CallToolR
 const noExpense = (): Prepared => ({
   refusal: toolError('not_found', 'There is no expense with that id in this split.'),
 });
+const sameCurrency = (code: string): Prepared => ({
+  refusal: toolError('invalid_input', `This split is in ${code}; send cost rather than paidIn.`),
+});
+
+/** What an expense paid in another currency is saved with: the amount as paid */
+const toOriginal = (paid: z.infer<typeof paidIn>) => ({
+  currency: paid.currency,
+  amount: paid.amount,
+  exact: paid.exact,
+  ...(paid.rate != null ? { rate: paid.rate, rateSource: 'manual' as const } : {}),
+});
+
+/** Amounts given in both currencies at once, which can't both be meant */
+const moneyMixed = (paid: unknown, fields: { cost?: number; exact?: unknown }) =>
+  paid != null && (fields.cost != null || fields.exact != null)
+    ? toolError('invalid_input', 'Send amounts either in paidIn or as cost and exact, not both.')
+    : null;
+
 const noPerson = (): Prepared => ({
   refusal: toolError('not_found', 'There is no person with that id in this split.'),
 });
@@ -376,7 +428,7 @@ async function writeBill(
     savedAt: Date.now(),
   };
   const outcome = await saveOnce(db, receipt, (alongside) =>
-    saveChanges(db, input.splitId, { email, role }, [prepared.change], noRates, alongside),
+    saveChanges(db, input.splitId, { email, role }, [prepared.change], ratesFor(caller), alongside),
   );
   if ('refused' in outcome) {
     const { status, error } = outcome.refused;
@@ -575,7 +627,8 @@ export function registerTools(server: McpServer, caller: Caller) {
     {
       title: 'Add an expense',
       description:
-        "Adds one expense to a split, in the split's own currency. Who paid and who " +
+        "Adds one expense to a split: cost in the split's own currency, or paidIn for one paid " +
+        'in another currency. Who paid and who ' +
         'shares it are person ids from get_split; anyone in the bill can be the payer. splitMode ' +
         "defaults to equal. Dated now unless a date is sent. Saved under this grant's account. " +
         'Retrying with the same requestId returns the first answer (replayed: true) instead of ' +
@@ -585,7 +638,8 @@ export function registerTools(server: McpServer, caller: Caller) {
         requestId,
         currency,
         name: expenseFields.name,
-        cost: expenseFields.cost,
+        cost: expenseFields.cost.optional(),
+        paidIn: paidIn.optional(),
         payerId: expenseFields.payerId,
         participantIds: expenseFields.participantIds,
         splitMode: expenseFields.splitMode.optional(),
@@ -606,8 +660,20 @@ export function registerTools(server: McpServer, caller: Caller) {
     async (input) => {
       const denied = allowed('add_expense');
       if (denied) return denied;
-      const { splitId: id, requestId: key, currency: code, date: when, ...fields } = input;
+      const {
+        splitId: id,
+        requestId: key,
+        currency: code,
+        date: when,
+        paidIn: paid,
+        ...fields
+      } = input;
       const intent = { ...fields, splitMode: fields.splitMode ?? 'equal' };
+      if (paid == null && fields.cost == null) {
+        return toolError('invalid_input', 'Send cost, or paidIn for one paid in another currency.');
+      }
+      const mixed = moneyMixed(paid, fields);
+      if (mixed) return mixed;
       const target = { splitId: id, requestId: key, currency: code };
       // The save path quietly dates a new item now when its date doesn't fit; an agent
       // that sent one hears why instead
@@ -620,10 +686,12 @@ export function registerTools(server: McpServer, caller: Caller) {
         'add_expense',
         'expenseId',
         target,
-        { ...intent, date: when },
-        () => {
+        { ...intent, date: when, paidIn: paid },
+        (split) => {
+          if (paid?.currency === split.currency) return sameCurrency(split.currency);
           const id = newId();
-          return { rowId: id, change: { op: 'addItem', item: { id, ...intent, createdAt } } };
+          const item = { id, ...intent, createdAt, original: paid && toOriginal(paid) };
+          return { rowId: id, change: { op: 'addItem', item } };
         },
       );
     },
@@ -636,9 +704,10 @@ export function registerTools(server: McpServer, caller: Caller) {
       description:
         'Changes one expense. Only the fields you send change; the rest, its id and its date stay ' +
         'as they are. Send null for category or notes to clear them. Changing who shares it or ' +
-        'splitMode may need new shares or exact amounts, which must fit the result. Expenses paid ' +
-        'in another currency (original is set) cannot be edited here. Retrying with the same ' +
-        'requestId returns the first answer and never overwrites a later edit.',
+        'splitMode may need new shares or exact amounts, which must fit the result. For one paid ' +
+        'in another currency (original is set), send its amounts in paidIn; sending cost puts it ' +
+        "in the split's currency instead. Retrying with the same requestId returns the first " +
+        'answer and never overwrites a later edit.',
       inputSchema: {
         splitId,
         expenseId: rowId('expense'),
@@ -646,6 +715,7 @@ export function registerTools(server: McpServer, caller: Caller) {
         currency,
         name: expenseFields.name.optional(),
         cost: expenseFields.cost.optional(),
+        paidIn: paidIn.optional(),
         payerId: expenseFields.payerId.optional(),
         participantIds: expenseFields.participantIds.optional(),
         splitMode: expenseFields.splitMode.optional(),
@@ -669,32 +739,41 @@ export function registerTools(server: McpServer, caller: Caller) {
       if (Object.values(fields).every((v) => v === undefined)) {
         return toolError('invalid_input', 'Send at least one field to change.');
       }
+      const { paidIn: paid, ...rest } = fields;
+      const mixed = moneyMixed(paid, rest);
+      if (mixed) return mixed;
       const target = { splitId: id, requestId: key, currency: code, expenseId };
       return writeBill(caller, 'update_expense', 'expenseId', target, fields, (split) => {
         const current = split.items.find((i) => i.id === expenseId);
         if (current == null) return noExpense();
-        if (current.original != null) {
+        if (paid?.currency === split.currency) return sameCurrency(split.currency);
+        // Paid in another currency: its amounts are in paidIn, and stay as they are (at the
+        // rate it was converted at) unless new ones are sent. A cost puts it in the split's.
+        const original =
+          paid != null ? toOriginal(paid) : rest.cost != null ? null : current.original;
+        if (original != null && rest.exact != null) {
           return {
             refusal: toolError(
-              'refused',
-              `This expense was paid in ${current.original.currency}; edit it in the app.`,
+              'invalid_input',
+              `This expense is in ${original.currency}: send its exact amounts in paidIn.`,
             ),
           };
         }
-        const mode = fields.splitMode ?? current.splitMode;
+        const mode = rest.splitMode ?? current.splitMode;
         // The fields sent, over the expense as it is; shares and exact amounts carry over
         // only while the split mode they belong to does
         const item = {
           id: expenseId,
-          name: fields.name ?? current.name,
-          cost: fields.cost ?? current.cost,
-          payerId: fields.payerId ?? current.payerId,
-          participantIds: fields.participantIds ?? current.participantIds,
+          name: rest.name ?? current.name,
+          cost: rest.cost ?? current.cost,
+          payerId: rest.payerId ?? current.payerId,
+          participantIds: rest.participantIds ?? current.participantIds,
           splitMode: mode,
-          shares: fields.shares ?? (mode === current.splitMode ? current.shares : undefined),
-          exact: fields.exact ?? (mode === current.splitMode ? current.exact : undefined),
-          category: fields.category !== undefined ? fields.category : current.category,
-          notes: fields.notes !== undefined ? fields.notes : current.notes,
+          shares: rest.shares ?? (mode === current.splitMode ? current.shares : undefined),
+          exact: rest.exact ?? (mode === current.splitMode ? current.exact : undefined),
+          category: rest.category !== undefined ? rest.category : current.category,
+          notes: rest.notes !== undefined ? rest.notes : current.notes,
+          original,
         };
         return { rowId: expenseId, change: { op: 'updateItem', item } };
       });
@@ -1183,7 +1262,7 @@ async function writeSplit(
     if (kept) return answer({ receipt, replayed: false });
   } else {
     const outcome = await saveOnce(db, receipt, (alongside) =>
-      saveChanges(db, splitId, { email, role: 'owner' }, changes, noRates, alongside),
+      saveChanges(db, splitId, { email, role: 'owner' }, changes, ratesFor(caller), alongside),
     );
     if ('refused' in outcome) {
       // Sent twice at once, the other finished first: its people are in, so ours are refused
