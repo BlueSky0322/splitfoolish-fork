@@ -1,8 +1,9 @@
-// The four MCP tools: finding a split, reading its expenses and balances, adding an
-// expense and editing one. They act as the account behind the agent's grant, checked
-// afresh on every call: membership (a missing split and one you're not in look the
-// same), the account's change limit, and the bill's own rules, through the same save
-// path as the app (bill/changes.ts). Expense writes keep a retry receipt (receipts.ts).
+// The MCP tools: finding a split and reading its expenses and balances; adding, editing,
+// dating and removing expenses; adding and renaming people; and routing payments through
+// one person. They act as the account behind the agent's grant, checked afresh on every
+// call: membership (a missing split and one you're not in look the same), the account's
+// change limit, and the bill's own rules, through the same save path as the app
+// (bill/changes.ts). Every write keeps a retry receipt (receipts.ts).
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -17,6 +18,7 @@ import type { Env } from '../app';
 import { ID_PATTERN, getRole } from '../app';
 import { contentStatements, assembleContent } from '../bill/read';
 import { saveChanges } from '../bill/changes';
+import { isItemDate } from '../bill/input';
 import { RatesUnavailable } from '../currency/exchange-rates';
 import { newId } from '../http';
 import { listSplitSummaries } from '../splits/summaries';
@@ -39,7 +41,14 @@ export const TOOL_SCOPES: Record<string, string> = {
   get_split: READ_SCOPE,
   add_expense: WRITE_SCOPE,
   update_expense: WRITE_SCOPE,
+  set_expense_date: WRITE_SCOPE,
+  remove_expense: WRITE_SCOPE,
+  add_person: WRITE_SCOPE,
+  rename_person: WRITE_SCOPE,
+  route_payments: WRITE_SCOPE,
 };
+
+type WriteTool = Exclude<keyof typeof TOOL_SCOPES, 'list_splits' | 'get_split'>;
 
 type ErrorCode =
   | 'not_found'
@@ -132,6 +141,19 @@ const page = {
   limit: z.number().int().min(1).max(200).optional(),
   offset: z.number().int().min(0).optional(),
 };
+const date = z
+  .union([z.iso.date(), z.iso.datetime({ offset: true })])
+  .describe(
+    'When it was paid: a date (2026-10-01) or a time with its offset (2026-10-01T19:30:00+08:00). ' +
+      'Not in the future, nor before 2000.',
+  );
+const personName = z.string().min(1).max(MAX_NAME_LENGTH).describe("The person's name");
+
+/**
+ * A date as the time the app stores. A date alone is taken as noon UTC, so it shows as
+ * that day wherever the people in the split are.
+ */
+const toTime = (value: string) => Date.parse(value.length === 10 ? `${value}T12:00:00Z` : value);
 
 // Outputs
 
@@ -154,21 +176,27 @@ const expenseSchema = z.object({
     .describe('Paid in another currency: the amount typed and the rate it was converted at'),
 });
 
-const savedShape = {
+/** What a write changed: an expense or a person, named in its answer */
+type Row = 'expenseId' | 'personId';
+
+/** A write's answer; `row` names what it changed, and `id` describes that id */
+const savedShape = (row: Row, id: z.ZodType = z.string()) => ({
   status: z.literal('saved'),
   splitId: z.string(),
-  expenseId: z.string(),
+  [row]: id,
   requestId: z.string(),
   savedAt: z.string().describe('When it was saved (ISO 8601)'),
   actor: z.string().describe("The account the change was saved as: this grant's, not the payer's"),
   replayed: z.boolean().describe('True when this repeats an earlier call that was already saved'),
-};
+});
 
-const saved = (r: Receipt, replayed: boolean) =>
+// A receipt keeps the id of the row a change was about in `expenseId` (the column was
+// named for the first tools); none is kept as ''
+const saved = (r: Receipt, replayed: boolean, row: Row) =>
   result({
     status: 'saved' as const,
     splitId: r.splitId,
-    expenseId: r.expenseId,
+    [row]: r.expenseId || null,
     requestId: r.requestId,
     savedAt: new Date(r.savedAt).toISOString(),
     actor: r.email,
@@ -237,21 +265,30 @@ async function overLimit(caller: Caller) {
 /** No rate is fetched: the tools only take amounts in the split's own currency */
 const noRates = () => Promise.reject(new RatesUnavailable());
 
-type ExpenseIntent = Record<string, unknown>;
+type Intent = Record<string, unknown>;
+type Split = NonNullable<Awaited<ReturnType<typeof readSplit>>>;
+type Prepared = { change: unknown; rowId: string | null } | { refusal: CallToolResult };
+
+const noExpense = (): Prepared => ({
+  refusal: toolError('not_found', 'There is no expense with that id in this split.'),
+});
+const noPerson = (): Prepared => ({
+  refusal: toolError('not_found', 'There is no person with that id in this split.'),
+});
 
 /**
- * Saves one expense change with its receipt, or answers a retry with the receipt saved
- * the first time. `prepare` turns the request into the change, reading the split as it
- * is now; it only runs for a request not seen before.
+ * Saves one change to the bill with its receipt, or answers a retry with the receipt
+ * saved the first time. `prepare` turns the request into the change, reading the split
+ * as it is now; it only runs for a request not seen before. A request that names a
+ * currency is refused when the split's is another.
  */
-async function writeExpense(
+async function writeBill(
   caller: Caller,
-  tool: 'add_expense' | 'update_expense',
-  input: { splitId: string; requestId: string; currency: string; expenseId?: string },
-  intent: ExpenseIntent,
-  prepare: (
-    split: NonNullable<Awaited<ReturnType<typeof readSplit>>>,
-  ) => { change: unknown; expenseId: string } | { refusal: CallToolResult },
+  tool: WriteTool,
+  row: Row,
+  input: { splitId: string; requestId: string; currency?: string; expenseId?: string },
+  intent: Intent,
+  prepare: (split: Split) => Prepared,
 ): Promise<CallToolResult> {
   const { env, email } = caller;
   const db = env.DB;
@@ -278,14 +315,14 @@ async function writeExpense(
           'idempotency_conflict',
           'This requestId was already used for a different change. Use a new requestId.',
         )
-      : saved(outcome.receipt, outcome.replayed);
+      : saved(outcome.receipt, outcome.replayed, row);
   // A repeat of a saved request: its answer, before anything about the split is checked
   const earlier = await findReceipt(db, email, input.requestId);
   if (earlier != null) return answer(sameRequest(earlier, print));
 
   const split = await readSplit(db, input.splitId, email);
   if (split == null) return notFound();
-  if (split.currency !== input.currency) {
+  if (input.currency != null && split.currency !== input.currency) {
     return toolError(
       'currency_mismatch',
       `This split is in ${split.currency}, not ${input.currency}. Read it again and send amounts in ${split.currency}.`,
@@ -300,7 +337,7 @@ async function writeExpense(
     fingerprint: print,
     tool,
     splitId: input.splitId,
-    expenseId: prepared.expenseId,
+    expenseId: prepared.rowId ?? '',
     savedAt: Date.now(),
   };
   const outcome = await saveOnce(db, receipt, (alongside) =>
@@ -405,6 +442,10 @@ export function registerTools(server: McpServer, caller: Caller) {
             .boolean()
             .describe('Amounts are being converted to a new currency; writes wait'),
           totalCents: z.number(),
+          routePaymentsThrough: z
+            .string()
+            .nullable()
+            .describe('The person everyone settles with (route_payments); null when no one'),
         }),
         people: z.array(
           z.object({
@@ -464,6 +505,10 @@ export function registerTools(server: McpServer, caller: Caller) {
           archived: split.archived,
           converting: split.convertingSince != null,
           totalCents: settleItems.reduce((sum, i) => sum + i.costCents, 0),
+          // As the app shows it: no one, once that person has left the bill
+          routePaymentsThrough: split.people.some((p) => p.id === split.distributorId)
+            ? split.distributorId
+            : null,
         },
         people: split.people.map((p) => ({
           id: p.id,
@@ -485,10 +530,11 @@ export function registerTools(server: McpServer, caller: Caller) {
     {
       title: 'Add an expense',
       description:
-        "Adds one expense to a split, in the split's own currency, dated now. Who paid and who " +
+        "Adds one expense to a split, in the split's own currency. Who paid and who " +
         'shares it are person ids from get_split; anyone in the bill can be the payer. splitMode ' +
-        "defaults to equal. Saved under this grant's account. Retrying with the same requestId " +
-        'returns the first answer (replayed: true) instead of adding it again.',
+        "defaults to equal. Dated now unless a date is sent. Saved under this grant's account. " +
+        'Retrying with the same requestId returns the first answer (replayed: true) instead of ' +
+        'adding it again.',
       inputSchema: {
         splitId,
         requestId,
@@ -502,8 +548,9 @@ export function registerTools(server: McpServer, caller: Caller) {
         exact: expenseFields.exact.optional(),
         category: expenseFields.category.optional(),
         notes: expenseFields.notes.optional(),
+        date: date.optional(),
       },
-      outputSchema: savedShape,
+      outputSchema: savedShape('expenseId'),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -514,13 +561,26 @@ export function registerTools(server: McpServer, caller: Caller) {
     async (input) => {
       const denied = allowed('add_expense');
       if (denied) return denied;
-      const { splitId: id, requestId: key, currency: code, ...fields } = input;
+      const { splitId: id, requestId: key, currency: code, date: when, ...fields } = input;
       const intent = { ...fields, splitMode: fields.splitMode ?? 'equal' };
       const target = { splitId: id, requestId: key, currency: code };
-      return writeExpense(caller, 'add_expense', target, intent, () => {
-        const id = newId();
-        return { expenseId: id, change: { op: 'addItem', item: { id, ...intent } } };
-      });
+      // The save path quietly dates a new item now when its date doesn't fit; an agent
+      // that sent one hears why instead
+      const createdAt = when == null ? undefined : toTime(when);
+      if (createdAt != null && !isItemDate(createdAt)) {
+        return toolError('invalid_input', 'Pick a date that has already come, from 2000 on.');
+      }
+      return writeBill(
+        caller,
+        'add_expense',
+        'expenseId',
+        target,
+        { ...intent, date: when },
+        () => {
+          const id = newId();
+          return { rowId: id, change: { op: 'addItem', item: { id, ...intent, createdAt } } };
+        },
+      );
     },
   );
 
@@ -549,7 +609,7 @@ export function registerTools(server: McpServer, caller: Caller) {
         category: expenseFields.category.optional(),
         notes: expenseFields.notes.optional(),
       },
-      outputSchema: savedShape,
+      outputSchema: savedShape('expenseId'),
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -565,13 +625,9 @@ export function registerTools(server: McpServer, caller: Caller) {
         return toolError('invalid_input', 'Send at least one field to change.');
       }
       const target = { splitId: id, requestId: key, currency: code, expenseId };
-      return writeExpense(caller, 'update_expense', target, fields, (split) => {
+      return writeBill(caller, 'update_expense', 'expenseId', target, fields, (split) => {
         const current = split.items.find((i) => i.id === expenseId);
-        if (current == null) {
-          return {
-            refusal: toolError('not_found', 'There is no expense with that id in this split.'),
-          };
-        }
+        if (current == null) return noExpense();
         if (current.original != null) {
           return {
             refusal: toolError(
@@ -595,8 +651,137 @@ export function registerTools(server: McpServer, caller: Caller) {
           category: fields.category !== undefined ? fields.category : current.category,
           notes: fields.notes !== undefined ? fields.notes : current.notes,
         };
-        return { expenseId, change: { op: 'updateItem', item } };
+        return { rowId: expenseId, change: { op: 'updateItem', item } };
       });
+    },
+  );
+
+  const expenseWrite = { readOnlyHint: false, idempotentHint: true, openWorldHint: false };
+
+  server.registerTool(
+    'set_expense_date',
+    {
+      title: 'Date an expense',
+      description:
+        'Changes the date an expense was paid, which orders it in the split. Retrying with the ' +
+        'same requestId returns the first answer.',
+      inputSchema: { splitId, expenseId: rowId('expense'), requestId, date },
+      outputSchema: savedShape('expenseId'),
+      annotations: { ...expenseWrite, destructiveHint: false },
+    },
+    async ({ splitId: id, expenseId, requestId: key, date: when }) => {
+      const denied = allowed('set_expense_date');
+      if (denied) return denied;
+      const target = { splitId: id, requestId: key, expenseId };
+      return writeBill(caller, 'set_expense_date', 'expenseId', target, { date: when }, (split) =>
+        split.items.some((i) => i.id === expenseId)
+          ? {
+              rowId: expenseId,
+              change: { op: 'setItemDate', id: expenseId, createdAt: toTime(when) },
+            }
+          : noExpense(),
+      );
+    },
+  );
+
+  server.registerTool(
+    'remove_expense',
+    {
+      title: 'Remove an expense',
+      description:
+        'Removes one expense from the split, with its receipt photos; balances are worked out ' +
+        'again without it. This cannot be undone here: check the id with get_split first. ' +
+        'Retrying with the same requestId returns the first answer.',
+      inputSchema: { splitId, expenseId: rowId('expense'), requestId },
+      outputSchema: savedShape('expenseId'),
+      annotations: { ...expenseWrite, destructiveHint: true },
+    },
+    async ({ splitId: id, expenseId, requestId: key }) => {
+      const denied = allowed('remove_expense');
+      if (denied) return denied;
+      const target = { splitId: id, requestId: key, expenseId };
+      return writeBill(caller, 'remove_expense', 'expenseId', target, {}, (split) =>
+        split.items.some((i) => i.id === expenseId)
+          ? { rowId: expenseId, change: { op: 'removeItem', id: expenseId } }
+          : noExpense(),
+      );
+    },
+  );
+
+  server.registerTool(
+    'add_person',
+    {
+      title: 'Add a person',
+      description:
+        "Adds someone to the split's bill by name, so expenses can be paid by or shared with " +
+        'them. Only the owner of the split can. Names are unique within a split. People join ' +
+        "with their own account through the app's share link, not here. Retrying with the same " +
+        'requestId returns the first answer.',
+      inputSchema: { splitId, requestId, name: personName },
+      outputSchema: savedShape('personId'),
+      annotations: { ...expenseWrite, destructiveHint: false },
+    },
+    async ({ splitId: id, requestId: key, name }) => {
+      const denied = allowed('add_person');
+      if (denied) return denied;
+      const target = { splitId: id, requestId: key };
+      return writeBill(caller, 'add_person', 'personId', target, { name }, () => {
+        const personId = newId();
+        return { rowId: personId, change: { op: 'addPerson', id: personId, name } };
+      });
+    },
+  );
+
+  server.registerTool(
+    'rename_person',
+    {
+      title: 'Rename a person',
+      description:
+        "Renames someone in the split's bill. Only the owner of the split can, and only for " +
+        'people without an account: those take their name from it. Retrying with the same ' +
+        'requestId returns the first answer.',
+      inputSchema: { splitId, personId: rowId('person'), requestId, name: personName },
+      outputSchema: savedShape('personId'),
+      annotations: { ...expenseWrite, destructiveHint: false },
+    },
+    async ({ splitId: id, personId, requestId: key, name }) => {
+      const denied = allowed('rename_person');
+      if (denied) return denied;
+      const target = { splitId: id, requestId: key };
+      return writeBill(caller, 'rename_person', 'personId', target, { personId, name }, (split) =>
+        split.people.some((p) => p.id === personId)
+          ? { rowId: personId, change: { op: 'renamePerson', id: personId, name } }
+          : noPerson(),
+      );
+    },
+  );
+
+  server.registerTool(
+    'route_payments',
+    {
+      title: 'Route payments through someone',
+      description:
+        'Settles the split through one person: everyone else pays them what they owe, and they ' +
+        'pay out what others are owed. null settles directly between people, in as few payments ' +
+        'as there can be. get_split shows the choice and the transfers it gives. Retrying with ' +
+        'the same requestId returns the first answer.',
+      inputSchema: {
+        splitId,
+        requestId,
+        personId: rowId('person').nullable().describe('Who to route through; null for no one'),
+      },
+      outputSchema: savedShape('personId', z.string().nullable()),
+      annotations: { ...expenseWrite, destructiveHint: false },
+    },
+    async ({ splitId: id, requestId: key, personId }) => {
+      const denied = allowed('route_payments');
+      if (denied) return denied;
+      const target = { splitId: id, requestId: key };
+      return writeBill(caller, 'route_payments', 'personId', target, { personId }, (split) =>
+        personId == null || split.people.some((p) => p.id === personId)
+          ? { rowId: personId, change: { op: 'setDistributor', personId } }
+          : noPerson(),
+      );
     },
   );
 }

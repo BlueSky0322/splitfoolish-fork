@@ -18,6 +18,18 @@ const hex = () => randomBytes(8).toString('hex');
 const READ = 'splits:read';
 const WRITE = 'splits:write';
 const REDIRECT = 'http://127.0.0.1:9/callback';
+/** Every tool the server offers, in name order */
+const TOOLS = [
+  'add_expense',
+  'add_person',
+  'get_split',
+  'list_splits',
+  'remove_expense',
+  'rename_person',
+  'route_payments',
+  'set_expense_date',
+  'update_expense',
+];
 
 beforeAll(async () => {
   api = await startLocalWorker();
@@ -229,7 +241,7 @@ describe('signing in', () => {
     });
     expect(refreshed.status).toBe(200);
     const client = await connect(refreshed.data.access_token);
-    expect((await client.listTools()).tools).toHaveLength(4);
+    expect((await client.listTools()).tools).toHaveLength(TOOLS.length);
 
     const revocation = await fetch(`${api.base}/oauth/token`, {
       method: 'POST',
@@ -252,12 +264,7 @@ describe('the tools', () => {
     const client = await connect(access);
 
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual([
-      'add_expense',
-      'get_split',
-      'list_splits',
-      'update_expense',
-    ]);
+    expect(tools.map((t) => t.name).sort()).toEqual(TOOLS);
     const add = tools.find((t) => t.name === 'add_expense')!;
     expect(add.inputSchema.required).toEqual(
       expect.arrayContaining(['splitId', 'requestId', 'currency', 'name', 'cost', 'payerId']),
@@ -388,6 +395,162 @@ describe('the tools', () => {
       ).error?.code,
     ).toBe('refused');
     expect((await itemsOf(alice, split.id)).map((i) => i.name)).toEqual(['Taxi']);
+  });
+
+  it('date an expense when it was paid, and remove one, once', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const fuel = {
+      splitId: split.id,
+      currency: 'MYR',
+      name: 'Fuel',
+      cost: 40,
+      payerId: split.bob,
+      participantIds: [split.bob, split.cat],
+    };
+
+    // A date alone is noon UTC, so it reads as that day wherever the split is opened
+    const { expenseId } = await tool(client, 'add_expense', {
+      ...fuel,
+      requestId: 'fuel-dated-1',
+      date: '2026-01-15',
+    });
+    expect((await itemsOf(alice, split.id))[0].createdAt).toBe(Date.UTC(2026, 0, 15, 12));
+    // A date that hasn't come is refused, not quietly made today
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          ...fuel,
+          requestId: 'fuel-later-1',
+          date: '2999-01-01',
+        })
+      ).error?.code,
+    ).toBe('invalid_input');
+    expect(await itemsOf(alice, split.id)).toHaveLength(1);
+
+    const redate = (requestId: string, date: string) =>
+      tool(client, 'set_expense_date', { splitId: split.id, expenseId, requestId, date });
+    expect(await redate('fuel-redate-1', '2025-12-31T20:00:00+08:00')).toMatchObject({
+      status: 'saved',
+      expenseId,
+      replayed: false,
+    });
+    expect((await itemsOf(alice, split.id))[0].createdAt).toBe(Date.UTC(2025, 11, 31, 12));
+    expect((await redate('fuel-redate-2', '2999-01-01')).error).toEqual({
+      code: 'refused',
+      message: 'Pick a date that has already come',
+      retryable: false,
+    });
+
+    const remove = (requestId: string) =>
+      tool(client, 'remove_expense', { splitId: split.id, expenseId, requestId });
+    expect(await remove('fuel-remove-1')).toMatchObject({ status: 'saved', replayed: false });
+    expect(await itemsOf(alice, split.id)).toEqual([]);
+    // The answer was lost: the retry says it was done; a new request finds nothing to remove
+    expect(await remove('fuel-remove-1')).toMatchObject({ expenseId, replayed: true });
+    expect((await remove('fuel-remove-2')).error?.code).toBe('not_found');
+  });
+
+  it('add and rename people as the owner, and route payments through one of them', async () => {
+    const alice = person('alice');
+    const dave = person('dave');
+    const split = await trip(alice, dave);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const names = async () =>
+      (await tool(client, 'get_split', { splitId: split.id })).people.map(
+        (p: { name: string }) => p.name,
+      );
+
+    // Owner, Bob, Cat, and Dave, who joined through the share link
+    const before = await names();
+    const added = await tool(client, 'add_person', {
+      splitId: split.id,
+      requestId: 'eve-add-0001',
+      name: 'Eve',
+    });
+    expect(added).toMatchObject({ status: 'saved', replayed: false });
+    expect(
+      await tool(client, 'rename_person', {
+        splitId: split.id,
+        personId: added.personId,
+        requestId: 'eve-rename-1',
+        name: 'Evie',
+      }),
+    ).toMatchObject({ status: 'saved', personId: added.personId });
+    expect(await names()).toEqual([...before, 'Evie']);
+
+    // The bill's own rules: names are unique, and an account's name is its own
+    expect(
+      (
+        await tool(client, 'add_person', {
+          splitId: split.id,
+          requestId: 'bob-add-0001',
+          name: 'Bob',
+        })
+      ).error,
+    ).toEqual({ code: 'refused', message: 'Bob is already in this split', retryable: false });
+    expect(
+      (
+        await tool(client, 'rename_person', {
+          splitId: split.id,
+          personId: split.me,
+          requestId: 'me-rename-01',
+          name: 'Boss',
+        })
+      ).error?.code,
+    ).toBe('refused');
+    expect(
+      (
+        await tool(client, 'rename_person', {
+          splitId: split.id,
+          personId: hex(),
+          requestId: 'nobody-ren-1',
+          name: 'Ghost',
+        })
+      ).error?.code,
+    ).toBe('not_found');
+    // Only the owner changes who is in the bill
+    const daves = await connect((await grant(dave, [READ, WRITE])).access);
+    expect(
+      (
+        await tool(daves, 'add_person', {
+          splitId: split.id,
+          requestId: 'fay-add-0001',
+          name: 'Fay',
+        })
+      ).error?.code,
+    ).toBe('forbidden');
+    expect(await names()).toEqual([...before, 'Evie']);
+
+    // Cat paid for four; routed through Bob, everyone settles with him
+    await tool(client, 'add_expense', {
+      splitId: split.id,
+      requestId: 'hotel-add-01',
+      currency: 'MYR',
+      name: 'Hotel',
+      cost: 40,
+      payerId: split.cat,
+      participantIds: [split.me, split.bob, split.cat, added.personId],
+    });
+    const route = (requestId: string, personId: string | null) =>
+      tool(client, 'route_payments', { splitId: split.id, requestId, personId });
+    expect(await route('route-bob-01', split.bob)).toMatchObject({ personId: split.bob });
+    const routed = await tool(client, 'get_split', { splitId: split.id });
+    expect(routed.split.routePaymentsThrough).toBe(split.bob);
+    expect(routed.transfers).toEqual(
+      expect.arrayContaining([
+        { fromId: split.me, toId: split.bob, amountCents: 1000 },
+        { fromId: added.personId, toId: split.bob, amountCents: 1000 },
+        { fromId: split.bob, toId: split.cat, amountCents: 3000 },
+      ]),
+    );
+    expect(routed.transfers).toHaveLength(3);
+    expect(await route('route-none-1', null)).toMatchObject({ personId: null });
+    expect(
+      (await tool(client, 'get_split', { splitId: split.id })).split.routePaymentsThrough,
+    ).toBeNull();
+    expect((await route('route-ghost1', hex())).error?.code).toBe('not_found');
   });
 });
 
