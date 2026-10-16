@@ -439,6 +439,11 @@ what Back does.
 - [DesktopSplitLayout](../web/src/components/split/layout/DesktopSplitLayout.tsx) and
   [MobileSplitLayout](../web/src/components/split/layout/MobileSplitLayout.tsx) (also
   used on tablets).
+- [Skeleton](../web/src/components/ui/Skeleton.tsx): the shimmering placeholders a page
+  shows until its data arrives, shaped by each screen
+  ([HomeSkeletons](../web/src/components/home/HomeSkeletons.tsx),
+  [SplitSkeletons](../web/src/components/split/layout/SplitSkeletons.tsx), Settings,
+  Convert and the sidebar).
 
 **Invariants.**
 
@@ -446,8 +451,14 @@ what Back does.
   `ResponsiveDialog` or `useBackDismiss`, so Back closes the top one first.
 - The split's tabs on phones are not history entries, so Back leaves the split rather
   than stepping through tabs.
+- Until a page's data arrives it shows placeholders the size of what will replace them,
+  never an empty or zero state that then changes (no "RM 0.00" before the split loads).
+  A copy kept on the device shows instead of them when there is one.
 
-**Tests.** [App.test.tsx](../web/src/App.test.tsx) (pages and Back), and the phone
+**Tests.** [App.test.tsx](../web/src/App.test.tsx) (pages and Back), the placeholder
+cases in [SplitLoading.test.tsx](../web/src/components/split/SplitLoading.test.tsx),
+[SettingsPage.test.tsx](../web/src/components/settings/SettingsPage.test.tsx) and
+[ConvertPage.test.tsx](../web/src/components/convert/ConvertPage.test.tsx), and the phone
 cases (`{ size: 'phone' }`) in
 [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx) and
 [SplitsHome.test.tsx](../web/src/components/home/SplitsHome.test.tsx).

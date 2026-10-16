@@ -30,6 +30,7 @@ import { SOURCE_LABELS, describeRate, describeWhen } from '../../utils/rate-labe
 import CurrencySelect from '../ui/CurrencySelect';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SplitAvatar from '../common/SplitAvatar';
+import Skeleton from '../ui/Skeleton';
 import classes from './Convert.module.css';
 import { type SplitSummary } from '@shared/api';
 import { showError } from '../../utils/notify';
@@ -234,6 +235,18 @@ const ConvertPage = () => {
           ? convertCents(toCents(amount), rate.data.rate)
           : null;
 
+  // The rate is on its way: the result and its rate line hold their place until it lands
+  const awaitingRate = from !== to && rate.data == null && !rate.isError;
+  const rateSkeleton = (
+    <>
+      <Skeleton
+        width={220}
+        height={11}
+      />
+      <span className="sr-only">Getting the rate…</span>
+    </>
+  );
+
   const splitOptions = (splits ?? []).map((s) => ({ value: s.id, label: s.name }));
   const chosenSplit = splitId ?? splitOptions[0]?.value ?? null;
   const addTo = (id: string) => {
@@ -275,7 +288,7 @@ const ConvertPage = () => {
           ? `${describeRate(rate.data.rate, from, to)}, ${SOURCE_LABELS[rate.data.source]}, ${describeWhen(rate.data.fetchedAt)}`
           : rate.isError
             ? "Couldn't get a rate right now"
-            : 'Getting the rate…'}
+            : rateSkeleton}
     </div>
   );
 
@@ -293,7 +306,7 @@ const ConvertPage = () => {
       ) : rate.isError ? (
         <span>Couldn't get a rate right now</span>
       ) : (
-        <span>Getting the rate…</span>
+        rateSkeleton
       )}
       {refreshButton}
     </div>
@@ -391,7 +404,17 @@ const ConvertPage = () => {
                 data-empty={convertedCents == null || undefined}
                 aria-live="polite"
               >
-                {convertedCents == null ? '0' : formatAmount(convertedCents, to)}
+                {awaitingRate && amount != null ? (
+                  <Skeleton
+                    width={120}
+                    height={30}
+                    style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                  />
+                ) : convertedCents == null ? (
+                  '0'
+                ) : (
+                  formatAmount(convertedCents, to)
+                )}
               </output>
             </span>
           </div>
@@ -408,7 +431,14 @@ const ConvertPage = () => {
             aria-label="Split to add to"
           >
             <span className="min-w-0 flex-1 truncate">
-              {splitOptions.find((o) => o.value === chosenSplit)?.label ?? 'No splits yet'}
+              {splits == null ? (
+                <Skeleton
+                  width={110}
+                  height={12}
+                />
+              ) : (
+                splitOptions.find((o) => o.value === chosenSplit)?.label ?? 'No splits yet'
+              )}
             </span>
             <CaretUpDown size={16} />
           </UnstyledButton>
@@ -500,7 +530,7 @@ const ConvertPage = () => {
     <div className={classes.addRow}>
       <Select
         label="Add to a split"
-        placeholder={splitOptions.length === 0 ? 'No splits yet' : undefined}
+        placeholder={splits != null && splitOptions.length === 0 ? 'No splits yet' : undefined}
         data={splitOptions}
         value={chosenSplit}
         onChange={setSplitId}
@@ -523,7 +553,17 @@ const ConvertPage = () => {
   const resultPanel = (
     <div>
       <div className={classes.result}>
-        {convertedCents == null ? '—' : formatMoney(convertedCents, to)}
+        {awaitingRate && amount != null ? (
+          <Skeleton
+            width={200}
+            height={38}
+            style={{ margin: '4px 0' }}
+          />
+        ) : convertedCents == null ? (
+          '—'
+        ) : (
+          formatMoney(convertedCents, to)
+        )}
       </div>
       {rateLine}
     </div>

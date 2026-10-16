@@ -2,7 +2,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
-import { fakeServer, renderApp, splitDetail, setupAppTests } from '../../testing/app';
+import { fakeServer, holdNext, renderApp, splitDetail, setupAppTests } from '../../testing/app';
 
 setupAppTests();
 
@@ -82,5 +82,20 @@ describe('Convert', () => {
       cost: 450,
       original: { currency: 'USD', amount: 100 },
     });
+  });
+
+  test('holds the place of the result until the rate arrives', async () => {
+    const server = fakeServer(splitDetail('trip'));
+    server.rates.set('USDMYR', 4.5);
+    const held = holdNext(server, 'GET', '/api/rates');
+    renderApp(server, '/?convert');
+
+    expect(await screen.findByText('Getting the rate…')).toBeTruthy();
+    // No dash standing in for an amount that's on its way
+    expect(screen.queryByText('—')).toBeNull();
+
+    held.release();
+    expect(await screen.findByText(/RM\s?450\.00/)).toBeTruthy();
+    expect(screen.queryByText('Getting the rate…')).toBeNull();
   });
 });

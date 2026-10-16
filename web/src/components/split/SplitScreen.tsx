@@ -15,6 +15,7 @@ import { useSplitState } from '../../split/SplitStateContext';
 import { SplitActionsContext, useSplit } from '../../split/useSplit';
 import { plural } from '../../utils/text';
 import { usePhotos } from '../../split/usePhotos';
+import { ItemsSkeleton } from './layout/SplitSkeletons';
 import StateCard from '../ui/StateCard';
 import BalancePanel from './balances/BalancePanel';
 import DesktopSplitLayout from './layout/DesktopSplitLayout';
@@ -171,6 +172,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
 
   const loaded = meta != null;
   const noPeople = loaded && state.people.length === 0;
+  // Nothing to show yet, not even a copy kept on this device
+  const loading = !loaded && status === 'loading';
 
   const viewToggle = (
     <SegmentedControl
@@ -226,7 +229,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     photoCounts,
     selection: selection.row,
   };
-  const list = noPeople ? (
+  const list = loading ? (
+    <ItemsSkeleton mobile={!isDesktop} />
+  ) : noPeople ? (
     <div className={classes.empty}>
       <UsersThree
         size={36}
