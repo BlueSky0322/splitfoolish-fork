@@ -1,19 +1,30 @@
+// @vitest-environment jsdom
+import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
-import { describe, expect, test, vi } from 'vitest';
+import { URL as NodeURL, fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
 import { CLIENT_ID_HEADER } from '@shared/api';
-import { IMAGE_CACHE, SW_USER_KEY } from './cache';
-import { CREATE_PREFIX } from './pending-creates';
+import { backgroundSync, ok, respond } from '../testing/sw';
+import { clearCache, setCacheUser } from './cache';
+import { type PendingCreate, readPendingCreates, savePendingCreate } from './pending-creates';
 import type { Queued } from './outbox';
 import {
-  LOCK_PREFIX,
-  OUTBOX_PREFIX,
   SYNC_TAG,
   classifySaveFailure,
   isRetryable,
+  readOutbox,
   stillToSend,
   withOutbox,
+  writeOutbox,
 } from './outbox';
+import { forgetOfflineWork } from './sync';
+
+const swSource = readFileSync(
+  fileURLToPath(new NodeURL('../../public/sw.js', import.meta.url)),
+  'utf8',
+);
 
 const q = (cid: string): Queued => ({ cid, change: { op: 'removeItem', id: cid } });
 
@@ -88,23 +99,120 @@ describe('withOutbox', () => {
   });
 });
 
-// The service worker sends the outbox while the app is closed. It can't import these,
-// so it keeps its own copies, which have to match.
-describe('the service worker', () => {
-  const sw = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
+// The service worker sends the outbox while the app is closed. It can't import the app's
+// keys, lock and sync tag, so it keeps its own copies. Here it runs against what the app
+// itself kept, to show the two still find each other's work.
+describe('the service worker and the app', () => {
+  const create: PendingCreate = {
+    id: 'bali',
+    name: 'Bali',
+    currency: 'IDR',
+    summary: {} as PendingCreate['summary'],
+  };
 
-  test('uses the same keys, lock and sync tag as the app', () => {
-    const twins = {
-      SYNC_TAG,
-      OUTBOX_PREFIX,
-      CREATE_PREFIX,
-      LOCK_PREFIX,
-      USER_KEY: SW_USER_KEY,
-      IMAGE_CACHE,
-      CLIENT_ID_HEADER,
-    };
-    for (const [name, value] of Object.entries(twins)) {
-      expect(sw).toContain(`const ${name} = '${value}';`);
+  beforeEach(() => setCacheUser('ryan@example.com'));
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await forgetOfflineWork();
+  });
+
+  test('the service worker sends what the app kept, for whoever the app says is signed in', async () => {
+    await savePendingCreate(create);
+    await writeOutbox('bali', [q('a'), q('b')]);
+
+    // Woken by the app's own sync tag
+    const { outcome, fetch, batches } = await backgroundSync(ok);
+    expect(outcome).toBe('done');
+    // The new split first, then its changes, each saying it's the service worker sending
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual([
+      '/api/splits',
+      '/api/splits/bali/changes',
+    ]);
+    expect(JSON.parse(fetch.mock.calls[0][1].body as string)).toEqual({
+      id: 'bali',
+      name: 'Bali',
+      currency: 'IDR',
+    });
+    expect(batches).toEqual([[q('a').change, q('b').change]]);
+    for (const [, init] of fetch.mock.calls) {
+      expect(init.headers).toMatchObject({ [CLIENT_ID_HEADER]: 'background-sync' });
     }
+    // Crossed off where the app looks
+    expect(await readPendingCreates()).toEqual([]);
+    expect(await readOutbox('bali')).toEqual([]);
+  });
+
+  test('both take the same lock for a split', async () => {
+    const taken: string[] = [];
+    const locks = {
+      request: (name: string, fn: () => Promise<unknown>) => {
+        taken.push(name);
+        return fn();
+      },
+    };
+    await writeOutbox('bali', [q('a')]);
+    runServiceWorker({ navigator: { locks } }).sync();
+    await vi.waitFor(async () => expect(await readOutbox('bali')).toEqual([]));
+    const swLock = taken.splice(0);
+    expect(swLock).toHaveLength(1);
+
+    vi.stubGlobal('navigator', { locks });
+    await withOutbox('bali', () => Promise.resolve());
+    expect(taken).toEqual(swLock);
+  });
+
+  test('the pictures the service worker keeps are the ones the app clears on signing out', async () => {
+    const opened: string[] = [];
+    const deleted: string[] = [];
+    const caches = {
+      open: (name: string) => {
+        opened.push(name);
+        return Promise.resolve({ match: () => Promise.resolve(undefined), put: () => {} });
+      },
+      delete: (name: string) => {
+        deleted.push(name);
+        return Promise.resolve(true);
+      },
+    };
+    const picture = runServiceWorker({ location: { origin: 'https://app.test' } }, { caches });
+    await picture.fetch('https://app.test/api/splits/bali/picture');
+    expect(opened).toHaveLength(1);
+
+    vi.stubGlobal('caches', caches);
+    await clearCache();
+    expect(deleted).toEqual(opened);
   });
 });
+
+/**
+ * public/sw.js loaded on its own, with `self` and globals of a test's choosing, answering
+ * every request with ok: for what backgroundSync doesn't stand in for
+ */
+function runServiceWorker(self: object, globals: object = {}) {
+  const handlers: Record<string, (event: unknown) => void> = {};
+  runInNewContext(swSource, {
+    self: {
+      addEventListener: (type: string, handler: (event: unknown) => void) =>
+        (handlers[type] = handler),
+      navigator: {},
+      ...self,
+    },
+    fetch: () => respond(ok),
+    indexedDB,
+    Response,
+    URL,
+    ...globals,
+  });
+  return {
+    sync: () => handlers.sync({ tag: SYNC_TAG, waitUntil: () => {} }),
+    /** A page asking for `url`; resolves once the service worker has answered */
+    fetch: (url: string) =>
+      new Promise<unknown>((resolve) =>
+        handlers.fetch({
+          request: { url, method: 'GET', mode: 'no-cors' },
+          respondWith: (answer: Promise<unknown>) => resolve(answer),
+          waitUntil: () => {},
+        }),
+      ),
+  };
+}
