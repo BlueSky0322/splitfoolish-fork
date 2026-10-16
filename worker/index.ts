@@ -9,6 +9,8 @@ import invites from './routes/invites';
 import me from './routes/me';
 import rates from './routes/rates';
 import splits from './routes/splits';
+import type { ReconvertJob } from './reconvert';
+import { handleReconvertQueue } from './reconvert-queue';
 import { notifySplit } from './room';
 
 export { SplitRoom } from './room';
@@ -62,4 +64,6 @@ export default {
     if (!new URL(req.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     return api.fetch(req, env, ctx);
   },
-} satisfies ExportedHandler<Env>;
+  // Conversions to retry, and the ones given up on (reconvert-queue.ts)
+  queue: handleReconvertQueue,
+} satisfies ExportedHandler<Env, ReconvertJob>;

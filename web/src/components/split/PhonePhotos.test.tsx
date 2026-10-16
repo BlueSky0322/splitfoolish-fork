@@ -93,11 +93,14 @@ describe('picking photos on a phone', () => {
     );
   });
 
-  test('picked photos are removed together', async () => {
+  test('picked photos are removed together, after asking', async () => {
     const { server, user } = await openPhotos();
     const bar = await longPress(screen.getByRole('button', { name: 'Photo of Dinner' }));
     await user.click(screen.getAllByRole('checkbox', { name: 'Photo of the split' })[0]);
     await user.click(within(bar).getByRole('button', { name: 'Remove photos' }));
+    const question = await screen.findByRole('dialog', { name: 'Remove 2 photos?' });
+    expect(server.splits.get('trip')!.attachments).toHaveLength(3);
+    await user.click(within(question).getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
       expect(server.splits.get('trip')!.attachments.map((a) => a.id)).toEqual(['sunset']),
     );

@@ -30,6 +30,7 @@ import { useSplitPage } from '../SplitPageContext';
 import classes from './DesktopPhotos.module.css';
 import { timeLabel, useAddedBy } from './added-by';
 import PhotoDetails from './PhotoDetails';
+import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 
 /** Every row of photos is this tall; each photo is as wide as its shape makes it */
 const ROW_PX = 150;
@@ -94,8 +95,11 @@ const DesktopPhotos = () => {
     setSelected(new Set());
   };
 
+  const { confirm, dialog: confirmDialog } = useConfirmRemovePhotos();
   const viewer: ViewerPhoto[] = shown.map((photo) => {
-    const onRemove = canRemovePhoto(photo) ? () => photos.remove(photo) : undefined;
+    const onRemove = canRemovePhoto(photo)
+      ? () => confirm(1, () => photos.remove(photo))
+      : undefined;
     const item = photo.itemId ? itemById.get(photo.itemId) ?? null : null;
     return {
       key: photo.id,
@@ -181,10 +185,12 @@ const DesktopPhotos = () => {
               className="sf-danger-outline"
               leftSection={<Trash size={14} />}
               disabled={!canRemoveAll}
-              onClick={() => {
-                void photos.removeMany(chosen);
-                stopSelecting();
-              }}
+              onClick={() =>
+                confirm(chosen.length, () => {
+                  void photos.removeMany(chosen);
+                  stopSelecting();
+                })
+              }
             >
               Remove
             </Button>
@@ -424,6 +430,7 @@ const DesktopPhotos = () => {
         index={open}
         onIndexChange={setOpen}
       />
+      {confirmDialog}
     </div>
   );
 };

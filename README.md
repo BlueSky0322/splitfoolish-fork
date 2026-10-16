@@ -13,6 +13,7 @@ offline.
 | `shared/`     | Code both use: settling up, payment methods, rates and the API's data shapes |
 | `migrations/` | D1 (SQLite) schema changes, applied in order on deploy                       |
 | `docs/`       | The data model (`erd.md`) and where each feature lives (`feature-map.md`)    |
+| `scripts/`    | Tools run by hand: `subset-font.sh` makes the font for PDF exports           |
 | `tools/`      | Repository checks, such as the import boundaries `yarn lint` enforces        |
 
 `web/` and `worker/` never import each other; anything both need lives in `shared/`,

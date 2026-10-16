@@ -3,8 +3,9 @@
 // - The page itself comes from the network when there is one, and from the copy kept
 //   here when there isn't, so the app opens offline.
 // - Built files, fonts and images never change once made (built files have content
-//   hashes in their names, a profile picture URL names its version, and a photo never
-//   changes once added), so they're served from here once kept.
+//   hashes in their names, a profile picture URL names its version, a photo never
+//   changes once added, and a changed font in /fonts gets a new name), so they're
+//   served from here once kept.
 // - The rest of /api always goes to the network, through Cloudflare Access.
 // - Changes made offline are kept by the app (in IndexedDB); background sync sends
 //   them here when the connection is back, even if the app is closed.
@@ -37,6 +38,12 @@ const isImage = (url) =>
 
 const isFont = (url) =>
   url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com';
+
+/** A font file, not the app's page sent in its place for an address it doesn't have */
+const isFontFile = (response) =>
+  /^(font\/|application\/(font|x-font|octet-stream))/.test(
+    response.headers.get('Content-Type') ?? '',
+  );
 
 /** A real page, not a sign-in redirect or an error */
 const isPage = (response) =>
@@ -120,6 +127,9 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(page(event));
   } else if (url.pathname.startsWith('/assets/')) {
     event.respondWith(cacheFirst(ASSETS, event.request, (r) => r.type === 'basic'));
+  } else if (url.pathname.startsWith('/fonts/')) {
+    // The PDF export's font, so a PDF can be made offline once one has been made
+    event.respondWith(cacheFirst(FONTS, event.request, (r) => r.type === 'basic' && isFontFile(r)));
   } else if (isImage(url)) {
     event.respondWith(
       cacheFirst(

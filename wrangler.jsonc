@@ -26,6 +26,21 @@
   "ratelimits": [
     { "name": "API_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
   ],
+  // Currency conversions to retry after a failed first attempt (worker/reconvert-queue.ts).
+  // Both queues must exist before a deploy with this config: `wrangler queues create`
+  "queues": {
+    "producers": [{ "binding": "RECONVERT_QUEUE", "queue": "reconvert" }],
+    "consumers": [
+      {
+        "queue": "reconvert",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 8,
+        "dead_letter_queue": "reconvert-dlq",
+      },
+      { "queue": "reconvert-dlq", "max_batch_size": 10, "max_retries": 0 },
+    ],
+  },
   "d1_databases": [
     {
       "binding": "DB",

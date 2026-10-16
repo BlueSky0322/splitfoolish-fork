@@ -141,7 +141,46 @@ describe('the Photos tab on a computer', () => {
     expect(viewer.getByText('2 of 3')).toBeTruthy();
   });
 
-  test('selects a whole day and removes it in one go', async () => {
+  test("a receipt removed from its item's form asks first", async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Seafood dinner'));
+    const form = await screen.findByRole('dialog', { name: 'Edit item' });
+    await user.click(within(form).getByRole('button', { name: 'Remove photo 1' }));
+    const question = await screen.findByRole('dialog', { name: 'Remove this photo?' });
+    expect(server.splits.get('trip')!.attachments).toHaveLength(3);
+    await user.click(within(question).getByRole('button', { name: 'Remove' }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.attachments.map((a) => a.id)).toEqual(['beach', 'sunset']),
+    );
+  });
+
+  test('removing the open photo asks first, and Cancel keeps it', async () => {
+    const { server, user } = await openPhotos();
+    await user.click(screen.getByRole('button', { name: 'Receipt for Seafood dinner' }));
+    const viewer = await screen.findByRole('dialog');
+    await user.click(within(viewer).getByRole('button', { name: 'Remove photo' }));
+    const question = await screen.findByRole('dialog', { name: 'Remove this photo?' });
+    expect(within(question).getByText(/removed for everyone in the split/)).toBeTruthy();
+    await user.click(within(question).getByRole('button', { name: 'Cancel' }));
+    expect(server.splits.get('trip')!.attachments).toHaveLength(3);
+    // Still looking at it
+    expect(within(viewer).getByRole('heading', { name: 'Seafood dinner' })).toBeTruthy();
+
+    await user.click(within(viewer).getByRole('button', { name: 'Remove photo' }));
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Remove this photo?' })).getByRole(
+        'button',
+        { name: 'Remove' },
+      ),
+    );
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.attachments.map((a) => a.id)).toEqual(['beach', 'sunset']),
+    );
+  });
+
+  test('selects a whole day and removes it in one go, after asking', async () => {
     const { server, user } = await openPhotos();
     await user.click(screen.getByRole('button', { name: 'Select' }));
     await user.click(screen.getAllByRole('button', { name: 'Select day' })[0]);
@@ -150,7 +189,17 @@ describe('the Photos tab on a computer', () => {
       screen.getByRole('checkbox', { name: 'Select receipt for Seafood dinner' }).ariaChecked,
     ).toBe('true');
 
+    // Asks first; Cancel removes nothing and keeps them picked
     await user.click(screen.getByRole('button', { name: 'Remove' }));
+    let question = await screen.findByRole('dialog', { name: 'Remove 2 photos?' });
+    await user.click(within(question).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(server.splits.get('trip')!.attachments).toHaveLength(3);
+    expect(screen.getByText('2 selected')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    question = await screen.findByRole('dialog', { name: 'Remove 2 photos?' });
+    await user.click(within(question).getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
       expect(server.splits.get('trip')!.attachments.map((a) => a.id)).toEqual(['sunset']),
     );

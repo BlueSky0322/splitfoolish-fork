@@ -5,6 +5,7 @@ import { attachmentUrl } from '../../../api';
 import type { ViewerPhoto } from '../../ui/PhotoViewer';
 import PhotoViewer from '../../ui/PhotoViewer';
 import classes from './Photos.module.css';
+import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 import type { Attachment } from '@shared/api';
 
 interface PhotoStripProps {
@@ -94,6 +95,9 @@ const PhotoStrip = ({
 }: PhotoStripProps) => {
   const input = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState<number | null>(null);
+  // Saved photos go for everyone, so removing one asks first; one not sent yet doesn't
+  const { confirm, dialog: confirmDialog } = useConfirmRemovePhotos();
+  const removeSaved = (photo: Attachment) => confirm(1, () => onRemove(photo));
   const local = useMemo(() => [...pending, ...uploading], [pending, uploading]);
   const urls = useFileUrls(local);
 
@@ -102,7 +106,7 @@ const PhotoStrip = ({
     ...photos.map((photo) => ({
       key: photo.id,
       src: attachmentUrl(splitId, photo.id),
-      onRemove: canRemove(photo) ? () => onRemove(photo) : undefined,
+      onRemove: canRemove(photo) ? () => removeSaved(photo) : undefined,
     })),
     ...pending.map((file, ix) => ({
       key: `pending-${ix}-${file.name}`,
@@ -152,7 +156,7 @@ const PhotoStrip = ({
               radius="xl"
               variant="default"
               aria-label={`Remove photo ${ix + 1}`}
-              onClick={() => onRemove(photo)}
+              onClick={() => removeSaved(photo)}
             >
               <X size={12} />
             </ActionIcon>
@@ -194,6 +198,7 @@ const PhotoStrip = ({
         index={open}
         onIndexChange={setOpen}
       />
+      {confirmDialog}
     </div>
   );
 };

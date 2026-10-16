@@ -131,6 +131,8 @@ export interface FakeRates {
    * tests can't get in the way
    */
   newCurrency: () => string;
+  /** How many times either service has been asked for this pair, answered or not */
+  asked: (from: string, to: string) => number;
 }
 
 /** A tiny HTTP server answering like Wise's /v1/rates and Frankfurter's /v1/latest */
@@ -143,6 +145,7 @@ async function startFakeRates(): Promise<
   const isDown = { wise: false, frankfurter: false };
   let probed = false;
   let codes = 0;
+  const askedFor = new Map<string, number>();
   const server = createHttpServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
     const send = (status: number, body: unknown) => {
@@ -151,6 +154,7 @@ async function startFakeRates(): Promise<
     };
     const heard = (from: string | null, to: string | null) => {
       if (from === PROBE_PAIR[0] && to === PROBE_PAIR[1]) probed = true;
+      askedFor.set(`${from}${to}`, (askedFor.get(`${from}${to}`) ?? 0) + 1);
     };
     if (url.pathname === '/v1/rates') {
       const [from, to] = [url.searchParams.get('source'), url.searchParams.get('target')];
@@ -204,6 +208,7 @@ async function startFakeRates(): Promise<
       const letter = (i: number) => String.fromCharCode(65 + i);
       return `Q${letter(Math.floor(n / 26))}${letter(n % 26)}`;
     },
+    asked: (from, to) => askedFor.get(`${from}${to}`) ?? 0,
     heardProbe: () => probed,
     close: () => server.close(),
   };
@@ -288,6 +293,9 @@ export async function startLocalWorker(): Promise<LocalWorker> {
         'WISE_TOKEN:test-token',
         '--var',
         'RECONVERT_RETRY_MS:0',
+        // Queued conversion retries every second, rather than after minutes
+        '--var',
+        'RECONVERT_RETRY_DELAY_S:1',
         '--log-level',
         'warn',
       ],
