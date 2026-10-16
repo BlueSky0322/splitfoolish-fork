@@ -1,37 +1,94 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RatesUnavailable, getRate } from './exchange-rates';
 
-// A cache that behaves like Cloudflare's for these tests
+// A cache that behaves like Cloudflare's for these tests, keeping each copy's headers
 const memoryCache = () => {
-  const store = new Map<string, string>();
-  return {
-    match: (key: string) =>
-      Promise.resolve(store.has(key) ? new Response(store.get(key)) : undefined),
+  const store = new Map<string, { body: string; headers: Headers }>();
+  const cache = {
+    match: (key: string) => {
+      const kept = store.get(key);
+      return Promise.resolve(kept && new Response(kept.body, { headers: kept.headers }));
+    },
     put: async (key: string, res: Response) => {
-      store.set(key, await res.text());
+      store.set(key, { body: await res.text(), headers: new Headers(res.headers) });
     },
   } as unknown as Cache;
+  /** How long Cloudflare is told to keep each copy */
+  const keptFor = () => [...store.values()].map((kept) => kept.headers.get('Cache-Control'));
+  return Object.assign(cache, { keptFor });
 };
 
-/** Answers Wise and Frankfurter requests from the given handlers, counting calls */
-function services(wise: () => Response, frankfurter: () => Response) {
+type Answer = (init?: RequestInit) => Response | Promise<Response>;
+
+/** Answers Wise and Frankfurter requests from the given handlers, counting and keeping them */
+function services(wise: Answer, frankfurter: Answer) {
   const calls = { wise: 0, frankfurter: 0 };
-  const fetchImpl = (input: RequestInfo | URL) => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input.toString();
+    requests.push({ url, init });
     if (url.includes('/v1/rates')) {
       calls.wise++;
-      return Promise.resolve(wise());
+      return wise(init);
     }
     calls.frankfurter++;
-    return Promise.resolve(frankfurter());
+    return frankfurter(init);
   };
-  return { calls, fetch: fetchImpl };
+  return { calls, requests, fetch: fetchImpl };
 }
 
 const ok = (body: unknown) => new Response(JSON.stringify(body));
 const wiseRate = (rate: number) => () => ok([{ rate, source: 'USD', target: 'MYR' }]);
 const ecbRate = (rate: number) => () => ok({ base: 'USD', rates: { MYR: rate } });
 const down = () => new Response('down', { status: 500 });
+const raw = (body: string) => () => new Response(body);
+const rejected = () => Promise.reject(new TypeError('fetch failed'));
+const timedOut = () => Promise.reject(new DOMException('timed out', 'TimeoutError'));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/** getRate with no cache and a fixed clock, keeping provider errors out of the output */
+const rateFrom = (s: ReturnType<typeof services>, prefer?: 'wise' | 'ecb') => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  return getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', {
+    deps: { fetch: s.fetch, cache: null, now: () => 1 },
+    prefer,
+  });
+};
+
+// Each is an unusable answer, or no answer, from a service
+const unusable: [string, Answer][] = [
+  ['an error status', down],
+  ['a rejected request', rejected],
+  ['a timed-out request', timedOut],
+  ['a body that is not JSON', raw('<html>oops</html>')],
+  ['JSON null', raw('null')],
+];
+const badWise: [string, Answer][] = [
+  ...unusable,
+  ['a zero rate', wiseRate(0)],
+  ['a negative rate', wiseRate(-4.2)],
+  ['an infinite rate', raw('[{"rate":1e999}]')],
+  ['a rate as a string', () => ok([{ rate: '4.2' }])],
+  ['a null rate', () => ok([{ rate: null }])],
+  ['no rate', () => ok([{ source: 'USD', target: 'MYR' }])],
+  ['an empty list', () => ok([])],
+  ['an object instead of a list', () => ok({ rate: 4.2 })],
+];
+const badEcb: [string, Answer][] = [
+  ...unusable,
+  ['a currency it does not cover (404)', () => new Response('', { status: 404 })],
+  ['a currency it does not cover (422)', () => new Response('', { status: 422 })],
+  ['a zero rate', ecbRate(0)],
+  ['a negative rate', ecbRate(-4.1)],
+  ['an infinite rate', raw('{"rates":{"MYR":1e999}}')],
+  ['a rate as a string', () => ok({ rates: { MYR: '4.1' } })],
+  ['no rate for the currency', () => ok({ rates: { SGD: 1.3 } })],
+  ['no rates at all', () => ok({ base: 'USD' })],
+  ['rates as null', () => ok({ rates: null })],
+];
 
 describe('getRate', () => {
   it('uses Wise when there is a token', async () => {
@@ -95,9 +152,8 @@ describe('getRate', () => {
     now = 5 * 60 * 60 * 1000;
     const outage = services(down, down);
     expect(
-      (await getRate({}, 'USD', 'MYR', { deps: { fetch: outage.fetch, cache, now: () => now } }))
-        .rate,
-    ).toBe(4.1);
+      await getRate({}, 'USD', 'MYR', { deps: { fetch: outage.fetch, cache, now: () => now } }),
+    ).toEqual({ rate: 4.1, source: 'frankfurter', fetchedAt: 0 });
     await expect(
       getRate({}, 'USD', 'SGD', { deps: { fetch: outage.fetch, cache, now: () => now } }),
     ).rejects.toBeInstanceOf(RatesUnavailable);
@@ -148,6 +204,85 @@ describe('getRate', () => {
       prefer: 'ecb',
     });
     expect(fallback.source).toBe('wise');
+  });
+
+  it('tells Cloudflare to keep each copy for a day', async () => {
+    const cache = memoryCache();
+    const s = services(wiseRate(4.2), ecbRate(4.1));
+    await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', {
+      deps: { fetch: s.fetch, cache, now: () => 1 },
+    });
+    expect(cache.keptFor()).toEqual([`max-age=${24 * 60 * 60}`]);
+  });
+
+  it.each(badWise)('falls back to the ECB when Wise answers with %s', async (_name, wise) => {
+    const s = services(wise, ecbRate(4.1));
+    expect(await rateFrom(s)).toEqual({ rate: 4.1, source: 'frankfurter', fetchedAt: 1 });
+    expect(s.calls).toEqual({ wise: 1, frankfurter: 1 });
+  });
+
+  it.each(badEcb)('falls back to Wise when the ECB answers with %s', async (_name, ecb) => {
+    const s = services(wiseRate(4.2), ecb);
+    expect(await rateFrom(s, 'ecb')).toEqual({ rate: 4.2, source: 'wise', fetchedAt: 1 });
+    expect(s.calls).toEqual({ wise: 1, frankfurter: 1 });
+  });
+
+  it('fails with RatesUnavailable when neither service gives a usable rate', async () => {
+    for (const [, wise] of badWise) {
+      for (const [, ecb] of badEcb) {
+        await expect(rateFrom(services(wise, ecb))).rejects.toBeInstanceOf(RatesUnavailable);
+      }
+    }
+  });
+
+  it('gives up on a service that does not answer in 4 seconds', async () => {
+    // Stands in for the timeout so the test needn't wait: the signal fires at once
+    const timeout = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation(() => AbortSignal.abort(new DOMException('timed out', 'TimeoutError')));
+    const hangs: Answer = (init) =>
+      new Promise((_, reject) => {
+        const signal = init?.signal;
+        if (signal?.aborted) reject(signal.reason as Error);
+        signal?.addEventListener('abort', () => reject(signal.reason as Error));
+      });
+    const s = services(hangs, ecbRate(4.1));
+    expect(await rateFrom(s)).toEqual({ rate: 4.1, source: 'frankfurter', fetchedAt: 1 });
+    expect(timeout.mock.calls).toEqual([[4000], [4000]]);
+    // Each request carries the signal made for it
+    s.requests.forEach((r, n) => expect(r.init?.signal).toBe(timeout.mock.results[n].value));
+  });
+
+  it('asks each service for the pair, with the Wise token sent only to Wise', async () => {
+    const s = services(down, ecbRate(4.1));
+    await rateFrom(s);
+    const [wise, ecb] = s.requests;
+    const wiseUrl = new URL(wise.url);
+    expect(wiseUrl.origin + wiseUrl.pathname).toBe('https://api.wise.com/v1/rates');
+    expect(Object.fromEntries(wiseUrl.searchParams)).toEqual({ source: 'USD', target: 'MYR' });
+    expect(new Headers(wise.init?.headers).get('Authorization')).toBe('Bearer t');
+    expect(wise.init?.signal).toBeInstanceOf(AbortSignal);
+
+    const ecbUrl = new URL(ecb.url);
+    expect(ecbUrl.origin + ecbUrl.pathname).toBe('https://api.frankfurter.dev/v1/latest');
+    expect(Object.fromEntries(ecbUrl.searchParams)).toEqual({ base: 'USD', symbols: 'MYR' });
+    expect(new Headers(ecb.init?.headers).has('Authorization')).toBe(false);
+    expect(ecb.init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('asks the services at the addresses given in the environment', async () => {
+    const s = services(down, ecbRate(4.1));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await getRate(
+      { WISE_TOKEN: 't', WISE_BASE: 'http://wise.test', FRANKFURTER_BASE: 'http://ecb.test' },
+      'USD',
+      'MYR',
+      { deps: { fetch: s.fetch, cache: null, now: () => 1 } },
+    );
+    expect(s.requests.map((r) => r.url)).toEqual([
+      'http://wise.test/v1/rates?source=USD&target=MYR',
+      'http://ecb.test/v1/latest?base=USD&symbols=MYR',
+    ]);
   });
 
   it('still returns a fetched rate when keeping a copy of it fails', async () => {
