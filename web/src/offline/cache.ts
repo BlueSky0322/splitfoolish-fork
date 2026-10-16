@@ -9,9 +9,15 @@ import { quietly } from '../utils/quietly';
 
 /** The page that was open last, reopened on a fresh start (see hooks/useRoute) */
 export const LAST_PAGE_KEY = 'splitfoolish:lastPage';
-const LAST_EMAIL_KEY = 'splitfoolish:lastEmail';
+/** Who last signed in on this device, assumed while the server can't say */
+export const LAST_EMAIL_KEY = 'splitfoolish:lastEmail';
 /** The signed-in email in IndexedDB, also read by public/sw.js (outbox.test.ts checks they match) */
 export const SW_USER_KEY = 'sf-user';
+/**
+ * Marks the page when the service worker opened it from the copy it keeps, because the
+ * server didn't send it in time (OPENED_FROM_DEVICE in public/sw.js)
+ */
+export const OPENED_FROM_DEVICE = 'sf-opened-from-device';
 /** Pictures the service worker keeps (IMAGE_CACHE in public/sw.js) */
 export const IMAGE_CACHE = 'splitfoolish-images-v1';
 
@@ -110,6 +116,13 @@ export function assumeLastUser(): string | null {
   if (email) confirmCacheUser(email);
   return email;
 }
+
+/**
+ * The service worker opened this page from the copy it keeps, as the server didn't send
+ * it in time: the connection is down or slow, or the server is failing
+ */
+export const openedFromDevice = () =>
+  document.querySelector(`meta[name="${OPENED_FROM_DEVICE}"]`) != null;
 
 /** Empties this device's cache, which is then nobody's until setCacheUser */
 export async function clearCache(): Promise<void> {

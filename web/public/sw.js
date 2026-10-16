@@ -1,7 +1,13 @@
 // Keeps the app on the device so it starts fast, opens offline, installs as an app,
 // and doesn't download pictures or fonts again:
-// - The page itself comes from the network when there is one, and from the copy kept
-//   here when there isn't, so the app opens offline.
+// - The page itself comes from the network when it answers within a few seconds, and
+//   from the copy kept here when it doesn't, fails, or the server is in trouble, so the
+//   app opens offline and on a bad connection. Signing in (Cloudflare Access) is left
+//   to the network.
+// - The kept page is only replaced once every built file it needs is kept too, along
+//   with what the app offers offline but loads later (sharing an image, exporting), as
+//   the build lists them in /precache.json. Built files of the newest two versions are
+//   kept, so a tab still open on the older one can load what it needs; older ones go.
 // - Built files, fonts and images never change once made (built files have content
 //   hashes in their names, a profile picture URL names its version, a photo never
 //   changes once added, and a changed font in /fonts gets a new name), so they're
@@ -16,7 +22,16 @@ const IMAGE_CACHE = 'splitfoolish-images-v1';
 const FONTS = 'splitfoolish-fonts-v1';
 const KEEP = [SHELL, ASSETS, IMAGE_CACHE, FONTS];
 
+/** Every built file the app needs offline, written by the build (web/build/precache.ts) */
+const PRECACHE_LIST = '/precache.json';
+/** Kept in SHELL beside the page: which built files it and the page before it need */
+const SHELL_FILES = '/shell-files';
+/** How long a page may take to come before the kept one is shown instead */
+const PAGE_WAIT_MS = 3000;
+
 // Shared with the app, which can't be imported here: keep each the same as its twin
+/** OPENED_FROM_DEVICE in web/src/offline/cache.ts */
+const OPENED_FROM_DEVICE = 'sf-opened-from-device';
 /** SYNC_TAG in web/src/offline/outbox.ts */
 const SYNC_TAG = 'sf-outbox';
 /** OUTBOX_PREFIX and LOCK_PREFIX in web/src/offline/outbox.ts; CREATE_PREFIX in pending-creates.ts */
@@ -52,20 +67,106 @@ const isPage = (response) =>
   !response.redirected &&
   (response.headers.get('Content-Type') ?? '').startsWith('text/html');
 
-/** Keeps the page and the built files it starts with, so the app opens offline */
-async function keepShell(response) {
+/**
+ * The server, or something in the way, failing to send the page: better shown the kept
+ * one. A sign-in redirect or a refusal (4xx) still goes to the browser, so Access can
+ * ask them to sign in again.
+ */
+const isBroken = (response) =>
+  response.status >= 500 ||
+  (response.ok &&
+    !response.redirected &&
+    !(response.headers.get('Content-Type') ?? '').startsWith('text/html'));
+
+/** The built files a page loads as it starts */
+const filesOf = (html) => [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+
+const sameFiles = (a, b) => a.length === b.length && a.every((file) => b.includes(file));
+
+/** A built file, not a sign-in page or an error sent in its place */
+async function fetchFile(file) {
+  const res = await fetch(file);
+  if (!res.ok || res.type !== 'basic' || res.redirected) {
+    throw new Error(`${file} could not be kept (${res.status})`);
+  }
+  return res;
+}
+
+/**
+ * The build's list of every built file the app needs offline, or null when this build
+ * has none (one from before there was a list). Not reaching it fails, to try again later.
+ */
+async function precacheList() {
+  const res = await fetch(PRECACHE_LIST, { cache: 'no-cache' });
+  if (res.status >= 500 || res.redirected || res.type !== 'basic') {
+    throw new Error(`The list of files could not be read (${res.status})`);
+  }
+  const list = res.ok ? await res.json().catch(() => null) : null;
+  return Array.isArray(list) && list.every((f) => typeof f === 'string') ? list : null;
+}
+
+/** Which built files the kept page and the one before it need, as kept beside it */
+async function readRecord(shell) {
+  const record = await shell
+    .match(SHELL_FILES)
+    .then((r) => r?.json())
+    .catch(() => null);
+  return ['page', 'files', 'previous'].every((key) => Array.isArray(record?.[key])) ? record : null;
+}
+
+/**
+ * Keeps a page that came from the network, with every built file it needs. The page
+ * kept before stays until all of them are kept, so stopping halfway (the connection
+ * dropping, the browser closing the worker) still leaves a page that opens offline.
+ */
+async function secureShell(response) {
   const html = await response.clone().text();
   const shell = await caches.open(SHELL);
-  await shell.put('/', response.clone());
   const assets = await caches.open(ASSETS);
-  const files = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+  const page = filesOf(html);
+  const kept = await shell.match('/');
+  const keptHtml = kept ? await kept.text() : null;
+  const record = await readRecord(shell);
+  // Kept already, with its files
+  if (keptHtml === html && record != null && sameFiles(record.page, page)) return;
+
+  const list = await precacheList();
+  // A list from another version (a deploy landing in between): try again next time
+  if (list != null && !page.every((file) => list.includes(file))) {
+    throw new Error('The page and the list of its files are from different versions');
+  }
+  const files = list ?? page;
   await Promise.all(
     files.map(async (file) => {
-      if (await assets.match(file)) return;
-      const res = await fetch(file);
-      if (res.ok && res.type === 'basic') await assets.put(file, res);
+      if (!(await assets.match(file))) await assets.put(file, await fetchFile(file));
     }),
   );
+
+  // What the page kept until now needs, for tabs still open on it
+  let previous = keptHtml == null ? [] : filesOf(keptHtml);
+  if (record != null) previous = sameFiles(record.page, page) ? record.previous : record.files;
+  await shell.put('/', response);
+  await shell.put(
+    SHELL_FILES,
+    new Response(JSON.stringify({ page, files, previous }), {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+
+  // Built files neither version needs: from older versions, or fetched along the way
+  const wanted = new Set([...files, ...previous]);
+  for (const request of await assets.keys()) {
+    if (!wanted.has(new URL(request.url).pathname)) await assets.delete(request);
+  }
+}
+
+// One page at a time, so two tabs opening at once don't interleave their updates
+let keeping = Promise.resolve();
+/** Keeps the page (a response no one else reads) and its files, after any being kept */
+function keepShell(response) {
+  const done = keeping.then(() => secureShell(response));
+  keeping = done.catch(() => undefined);
+  return done;
 }
 
 self.addEventListener('install', (event) => {
@@ -98,17 +199,39 @@ async function cacheFirst(cacheName, request, accept) {
   return response;
 }
 
-async function page(event) {
-  try {
-    const response = await fetch(event.request);
-    if (isPage(response)) event.waitUntil(keepShell(response).catch(() => undefined));
-    return response;
-  } catch (err) {
-    // Offline: the app is the same page whatever the address
-    const cached = await caches.match('/', { cacheName: SHELL });
-    if (cached) return cached;
-    throw err;
-  }
+/**
+ * The kept page, marked so the app knows it opened without the server and doesn't wait
+ * long on it (openedFromDevice in web/src/offline/cache.ts)
+ */
+async function fromDevice(kept) {
+  const html = (await kept.text()).replace(
+    /<head[^>]*>/i,
+    (head) => `${head}<meta name="${OPENED_FROM_DEVICE}" content="true">`,
+  );
+  const headers = new Headers(kept.headers);
+  headers.delete('Content-Length');
+  return new Response(html, { status: kept.status, statusText: kept.statusText, headers });
+}
+
+const wait = (ms) => new Promise((resolve) => setTimeout(() => resolve(null), ms));
+
+function page(event) {
+  const network = fetch(event.request);
+  // A good page is kept, even one that comes too late to be shown. Copied here, first,
+  // before the browser reads it.
+  event.waitUntil(
+    network.then((res) => (isPage(res) ? keepShell(res.clone()) : undefined)).catch(() => {}),
+  );
+  return pageOrKept(network);
+}
+
+async function pageOrKept(network) {
+  const kept = await (await caches.open(SHELL)).match('/');
+  // Nothing kept yet: whatever the network says, however long it takes
+  if (kept == null) return network;
+  // Offline, slow, or the server failing: the app is the same page whatever the address
+  const answer = await Promise.race([network, wait(PAGE_WAIT_MS)]).catch(() => null);
+  return answer != null && !isBroken(answer) ? answer : fromDevice(kept);
 }
 
 self.addEventListener('fetch', (event) => {
@@ -121,7 +244,8 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-  if (url.origin !== self.location.origin) return;
+  // Signing in and out with Cloudflare Access is left to the browser
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/cdn-cgi/')) return;
 
   if (event.request.mode === 'navigate') {
     event.respondWith(page(event));
