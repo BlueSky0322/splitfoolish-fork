@@ -18,6 +18,21 @@ const hex = () => randomBytes(8).toString('hex');
 const READ = 'splits:read';
 const WRITE = 'splits:write';
 const REDIRECT = 'http://127.0.0.1:9/callback';
+/** Every tool the server offers, in name order */
+const TOOLS = [
+  'add_expense',
+  'add_person',
+  'add_photo',
+  'create_split',
+  'get_photo',
+  'get_split',
+  'list_splits',
+  'remove_expense',
+  'rename_person',
+  'route_payments',
+  'set_expense_date',
+  'update_expense',
+];
 
 beforeAll(async () => {
   api = await startLocalWorker();
@@ -229,7 +244,7 @@ describe('signing in', () => {
     });
     expect(refreshed.status).toBe(200);
     const client = await connect(refreshed.data.access_token);
-    expect((await client.listTools()).tools).toHaveLength(4);
+    expect((await client.listTools()).tools).toHaveLength(TOOLS.length);
 
     const revocation = await fetch(`${api.base}/oauth/token`, {
       method: 'POST',
@@ -252,15 +267,14 @@ describe('the tools', () => {
     const client = await connect(access);
 
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual([
-      'add_expense',
-      'get_split',
-      'list_splits',
-      'update_expense',
-    ]);
+    expect(tools.map((t) => t.name).sort()).toEqual(TOOLS);
     const add = tools.find((t) => t.name === 'add_expense')!;
     expect(add.inputSchema.required).toEqual(
-      expect.arrayContaining(['splitId', 'requestId', 'currency', 'name', 'cost', 'payerId']),
+      expect.arrayContaining(['splitId', 'requestId', 'currency', 'name', 'payerId']),
+    );
+    // One of cost or paidIn, checked when it's called
+    expect(Object.keys(add.inputSchema.properties ?? {})).toEqual(
+      expect.arrayContaining(['cost', 'paidIn', 'date']),
     );
     expect(add.outputSchema?.properties).toHaveProperty('replayed');
 
@@ -312,6 +326,7 @@ describe('the tools', () => {
       'expenses',
       'nextOffset',
       'people',
+      'photos',
       'split',
       'transfers',
     ]);
@@ -360,7 +375,7 @@ describe('the tools', () => {
         .error?.code,
     ).toBe('currency_mismatch');
 
-    // Paid in another currency: left to the app rather than losing what was typed
+    // Paid in another currency: an edit that sends no amounts keeps them, and the rate
     const foreign = hex();
     await api.call(alice, 'POST', `/api/splits/${split.id}/changes`, {
       changes: [
@@ -385,9 +400,455 @@ describe('the tools', () => {
           currency: 'MYR',
           name: 'Cab',
         })
+      ).status,
+    ).toBe('saved');
+    expect(await itemsOf(alice, split.id)).toEqual([
+      expect.objectContaining({
+        name: 'Cab',
+        cost: 20,
+        original: expect.objectContaining({ currency: 'USD', amount: 5, rate: 4 }),
+      }),
+    ]);
+  });
+
+  it('take expenses paid in another currency, converted as the app converts them', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const code = api.rates.newCurrency();
+    api.rates.set(code, 'MYR', 0.5);
+    const base = {
+      splitId: split.id,
+      currency: 'MYR',
+      payerId: split.bob,
+      participantIds: [split.bob, split.cat],
+    };
+    const expenseOf = async (expenseId: string) =>
+      (await tool(client, 'get_split', { splitId: split.id })).expenses.find(
+        (e: { id: string }) => e.id === expenseId,
+      );
+
+    // Today's rate, fetched by the server
+    const live = await tool(client, 'add_expense', {
+      ...base,
+      requestId: 'fx-live-0001',
+      name: 'Market',
+      paidIn: { currency: code, amount: 30 },
+    });
+    expect(await expenseOf(live.expenseId)).toMatchObject({
+      cost: 15,
+      costCents: 1500,
+      original: { currency: code, amount: 30, rate: 0.5 },
+    });
+    // A rate given, and exact amounts in the currency paid in
+    const typed = await tool(client, 'add_expense', {
+      ...base,
+      requestId: 'fx-typed-001',
+      name: 'Ferry',
+      splitMode: 'exact',
+      paidIn: { currency: 'USD', amount: 10, rate: 4.5, exact: { [split.bob]: 6, [split.cat]: 4 } },
+    });
+    expect(await expenseOf(typed.expenseId)).toMatchObject({
+      cost: 45,
+      exact: { [split.bob]: 27, [split.cat]: 18 },
+      original: { currency: 'USD', amount: 10, rate: 4.5 },
+    });
+
+    const edit = (requestId: string, fields: Record<string, unknown>) =>
+      tool(client, 'update_expense', {
+        splitId: split.id,
+        expenseId: typed.expenseId,
+        requestId,
+        currency: 'MYR',
+        ...fields,
+      });
+    expect(
+      (
+        await edit('fx-edit-0001', {
+          paidIn: {
+            currency: 'USD',
+            amount: 20,
+            rate: 4.5,
+            exact: { [split.bob]: 12, [split.cat]: 8 },
+          },
+        })
+      ).status,
+    ).toBe('saved');
+    expect(await expenseOf(typed.expenseId)).toMatchObject({ cost: 90 });
+    // Exact amounts in the split's currency can't go on one paid in another
+    expect(
+      (await edit('fx-edit-0002', { exact: { [split.bob]: 50, [split.cat]: 40 } })).error,
+    ).toEqual({
+      code: 'invalid_input',
+      message: 'This expense is in USD: send its exact amounts in paidIn.',
+      retryable: false,
+    });
+    // A cost puts it in the split's currency
+    await edit('fx-edit-0003', { cost: 50, splitMode: 'equal' });
+    expect(await expenseOf(typed.expenseId)).toMatchObject({ cost: 50, original: null });
+
+    // Amounts in both currencies, or the split's own as paidIn, are refused
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          ...base,
+          requestId: 'fx-both-0001',
+          name: 'Both',
+          cost: 5,
+          paidIn: { currency: 'USD', amount: 1 },
+        })
+      ).error?.code,
+    ).toBe('invalid_input');
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          ...base,
+          requestId: 'fx-same-0001',
+          name: 'Same',
+          paidIn: { currency: 'MYR', amount: 1 },
+        })
+      ).error?.code,
+    ).toBe('invalid_input');
+    expect(await itemsOf(alice, split.id)).toHaveLength(2);
+  });
+
+  it('date an expense when it was paid, and remove one, once', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const fuel = {
+      splitId: split.id,
+      currency: 'MYR',
+      name: 'Fuel',
+      cost: 40,
+      payerId: split.bob,
+      participantIds: [split.bob, split.cat],
+    };
+
+    // A date alone is noon UTC, so it reads as that day wherever the split is opened
+    const { expenseId } = await tool(client, 'add_expense', {
+      ...fuel,
+      requestId: 'fuel-dated-1',
+      date: '2026-01-15',
+    });
+    expect((await itemsOf(alice, split.id))[0].createdAt).toBe(Date.UTC(2026, 0, 15, 12));
+    // A date that hasn't come is refused, not quietly made today
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          ...fuel,
+          requestId: 'fuel-later-1',
+          date: '2999-01-01',
+        })
+      ).error?.code,
+    ).toBe('invalid_input');
+    expect(await itemsOf(alice, split.id)).toHaveLength(1);
+
+    const redate = (requestId: string, date: string) =>
+      tool(client, 'set_expense_date', { splitId: split.id, expenseId, requestId, date });
+    expect(await redate('fuel-redate-1', '2025-12-31T20:00:00+08:00')).toMatchObject({
+      status: 'saved',
+      expenseId,
+      replayed: false,
+    });
+    expect((await itemsOf(alice, split.id))[0].createdAt).toBe(Date.UTC(2025, 11, 31, 12));
+    expect((await redate('fuel-redate-2', '2999-01-01')).error).toEqual({
+      code: 'refused',
+      message: 'Pick a date that has already come',
+      retryable: false,
+    });
+
+    const remove = (requestId: string) =>
+      tool(client, 'remove_expense', { splitId: split.id, expenseId, requestId });
+    expect(await remove('fuel-remove-1')).toMatchObject({ status: 'saved', replayed: false });
+    expect(await itemsOf(alice, split.id)).toEqual([]);
+    // The answer was lost: the retry says it was done; a new request finds nothing to remove
+    expect(await remove('fuel-remove-1')).toMatchObject({ expenseId, replayed: true });
+    expect((await remove('fuel-remove-2')).error?.code).toBe('not_found');
+  });
+
+  it('add and rename people as the owner, and route payments through one of them', async () => {
+    const alice = person('alice');
+    const dave = person('dave');
+    const split = await trip(alice, dave);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const names = async () =>
+      (await tool(client, 'get_split', { splitId: split.id })).people.map(
+        (p: { name: string }) => p.name,
+      );
+
+    // Owner, Bob, Cat, and Dave, who joined through the share link
+    const before = await names();
+    const added = await tool(client, 'add_person', {
+      splitId: split.id,
+      requestId: 'eve-add-0001',
+      name: 'Eve',
+    });
+    expect(added).toMatchObject({ status: 'saved', replayed: false });
+    expect(
+      await tool(client, 'rename_person', {
+        splitId: split.id,
+        personId: added.personId,
+        requestId: 'eve-rename-1',
+        name: 'Evie',
+      }),
+    ).toMatchObject({ status: 'saved', personId: added.personId });
+    expect(await names()).toEqual([...before, 'Evie']);
+
+    // The bill's own rules: names are unique, and an account's name is its own
+    expect(
+      (
+        await tool(client, 'add_person', {
+          splitId: split.id,
+          requestId: 'bob-add-0001',
+          name: 'Bob',
+        })
+      ).error,
+    ).toEqual({ code: 'refused', message: 'Bob is already in this split', retryable: false });
+    expect(
+      (
+        await tool(client, 'rename_person', {
+          splitId: split.id,
+          personId: split.me,
+          requestId: 'me-rename-01',
+          name: 'Boss',
+        })
       ).error?.code,
     ).toBe('refused');
-    expect((await itemsOf(alice, split.id)).map((i) => i.name)).toEqual(['Taxi']);
+    expect(
+      (
+        await tool(client, 'rename_person', {
+          splitId: split.id,
+          personId: hex(),
+          requestId: 'nobody-ren-1',
+          name: 'Ghost',
+        })
+      ).error?.code,
+    ).toBe('not_found');
+    // Only the owner changes who is in the bill
+    const daves = await connect((await grant(dave, [READ, WRITE])).access);
+    expect(
+      (
+        await tool(daves, 'add_person', {
+          splitId: split.id,
+          requestId: 'fay-add-0001',
+          name: 'Fay',
+        })
+      ).error?.code,
+    ).toBe('forbidden');
+    expect(await names()).toEqual([...before, 'Evie']);
+
+    // Cat paid for four; routed through Bob, everyone settles with him
+    await tool(client, 'add_expense', {
+      splitId: split.id,
+      requestId: 'hotel-add-01',
+      currency: 'MYR',
+      name: 'Hotel',
+      cost: 40,
+      payerId: split.cat,
+      participantIds: [split.me, split.bob, split.cat, added.personId],
+    });
+    const route = (requestId: string, personId: string | null) =>
+      tool(client, 'route_payments', { splitId: split.id, requestId, personId });
+    expect(await route('route-bob-01', split.bob)).toMatchObject({ personId: split.bob });
+    const routed = await tool(client, 'get_split', { splitId: split.id });
+    expect(routed.split.routePaymentsThrough).toBe(split.bob);
+    expect(routed.transfers).toEqual(
+      expect.arrayContaining([
+        { fromId: split.me, toId: split.bob, amountCents: 1000 },
+        { fromId: added.personId, toId: split.bob, amountCents: 1000 },
+        { fromId: split.bob, toId: split.cat, amountCents: 3000 },
+      ]),
+    );
+    expect(routed.transfers).toHaveLength(3);
+    expect(await route('route-none-1', null)).toMatchObject({ personId: null });
+    expect(
+      (await tool(client, 'get_split', { splitId: split.id })).split.routePaymentsThrough,
+    ).toBeNull();
+    expect((await route('route-ghost1', hex())).error?.code).toBe('not_found');
+  });
+});
+
+describe('new splits', () => {
+  it('create a split with its people, once, however often it is sent', async () => {
+    const alice = person('alice');
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const bali = {
+      requestId: 'bali-create1',
+      name: 'Bali',
+      currency: 'IDR',
+      people: ['Bob', 'Cat'],
+    };
+
+    const made = await tool(client, 'create_split', bali);
+    expect(made).toMatchObject({ status: 'saved', actor: alice, replayed: false });
+    expect(await tool(client, 'create_split', bali)).toEqual({ ...made, replayed: true });
+    const together = await Promise.all(
+      [1, 2, 3].map(() => tool(client, 'create_split', { ...bali, requestId: 'bali-create2' })),
+    );
+    expect(new Set(together.map((t) => t.splitId)).size).toBe(1);
+    expect(together.filter((t) => t.replayed === false)).toHaveLength(1);
+    expect((await tool(client, 'list_splits', {})).splits).toHaveLength(2);
+
+    const read = await tool(client, 'get_split', { splitId: made.splitId });
+    expect(read.split).toMatchObject({ name: 'Bali', currency: 'IDR', role: 'owner' });
+    // You come first, linked to your account; the others are guests
+    expect(read.people.map((p: { name: string; isYou: boolean }) => [p.name, p.isYou])).toEqual([
+      [alice.split('@')[0], true],
+      ['Bob', false],
+      ['Cat', false],
+    ]);
+    // The app opens it as its owner, with the same people
+    const inApp = (await api.call(alice, 'GET', `/api/splits/${made.splitId}`)).data;
+    expect(inApp).toMatchObject({ role: 'owner', name: 'Bali' });
+    expect(inApp.people).toHaveLength(3);
+
+    expect((await tool(client, 'create_split', { ...bali, name: 'Lombok' })).error?.code).toBe(
+      'idempotency_conflict',
+    );
+  });
+
+  it('refuse names that repeat before making anything, and make one with no one in it', async () => {
+    const alice = person('alice');
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    expect(
+      (
+        await tool(client, 'create_split', {
+          requestId: 'twice-bob-01',
+          name: 'Trip',
+          currency: 'MYR',
+          people: ['Bob', 'Bob'],
+        })
+      ).error,
+    ).toEqual({
+      code: 'invalid_input',
+      message: 'Bob is named twice; names in a split are unique.',
+      retryable: false,
+    });
+    expect((await tool(client, 'list_splits', {})).splits).toEqual([]);
+
+    const empty = await tool(client, 'create_split', {
+      requestId: 'empty-trip-1',
+      name: 'Later',
+      currency: 'MYR',
+      includeMe: false,
+    });
+    expect((await tool(client, 'get_split', { splitId: empty.splitId })).people).toEqual([]);
+  });
+});
+
+describe('photos', () => {
+  // A 1x1 PNG
+  const PNG =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const OTHER_PNG =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('add a receipt to an expense and a photo of the split, once, and look at them', async () => {
+    const alice = person('alice');
+    const stranger = person('stranger');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const { expenseId } = await tool(client, 'add_expense', {
+      splitId: split.id,
+      requestId: 'cafe-add-001',
+      currency: 'MYR',
+      name: 'Cafe',
+      cost: 18,
+      payerId: split.bob,
+      participantIds: [split.bob, split.cat],
+    });
+
+    const receipt = {
+      splitId: split.id,
+      expenseId,
+      requestId: 'cafe-photo-1',
+      image: `data:image/png;base64,${PNG}`,
+    };
+    const first = await tool(client, 'add_photo', receipt);
+    expect(first).toMatchObject({ status: 'saved', expenseId, actor: alice, replayed: false });
+    // The answer was lost: sent again, and three times at once, it is still one photo
+    expect(await tool(client, 'add_photo', receipt)).toEqual({ ...first, replayed: true });
+    const together = await Promise.all(
+      [1, 2, 3].map(() => tool(client, 'add_photo', { ...receipt, requestId: 'cafe-photo-2' })),
+    );
+    expect(new Set(together.map((t) => t.photoId)).size).toBe(1);
+    expect(together.filter((t) => t.replayed === false)).toHaveLength(1);
+    // The same request id with another image is refused
+    expect((await tool(client, 'add_photo', { ...receipt, image: OTHER_PNG })).error?.code).toBe(
+      'idempotency_conflict',
+    );
+
+    const ofSplit = await tool(client, 'add_photo', {
+      splitId: split.id,
+      requestId: 'trip-photo-1',
+      image: OTHER_PNG,
+    });
+    expect(ofSplit).toMatchObject({ status: 'saved', expenseId: null });
+
+    const read = await tool(client, 'get_split', { splitId: split.id });
+    expect(read.expenses[0].photos.map((p: { id: string }) => p.id).sort()).toEqual(
+      [first.photoId, together[0].photoId].sort(),
+    );
+    expect(read.expenses[0].photos[0]).toMatchObject({
+      contentType: 'image/png',
+      addedByYou: true,
+    });
+    expect(read.photos.map((p: { id: string }) => p.id)).toEqual([ofSplit.photoId]);
+    // The app shows the same photos
+    const inApp = (await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments;
+    expect(inApp).toHaveLength(3);
+
+    const look = await client.callTool({
+      name: 'get_photo',
+      arguments: { splitId: split.id, photoId: first.photoId },
+    });
+    expect(look.content).toEqual([{ type: 'image', data: PNG, mimeType: 'image/png' }]);
+    const strangers = await connect((await grant(stranger, [READ, WRITE])).access);
+    expect(
+      (await tool(strangers, 'get_photo', { splitId: split.id, photoId: first.photoId })).error
+        ?.code,
+    ).toBe('not_found');
+
+    // Removing the expense takes its receipts with it
+    await tool(client, 'remove_expense', {
+      splitId: split.id,
+      expenseId,
+      requestId: 'cafe-remove1',
+    });
+    expect((await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments).toEqual([
+      expect.objectContaining({ id: ofSplit.photoId, itemId: null }),
+    ]);
+  });
+
+  it('refuse what is not a photo, and an expense that is not there', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    expect(
+      (
+        await tool(client, 'add_photo', {
+          splitId: split.id,
+          requestId: 'text-photo-1',
+          image: btoa('hello, not a photo'),
+        })
+      ).error,
+    ).toEqual({
+      code: 'invalid_input',
+      message: 'Only JPEG, PNG and WebP photos are supported',
+      retryable: false,
+    });
+    expect(
+      (
+        await tool(client, 'add_photo', {
+          splitId: split.id,
+          expenseId: hex(),
+          requestId: 'ghost-photo1',
+          image: PNG,
+        })
+      ).error?.code,
+    ).toBe('not_found');
+    expect((await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments).toEqual([]);
   });
 });
 

@@ -30,7 +30,11 @@ export async function fingerprint(value: unknown) {
               .map((k) => [k, canonical((v as Record<string, unknown>)[k])]),
           )
         : v;
-  const bytes = new TextEncoder().encode(JSON.stringify(canonical(value)));
+  return hashBytes(new TextEncoder().encode(JSON.stringify(canonical(value))));
+}
+
+/** SHA-256 of some bytes, in hex: a photo's fingerprint, say */
+export async function hashBytes(bytes: Uint8Array) {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }

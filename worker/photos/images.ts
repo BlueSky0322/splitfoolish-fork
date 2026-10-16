@@ -16,11 +16,20 @@ function detectImageType(bytes: Uint8Array): string | null {
   return null;
 }
 
+export interface Image {
+  bytes: Uint8Array;
+  contentType: string;
+}
+
 /** The image sent with a request, checked; or the answer refusing it */
 export async function readImage(req: Request, maxBytes: number) {
   const declared = Number(req.headers.get('Content-Length') ?? 0);
   if (declared > maxBytes) return fail('That photo is too large', 413);
-  const bytes = new Uint8Array(await req.arrayBuffer());
+  return checkImage(new Uint8Array(await req.arrayBuffer()), maxBytes);
+}
+
+/** An image's bytes, checked; or the answer refusing them */
+export function checkImage(bytes: Uint8Array, maxBytes: number): Image | Response {
   if (bytes.length > maxBytes) return fail('That photo is too large', 413);
   if (bytes.length === 0) return fail('No photo was sent', 400);
   const contentType = detectImageType(bytes);
