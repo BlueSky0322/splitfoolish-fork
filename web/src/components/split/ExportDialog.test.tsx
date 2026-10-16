@@ -108,34 +108,25 @@ async function openExportOnPhone(server = fakeServer(trip())) {
 }
 
 describe('exporting a split on a computer', () => {
-  test.each(['CSV', 'PDF'])(
-    '%s downloads, even where the browser has a share sheet for files',
-    async (kind) => {
+  test.each([
+    { kind: 'CSV', extension: 'csv', type: 'text/csv' },
+    { kind: 'PDF', extension: 'pdf', type: 'application/pdf' },
+  ])(
+    '$kind downloads, even where the browser has a share sheet for files',
+    async ({ kind, extension, type }) => {
       // Windows and macOS browsers can share files, but their sheet only offers to copy
       const { saved, shared } = watchFiles(() => Promise.resolve());
       const { user, dialog } = await openExport();
       await user.click(dialog.getByRole('button', { name: kind }));
 
       await waitFor(() => expect(saved).toHaveLength(1), { timeout: 10_000 });
-      expect(saved[0].name).toMatch(new RegExp(`\\.${kind.toLowerCase()}$`));
+      expect(saved[0].name).toBe(`trip-${isoDate(Date.now())}.${extension}`);
+      expect(saved[0].type).toBe(type);
       expect(shared).toEqual([]);
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Export' })).toBeNull());
     },
     20_000,
   );
-
-  test('CSV downloads the split as a spreadsheet, and the dialog closes', async () => {
-    const { saved, shared } = watchFiles();
-    const { user, dialog } = await openExport();
-    await user.click(dialog.getByRole('button', { name: 'CSV' }));
-
-    await waitFor(() => expect(saved).toHaveLength(1));
-    expect(shared).toEqual([]);
-    expect(saved[0].name).toBe(`trip-${isoDate(Date.now())}.csv`);
-    expect(saved[0].type).toBe('text/csv');
-    expect(await readFile(saved[0])).toBe(TRIP_CSV);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Export' })).toBeNull());
-  });
 
   test('PDF downloads a PDF written in the font from /fonts', async () => {
     const { saved } = watchFiles();
