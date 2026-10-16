@@ -8,8 +8,8 @@ import { URL as NodeURL, fileURLToPath } from 'node:url';
 import { cleanup, configure, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
-import type { MyInvite, Profile, SplitDetail, SplitSummary } from '@shared/api';
-import { DEFAULT_SETTINGS, MAX_CHANGES } from '@shared/api';
+import type { Attachment, MyInvite, Profile, SplitDetail, SplitSummary } from '@shared/api';
+import { DEFAULT_SETTINGS, MAX_CHANGES, MAX_PHOTO_BYTES } from '@shared/api';
 import { toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
@@ -121,8 +121,13 @@ export interface FakeServer {
   rates: Map<string, number>;
   /** Every batch of changes the app sent, by split */
   sent: { splitId: string; changes: Change[] }[];
-  /** The next save of the profile, a split's changes or its settings answers with this status */
-  failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join', number>>;
+  /** Every photo the app uploaded and the server kept, in the order they arrived */
+  uploads: { splitId: string; itemId: string | null; image: Blob }[];
+  /**
+   * The next save of the profile, a split's changes or its settings, or the next photo
+   * upload, answers with this status
+   */
+  failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join' | 'photo', number>>;
   /** Splits the signed-in account has archived */
   archived: Set<string>;
   /** Answers being held back until a test releases them (see holdNext) */
@@ -413,6 +418,38 @@ function answerNow(server: FakeServer) {
           : new Response('Not found', { status: 404 }),
       );
     }
+    // Adding a photo, as worker/photos.ts does: at most 300 to a split, a receipt only on
+    // an item that exists, and no larger than MAX_PHOTO_BYTES
+    const addPhoto = path.match(/^\/api\/splits\/([^/]+)\/attachments$/);
+    if (addPhoto && method === 'POST') {
+      const split = server.splits.get(addPhoto[1]);
+      if (split == null) return json({ error: 'Not found' }, 404);
+      const failure = failing('photo');
+      if (failure) return failure;
+      if (split.attachments.length >= 300) {
+        return json({ error: 'A split can have up to 300 photos' }, 409);
+      }
+      const itemId = url.searchParams.get('itemId');
+      if (itemId != null && !split.items.some((i) => i.id === itemId)) {
+        return json({ error: 'That item no longer exists' }, 404);
+      }
+      const image = init?.body;
+      if (!(image instanceof Blob) || image.size === 0) {
+        return json({ error: 'No photo was sent' }, 400);
+      }
+      if (image.size > MAX_PHOTO_BYTES) return json({ error: 'That photo is too large' }, 413);
+      server.uploads.push({ splitId: split.id, itemId, image });
+      const added: Attachment = {
+        id: `photo-${server.uploads.length}`,
+        itemId,
+        size: image.size,
+        contentType: 'image/jpeg',
+        uploadedBy: server.me.email,
+        createdAt: Date.now(),
+      };
+      split.attachments.push(added);
+      return json(added, 201);
+    }
     const removePhotos = path.match(/^\/api\/splits\/([^/]+)\/attachments\/remove$/);
     if (removePhotos && method === 'POST') {
       const split = server.splits.get(removePhotos[1]);
@@ -472,6 +509,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     invites: [],
     rates: new Map(),
     sent: [],
+    uploads: [],
     failNext: {},
     archived: new Set(),
     held: [],

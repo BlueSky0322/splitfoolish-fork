@@ -77,3 +77,16 @@
   justify-content: center;
   background: rgba(0, 0, 0, 0.35);
 }
+
+/* On a photo kept on this device until it can be uploaded */
+.waiting {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}

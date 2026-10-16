@@ -14,6 +14,7 @@ import {
   resumeCreates,
   whenCreated,
 } from './pending-creates';
+import { splitsWithQueuedPhotos } from './photo-queue';
 import { reportKept } from './storage-health';
 
 // Sending what was kept on this device while offline (splits made, changes to them):
@@ -66,14 +67,15 @@ export function flushOfflineChanges(): Promise<number> {
 }
 
 /**
- * How many splits have work on this device the server hasn't got yet (changes, or the
- * split itself), which signing out would lose
+ * How many splits have work on this device the server hasn't got yet (changes, photos,
+ * or the split itself), which signing out would lose
  */
 export async function countUnsentSplits(): Promise<number> {
   const unsent = new Set((await readPendingCreates()).map((c) => c.id));
   for (const id of await readOutboxIds()) {
     if ((await readOutbox(id)).length > 0) unsent.add(id);
   }
+  for (const id of await splitsWithQueuedPhotos()) unsent.add(id);
   return unsent.size;
 }
 

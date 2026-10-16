@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Loader, Portal, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Button, Portal, UnstyledButton } from '@mantine/core';
 import { Check, DownloadSimple, Trash, X } from '@phosphor-icons/react';
 import type { Attachment } from '@shared/api';
 import { useMemo, useRef, useState } from 'react';
@@ -13,6 +13,7 @@ import { useLongPress } from '../items/useItemSelection';
 import bar from '../items/ItemSelection.module.css';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './PhotosTab.module.css';
+import QueuedPhotoTile from './QueuedPhotoTile';
 import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 import type { PhotoSelection } from './usePhotoSelection';
 
@@ -69,7 +70,7 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
   const saving = usePhotoDownload(splitId, meta?.name ?? '', { zip: !useIsMobile() });
   const { items } = useSplitState().state;
   const [open, setOpen] = useState<number | null>(null);
-  const uploading = photos.uploading[''] ?? [];
+  const queued = photos.queuedOf(null);
 
   const all = useMemo(
     () => [...(meta?.attachments ?? [])].sort((a, b) => b.createdAt - a.createdAt),
@@ -151,19 +152,19 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
           </div>
         </Portal>
       )}
-      {uploading.length > 0 && (
+      {queued.length > 0 && (
         <div className={classes.grid}>
-          {uploading.map((file) => (
-            <div
-              key={`${file.name}-${file.lastModified}`}
+          {queued.map((photo) => (
+            <QueuedPhotoTile
+              key={photo.id}
+              photo={photo}
               className={classes.tile}
-            >
-              <Loader size="sm" />
-            </div>
+              onRemove={() => photos.removeQueued(photo)}
+            />
           ))}
         </div>
       )}
-      {all.length === 0 && uploading.length === 0 && (
+      {all.length === 0 && queued.length === 0 && (
         <p className="sf-muted text-sm text-center py-10">
           No photos yet. Add some of the trip here, or a receipt on its item.
         </p>

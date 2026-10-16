@@ -5,7 +5,7 @@ import { signOut } from '../../profile/ProfileContext';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 
 /**
- * Signs out, first asking if this device has changes the server hasn't got yet, since
+ * Signs out, first asking if this device has changes or photos the server hasn't got yet, since
  * signing out removes them. `askToSignOut()` starts; render `dialog` alongside.
  */
 export function useConfirmSignOut() {
@@ -29,9 +29,9 @@ export function useConfirmSignOut() {
     >
       <div className="flex flex-col gap-4">
         <p className="sf-muted text-sm">
-          {unsent === 1 ? 'A split has' : `${unsent} splits have`} changes that haven't reached the
-          server yet. Signing out removes them from this device. To keep them, stay signed in until
-          you're online and they're saved.
+          {unsent === 1 ? 'A split has' : `${unsent} splits have`} changes or photos that haven't
+          reached the server yet. Signing out removes them from this device. To keep them, stay
+          signed in until you're online and they're saved.
         </p>
         <div className="flex gap-2 justify-end">
           <Button

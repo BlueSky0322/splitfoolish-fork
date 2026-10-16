@@ -20,7 +20,7 @@ const OfflineNotice = ({ inline = false }: { inline?: boolean }) => {
       {keeping ? <CloudSlash size={16} /> : <WarningCircle size={16} />}
       {keeping
         ? "Offline. Changes are kept on this device and sync when you're back."
-        : "This device's storage is full or blocked. Keep the app open until your changes are saved."}
+        : "This device's storage is full or blocked. Keep the app open until your changes and photos are saved."}
     </div>
   );
 };

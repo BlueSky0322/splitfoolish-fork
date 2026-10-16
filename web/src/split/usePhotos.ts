@@ -1,10 +1,18 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { api } from '../api';
 import type { MetaChanges } from './state';
 import type { SplitMeta } from './state';
-import { shrinkImage } from '../utils/image';
 import type { Attachment } from '@shared/api';
-import { showError } from '../utils/notify';
+import {
+  type QueuedPhoto,
+  addPhotos,
+  openSplitPhotos,
+  queuedPhotos,
+  removeQueuedPhoto,
+  subscribeQueuedPhotos,
+} from '../offline/photo-queue';
+
+export type { QueuedPhoto };
 
 interface UsePhotosOptions {
   splitId: string;
@@ -14,45 +22,41 @@ interface UsePhotosOptions {
   whenSaved: () => Promise<void>;
 }
 
-// Receipt photos on items and photos of the whole split: shrinking, uploading and
-// removing them, keeping the split's list of photos in step
+const NONE: QueuedPhoto[] = [];
+
+// Receipt photos on items and photos of the whole split: adding them (through the
+// device's photo queue, offline/photo-queue.ts, so they survive going offline or the app
+// closing) and removing them, keeping the split's list of photos in step
 export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOptions) {
   const { addAttachment, changeMeta } = metaChanges;
-  // Photos on their way up, per item id ('' for the split itself), shown meanwhile
-  const [uploading, setUploading] = useState<Record<string, File[]>>({});
+  const all = useSyncExternalStore(subscribeQueuedPhotos, queuedPhotos);
 
-  const adding = (key: string, files: File[]) =>
-    setUploading((u) => ({ ...u, [key]: [...(u[key] ?? []), ...files] }));
-  const done = (key: string, file: File) =>
-    setUploading((u) => ({ ...u, [key]: (u[key] ?? []).filter((f) => f !== file) }));
+  // While the split is open, its photos waiting on the device show here and go when they
+  // can, each joining the split's photos once uploaded
+  useEffect(
+    () => openSplitPhotos(splitId, { whenSaved, onUploaded: addAttachment }),
+    [splitId, whenSaved, addAttachment],
+  );
+
+  // Photos still to upload, per item id ('' for the split itself), shown meanwhile
+  const queued = useMemo(() => {
+    const byItem: Record<string, QueuedPhoto[]> = {};
+    for (const photo of all) {
+      if (photo.splitId !== splitId) continue;
+      (byItem[photo.itemId ?? ''] ??= []).push(photo);
+    }
+    for (const list of Object.values(byItem)) list.sort((a, b) => a.createdAt - b.createdAt);
+    return byItem;
+  }, [all, splitId]);
+  const queuedOf = useCallback((itemId: string | null) => queued[itemId ?? ''] ?? NONE, [queued]);
 
   const upload = useCallback(
-    async (files: File[], itemId: string | null) => {
-      const key = itemId ?? '';
-      adding(key, files);
-      try {
-        await whenSaved();
-      } catch (err) {
-        files.forEach((f) => done(key, f));
-        showError(err, 'Could not save the item first');
-        return;
-      }
-      await Promise.all(
-        files.map(async (file) => {
-          try {
-            const photo = await shrinkImage(file);
-            const added = await api.uploadAttachment(splitId, photo, itemId);
-            addAttachment(added);
-          } catch (err) {
-            showError(err, 'Could not add that photo');
-          } finally {
-            done(key, file);
-          }
-        }),
-      );
-    },
-    [splitId, addAttachment, whenSaved],
+    (files: File[], itemId: string | null) => addPhotos(splitId, itemId, files),
+    [splitId],
   );
+
+  /** Removes a photo still waiting to upload; it was only ever on this device */
+  const removeQueued = useCallback((photo: QueuedPhoto) => void removeQueuedPhoto(photo.id), []);
 
   /** Removes them all at once: they go together, and come back together if that fails */
   const removeMany = useCallback(
@@ -72,5 +76,5 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
   const photosOf = (itemId: string | null) =>
     meta?.attachments.filter((a) => a.itemId === itemId) ?? [];
 
-  return { upload, remove, removeMany, photosOf, uploading };
+  return { upload, remove, removeMany, photosOf, queuedOf, removeQueued };
 }

@@ -133,9 +133,17 @@ export function assumeLastUser(): string | null {
 export const openedFromDevice = () =>
   document.querySelector(`meta[name="${OPENED_FROM_DEVICE}"]`) != null;
 
+// What else the page holds for the account, forgotten with the cache (photos still to
+// upload, say)
+const forgetters = new Set<() => void>();
+
+/** Runs `forget` whenever this device's cache is emptied: on signing out, or someone else signing in */
+export const onCacheCleared = (forget: () => void) => void forgetters.add(forget);
+
 /** Empties this device's cache, which is then nobody's until setCacheUser */
 export async function clearCache(): Promise<void> {
   user = null;
+  forgetters.forEach((forget) => forget());
   quietly(() => {
     localStorage.removeItem(LAST_EMAIL_KEY);
     // The page they had open is theirs too

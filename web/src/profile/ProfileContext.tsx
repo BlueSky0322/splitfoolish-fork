@@ -7,6 +7,7 @@ import { ApiError, api } from '../api';
 import { queryClient } from '../query-client';
 import { isOfflineFailure } from '../offline/outbox';
 import { forgetOfflineWork, syncOfflineChanges } from '../offline/sync';
+import { resumePhotoUploads } from '../offline/photo-queue';
 import { reloadMySplits } from '../my-splits/my-splits';
 import {
   assumeLastUser,
@@ -168,6 +169,8 @@ export function ProfileProvider({
         // now: start afresh as the person signed in
         if (shown != null && shown !== me.email) window.location.reload();
         syncOfflineChanges(() => void reloadMySplits());
+        // Photos picked offline, or before the app was last closed, are uploaded too
+        void resumePhotoUploads();
         void writeCache(ME_CACHE_KEY, me);
         return me;
       } catch (err) {
