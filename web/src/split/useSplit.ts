@@ -243,13 +243,19 @@ export function useSplit(splitId: string) {
     [dispatch, saves, metaChanges],
   );
 
-  // While the server converts the items into a new currency, fetch them until it's done
+  // While the server converts the items into a new currency, fetch them until it's done:
+  // only while the app is on screen, and straight away on coming back to it
   const converting = meta?.converting ?? false;
   useEffect(() => {
     if (!converting) return;
-    const timer = setInterval(() => void load().catch(backgroundLoadFailed), CONVERT_POLL_MS);
+    const poll = () => {
+      if (document.visibilityState === 'visible') void load().catch(backgroundLoadFailed);
+    };
+    const timer = setInterval(poll, CONVERT_POLL_MS);
+    document.addEventListener('visibilitychange', poll);
     return () => {
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', poll);
       // Done (or left): the sidebar and My splits show the converted totals
       void reloadMySplits();
     };

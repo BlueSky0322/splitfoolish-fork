@@ -2,6 +2,7 @@ import { ApiError, api } from '../api';
 import type { SplitSummary } from '@shared/api';
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
 import { isOffline, isRetryable, requestBackgroundSync, withOutbox } from './outbox';
+import { reportKept } from './storage-health';
 
 // Splits that are open on screen but still being created on the server. Each is kept
 // on the device until the server has it, so one made offline is created once the
@@ -21,8 +22,8 @@ export interface PendingCreate {
 export const CREATE_PREFIX = 'create:';
 const createKey = (splitId: string) => `${CREATE_PREFIX}${splitId}`;
 
-export const savePendingCreate = (create: PendingCreate) =>
-  writeCache(createKey(create.id), create);
+export const savePendingCreate = async (create: PendingCreate) =>
+  reportKept(await writeCache(createKey(create.id), create));
 
 export const removePendingCreate = (id: string) => removeCacheEntry(createKey(id));
 

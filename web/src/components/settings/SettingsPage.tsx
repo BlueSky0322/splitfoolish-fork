@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import { navigate } from '../../hooks/useRoute';
-import { nameFor, signOut, useProfile } from '../../profile/ProfileContext';
+import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { InstallField } from '../common/InstallApp';
 import UserAvatar from '../common/UserAvatar';
 import AppearanceSection from './AppearanceSection';
@@ -24,6 +24,7 @@ import ProfileSection from './ProfileSection';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
 import { useSaveIndicator } from './useSaveIndicator';
+import { useConfirmSignOut } from './useConfirmSignOut';
 import classes from './SettingsLayout.module.css';
 
 type SectionId = 'profile' | 'getting-paid' | 'currency' | 'appearance' | 'app';
@@ -130,6 +131,7 @@ const SettingsPage = () => {
   const isMobile = useIsMobile();
   const hashed = useSectionHash();
   const { track, note } = useSaveIndicator();
+  const { askToSignOut, dialog: signOutDialog } = useConfirmSignOut();
   if (profile == null) return null;
   const myName = nameFor(profile.email, profile.displayName);
 
@@ -170,14 +172,18 @@ const SettingsPage = () => {
     </UnstyledButton>
   );
 
+  // Asks first when this device has changes not yet saved, which signing out removes
   const signOutButton = (
-    <UnstyledButton
-      className={`${isDesktop ? classes.menuItem : classes.listRow} ${classes.signOut}`}
-      onClick={() => void signOut()}
-    >
-      <SignOut size={isDesktop ? 17 : 20} />
-      <span>Sign out</span>
-    </UnstyledButton>
+    <>
+      <UnstyledButton
+        className={`${isDesktop ? classes.menuItem : classes.listRow} ${classes.signOut}`}
+        onClick={() => void askToSignOut()}
+      >
+        <SignOut size={isDesktop ? 17 : 20} />
+        <span>Sign out</span>
+      </UnstyledButton>
+      {signOutDialog}
+    </>
   );
 
   if (isDesktop) {

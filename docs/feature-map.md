@@ -9,17 +9,17 @@ The data model is in [erd.md](erd.md). How the Worker's routes and modules fit t
 is at the top of [worker/app.ts](../worker/app.ts). The rules every change follows are
 in [AGENTS.md](../AGENTS.md).
 
-| Feature                                                                        | State owner (app)                                                       | Worker                                                                       |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                            | `auth.ts`, `profiles.ts`, `routes/me.ts`                                     |
-| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts`                     |
-| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`        | `split-content.ts`, `split-detail.ts`                                        |
-| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                | `exchange-rates.ts`, `reconvert.ts`, `reconvert-queue.ts`, `routes/rates.ts` |
-| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                         | (none)                                                                       |
-| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`  | `sharing.ts`, `room.ts`, `routes/invites.ts`                                 |
-| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                              | (none; the API is the same)                                                  |
-| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                                                  |
-| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                          | (none)                                                                       |
+| Feature                                                                        | State owner (app)                                                                                 | Worker                                                                       |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                                                      | `auth.ts`, `profiles.ts`, `routes/me.ts`                                     |
+| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                                          | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts`                     |
+| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`                                  | `split-content.ts`, `split-detail.ts`                                        |
+| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                                          | `exchange-rates.ts`, `reconvert.ts`, `reconvert-queue.ts`, `routes/rates.ts` |
+| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                                                   | (none)                                                                       |
+| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`                            | `sharing.ts`, `room.ts`, `routes/invites.ts`                                 |
+| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                                                        | (none; the API is the same)                                                  |
+| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `offline/photo-queue.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                                                  |
+| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                                                    | (none)                                                                       |
 
 App paths are under `web/src/`, Worker paths under `worker/`.
 
@@ -273,41 +273,80 @@ page or, if it's closed, by the service worker.
 - [outbox.ts](../web/src/offline/outbox.ts): unsent changes, batching and the
   per-split lock.
 - [pending-creates.ts](../web/src/offline/pending-creates.ts): splits made offline.
+- [photo-queue.ts](../web/src/offline/photo-queue.ts): photos and receipts still to
+  upload (see Pictures below).
 - [sync.ts](../web/src/offline/sync.ts): sending all of it, started by
-  [main.tsx](../web/src/main.tsx).
+  [main.tsx](../web/src/main.tsx) when the connection or the app comes back, and
+  counting what signing out would lose, changes and photos (Settings asks first).
+- [storage-health.ts](../web/src/offline/storage-health.ts): whether the device kept the
+  latest unsent work (changes, new splits, photos); the shell's `OfflineNotice` says
+  when it couldn't.
+- [storage.ts](../web/src/offline/storage.ts): once the app is installed, asks the
+  browser (once per device) not to clear what's kept when space runs low.
 
 An open split sends its own changes through `useSaveQueue`.
 
-**Parts.** [web/public/sw.js](../web/public/sw.js) keeps the built files and pictures,
-and sends the outbox by background sync. It can't import app code, so the keys, lock
-names and limits it shares with `offline/` and `shared/api.ts` are copied in it.
+**Parts.** [web/public/sw.js](../web/public/sw.js) keeps the page, the built files and
+pictures, and sends the outbox by background sync. It can't import app code, so the
+keys, lock names and limits it shares with `offline/` and `shared/api.ts` are copied in
+it. The build writes `precache.json`, every built file the app needs offline: the entry
+and its styles, and the chunks the app's own code loads later (sharing an image, PDF
+export) with their imports, but not a library's own optional extras
+([web/build/precache.ts](../web/build/precache.ts)). The PDF font is not in it: it's
+kept the first time Export opens.
+
+**Flow.** A page load waits up to 3 seconds for the network; offline, slower, or a
+5xx or non-page answer, and the kept page opens instead, marked as opened from the
+device. A sign-in redirect or a 4xx goes to the browser, and `/cdn-cgi/` (Access) is
+never handled. A good page is kept in the background, even when it came too late. Opened
+from the device, the profile waits 2 seconds on `/api/me` (or not at all if it fails
+with a 5xx), then shows the last account's saved copies
+([ProfileContext](../web/src/profile/ProfileContext.tsx)).
 
 **Invariants.**
 
 - Nothing kept on the device is shown before the signed-in account is known, and one
-  account never sees another's.
+  account never sees another's. The last account is only assumed offline, or when the
+  page was opened from the device; if the server then names someone else, their copies
+  are dropped and the app reloads.
+- The kept page is only replaced once every file it and `precache.json` name is kept,
+  so a stopped update leaves the old page whole. Built files of the newest two pages
+  are kept, for a tab still open on the older one; others go when a new page is kept.
 - A batch leaves the outbox once the server accepts it with a JSON answer; a refused
   batch is dropped with everything queued after it. Where the browser has Web Locks,
   the page and the service worker take the same lock per split, so a change is sent
   once.
-- Batches are at most `MAX_CHANGES`, in order; what's left is kept after each batch.
+- Batches are at most `MAX_CHANGES` and `MAX_CHANGES_BYTES` of JSON (one larger change
+  goes alone), in order; what's left is kept after each batch. Sends while the page is
+  hidden use keepalive, which browsers allow only for small requests.
+- Unsent work the device couldn't keep is still sent from memory while the app is
+  open, and is never taken for sent elsewhere.
+- Signed out (401), an open split stops retrying on a timer until the app is shown
+  again or the connection returns.
 
 **Tests.** [cache.test.ts](../web/src/offline/cache.test.ts),
 [outbox.test.ts](../web/src/offline/outbox.test.ts) (runs `sw.js` against what the app
 writes, so the copied keys and lock names can't drift),
-[sw.test.ts](../web/src/offline/sw.test.ts) (batches of `MAX_CHANGES` and every kind of
-answer, on the page and in `sw.js` alike),
+[sw.test.ts](../web/src/offline/sw.test.ts) (batches by count and size and every kind
+of answer, on the page and in `sw.js` alike),
+[shell.test.ts](../web/src/offline/shell.test.ts) (slow, failing and redirected page
+loads, stopped updates, which files are kept),
+[start.test.tsx](../web/src/offline/start.test.tsx) (starting from the device's copy),
+[storage.test.ts](../web/src/offline/storage.test.ts),
+[web/build/precache.test.ts](../web/build/precache.test.ts) (what the build lists),
 [delivery.test.ts](../web/src/offline/delivery.test.ts) (page and service worker
-together), and [pending-creates.test.ts](../web/src/offline/pending-creates.test.ts).
+together, keepalive, coming back to the app, signed-out retries), and [pending-creates.test.ts](../web/src/offline/pending-creates.test.ts).
 
 ## Pictures, photos and payment QR codes
 
 **What it is.** Profile pictures, split pictures, photos of a split and receipts on its
 items (the Photos tab), and QR codes on payment methods.
 
-**Owner.** Split photos: [split/usePhotos.ts](../web/src/split/usePhotos.ts) (upload,
-remove, remove several) keeping the split's details in step (`addAttachment`, and
-`changeMeta` for removals). Split pictures: [split/pictures.ts](../web/src/split/pictures.ts),
+**Owner.** Split photos and receipts: [split/usePhotos.ts](../web/src/split/usePhotos.ts)
+(add, remove, remove several, and the photos still to upload) keeping the split's
+details in step (`addAttachment` once one is uploaded, and `changeMeta` for removals).
+Adding goes through [offline/photo-queue.ts](../web/src/offline/photo-queue.ts), which
+keeps each photo on the device until it's uploaded. Split pictures: [split/pictures.ts](../web/src/split/pictures.ts),
 through My splits and `patchSettings`. Profile pictures:
 [ProfileContext](../web/src/profile/ProfileContext.tsx) changes, with the upload as the
 `save`. QR codes are uploaded first (`api.setPaymentQr`), then saved with their payment
@@ -323,19 +362,39 @@ method through a profile change.
 - Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
+- Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
+  on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
+  in the item form, with a spinner on their way up or marked as waiting.
 - API: [worker/photos.ts](../worker/photos.ts) stores images in D1 and serves them
   only to members (or to people who share a split, for profile pictures and QR codes).
 - Shared: size limits and `Attachment` in [shared/api.ts](../shared/api.ts), and
   `canRemovePhoto` in [shared/rules.ts](../shared/rules.ts).
 
+**Flow.** Picked → shrunk once (at most two photos shrunk or sent at a time) → kept on
+the device as bytes, tagged with the account → shown at once → sent once online, the
+split is on the server (`pending-creates.ts`) and, for a receipt, its item is saved
+(the open split's `whenSaved`, and no `addItem` for it left in the outbox) → joins the
+split's photos. Opening a split, signing in, coming back online or to the app picks up
+what's kept, oldest first.
+
 **Invariants.**
 
+- A photo leaves the device only once the server has it, or refused it (any 4xx but
+  401 and 429: its item gone, too large, too many photos), which is explained. Anything
+  else (offline, 401, 429, 5xx) keeps it to try again.
+- One account never sees or sends another's; they're forgotten with the cache
+  (`onCacheCleared`). Where the browser has Web Locks, each upload takes a lock per
+  photo and checks it's still kept, so two tabs don't both send it.
 - The file type comes from the bytes, not what the upload says.
 - A profile picture's, split picture's or QR code's address names its version, and a
   photo never changes once added, so the service worker and browsers can keep them for
   good.
 
-**Tests.** [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
+**Tests.** [photo-queue.test.ts](../web/src/offline/photo-queue.test.ts) (kept through a
+reload, accounts kept apart, order, two at a time, refused or retried, waiting for the
+split and the item), [OfflinePhotos.test.tsx](../web/src/components/split/OfflinePhotos.test.tsx)
+(waiting through the app reopening, removing one, a new item's receipt, online uploads,
+a refusal), [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
 [PhonePhotos.test.tsx](../web/src/components/split/PhonePhotos.test.tsx),
 [photo-days.test.ts](../web/src/split/photo-days.test.ts),
 [photo-download.test.ts](../web/src/split/photo-download.test.ts), and the image

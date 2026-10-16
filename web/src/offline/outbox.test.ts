@@ -200,6 +200,7 @@ function runServiceWorker(self: object, globals: object = {}) {
     fetch: () => respond(ok),
     indexedDB,
     Response,
+    TextEncoder,
     URL,
     ...globals,
   });

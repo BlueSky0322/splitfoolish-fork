@@ -2,15 +2,15 @@
 import 'fake-indexeddb/auto';
 import { act, renderHook } from '@testing-library/react';
 import { get } from 'idb-keyval';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { MAX_CHANGES } from '@shared/api';
-import type { Change } from '@shared/types';
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest';
+import { MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
+import { type Change, MAX_NOTES_LENGTH } from '@shared/types';
 import { ApiError, api } from '../api';
 import { useSaveQueue } from '../split/useSaveQueue';
 import { backgroundSync, ok } from '../testing/sw';
 import { assumeLastUser, setCacheUser } from './cache';
 import { OUTBOX_PREFIX, type Queued, readOutbox, withOutbox, writeOutbox } from './outbox';
-import { flushOfflineChanges, forgetOfflineWork } from './sync';
+import { flushOfflineChanges, forgetOfflineWork, syncWhenOnline } from './sync';
 
 // Saving a long queue of changes kept on the device: the server takes at most
 // MAX_CHANGES in one request, so the queue goes in order, a request at a time, and each
@@ -32,12 +32,30 @@ function server(answers: ('ok' | ApiError)[] = ['ok']) {
     if (changes.length > MAX_CHANGES) {
       return Promise.reject(new ApiError(400, `Send 1-${MAX_CHANGES} changes`));
     }
+    if (bytes(changes) > MAX_CHANGES_BYTES) {
+      return Promise.reject(new ApiError(413, 'Too large'));
+    }
     return answer === 'ok' ? Promise.resolve({ ok: true }) : Promise.reject(answer);
   });
   return { sent, spy };
 }
 
+const bytes = (changes: Change[]) => new Blob([JSON.stringify({ changes })]).size;
+
+// Long names in a script that takes three bytes a letter: a few kilobytes each
+const bulky = (count: number): Queued[] =>
+  Array.from({ length: count }, (_, i) => ({
+    cid: `b${i}`,
+    change: { op: 'renamePerson', id: `p${i}`, name: '漢'.repeat(MAX_NOTES_LENGTH) },
+  }));
+
 const busy = new ApiError(503, 'Busy');
+const signedOut = new ApiError(401, 'Signed out');
+
+/** The page on screen, or in the background (another app in front, say) */
+function showPage(state: 'visible' | 'hidden') {
+  Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+}
 
 /** A split open on screen, saving through its queue */
 function openSplit() {
@@ -55,6 +73,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  showPage('visible');
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   await forgetOfflineWork();
@@ -87,6 +106,109 @@ describe('the page catching up on changes kept for splits not open', () => {
   });
 });
 
+describe('saving changes too big to go in one request', () => {
+  test('the page catching up sends them all, in requests the server takes', async () => {
+    const { sent } = server();
+    await writeOutbox('trip', bulky(30));
+    await flushOfflineChanges();
+    expect(sent.length).toBeGreaterThan(1);
+    expect(sent.flat()).toEqual(bulky(30).map((q) => q.change));
+    expect(await readOutbox('trip')).toEqual([]);
+  });
+
+  test('an open split sends them all, in requests the server takes', async () => {
+    const { sent } = server();
+    const split = openSplit();
+    act(() => bulky(30).forEach((q) => split.saves().queue(q.change)));
+    await act(() => split.saves().whenSaved());
+    expect(sent.length).toBeGreaterThan(1);
+    expect(sent.flat()).toEqual(bulky(30).map((q) => q.change));
+    expect(await readOutbox('trip')).toEqual([]);
+    split.unmount();
+  });
+});
+
+describe('saving while the app is in the background or closing', () => {
+  /** The browser: a keepalive request bigger than it allows fails before it goes */
+  function browser() {
+    const sent: { keepalive: boolean; changes: Change[] }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_path: string, init: RequestInit) => {
+        const body = init.body as string;
+        if (init.keepalive && new Blob([body]).size > 64 * 1024) {
+          return Promise.reject(new TypeError('Failed to fetch'));
+        }
+        sent.push({
+          keepalive: init.keepalive === true,
+          changes: (JSON.parse(body) as { changes: Change[] }).changes,
+        });
+        return Promise.resolve(Response.json({ ok: true }));
+      }),
+    );
+    return sent;
+  }
+
+  test('a hidden page sends long changes so they finish after it goes, small enough to be let through', async () => {
+    const sent = browser();
+    showPage('hidden');
+    const split = openSplit();
+    act(() => bulky(30).forEach((q) => split.saves().queue(q.change)));
+    await act(() => split.saves().whenSaved());
+    expect(sent.every((r) => r.keepalive)).toBe(true);
+    expect(sent.flatMap((r) => r.changes)).toEqual(bulky(30).map((q) => q.change));
+    expect(await readOutbox('trip')).toEqual([]);
+    split.unmount();
+  });
+
+  test('a page on screen sends them as ordinary requests', async () => {
+    const sent = browser();
+    const split = openSplit();
+    act(() => queued(2).forEach((q) => split.saves().queue(q.change)));
+    await act(() => split.saves().whenSaved());
+    expect(sent.map((r) => r.keepalive)).toEqual([false]);
+    split.unmount();
+  });
+});
+
+describe('the page coming back to the foreground', () => {
+  test('sends what was kept for splits not open, and refreshes what is shown', async () => {
+    const { sent } = server();
+    const refresh = vi.fn();
+    onTestFinished(syncWhenOnline(refresh));
+    showPage('hidden');
+    await writeOutbox('trip', queued(2));
+
+    showPage('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(sent).toEqual([[change(1), change(2)]]);
+    expect(await readOutbox('trip')).toEqual([]);
+  });
+
+  test('sends them when the browser brings the page back from its memory', async () => {
+    const { sent } = server();
+    onTestFinished(syncWhenOnline(() => {}));
+    await writeOutbox('trip', queued(1));
+    window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+    await vi.waitFor(() => expect(sent).toEqual([[change(1)]]));
+  });
+
+  test('sends nothing while it stays in the background', async () => {
+    const { sent } = server();
+    onTestFinished(syncWhenOnline(() => {}));
+    await writeOutbox('trip', queued(1));
+    showPage('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushOfflineChanges().then(
+      () => undefined,
+      () => undefined,
+    );
+    // Only the call above sent it, not the page going to the background
+    expect(sent).toEqual([[change(1)]]);
+  });
+});
+
 describe('an open split saving its changes', () => {
   test('sends a long queue in requests the server takes, each change once', async () => {
     const { sent } = server();
@@ -95,6 +217,32 @@ describe('an open split saving its changes', () => {
     await act(() => split.saves().whenSaved());
     expect(sent.map((b) => b.length)).toEqual([MAX_CHANGES, 1]);
     expect(sent.flat()).toEqual(queued(MAX_CHANGES + 1).map((q) => q.change));
+    expect(await readOutbox('trip')).toEqual([]);
+    split.unmount();
+  });
+
+  test('signed out, it stops trying on a timer, and sends once back in the app', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    onTestFinished(() => void vi.useRealTimers());
+    const { sent } = server([signedOut, 'ok']);
+    const split = openSplit();
+    act(() => split.saves().queue(change(1)));
+    await act(() => split.saves().save());
+    expect(sent).toHaveLength(1);
+
+    // Ten minutes on, nothing more was tried: each try would only fail until they sign in
+    for (let minute = 0; minute < 10; minute++) {
+      await act(() => vi.advanceTimersByTimeAsync(60_000));
+      // Time for a try begun then to reach the server, through the device's storage
+      for (let tick = 0; tick < 20; tick++) await new Promise((r) => setImmediate(r));
+    }
+    expect(sent).toHaveLength(1);
+    expect(await readOutbox('trip')).toHaveLength(1);
+
+    // Signed in again, and back to the app
+    act(() => void split.saves().resume());
+    await act(() => split.saves().whenSaved());
+    expect(sent).toEqual([[change(1)], [change(1)]]);
     expect(await readOutbox('trip')).toEqual([]);
     split.unmount();
   });

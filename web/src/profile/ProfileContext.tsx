@@ -7,8 +7,15 @@ import { ApiError, api } from '../api';
 import { queryClient } from '../query-client';
 import { isOfflineFailure } from '../offline/outbox';
 import { forgetOfflineWork, syncOfflineChanges } from '../offline/sync';
+import { resumePhotoUploads } from '../offline/photo-queue';
 import { reloadMySplits } from '../my-splits/my-splits';
-import { assumeLastUser, readCache, setCacheUser, writeCache } from '../offline/cache';
+import {
+  assumeLastUser,
+  openedFromDevice,
+  readCache,
+  setCacheUser,
+  writeCache,
+} from '../offline/cache';
 import { isAccent } from '../theme/accents';
 import {
   DEFAULT_SETTINGS,
@@ -88,6 +95,11 @@ const ProfileContext = createContext<ProfileContextValue | null>(null);
 const ME_KEY = ['me'] as const;
 /** Versioned like the other saved copies: one in an older shape is never read */
 const ME_CACHE_KEY = 'me-v2';
+/**
+ * How long an app opened from the device's copy waits on the server before showing the
+ * last account's saved profile and splits
+ */
+const DEVICE_START_WAIT_MS = 2000;
 
 export const useProfile = () => {
   const value = useContext(ProfileContext);
@@ -113,24 +125,62 @@ export function ProfileProvider({
   onAccentChange: (accent: Accent) => void;
 }) {
   const fromDevice = useRef(false);
+  // Whose saved copies were shown while the server couldn't say who's signed in
+  const assumed = useRef<string | null>(null);
+
+  /** The last account's saved profile, its saved copies now readable, or nothing */
+  const savedProfile = useCallback(async () => {
+    const email = assumeLastUser();
+    if (email == null) return undefined;
+    assumed.current = email;
+    return readCache<Profile>(ME_CACHE_KEY);
+  }, []);
+
   // Loaded once: after that, this device's changes are the latest, and a refetch
   // landing mid-change would undo one
   const { data, error, refetch } = useQuery({
     queryKey: ME_KEY,
     queryFn: async () => {
+      // Opened from the copy kept on this device: the server is unreachable, slow or
+      // failing. Rather than wait on it, show the last account's saved profile and splits
+      // after a moment; the server's answer still replaces them when it comes.
+      const startedFromDevice = openedFromDevice();
+      let answered = false;
+      const timer = startedFromDevice
+        ? setTimeout(() => {
+            if (queryClient.getQueryData(ME_KEY) != null) return;
+            void savedProfile().then((saved) => {
+              if (saved == null || answered) return;
+              fromDevice.current = true;
+              queryClient.setQueryData(ME_KEY, saved);
+            });
+          }, DEVICE_START_WAIT_MS)
+        : undefined;
       try {
         const me = await api.getMe();
+        answered = true;
+        clearTimeout(timer);
         // Cached splits are kept per account; know whose before showing any
         await setCacheUser(me.email);
+        const shown = assumed.current;
+        assumed.current = null;
         fromDevice.current = false;
+        // Someone else's saved copies were shown meanwhile, and are gone from this device
+        // now: start afresh as the person signed in
+        if (shown != null && shown !== me.email) window.location.reload();
         syncOfflineChanges(() => void reloadMySplits());
+        // Photos picked offline, or before the app was last closed, are uploaded too
+        void resumePhotoUploads();
         void writeCache(ME_CACHE_KEY, me);
         return me;
       } catch (err) {
-        // No connection: carry on as whoever last used this device, from their saved
-        // profile
-        if (isOfflineFailure(err) && assumeLastUser() != null) {
-          const saved = await readCache<Profile>(ME_CACHE_KEY);
+        answered = true;
+        clearTimeout(timer);
+        // No connection, or (opened from the device) the server failing: carry on as
+        // whoever last used this device, from their saved profile
+        const serverFailed = startedFromDevice && err instanceof ApiError && err.status >= 500;
+        if (isOfflineFailure(err) || serverFailed) {
+          const saved = await savedProfile();
           if (saved) {
             fromDevice.current = true;
             return saved;

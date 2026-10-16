@@ -239,6 +239,15 @@ export const MAX_QR_BYTES = 512_000;
  */
 export const MAX_CHANGES = 200;
 
+/**
+ * The most bytes of JSON one request of changes may carry; a single change bigger than
+ * this still goes, on its own. It keeps a request under the 64 KB browsers allow one
+ * that finishes after the page closes (keepalive), and well under the Worker's 256 KB
+ * limit, which a long note on every item could otherwise reach within MAX_CHANGES.
+ * public/sw.js keeps its own copy (sw.test.ts checks they agree).
+ */
+export const MAX_CHANGES_BYTES = 48 * 1024;
+
 /** Photos removed in one request (D1 takes up to 100 values in one query) */
 export const MAX_PHOTOS_REMOVED = 100;
 

@@ -1,11 +1,12 @@
 import 'fake-indexeddb/auto';
 import { clear, get, set } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { MAX_CHANGES } from '@shared/api';
+import { MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
+import { MAX_NOTES_LENGTH } from '@shared/types';
 import type { Change } from '@shared/types';
 import { SW_USER_KEY } from './cache';
 import { api } from '../api';
-import { OUTBOX_PREFIX, classifySaveFailure, type Queued } from './outbox';
+import { OUTBOX_PREFIX, classifySaveFailure, nextBatch, type Queued } from './outbox';
 import {
   type Answer,
   backgroundSync,
@@ -87,6 +88,50 @@ describe('the service worker, sending more changes than one request takes', () =
     expect(outcome).toBe('done');
     expect(batches).toHaveLength(1);
     expect(await kept()).toBeUndefined();
+  });
+});
+
+describe('the service worker, sending changes too big to go all at once', () => {
+  // Long names in a script that takes three bytes a letter: a few kilobytes each
+  const bulky = (count: number): Queued[] =>
+    Array.from({ length: count }, (_, i) => ({
+      cid: `c${i}`,
+      change: { op: 'renamePerson', id: `p${i}`, name: '漢'.repeat(MAX_NOTES_LENGTH) },
+    }));
+
+  test('keeps each request under the size the server takes, and sends them all in order', async () => {
+    const all = bulky(30);
+    await keep('ryan@example.com', all);
+    const { outcome, fetch, batches } = await backgroundSync(ok);
+    expect(outcome).toBe('done');
+    expect(batches.length).toBeGreaterThan(1);
+    for (const [, init] of fetch.mock.calls) {
+      expect(new Blob([init.body as string]).size).toBeLessThanOrEqual(MAX_CHANGES_BYTES);
+    }
+    expect(batches.flat()).toEqual(all.map((q) => q.change));
+    expect(await kept()).toBeUndefined();
+  });
+
+  test('splits a queue where the app would', async () => {
+    const all = bulky(30);
+    await keep('ryan@example.com', all);
+    const { batches } = await backgroundSync(ok);
+    const app: number[] = [];
+    for (let left = all; left.length > 0; left = left.slice(app[app.length - 1])) {
+      app.push(nextBatch(left).length);
+    }
+    expect(batches.map((b) => b.length)).toEqual(app);
+  });
+
+  test('still sends a change bigger than that on its own', async () => {
+    const huge: Queued = {
+      cid: 'big',
+      change: { op: 'renamePerson', id: 'p', name: 'a'.repeat(MAX_CHANGES_BYTES) },
+    };
+    await keep('ryan@example.com', [huge, ...queued(2)]);
+    const { outcome, batches } = await backgroundSync(ok);
+    expect(outcome).toBe('done');
+    expect(batches).toEqual([[huge.change], [change(1), change(2)]]);
   });
 });
 

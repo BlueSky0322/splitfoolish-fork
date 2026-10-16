@@ -1,4 +1,4 @@
-import { Button, Loader, Menu, SegmentedControl, Tooltip, UnstyledButton } from '@mantine/core';
+import { Button, Menu, SegmentedControl, Tooltip, UnstyledButton } from '@mantine/core';
 import {
   CaretDown,
   Check,
@@ -30,6 +30,7 @@ import { useSplitPage } from '../SplitPageContext';
 import classes from './DesktopPhotos.module.css';
 import { timeLabel, useAddedBy } from './added-by';
 import PhotoDetails from './PhotoDetails';
+import QueuedPhotoTile from './QueuedPhotoTile';
 import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 
 /** Every row of photos is this tall; each photo is as wide as its shape makes it */
@@ -75,7 +76,7 @@ const DesktopPhotos = () => {
   );
   const counts = photoCounts(all);
   const shown = days.flatMap((d) => d.photos);
-  const uploading = photos.uploading[''] ?? [];
+  const queued = photos.queuedOf(null);
 
   // Selected photos still there (one removed elsewhere drops out)
   const chosen = shown.filter((p) => selected.has(p.id));
@@ -308,22 +309,22 @@ const DesktopPhotos = () => {
         </div>
       )}
 
-      {uploading.length > 0 && (
+      {queued.length > 0 && (
         <div className={classes.row}>
-          {uploading.map((file) => (
-            <div
-              key={`${file.name}-${file.lastModified}`}
+          {queued.map((photo) => (
+            <QueuedPhotoTile
+              key={photo.id}
+              photo={photo}
               className={`${classes.tile} ${classes.adding}`}
               style={{ flex: `1 1 ${ROW_PX}px`, maxWidth: ROW_PX * MAX_STRETCH }}
-            >
-              <Loader size="sm" />
-            </div>
+              onRemove={() => photos.removeQueued(photo)}
+            />
           ))}
           <span className={classes.rowEnd} />
         </div>
       )}
 
-      {shown.length === 0 && uploading.length === 0 && dragging === 0 && (
+      {shown.length === 0 && queued.length === 0 && dragging === 0 && (
         <p className="sf-muted text-sm text-center py-10">
           {all.length === 0
             ? 'No photos yet. Drop some here, or add a receipt on its item.'
