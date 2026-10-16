@@ -274,9 +274,12 @@ function apply(split: SplitDetail, change: Change) {
 /** The most a browser lets keepalive requests carry at once */
 const KEEPALIVE_BYTES = 64 * 1024;
 
+/** Requests the app has made that the stand-in server hasn't answered yet */
+let unanswered = 0;
+
 function serve(server: FakeServer) {
   const answer = answerNow(server);
-  return (input: RequestInfo | URL, init?: RequestInit) => {
+  const respond = (input: RequestInfo | URL, init?: RequestInit) => {
     const response = answer(input, init);
     const method = init?.method ?? 'GET';
     const path = new URL(input instanceof Request ? input.url : input, 'http://app').pathname;
@@ -285,6 +288,31 @@ function serve(server: FakeServer) {
     const [{ release }] = server.held.splice(at, 1);
     return release.then(() => response);
   };
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = respond(input, init);
+    // Counted alongside, so the app gets its answer exactly as before
+    unanswered++;
+    void response.then(
+      () => unanswered--,
+      () => unanswered--,
+    );
+    return response;
+  };
+}
+
+/**
+ * Waits until the app has nothing under way: no request unanswered, nothing loading or
+ * saving, for a few turns in a row (work often waits on the device's storage between
+ * requests). Gives up after a few seconds, for an answer a test never releases.
+ */
+async function settle() {
+  if (vi.isFakeTimers()) return;
+  const giveUpAt = Date.now() + 3000;
+  for (let quiet = 0; quiet < 5 && Date.now() < giveUpAt; ) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const busy = unanswered > 0 || queryClient.isFetching() > 0 || queryClient.isMutating() > 0;
+    quiet = busy ? 0 : quiet + 1;
+  }
 }
 
 function answerNow(server: FakeServer) {
@@ -586,6 +614,9 @@ export function setupAppTests() {
   });
   afterEach(async () => {
     cleanup();
+    // What the test set going (a reload of My splits after making a split, say) finishes
+    // now, rather than landing in the next test as its data
+    await settle();
     queryClient.clear();
     // The device's cache, and whose it is, start empty for the next test
     await forgetOfflineWork();
