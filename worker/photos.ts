@@ -64,7 +64,8 @@ function imageResponse(data: ArrayBuffer | number[], contentType: string) {
 export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
   db
     .prepare(
-      `SELECT id, item_id AS itemId, size, uploaded_by AS uploadedBy, created_at AS createdAt
+      `SELECT id, item_id AS itemId, size, content_type AS contentType, uploaded_by AS uploadedBy,
+       created_at AS createdAt
        FROM attachments WHERE split_id = ? ORDER BY created_at`,
     )
     .bind(splitId);
@@ -96,6 +97,7 @@ export async function uploadAttachment(
     id: newId(),
     itemId,
     size: image.bytes.length,
+    contentType: image.contentType,
     uploadedBy: email,
     createdAt: Date.now(),
   };
@@ -111,7 +113,7 @@ export async function uploadAttachment(
           attachment.id,
           splitId,
           itemId,
-          image.contentType,
+          attachment.contentType,
           attachment.size,
           email,
           attachment.createdAt,
@@ -142,18 +144,32 @@ export async function serveAttachment(db: D1Database, splitId: string, id: strin
   return imageResponse(row.data, row.contentType);
 }
 
-export async function deleteAttachment(db: D1Database, splitId: string, id: string, actor: Actor) {
-  const row = await db
-    .prepare('SELECT uploaded_by AS uploadedBy FROM attachments WHERE id = ? AND split_id = ?')
-    .bind(id, splitId)
-    .first<{ uploadedBy: string }>();
-  if (row == null) return ok();
-  if (!canRemovePhoto(row.uploadedBy, actor)) {
+/**
+ * Removes photos from the split: all of them, or none when any isn't this person's to
+ * remove. Ones already gone are skipped.
+ */
+export async function deleteAttachments(
+  db: D1Database,
+  splitId: string,
+  ids: string[],
+  actor: Actor,
+) {
+  const marks = (n: number) => Array.from({ length: n }, () => '?').join(', ');
+  const { results } = await db
+    .prepare(
+      `SELECT id, uploaded_by AS uploadedBy FROM attachments
+       WHERE split_id = ? AND id IN (${marks(ids.length)})`,
+    )
+    .bind(splitId, ...ids)
+    .all<{ id: string; uploadedBy: string }>();
+  if (results.some((row) => !canRemovePhoto(row.uploadedBy, actor))) {
     return fail('Only the person who added a photo, or the owner, can remove it', 403);
   }
+  if (results.length === 0) return ok();
+  const found = results.map((row) => row.id);
   await db.batch([
-    db.prepare('DELETE FROM attachment_data WHERE id = ?').bind(id),
-    db.prepare('DELETE FROM attachments WHERE id = ?').bind(id),
+    db.prepare(`DELETE FROM attachment_data WHERE id IN (${marks(found.length)})`).bind(...found),
+    db.prepare(`DELETE FROM attachments WHERE id IN (${marks(found.length)})`).bind(...found),
   ]);
   return ok();
 }

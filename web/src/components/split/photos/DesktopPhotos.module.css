@@ -1,0 +1,238 @@
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 320px;
+}
+
+.toolbar,
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.filter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.filterCount {
+  font-size: 11px;
+  color: var(--sf-text-muted);
+}
+
+/* Stays in view below the day's heading while scrolling */
+.selectionBar {
+  position: sticky;
+  top: 49px;
+  z-index: 3;
+  height: 40px;
+  padding: 0 6px 0 4px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sf-accent) 12%, var(--sf-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sf-accent) 40%, transparent);
+}
+
+.barClose {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--sf-text-secondary);
+}
+
+.barClose:hover {
+  background: var(--sf-hover);
+}
+
+.selectedCount {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dropZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 16px;
+  border: 1.5px dashed var(--sf-accent);
+  border-radius: 12px;
+  background: var(--sf-accent-tint);
+  color: var(--sf-accent);
+  text-align: center;
+}
+
+.dropTitle {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--sf-text);
+}
+
+.dropHint {
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+/* Each day's heading stays at the top while its photos scroll under it */
+.day {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 12px 0 10px;
+  background: var(--sf-bg);
+  border-bottom: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.dayCount {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sf-text-muted);
+}
+
+.selectDay {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--sf-accent);
+}
+
+/* Justified rows: every photo is the row's height, as wide as its shape, stretched a
+   little to fill the row. The last row keeps its photos' natural widths. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rowEnd {
+  flex: 1000 1 0;
+}
+
+.tile {
+  position: relative;
+  height: 150px;
+  min-width: 80px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--sf-fill);
+  transition:
+    transform 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.open {
+  position: absolute;
+  inset: 0;
+}
+
+.open img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.itemTag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 48px);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--sf-bg) 82%, transparent);
+  color: var(--sf-text);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.itemTag > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.itemTag svg {
+  flex-shrink: 0;
+}
+
+/* Who added it and when, along the bottom on hover */
+.strip {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 10px 8px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.6), transparent);
+  color: #fff;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 120ms;
+  pointer-events: none;
+}
+
+.who {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 0.9);
+  background: rgb(0 0 0 / 0.2);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.tile:hover .strip,
+.tile:hover .check,
+.tile:focus-within .check,
+.tile[data-selecting] .check {
+  opacity: 1;
+}
+
+.tile[data-selecting] .strip {
+  opacity: 0;
+}
+
+.tile[data-selected] {
+  transform: scale(0.96);
+  box-shadow: 0 0 0 2px var(--sf-accent);
+}
+
+.tile[data-selected] .check {
+  border-color: var(--sf-accent);
+  background: var(--sf-accent);
+}
+
+.adding {
+  height: 150px;
+}

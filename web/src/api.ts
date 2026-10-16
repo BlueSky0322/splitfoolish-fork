@@ -1,4 +1,4 @@
-import { CLIENT_ID_HEADER } from '@shared/api';
+import { CLIENT_ID_HEADER, MAX_PHOTOS_REMOVED } from '@shared/api';
 import type {
   AcceptResult,
   ArchiveBody,
@@ -27,6 +27,7 @@ import type {
   SplitPictureResult,
   UpdateSplitResult,
   UsedCurrencyRates,
+  RemovePhotosBody,
 } from '@shared/api';
 import type { PaymentMethod } from '@shared/payments';
 import type { Change, Item as ApiItem } from '@shared/types';
@@ -153,8 +154,14 @@ export const api = {
       `${splitPath(id)}/attachments${itemId ? `?itemId=${encodeURIComponent(itemId)}` : ''}`,
       photo,
     ),
-  deleteAttachment: (id: string, attachmentId: string) =>
-    request<Ok>('DELETE', `${splitPath(id)}/attachments/${encodeURIComponent(attachmentId)}`),
+  /** Removes photos, as many to a request as the server takes */
+  deleteAttachments: async (id: string, attachmentIds: string[]) => {
+    for (let at = 0; at < attachmentIds.length; at += MAX_PHOTOS_REMOVED) {
+      await request<Ok>('POST', `${splitPath(id)}/attachments/remove`, {
+        ids: attachmentIds.slice(at, at + MAX_PHOTOS_REMOVED),
+      } satisfies RemovePhotosBody);
+    }
+  },
   setSplitPicture: (id: string, picture: Blob) =>
     upload<SplitPictureResult>('PUT', `${splitPath(id)}/picture`, picture),
   deleteSplitPicture: (id: string) => request<Ok>('DELETE', `${splitPath(id)}/picture`),

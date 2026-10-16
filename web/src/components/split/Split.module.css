@@ -20,6 +20,49 @@
   top: 28px;
 }
 
+/* The Photos tab has the page's full width; the balances step aside */
+.desktop[data-wide] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pageTabs {
+  display: flex;
+  gap: 24px;
+  margin-bottom: -8px;
+  border-bottom: 1px solid var(--sf-divider);
+}
+
+.pageTab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: -1px;
+  padding: 0 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--sf-text-secondary);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.pageTab:hover {
+  color: var(--sf-text);
+}
+
+.pageTab[data-active] {
+  color: var(--sf-text);
+  font-weight: 500;
+  border-bottom-color: var(--sf-accent);
+}
+
+.pageTabCount {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sf-text-muted);
+}
+
 .mobile {
   display: flex;
   flex-direction: column;

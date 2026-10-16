@@ -1,0 +1,94 @@
+/* Inside the photo viewer, which is always dark */
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color: #fff;
+}
+
+.tag {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.1);
+  font-size: 12px;
+}
+
+.heading {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.addedBy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.rows {
+  margin: 0;
+}
+
+.rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 0.1);
+  font-size: 14px;
+}
+
+.rows dt {
+  color: rgb(255 255 255 / 0.6);
+}
+
+.rows dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.button:global(.mantine-Button-root) {
+  background: transparent;
+  color: #fff;
+  border-color: rgb(255 255 255 / 0.18);
+}
+
+.button:global(.mantine-Button-root):hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.remove:global(.mantine-ActionIcon-root) {
+  background: transparent;
+  color: var(--mantine-color-red-5);
+  border-color: var(--mantine-color-red-5);
+}
