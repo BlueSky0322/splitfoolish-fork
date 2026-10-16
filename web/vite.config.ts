@@ -2,10 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import mkcert from 'vite-plugin-mkcert';
 import { fileURLToPath } from 'node:url';
+import { precacheList } from './build/precache';
 
-// The browser app. Built into ../dist, which the Worker serves (see wrangler.jsonc).
+// The browser app. Built into ../dist, which the Worker serves (see wrangler.jsonc), with
+// the list of files the service worker keeps for offline use (build/precache.ts).
 export default defineConfig({
-  plugins: [react(), mkcert()],
+  plugins: [react(), mkcert(), precacheList()],
   base: '/',
   // The same as web/tsconfig.json's paths
   resolve: { alias: { '@shared': fileURLToPath(new URL('../shared', import.meta.url)) } },
