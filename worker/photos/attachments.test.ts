@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import type { Attachment } from '../shared/api';
-import { uploadAttachment } from './photos';
+import type { Attachment } from '../../shared/api';
+import { uploadAttachment } from './attachments';
 
 // The same photo sent twice at the same moment (a retry while the first is still on its
 // way): both find no photo with its id, and the second to save it is refused by the

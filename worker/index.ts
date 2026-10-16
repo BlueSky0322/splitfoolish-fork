@@ -4,16 +4,16 @@
 import { Hono } from 'hono';
 import type { AppEnv, Env } from './app';
 import { clientId, fail, isCrossSiteWrite, notFound } from './http';
-import { getUserEmail } from './auth';
+import { getUserEmail } from './accounts/auth';
 import invites from './routes/invites';
 import me from './routes/me';
 import rates from './routes/rates';
 import splits from './routes/splits';
-import type { ReconvertJob } from './reconvert';
-import { handleReconvertQueue } from './reconvert-queue';
-import { notifySplit } from './room';
+import type { ReconvertJob } from './currency/reconvert';
+import { handleReconvertQueue } from './currency/reconvert-queue';
+import { notifySplit } from './splits/room';
 
-export { SplitRoom } from './room';
+export { SplitRoom } from './splits/room';
 
 const api = new Hono<AppEnv>().basePath('/api');
 
@@ -64,6 +64,6 @@ export default {
     if (!new URL(req.url).pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     return api.fetch(req, env, ctx);
   },
-  // Conversions to retry, and the ones given up on (reconvert-queue.ts)
+  // Conversions to retry, and the ones given up on (currency/reconvert-queue.ts)
   queue: handleReconvertQueue,
 } satisfies ExportedHandler<Env, ReconvertJob>;

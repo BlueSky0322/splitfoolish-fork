@@ -475,7 +475,7 @@ function answerNow(server: FakeServer) {
           : new Response('Not found', { status: 404 }),
       );
     }
-    // Adding a photo, as worker/photos.ts does: sent again with the same id, the photo
+    // Adding a photo, as worker/photos/attachments.ts does: sent again with the same id, the photo
     // saved then; at most 300 to a split, a receipt only on an item that exists, and no
     // larger than MAX_PHOTO_BYTES
     const addPhoto = path.match(/^\/api\/splits\/([^/]+)\/attachments$/);

@@ -1,9 +1,9 @@
 // Who has access to a split: its members, the share links that bring new ones in, and
 // the invites those links give out. Routes check who may act; this does the work.
 
-import type { AcceptResult, MyInvite } from '../shared/api';
-import { touchSplitStatement } from './app';
-import { fail, json, newId, ok } from './http';
+import type { AcceptResult, MyInvite } from '../../shared/api';
+import { touchSplitStatement } from '../app';
+import { fail, json, newId, ok } from '../http';
 
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 

@@ -3,7 +3,7 @@ import { removalBlocker } from '@shared/rules';
 import type { SplitItem, SplitState } from './state';
 
 // The bill's rules that the app checks before sending a change, so it can explain a
-// refusal straight away. The server checks the same rules (worker/split-content.ts),
+// refusal straight away. The server checks the same rules (worker/bill/),
 // some of them through the same code (shared/rules.ts); bill-rules.test.ts holds both to the
 // same cases.
 

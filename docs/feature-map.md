@@ -9,17 +9,17 @@ The data model is in [erd.md](erd.md). How the Worker's routes and modules fit t
 is at the top of [worker/app.ts](../worker/app.ts). The rules every change follows are
 in [AGENTS.md](../AGENTS.md).
 
-| Feature                                                                        | State owner (app)                                                                                 | Worker                                                                       |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                                                      | `auth.ts`, `profiles.ts`, `routes/me.ts`                                     |
-| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                                          | `summaries.ts`, `split-lifecycle.ts`, `routes/splits.ts`                     |
-| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`                                  | `split-content.ts`, `split-detail.ts`                                        |
-| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                                          | `exchange-rates.ts`, `reconvert.ts`, `reconvert-queue.ts`, `routes/rates.ts` |
-| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                                                   | (none)                                                                       |
-| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`                            | `sharing.ts`, `room.ts`, `routes/invites.ts`                                 |
-| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                                                        | (none; the API is the same)                                                  |
-| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `offline/photo-queue.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos.ts`                                                                  |
-| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                                                    | (none)                                                                       |
+| Feature                                                                        | State owner (app)                                                                                 | Worker                                                           |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [Sign-in, profile and settings](#sign-in-profile-and-settings)                 | `profile/ProfileContext.tsx`                                                                      | `accounts/`, `routes/me.ts`                                      |
+| [My splits](#my-splits-archive-search-and-order)                               | `my-splits/my-splits.ts`                                                                          | `splits/summaries.ts`, `splits/lifecycle.ts`, `routes/splits.ts` |
+| [Editing a split](#editing-a-split-items-and-people)                           | `split/actions.ts`, `split/useSaveQueue.ts`, `split/useSplit.ts`                                  | `bill/`, `splits/detail.ts`                                      |
+| [Settling up and currencies](#settling-up-and-currencies)                      | `split/derive.ts`, `split/currencies.ts`                                                          | `currency/`, `routes/rates.ts`                                   |
+| [Exporting a split](#exporting-a-split)                                        | `split/export/`                                                                                   | (none)                                                           |
+| [Sharing, invites and live updates](#sharing-invites-and-live-updates)         | `split/useSplit.ts`, `split/useSplitLive.ts`, `my-splits/my-splits.ts`                            | `splits/sharing.ts`, `splits/room.ts`, `routes/invites.ts`       |
+| [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                                                        | (none; the API is the same)                                      |
+| [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `offline/photo-queue.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos/`                                                        |
+| [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                                                    | (none)                                                           |
 
 App paths are under `web/src/`, Worker paths under `worker/`.
 
@@ -37,9 +37,9 @@ the profile, keeps a device copy, and owns every change through
 **Parts.**
 
 - UI: [components/settings/](../web/src/components/settings/SettingsPage.tsx).
-- API: [worker/auth.ts](../worker/auth.ts) checks the Access token (or the local dev
+- API: [worker/accounts/auth.ts](../worker/accounts/auth.ts) checks the Access token (or the local dev
   user), [worker/routes/me.ts](../worker/routes/me.ts) serves `/api/me`, and
-  [worker/profiles.ts](../worker/profiles.ts) stores profiles and settings.
+  [worker/accounts/profiles.ts](../worker/accounts/profiles.ts) stores profiles and settings.
 - Shared: `Settings`, `DEFAULT_SETTINGS` and the profile shapes in
   [shared/api.ts](../shared/api.ts); payment method shapes in
   [shared/payments.ts](../shared/payments.ts).
@@ -47,12 +47,12 @@ the profile, keeps a device copy, and owns every change through
 **Invariants.**
 
 - Without both Access values set, the API refuses everyone, unless both are blank and a
-  local dev user is set (`getUserEmail` in `auth.ts`).
+  local dev user is set (`getUserEmail` in `accounts/auth.ts`).
 - A new settings row takes every value from `DEFAULT_SETTINGS`, so defaults change in
-  `shared/api.ts` alone (`profiles.ts`).
+  `shared/api.ts` alone (`accounts/profiles.ts`).
 - A stale save answer never overwrites a newer change (`ProfileContext.tsx`).
 
-**Tests.** [worker/auth.test.ts](../worker/auth.test.ts) (tokens, keys, configuration,
+**Tests.** [worker/accounts/auth.test.ts](../worker/accounts/auth.test.ts) (tokens, keys, configuration,
 401 versus 500), [SettingsPage.test.tsx](../web/src/components/settings/SettingsPage.test.tsx)
 (saving, out-of-order answers), and the profile and payment cases in
 [worker/test/api.test.ts](../worker/test/api.test.ts).
@@ -73,8 +73,8 @@ balance, pending invites, archive, your own order, and search across items and s
 - UI: [components/home/](../web/src/components/home/SplitsHome.tsx) (desktop and
   [MobileHome](../web/src/components/home/MobileHome.tsx), search, sorting, invites)
   and the [sidebar](../web/src/components/shell/Sidebar.tsx).
-- API: [worker/summaries.ts](../worker/summaries.ts) (the list with totals, search, item name
-  suggestions, used currencies), [worker/split-lifecycle.ts](../worker/split-lifecycle.ts)
+- API: [worker/splits/summaries.ts](../worker/splits/summaries.ts) (the list with totals, search, item name
+  suggestions, used currencies), [worker/splits/lifecycle.ts](../worker/splits/lifecycle.ts)
   (create, rename, order, delete), and [worker/routes/splits.ts](../worker/routes/splits.ts)
   (archive, search).
 - Shared: `SplitSummary` and the list shapes in [shared/api.ts](../shared/api.ts).
@@ -120,8 +120,11 @@ it current.
   [SplitStateContext](../web/src/split/SplitStateContext.tsx).
 - Form logic: [split/item-input.ts](../web/src/split/item-input.ts) and
   [split/bill-rules.ts](../web/src/split/bill-rules.ts).
-- API: [worker/split-content.ts](../worker/split-content.ts) applies a batch of changes
-  (all or none) and reads the bill; [worker/split-detail.ts](../worker/split-detail.ts)
+- API: [worker/bill/changes.ts](../worker/bill/changes.ts) applies a batch of changes
+  (all or none), checking each against the bill as it stands
+  ([model.ts](../worker/bill/model.ts)) with what [input.ts](../worker/bill/input.ts)
+  reads from it; [worker/bill/read.ts](../worker/bill/read.ts) reads the bill, and
+  [worker/splits/detail.ts](../worker/splits/detail.ts)
   reads a whole split in one round trip.
 - Shared: `Item` and `Change` in [shared/types.ts](../shared/types.ts), who may do what
   in [shared/rules.ts](../shared/rules.ts), `MAX_CHANGES` in [shared/api.ts](../shared/api.ts).
@@ -133,7 +136,7 @@ split as it is now. A refused batch drops what was queued after it and reloads t
 **Invariants.**
 
 - Changes are applied in the order they were made, and a refused batch never applies
-  part of itself (`split-content.ts`).
+  part of itself (`bill/changes.ts`).
 - Only the newest load of a split is shown, and a device copy never replaces what the
   server said (`useSplit.ts`).
 
@@ -162,11 +165,11 @@ Currencies sheet, and rate changes go through the split's actions.
   [CurrenciesSheet](../web/src/components/split/dialogs/CurrenciesSheet.tsx),
   [components/convert/](../web/src/components/convert/ConvertPage.tsx), and the rate
   hook [hooks/useRate.ts](../web/src/hooks/useRate.ts).
-- API: [worker/exchange-rates.ts](../worker/exchange-rates.ts) (Wise and the ECB,
+- API: [worker/currency/exchange-rates.ts](../worker/currency/exchange-rates.ts) (Wise and the ECB,
   cached), [worker/routes/rates.ts](../worker/routes/rates.ts), and
-  [worker/reconvert.ts](../worker/reconvert.ts) (converting every item after the
+  [worker/currency/reconvert.ts](../worker/currency/reconvert.ts) (converting every item after the
   split's currency changes, in the background). A failed conversion is retried by the
-  `reconvert` queue with growing waits ([worker/reconvert-queue.ts](../worker/reconvert-queue.ts),
+  `reconvert` queue with growing waits ([worker/currency/reconvert-queue.ts](../worker/currency/reconvert-queue.ts),
   wired in `worker/index.ts` and `wrangler.jsonc`); opening a split retries one stuck
   for 10 minutes.
 - Shared: [shared/rates.ts](../shared/rates.ts) (`toCents`, `convertCents`,
@@ -184,11 +187,11 @@ Currencies sheet, and rate changes go through the split's actions.
   can overlap safely.
 
 **Tests.** [shared/settle.test.ts](../shared/settle.test.ts),
-[worker/reconvert-queue.test.ts](../worker/reconvert-queue.test.ts) (acks, retries,
+[worker/currency/reconvert-queue.test.ts](../worker/currency/reconvert-queue.test.ts) (acks, retries,
 backoff, given-up jobs),
 [derive.test.ts](../web/src/split/derive.test.ts),
 [currencies.test.ts](../web/src/split/currencies.test.ts),
-[worker/exchange-rates.test.ts](../worker/exchange-rates.test.ts),
+[worker/currency/exchange-rates.test.ts](../worker/currency/exchange-rates.test.ts),
 [ConvertPage.test.tsx](../web/src/components/convert/ConvertPage.test.tsx),
 [CurrenciesSheet.test.tsx](../web/src/components/split/CurrenciesSheet.test.tsx), and
 the rate and reconversion cases in [worker/test/api.test.ts](../worker/test/api.test.ts) (including a photo sent
@@ -248,9 +251,9 @@ changes to the open split and asks `useSplit` to reload.
 - UI: [SplitMembers](../web/src/components/split/people/SplitMembers.tsx),
   [JoinSplit](../web/src/components/split/JoinSplit.tsx) and
   [invite-answers.ts](../web/src/components/home/invite-answers.ts).
-- API: [worker/sharing.ts](../worker/sharing.ts) (links, invites, removing someone),
+- API: [worker/splits/sharing.ts](../worker/splits/sharing.ts) (links, invites, removing someone),
   [worker/routes/invites.ts](../worker/routes/invites.ts), and
-  [worker/room.ts](../worker/room.ts), one Durable Object per split that tells open
+  [worker/splits/room.ts](../worker/splits/room.ts), one Durable Object per split that tells open
   apps a change was saved. [worker/index.ts](../worker/index.ts) tells the room after
   a successful change (`changedSplit`).
 - Shared: roles and permissions in [shared/rules.ts](../shared/rules.ts).
@@ -258,7 +261,8 @@ changes to the open split and asks `useSplit` to reload.
 **Invariants.**
 
 - A removed member's live sockets are closed (`evictFromRoom` in `routes/splits.ts`) and
-  the owner's share link changes, so the old link can't bring them back (`sharing.ts`).
+  the owner's share link changes, so the old link can't bring them back
+  (`splits/sharing.ts`).
 - The room carries no data, only "changed"; each app fetches the split again.
 
 **Tests.** [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx)
@@ -371,8 +375,10 @@ method through a profile change.
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
   in the item form, with a spinner on their way up or marked as waiting.
-- API: [worker/photos.ts](../worker/photos.ts) stores images in D1 and serves them
-  only to members (or to people who share a split, for profile pictures and QR codes).
+- API: [worker/photos/](../worker/photos/) stores images in D1 and serves them only to
+  members: photos on a split in `attachments.ts`; profile, split and payment QR pictures
+  in `pictures.ts` (profile pictures and QR codes also to people who share a split);
+  checking and serving the bytes in `images.ts`.
 - Shared: size limits and `Attachment` in [shared/api.ts](../shared/api.ts), and
   `canRemovePhoto` in [shared/rules.ts](../shared/rules.ts).
 
@@ -407,7 +413,7 @@ reload, accounts kept apart, order, two at a time, refused or retried, the same 
 sent again, sent by the service worker and not again by the app, waiting for the split
 and the item), [sw.test.ts](../web/src/offline/sw.test.ts) (the service worker's photo
 sending: order, ids, retries and refusals),
-[worker/photos.test.ts](../worker/photos.test.ts) (the same photo sent twice at once), [OfflinePhotos.test.tsx](../web/src/components/split/OfflinePhotos.test.tsx)
+[worker/photos/attachments.test.ts](../worker/photos/attachments.test.ts) (the same photo sent twice at once), [OfflinePhotos.test.tsx](../web/src/components/split/OfflinePhotos.test.tsx)
 (waiting through the app reopening, removing one, a new item's receipt, online uploads,
 a refusal), [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),
 [PhonePhotos.test.tsx](../web/src/components/split/PhonePhotos.test.tsx),

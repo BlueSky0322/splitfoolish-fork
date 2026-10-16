@@ -4,9 +4,8 @@
 // Routes (routes/*.ts) gate who gets in: membership, and ownership (or a rule from
 // shared/rules.ts) where only the owner may act. Rules that depend on a row (who
 // uploaded a photo, which person is being linked or removed) are checked by the handler
-// that loads that row, such as deleteAttachment and applyChanges. The work lives in the
-// feature modules (photos, profiles, sharing, split-lifecycle, reconvert, split-content, split-detail,
-// summaries), which export these kinds of function:
+// that loads that row, such as deleteAttachments and applyChanges. The work lives in the
+// feature folders, which export these kinds of function:
 //   - handlers, taking the database, the ids and person involved, then the request or
 //     its body, and answering with a Response;
 //   - loaders, returning data shaped as in shared/api.ts for the route to send with
@@ -14,18 +13,26 @@
 //   - statement builders (*Statement, *Statements), returning statements for a route to
 //     run in one batch with others, and planners (plan*), reading what they need first;
 //   - actions, which write themselves and answer with what changed (a new token, say).
-// Reading requests is in http.ts, and telling the apps that have a split open about
-// changes in room.ts. Besides requests, the Worker takes messages from the reconvert
-// queue: currency conversions to retry after a failed first attempt
-// (reconvert-queue.ts, wired in index.ts and wrangler.jsonc).
+// The feature folders:
+//   - accounts/: who's signed in (auth.ts), and their profile and settings (profiles.ts);
+//   - splits/: a split itself (lifecycle.ts), what opening one sends (detail.ts), My
+//     splits and search (summaries.ts), who has access (sharing.ts), and telling the
+//     apps that have it open about changes (room.ts);
+//   - bill/: a split's people and items, read (read.ts) and changed in batches
+//     (changes.ts, checking each against model.ts with what input.ts reads);
+//   - currency/: exchange rates, and converting a split's items into a new currency;
+//   - photos/: photos on a split, and profile, split and payment QR pictures.
+// Reading requests and answering is in http.ts. Besides requests, the Worker takes
+// messages from the reconvert queue: currency conversions to retry after a failed first
+// attempt (currency/reconvert-queue.ts, wired in index.ts and wrangler.jsonc).
 
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
-import type { AuthEnv } from './auth';
+import type { AuthEnv } from './accounts/auth';
 import { fail, notFound } from './http';
-import type { RatesEnv } from './exchange-rates';
-import type { ReconvertJob } from './reconvert';
-import type { RoomEnv } from './room';
+import type { RatesEnv } from './currency/exchange-rates';
+import type { ReconvertJob } from './currency/reconvert';
+import type { RoomEnv } from './splits/room';
 import { ROW_ID_CHARS } from '../shared/api';
 
 export interface Env extends AuthEnv, RatesEnv, RoomEnv {
@@ -35,7 +42,7 @@ export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   API_LIMITER: RateLimit;
   /** How long a currency change may take before opening the split retries it; for tests */
   RECONVERT_RETRY_MS?: string;
-  /** Conversions whose first attempt failed, retried with backoff (reconvert-queue.ts) */
+  /** Conversions whose first attempt failed, retried with backoff (currency/reconvert-queue.ts) */
   RECONVERT_QUEUE: Queue<ReconvertJob>;
   /** Seconds between those retries, instead of the backoff; for tests */
   RECONVERT_RETRY_DELAY_S?: string;

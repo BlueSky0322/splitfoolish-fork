@@ -7,9 +7,14 @@ import { convertCents, isCurrency, toCents } from '../../shared/rates';
 import { MAX_COST } from '../../shared/types';
 import type { AppEnv } from '../app';
 import { json, fail } from '../http';
-import { getRatePreference } from '../profiles';
-import { REFRESH_MAX_AGE_MS, RatesUnavailable, getRate, rateOrNull } from '../exchange-rates';
-import { listUsedCurrencies } from '../summaries';
+import { getRatePreference } from '../accounts/profiles';
+import {
+  REFRESH_MAX_AGE_MS,
+  RatesUnavailable,
+  getRate,
+  rateOrNull,
+} from '../currency/exchange-rates';
+import { listUsedCurrencies } from '../splits/summaries';
 
 const rates = new Hono<AppEnv>();
 

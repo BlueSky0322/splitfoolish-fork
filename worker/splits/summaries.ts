@@ -3,10 +3,10 @@
 // Also the names of items across those splits, for suggesting as you type one, and the
 // currencies used in them, for Settings.
 
-import type { FoundItem, ItemNameUse, SplitSummary } from '../shared/api';
-import type { SettleItem, SplitMode } from '../shared/settle';
-import { balances } from '../shared/settle';
-import type { Role } from '../shared/types';
+import type { FoundItem, ItemNameUse, SplitSummary } from '../../shared/api';
+import type { SettleItem, SplitMode } from '../../shared/settle';
+import { balances } from '../../shared/settle';
+import type { Role } from '../../shared/types';
 
 export async function listSplitSummaries(db: D1Database, email: string): Promise<SplitSummary[]> {
   const [splits, items, participants, mine, people] = await db.batch([

@@ -21,8 +21,8 @@ which the app imports as `@shared/...`. `yarn lint` checks this
 (`tools/lint/architecture.js`).
 Each has its own `tsconfig.json`, so the app gets browser types, the Worker gets Worker
 types and `shared/` gets neither. Files are named for what they do on their side:
-`shared/rates.ts` holds the arithmetic, `worker/exchange-rates.ts` fetches rates and
-`web/src/utils/rate-labels.ts` says how they read.
+`shared/rates.ts` holds the arithmetic, `worker/currency/exchange-rates.ts` fetches
+rates and `web/src/utils/rate-labels.ts` says how they read.
 
 Inside `web/src`, what the app knows is kept apart from how it looks:
 
@@ -44,6 +44,21 @@ payment method goes through the profile's, which shows it at once and undoes it 
 save fails) or for something nothing else shows, such as a search; when such an action
 changes what other screens show, the screen tells the owner to refresh. The rules are in
 `AGENTS.md`, and each feature's owner in `docs/feature-map.md`.
+
+The Worker is laid out the same way, by feature:
+
+| Folder                                     | What it holds                                                               |
+| ------------------------------------------ | --------------------------------------------------------------------------- |
+| `index.ts`, `app.ts`, `http.ts`, `routes/` | The entry point, what every route shares, reading requests, and the routes  |
+| `accounts/`                                | Signing in, profiles and settings                                           |
+| `splits/`                                  | Splits themselves, My splits, sharing and invites, live updates             |
+| `bill/`                                    | A split's people and items: reading them, and checking and applying changes |
+| `currency/`                                | Exchange rates, and converting a split's items into a new currency          |
+| `photos/`                                  | Photos on a split, and profile, split and payment QR pictures               |
+| `test/`                                    | The API tests, run against a real local Worker and database                 |
+
+Routes only decide who gets in; the work is in the feature folders (see the top of
+`worker/app.ts`).
 
 ## Running it
 

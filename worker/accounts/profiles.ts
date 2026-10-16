@@ -2,7 +2,7 @@
 // (private preferences that follow the account between devices). A profile row is
 // made the first time someone saves anything; until then everything has its default.
 
-import type { PaymentMethodsBody, ProfilePatch } from '../shared/api';
+import type { PaymentMethodsBody, ProfilePatch } from '../../shared/api';
 import {
   BANK_TRANSFER,
   MAX_ACCOUNT_NAME,
@@ -13,7 +13,7 @@ import {
   type PaymentMethod,
   QR_CODE,
   needsDetail,
-} from '../shared/payments';
+} from '../../shared/payments';
 import {
   ACCENTS,
   DEFAULT_SETTINGS,
@@ -28,11 +28,11 @@ import {
   type Settings,
   type SplitMember,
   THEMES,
-} from '../shared/api';
-import { isCurrency } from '../shared/rates';
-import type { Role } from '../shared/types';
-import { type Unchecked, json, fail, isConstraintError } from './http';
-import { isRowId } from '../shared/api';
+} from '../../shared/api';
+import { isCurrency } from '../../shared/rates';
+import type { Role } from '../../shared/types';
+import { type Unchecked, json, fail, isConstraintError } from '../http';
+import { isRowId } from '../../shared/api';
 
 /** Each setting's column and allowed values (null: any currency code, or none) */
 const SETTINGS = {

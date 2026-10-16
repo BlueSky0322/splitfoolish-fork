@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { Env } from './app';
+import type { Env } from '../app';
 import type { ReconvertJob } from './reconvert';
 
 // The reconvert queue's handler: conversions that failed the first time, tried again
@@ -11,13 +11,15 @@ vi.mock('./reconvert', async (actual) => ({
   ...(await actual<typeof import('./reconvert')>()),
   reconvertSplit: vi.fn(),
 }));
-vi.mock('./profiles', () => ({ getRatePreference: vi.fn(() => Promise.resolve('frankfurter')) }));
+vi.mock('../accounts/profiles', () => ({
+  getRatePreference: vi.fn(() => Promise.resolve('frankfurter')),
+}));
 vi.mock('./exchange-rates', () => ({ getRate: vi.fn() }));
-vi.mock('./room', () => ({ notifySplit: vi.fn() }));
+vi.mock('../splits/room', () => ({ notifySplit: vi.fn() }));
 
 const { reconvertSplit, retryDelaySeconds } = await import('./reconvert');
 const { getRate } = await import('./exchange-rates');
-const { notifySplit } = await import('./room');
+const { notifySplit } = await import('../splits/room');
 const { handleReconvertQueue, queueReconvert, retryDelay } = await import('./reconvert-queue');
 
 const job = (splitId: string, since = 100): ReconvertJob => ({

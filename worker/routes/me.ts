@@ -5,8 +5,14 @@ import { Hono } from 'hono';
 import type { PaymentMethodsBody, Profile, ProfilePatch } from '../../shared/api';
 import type { AppEnv } from '../app';
 import { json, readJson } from '../http';
-import { deleteAvatar, putAvatar, putPaymentQr, serveAvatar, servePaymentQr } from '../photos';
-import { getProfile, patchProfile, putPaymentMethods } from '../profiles';
+import {
+  deleteAvatar,
+  putAvatar,
+  putPaymentQr,
+  serveAvatar,
+  servePaymentQr,
+} from '../photos/pictures';
+import { getProfile, patchProfile, putPaymentMethods } from '../accounts/profiles';
 import { ROW_ID_PARAM } from '../app';
 
 const me = new Hono<AppEnv>();

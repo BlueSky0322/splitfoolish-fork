@@ -1,16 +1,16 @@
 // A split itself: making one, changing its name and currency (which sets off converting
 // its items in the background), everyone's own order of their splits, and deleting one.
-// Its bill is in split-content.ts, and who has access to it in sharing.ts.
+// Its bill is in bill/, and who has access to it in sharing.ts.
 
-import type { Env } from './app';
-import { touchSplitStatement } from './app';
-import { getRatePreference, settingsStatements } from './profiles';
-import { getRate } from './exchange-rates';
-import { RETRY_AFTER_MS, reconvertSplit } from './reconvert';
-import { queueReconvert } from './reconvert-queue';
+import type { Env } from '../app';
+import { touchSplitStatement } from '../app';
+import { getRatePreference, settingsStatements } from '../accounts/profiles';
+import { getRate } from '../currency/exchange-rates';
+import { RETRY_AFTER_MS, reconvertSplit } from '../currency/reconvert';
+import { queueReconvert } from '../currency/reconvert-queue';
 import { notifySplit } from './room';
 import { deleteAllAccessStatements, newShareToken } from './sharing';
-import { deleteContentStatements } from './split-content';
+import { deleteContentStatements } from '../bill/changes';
 
 type WaitUntil = { waitUntil: (p: Promise<unknown>) => void };
 
