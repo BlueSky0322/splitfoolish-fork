@@ -11,6 +11,9 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  /* The dialog title's own line height is 1, which would clip the tails of g, y and p
+     under the name, cut short with "…" when long */
+  line-height: 1.35;
 }
 
 .titleSub {

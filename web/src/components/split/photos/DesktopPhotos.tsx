@@ -438,7 +438,7 @@ const FilterLabel = ({ label, count }: { label: string; count: number }) => (
 );
 
 /** The page's main button on the Photos tab: picks photos to add to the split */
-export function AddPhotosButton({ disabled }: { disabled?: boolean }) {
+export function AddPhotosButton({ disabled, miw }: { disabled?: boolean; miw?: number }) {
   const { photos } = useSplitPage();
   const picker = useRef<HTMLInputElement>(null);
   return (
@@ -456,6 +456,7 @@ export function AddPhotosButton({ disabled }: { disabled?: boolean }) {
         }}
       />
       <Button
+        miw={miw}
         leftSection={<UploadSimple size={16} />}
         onClick={() => picker.current?.click()}
         disabled={disabled}

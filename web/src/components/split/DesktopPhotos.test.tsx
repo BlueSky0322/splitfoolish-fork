@@ -85,8 +85,9 @@ describe('the Photos tab on a computer', () => {
     expect(screen.getByRole('tab', { name: /^Items/ }).textContent).toBe('Items2');
     expect(screen.getByRole('button', { name: 'Add photos' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add item' })).toBeNull();
-    // The balances step aside
+    // The balances step aside; the people stay, so the tabs don't move
     expect(screen.queryByText('Who pays who')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit people' })).toBeTruthy();
 
     const days = screen.getAllByRole('region');
     expect(days).toHaveLength(2);
