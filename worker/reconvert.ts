@@ -8,8 +8,29 @@ import { convertCents, convertParts } from '../shared/rates';
 import type { SplitMode } from '../shared/settle';
 import type { Rate } from './exchange-rates';
 
-/** Started (and its time recorded) when the change is made; retried when this old */
-export const RETRY_AFTER_MS = 30_000;
+/**
+ * Opening a split retries a conversion this old. Failed conversions are retried by the
+ * queue (reconvert-queue.ts); this is the safety net for when that couldn't.
+ */
+export const RETRY_AFTER_MS = 10 * 60 * 1000;
+
+/** A conversion to retry, sent to the reconvert queue when the first attempt fails */
+export interface ReconvertJob {
+  splitId: string;
+  /** converting_since of the change this job is for; a newer change makes it a no-op */
+  since: number;
+  /** Whose rate preference to use: the person who changed the currency */
+  email: string;
+}
+
+/** The first retry waits this long, giving the rate services a moment to come back */
+export const FIRST_RETRY_S = 30;
+/** Longest wait between retries; queued messages are kept a day, and 8 tries fit in it */
+const MAX_RETRY_S = 60 * 60;
+
+/** How long to wait before try number `attempts + 1`: 1 minute, 2, 4 ... up to an hour */
+export const retryDelaySeconds = (attempts: number) =>
+  Math.min(60 * 2 ** Math.max(0, attempts - 1), MAX_RETRY_S);
 
 interface ItemRow {
   id: string;
@@ -31,14 +52,17 @@ interface PartRow {
 
 /**
  * Converts every item into the split's current currency, then marks the split done.
- * Does nothing if it isn't converting. If the currency changes again meanwhile, its
- * writes are skipped and the next run starts over.
+ * Does nothing if it isn't converting, or (given `onlySince`) if the conversion under
+ * way is for a newer change than the one asked about. If the currency changes again
+ * meanwhile, its writes are skipped and the next run starts over. True when this run
+ * finished the conversion.
  */
 export async function reconvertSplit(
   db: D1Database,
   splitId: string,
   fetchRate: (from: string, to: string) => Promise<Rate>,
-): Promise<void> {
+  onlySince?: number,
+): Promise<boolean> {
   const [splitRows, itemRows, partRows] = await db.batch([
     db
       .prepare(
@@ -65,7 +89,8 @@ export async function reconvertSplit(
   const split = splitRows.results[0] as
     | { currency: string; fromCurrency: string | null; since: number | null }
     | undefined;
-  if (split?.fromCurrency == null || split.since == null) return;
+  if (split?.fromCurrency == null || split.since == null) return false;
+  if (onlySince != null && split.since !== onlySince) return false;
   const { currency: to, fromCurrency, since } = split;
 
   const items = itemRows.results as ItemRow[];
@@ -164,5 +189,6 @@ export async function reconvertSplit(
       )
       .bind(Date.now(), splitId, to, since),
   );
-  await db.batch(statements);
+  const results = await db.batch(statements);
+  return (results.at(-1)?.meta.changes ?? 0) > 0;
 }

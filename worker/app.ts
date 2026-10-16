@@ -15,13 +15,16 @@
 //     run in one batch with others, and planners (plan*), reading what they need first;
 //   - actions, which write themselves and answer with what changed (a new token, say).
 // Reading requests is in http.ts, and telling the apps that have a split open about
-// changes in room.ts.
+// changes in room.ts. Besides requests, the Worker takes messages from the reconvert
+// queue: currency conversions to retry after a failed first attempt
+// (reconvert-queue.ts, wired in index.ts and wrangler.jsonc).
 
 import { createMiddleware } from 'hono/factory';
 import type { Role } from '../shared/types';
 import type { AuthEnv } from './auth';
 import { fail, notFound } from './http';
 import type { RatesEnv } from './exchange-rates';
+import type { ReconvertJob } from './reconvert';
 import type { RoomEnv } from './room';
 import { ROW_ID_CHARS } from '../shared/api';
 
@@ -32,6 +35,10 @@ export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   API_LIMITER: RateLimit;
   /** How long a currency change may take before opening the split retries it; for tests */
   RECONVERT_RETRY_MS?: string;
+  /** Conversions whose first attempt failed, retried with backoff (reconvert-queue.ts) */
+  RECONVERT_QUEUE: Queue<ReconvertJob>;
+  /** Seconds between those retries, instead of the backoff; for tests */
+  RECONVERT_RETRY_DELAY_S?: string;
 }
 
 export type AppEnv = {

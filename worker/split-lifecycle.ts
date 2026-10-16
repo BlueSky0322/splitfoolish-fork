@@ -7,6 +7,8 @@ import { touchSplitStatement } from './app';
 import { getRatePreference, settingsStatements } from './profiles';
 import { getRate } from './exchange-rates';
 import { RETRY_AFTER_MS, reconvertSplit } from './reconvert';
+import { queueReconvert } from './reconvert-queue';
+import { notifySplit } from './room';
 import { deleteAllAccessStatements, newShareToken } from './sharing';
 import { deleteContentStatements } from './split-content';
 
@@ -59,8 +61,10 @@ export async function planSplitSettings(
   db: D1Database,
   splitId: string,
   changes: { name?: string; currency?: string },
-): Promise<{ statements: D1PreparedStatement[]; converting: boolean }> {
+): Promise<{ statements: D1PreparedStatement[]; converting: boolean; since: number }> {
   const statements: D1PreparedStatement[] = [];
+  // When the conversion started, which tells its retries apart from a later change's
+  const since = Date.now();
   if (changes.name != null) {
     statements.push(
       db.prepare('UPDATE splits SET name = ? WHERE id = ?').bind(changes.name, splitId),
@@ -81,12 +85,12 @@ export async function planSplitSettings(
             `UPDATE splits SET converting_from = coalesce(converting_from, currency),
              converting_since = ?, currency = ? WHERE id = ?`,
           )
-          .bind(Date.now(), changes.currency, splitId),
+          .bind(since, changes.currency, splitId),
       );
     }
   }
   if (statements.length > 0) statements.push(touchSplitStatement(db, splitId));
-  return { statements, converting };
+  return { statements, converting, since };
 }
 
 /** Everything of a split, children first, for deleting it */
@@ -98,15 +102,30 @@ export const deleteSplitStatements = (db: D1Database, splitId: string) => [
 
 /**
  * Converts the split's items after the response is sent, at rates from the source the
- * person who set it off prefers; failures are retried later
+ * person who set it off prefers, and tells the apps that have it open once it's done.
+ * If that fails (say, the rates are down), the reconvert queue tries again later.
+ * `since` is when the conversion started (converting_since).
  */
-export const startReconvert = (env: Env, ctx: WaitUntil, splitId: string, email: string) =>
+export const startReconvert = (
+  env: Env,
+  ctx: WaitUntil,
+  splitId: string,
+  email: string,
+  since: number,
+) =>
   ctx.waitUntil(
-    getRatePreference(env.DB, email)
-      .then((prefer) =>
-        reconvertSplit(env.DB, splitId, (from, to) => getRate(env, from, to, { prefer })),
-      )
-      .catch((err) => console.error(err)),
+    (async () => {
+      try {
+        const prefer = await getRatePreference(env.DB, email);
+        const fetchRate = (from: string, to: string) => getRate(env, from, to, { prefer });
+        if (await reconvertSplit(env.DB, splitId, fetchRate, since)) {
+          notifySplit(env, ctx, splitId, null);
+        }
+      } catch (err) {
+        console.error(err);
+        await queueReconvert(env, { splitId, since, email });
+      }
+    })(),
   );
 
 /** How long a conversion may take before opening the split retries it */
@@ -127,6 +146,6 @@ export function retryStalledReconvert(
   convertingSince: number | null,
 ) {
   if (convertingSince != null && Date.now() - convertingSince >= retryAfterMs(env)) {
-    startReconvert(env, ctx, splitId, email);
+    startReconvert(env, ctx, splitId, email, convertingSince);
   }
 }
