@@ -89,13 +89,11 @@ Every push to `main` builds, checks and tests, applies new migrations to the pro
 database, then deploys the Worker (`.github/workflows/deploy.yml`).
 
 Cloudflare Access signs people in before anything else loads, which also turns away
-anything fetched without a login. Installing the app on Android needs its manifest and
-icons from outside it: Chrome checks the icons without the sign-in cookie, and Google's
-servers fetch them to package the app. So give these paths an Access application with
-a **Bypass** policy (everyone): `/manifest.webmanifest`, `/icon-192.png`, `/icon-512.png`,
-`/icon-maskable-512.png`, `/icon.svg`, `/apple-touch-icon.png` and `/launch/` (the
-iPhone launch screens). They hold the app's name, colours and pictures, nothing about
-anyone. Without them Chrome still installs the page, but without the manifest: a white
-launch screen, and the page installed from as its start. `chrome://webapks` on the
-phone shows which (an empty Manifest URL means it was installed without one); reinstall
-after fixing it, since an install made without a manifest never updates.
+anything fetched without a login. Chrome on Android installs the app without its
+manifest: a white launch screen, and the page installed from as its start.
+`chrome://webapks` on the phone shows this as an empty Manifest URL. An Access
+application with a **Bypass** policy for the manifest, icons and `/launch/` was tried
+and didn't change it, even though the manifest then loaded without a login, so there is
+none. The cause hasn't been found; `chrome://inspect` (Application, then Manifest) on
+the phone's tab is where to look next. An install made without a manifest never
+updates, so reinstall once it's fixed.
