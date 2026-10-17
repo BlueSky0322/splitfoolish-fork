@@ -16,7 +16,7 @@ export interface PhotoView {
 
 export const DEFAULT_PHOTO_VIEW: PhotoView = { sortKey: 'added', sortDir: 'desc', filter: 'all' };
 
-/** The orders a phone's sort button steps through, as a computer's sort menu offers */
+/** The orders a phone's sort menu offers, as a computer's does */
 export const PHONE_PHOTO_SORTS: { sortKey: PhotoSortKey; sortDir: PhotoSortDir; label: string }[] =
   [
     { sortKey: 'added', sortDir: 'desc', label: 'Newest' },
@@ -25,16 +25,12 @@ export const PHONE_PHOTO_SORTS: { sortKey: PhotoSortKey; sortDir: PhotoSortDir; 
     { sortKey: 'item', sortDir: 'asc', label: 'Item date, oldest' },
   ];
 
-/** The kinds a phone's filter button steps through, in order */
+/** The kinds a phone's filter menu offers, in order */
 export const PHOTO_FILTERS: { filter: PhotoFilter; label: string }[] = [
   { filter: 'all', label: 'All' },
   { filter: 'receipts', label: 'Receipts' },
   { filter: 'split', label: 'Split photos' },
 ];
-
-/** The next in a list after the one that matches, back to the first after the last */
-export const nextOf = <T>(list: T[], matches: (entry: T) => boolean) =>
-  list[(list.findIndex(matches) + 1) % list.length];
 
 export interface PhotoDay {
   key: string;

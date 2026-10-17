@@ -16,8 +16,8 @@ import {
   DEFAULT_PHOTO_VIEW,
   PHONE_PHOTO_SORTS,
   PHOTO_FILTERS,
+  type PhotoFilter,
   type PhotoView,
-  nextOf,
   photoCounts,
   photoDays,
 } from '../../../split/photo-days';
@@ -27,7 +27,7 @@ import Fab from '../../ui/Fab';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
 import { useLongPress } from '../items/useItemSelection';
 import bar from '../items/ItemSelection.module.css';
-import page from '../Split.module.css';
+import PillMenu from '../PillMenu';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './PhotosTab.module.css';
 import QueuedPhotoTile from './QueuedPhotoTile';
@@ -79,8 +79,8 @@ function PhotoTile({
 }
 
 // The split's Photos tab on a phone: every photo, the split's own and each item's
-// receipts, by day, with the item it belongs to. Its buttons step through the orders and
-// kinds a computer's Photos tab offers. A long press picks photos, to download or remove
+// receipts, by day, with the item it belongs to. Its menus offer the orders and kinds a
+// computer's Photos tab does. A long press picks photos, to download or remove
 // them together.
 const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
   const { splitId, meta, photos, canRemovePhoto } = useSplitPage();
@@ -181,36 +181,34 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
       )}
       {all.length > 0 && !pick.active && (
         <div className={classes.toolbar}>
-          <UnstyledButton
-            className={page.pill}
-            onClick={() =>
-              setView((v) => {
-                const next = nextOf(
-                  PHONE_PHOTO_SORTS,
-                  (o) => o.sortKey === v.sortKey && o.sortDir === v.sortDir,
-                );
-                return { ...v, sortKey: next.sortKey, sortDir: next.sortDir };
-              })
+          <PillMenu
+            title="Sort by"
+            label={`Sort photos: ${sort.label}`}
+            icon={
+              sort.sortDir === 'asc' ? <SortAscending size={14} /> : <SortDescending size={14} />
             }
-            aria-label={`Sort photos: ${sort.label}`}
-          >
-            {sort.sortDir === 'asc' ? <SortAscending size={14} /> : <SortDescending size={14} />}
-            {sort.label}
-          </UnstyledButton>
-          <UnstyledButton
-            className={page.pill}
-            onClick={() =>
-              setView((v) => ({
-                ...v,
-                filter: nextOf(PHOTO_FILTERS, (f) => f.filter === v.filter).filter,
-              }))
-            }
-            aria-label={`Show: ${filter.label}, ${counts[filter.filter]}`}
-          >
-            <FunnelSimple size={14} />
-            {filter.label}
-            <span className="sf-muted">{counts[filter.filter]}</span>
-          </UnstyledButton>
+            options={PHONE_PHOTO_SORTS.map((o) => ({
+              key: `${o.sortKey} ${o.sortDir}`,
+              label: o.label,
+            }))}
+            value={`${sort.sortKey} ${sort.sortDir}`}
+            onChange={(key) => {
+              const o = PHONE_PHOTO_SORTS.find((s) => `${s.sortKey} ${s.sortDir}` === key)!;
+              setView((v) => ({ ...v, sortKey: o.sortKey, sortDir: o.sortDir }));
+            }}
+          />
+          <PillMenu
+            title="Show"
+            label={`Show: ${filter.label}, ${counts[filter.filter]}`}
+            icon={<FunnelSimple size={14} />}
+            options={PHOTO_FILTERS.map((f) => ({
+              key: f.filter,
+              label: f.label,
+              count: counts[f.filter],
+            }))}
+            value={view.filter}
+            onChange={(key) => setView((v) => ({ ...v, filter: key as PhotoFilter }))}
+          />
         </div>
       )}
       {queued.length > 0 && (

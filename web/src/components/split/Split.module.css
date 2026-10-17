@@ -191,6 +191,23 @@
   padding: 0 14px;
 }
 
+/* On the narrowest phones the pills' names shorten, and the view switch keeps its size */
+.mobile .toolbar > * {
+  flex-shrink: 0;
+}
+
+.mobile .toolbar > .pill {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* Their icons go first, so names shorten only if they still don't fit */
+@media (max-width: 359px) {
+  .mobile .toolbar > .pill > svg:first-child {
+    display: none;
+  }
+}
+
 .toolbarSpacer {
   flex: 1;
 }
@@ -210,6 +227,15 @@
 
 .pill:hover {
   background: var(--sf-hover);
+}
+
+.pill > svg {
+  flex-shrink: 0;
+}
+
+.pillLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .filterChip {

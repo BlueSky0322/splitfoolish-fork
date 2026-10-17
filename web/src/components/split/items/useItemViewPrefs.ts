@@ -49,19 +49,9 @@ export function useItemViewPrefs() {
         : { sortKey: key, sortDir: FIRST_DIR[key] },
     );
 
-  // Phones step through a short list of sorts, and of groupings
-  const mobileSort = MOBILE_SORTS.findIndex(
-    (s) => s.key === prefs.sortKey && s.dir === prefs.sortDir,
-  );
-  const shownSort = MOBILE_SORTS[mobileSort] ?? MOBILE_SORTS[0];
-  const cycleMobileSort = () => {
-    const next = MOBILE_SORTS[(mobileSort + 1) % MOBILE_SORTS.length];
-    void setPref({ sortKey: next.key, sortDir: next.dir });
-  };
-  const cycleGroup = () =>
-    setPref({
-      groupBy: GROUP_ORDER[(GROUP_ORDER.indexOf(prefs.groupBy) + 1) % GROUP_ORDER.length],
-    });
+  // Phones choose from a short list of sorts
+  const shownSort =
+    MOBILE_SORTS.find((s) => s.key === prefs.sortKey && s.dir === prefs.sortDir) ?? MOBILE_SORTS[0];
 
-  return { prefs, setPref, sortBy, shownSort, cycleMobileSort, cycleGroup };
+  return { prefs, setPref, sortBy, shownSort };
 }

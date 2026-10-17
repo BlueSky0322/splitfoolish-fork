@@ -13,7 +13,7 @@ import { useBackDismiss } from '../../../hooks/useBackDismiss';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
 import { navigate } from '../../../hooks/useRoute';
 import { otherCurrencyCount } from '../../../split/derive';
-import { GROUP_LABELS } from '../../../split/grouping';
+import { GROUP_LABELS, type GroupBy, MOBILE_SORTS } from '../../../split/grouping';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { formatAmount } from '../../../utils/money';
 import SplitAvatar from '../../common/SplitAvatar';
@@ -24,8 +24,9 @@ import { ToolbarSkeleton } from './SplitSkeletons';
 import Fab from '../../ui/Fab';
 import { BalanceHero } from '../balances/BalancePanel';
 import { MobileSelectionBar } from '../items/ItemSelection';
-import { useItemViewPrefs } from '../items/useItemViewPrefs';
+import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
 import PhotosTab, { AddPhotosFab } from '../photos/PhotosTab';
+import PillMenu from '../PillMenu';
 import { usePhotoSelection } from '../photos/usePhotoSelection';
 import { useSplitPage } from '../SplitPageContext';
 import { SaveStatus, type SelectionUi, type SplitPageParts, SplitNotices } from './SplitPageParts';
@@ -91,7 +92,7 @@ const MobileSplitLayout = ({
 }) => {
   const { splitId, myEmail, meta, status, currency, pictureVersion, openDialog } = useSplitPage();
   const { state } = useSplitState();
-  const { prefs, shownSort, cycleMobileSort, cycleGroup } = useItemViewPrefs();
+  const { prefs, setPref, shownSort } = useItemViewPrefs();
   const isMobile = useIsMobile();
   const [tab, setTab] = useState<SplitTab>('items');
   const at = TABS.findIndex((x) => x.key === tab);
@@ -313,20 +314,28 @@ const MobileSplitLayout = ({
               <>
                 {!noPeople && state.items.length > 0 && (
                   <div className={page.toolbar}>
-                    <UnstyledButton
-                      className={page.pill}
-                      onClick={cycleGroup}
-                    >
-                      <StackSimple size={14} />
-                      {GROUP_LABELS[prefs.groupBy]}
-                    </UnstyledButton>
-                    <UnstyledButton
-                      className={page.pill}
-                      onClick={cycleMobileSort}
-                    >
-                      <SortDescending size={14} />
-                      {shownSort.label}
-                    </UnstyledButton>
+                    <PillMenu
+                      title="Group by"
+                      label={`Group items: ${GROUP_LABELS[prefs.groupBy]}`}
+                      icon={<StackSimple size={14} />}
+                      options={GROUP_ORDER.map((g) => ({ key: g, label: GROUP_LABELS[g] }))}
+                      value={prefs.groupBy}
+                      onChange={(g) => void setPref({ groupBy: g as GroupBy })}
+                    />
+                    <PillMenu
+                      title="Sort by"
+                      label={`Sort items: ${shownSort.label}`}
+                      icon={<SortDescending size={14} />}
+                      options={MOBILE_SORTS.map((o) => ({
+                        key: `${o.key} ${o.dir}`,
+                        label: o.label,
+                      }))}
+                      value={`${shownSort.key} ${shownSort.dir}`}
+                      onChange={(key) => {
+                        const o = MOBILE_SORTS.find((s) => `${s.key} ${s.dir}` === key)!;
+                        void setPref({ sortKey: o.key, sortDir: o.dir });
+                      }}
+                    />
                     <span className={page.toolbarSpacer} />
                     {parts.viewToggle}
                   </div>
