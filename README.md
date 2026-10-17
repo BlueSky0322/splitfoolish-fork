@@ -87,3 +87,15 @@ yarn vitest run  # unit tests, plus API tests against a local Worker
 
 Every push to `main` builds, checks and tests, applies new migrations to the production
 database, then deploys the Worker (`.github/workflows/deploy.yml`).
+
+Cloudflare Access signs people in before anything else loads, which also turns away
+anything fetched without a login. Installing the app on Android needs its manifest and
+icons from outside it: Chrome checks the icons without the sign-in cookie, and Google's
+servers fetch them to package the app. So give these paths an Access application with
+a **Bypass** policy (everyone): `/manifest.webmanifest`, `/icon-192.png`, `/icon-512.png`,
+`/icon-maskable-512.png`, `/icon.svg`, `/apple-touch-icon.png` and `/launch/` (the
+iPhone launch screens). They hold the app's name, colours and pictures, nothing about
+anyone. Without them Chrome still installs the page, but without the manifest: a white
+launch screen, and the page installed from as its start. `chrome://webapks` on the
+phone shows which (an empty Manifest URL means it was installed without one); reinstall
+after fixing it, since an install made without a manifest never updates.

@@ -314,7 +314,9 @@ on Auto, with the logo drawing itself, and sets the status bar's colour;
 and keeps the status bar following the theme. Before that, iPhones show plain launch
 screens in the theme's background, made at build time with their links
 ([web/build/launch-images.ts](../web/build/launch-images.ts)); Android shows the
-manifest's dark one, which can't follow the theme.
+manifest's dark one, which can't follow the theme. Both need the manifest and icons let
+past Cloudflare Access (Deploying in [README.md](../README.md)); without them Chrome
+installs the page with no manifest, and a white launch screen.
 
 **Flow.** A page load waits up to 3 seconds for the network; offline, slower, or a
 5xx or non-page answer, and the kept page opens instead, marked as opened from the
