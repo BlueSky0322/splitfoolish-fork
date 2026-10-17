@@ -49,8 +49,121 @@
       href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..600&family=Geist:wght@400..600&display=swap"
       crossorigin
     />
+    <!--
+      The first screen, shown before the app's code has loaded: the background of the
+      theme this device last used (or the phone's own, on Auto) and the logo drawing
+      itself. main.tsx fades it out once the app is up. The saved theme's key and the
+      colours are the app's own (sf-appearance in profile/ProfileContext.tsx, --sf-bg in
+      theme/tokens.css); launch-screen.test.ts keeps them in step.
+    -->
+    <script>
+      (function () {
+        var theme = 'auto';
+        try {
+          var saved = JSON.parse(localStorage.getItem('sf-appearance') || '{}');
+          if (saved.theme === 'light' || saved.theme === 'dark') theme = saved.theme;
+        } catch (e) {}
+        if (theme === 'auto') {
+          theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-launch', theme);
+        var bar = document.querySelector('meta[name="theme-color"]');
+        if (bar) bar.setAttribute('content', theme === 'light' ? '#eceef6' : '#161826');
+      })();
+    </script>
+    <style>
+      html {
+        background: #161826;
+      }
+      html[data-launch='light'] {
+        background: #eceef6;
+      }
+      #launch {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        place-items: center;
+        background: #161826;
+        transition: opacity 0.2s ease-out;
+      }
+      html[data-launch='light'] #launch {
+        background: #eceef6;
+      }
+      #launch[data-done] {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #launch svg {
+        width: 88px;
+        height: 88px;
+        overflow: visible;
+      }
+      #launch path {
+        fill: none;
+        stroke: #9184d9;
+        stroke-width: 24;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+        animation: launch-draw 0.32s ease-out forwards;
+      }
+      html[data-launch='light'] #launch path {
+        stroke: #6a5db3;
+      }
+      /* The stem, then both branches at once, then both arrowheads */
+      #launch .branch {
+        animation-delay: 0.22s;
+      }
+      #launch .head {
+        animation-delay: 0.5s;
+      }
+      @keyframes launch-draw {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #launch path {
+          animation: none;
+          stroke-dashoffset: 0;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div
+      id="launch"
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 256 256">
+        <path
+          pathLength="1"
+          d="M128 24V72"
+        />
+        <path
+          class="branch"
+          pathLength="1"
+          d="M128 72L64 136V216"
+        />
+        <path
+          class="branch"
+          pathLength="1"
+          d="M128 72L192 136V216"
+        />
+        <path
+          class="head"
+          pathLength="1"
+          d="M32 184L64 216L96 184"
+        />
+        <path
+          class="head"
+          pathLength="1"
+          d="M160 184L192 216L224 184"
+        />
+      </svg>
+    </div>
     <div id="root"></div>
     <script
       type="module"

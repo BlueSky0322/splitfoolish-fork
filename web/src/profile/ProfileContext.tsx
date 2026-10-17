@@ -30,7 +30,8 @@ import { quietly } from '../utils/quietly';
 
 // The signed-in user's profile. Theme and accent are also kept in localStorage so
 // the app paints in the right colours before /api/me answers.
-const APPEARANCE_KEY = 'sf-appearance';
+/** Also read by index.html's first screen, before the app's code loads */
+export const APPEARANCE_KEY = 'sf-appearance';
 
 export interface Appearance {
   theme: ThemeSetting;
