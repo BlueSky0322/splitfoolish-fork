@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ui/ErrorBoundary';
 import { Root } from './Root';
 import { trackKeyboardInset } from './pwa/keyboard-inset';
 import { trackInstall } from './pwa/install';
+import { hideLaunchScreen } from './pwa/launch-screen';
 import { restoreLastPage } from './hooks/useRoute';
 import { syncWhenOnline } from './offline/sync';
 import { keepStorageOnceInstalled } from './offline/storage';
@@ -28,6 +29,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </React.StrictMode>,
 );
+hideLaunchScreen();
 
 // Installable app: the service worker only keeps the built files for offline starts
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

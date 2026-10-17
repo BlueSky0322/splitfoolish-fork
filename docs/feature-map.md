@@ -307,6 +307,15 @@ export) with their imports, but not a library's own optional extras
 ([web/build/precache.ts](../web/build/precache.ts)). The PDF font is not in it: it's
 kept the first time Export opens.
 
+Opening the app: [web/index.html](../web/index.html) paints a first screen before the
+app's code loads, in the theme this device saved (`sf-appearance`) or the phone's own
+on Auto, with the logo drawing itself, and sets the status bar's colour;
+[pwa/launch-screen.ts](../web/src/pwa/launch-screen.ts) fades it out once the app is up
+and keeps the status bar following the theme. Before that, iPhones show plain launch
+screens in the theme's background, made at build time with their links
+([web/build/launch-images.ts](../web/build/launch-images.ts)); Android shows the
+manifest's dark one, which can't follow the theme.
+
 **Flow.** A page load waits up to 3 seconds for the network; offline, slower, or a
 5xx or non-page answer, and the kept page opens instead, marked as opened from the
 device. A sign-in redirect or a 4xx goes to the browser, and `/cdn-cgi/` (Access) is
