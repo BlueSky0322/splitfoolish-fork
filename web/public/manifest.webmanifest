@@ -2,6 +2,7 @@
   "name": "Splitfoolish",
   "short_name": "Splitfoolish",
   "description": "Split shared expenses and see who pays who.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
