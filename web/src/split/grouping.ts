@@ -96,7 +96,7 @@ export function groupItems(
   return [...groups.values()];
 }
 
-/** The phone's sort pill cycles through these */
+/** The sorts a phone's sort menu offers */
 export const MOBILE_SORTS: { key: SortKey; dir: SortDir; label: string }[] = [
   { key: 'date', dir: 'desc', label: 'Newest' },
   { key: 'date', dir: 'asc', label: 'Oldest' },

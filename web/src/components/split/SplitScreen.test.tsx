@@ -389,6 +389,51 @@ describe('the split page', () => {
     await waitFor(() => expect(names()).toEqual(['Taxi', 'Dinner']));
   });
 
+  test('on a phone, grouping and sorting items are picked from menus, and kept', async () => {
+    const server = fakeServer(
+      splitDetail('trip', [
+        item({ id: 'dinner', name: 'Dinner', cost: 90, createdAt: Date.UTC(2026, 9, 10, 12) }),
+        item({ id: 'taxi', name: 'Taxi', cost: 30, createdAt: Date.UTC(2026, 9, 11, 12) }),
+        item({ id: 'brunch', name: 'Brunch', cost: 12, createdAt: Date.UTC(2026, 9, 12, 12) }),
+      ]),
+    );
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await screen.findByText('Taxi');
+    const names = () => screen.getAllByText(/^(Dinner|Taxi|Brunch)$/).map((el) => el.textContent);
+    const menuItems = async () =>
+      (await screen.findAllByRole('menuitem')).map((el) => el.textContent);
+
+    // Every grouping is listed, so No grouping is one tap, not three
+    await user.click(screen.getByRole('button', { name: 'Group items: By day' }));
+    expect(await menuItems()).toEqual(['No grouping', 'By day', 'By payer', 'By category']);
+    await user.click(screen.getByRole('menuitem', { name: 'No grouping' }));
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(await screen.findByRole('button', { name: 'Group items: No grouping' })).toBeTruthy();
+    expect(names()).toEqual(['Brunch', 'Taxi', 'Dinner']);
+
+    // Straight from Newest to A to Z, past the sorts in between
+    await user.click(screen.getByRole('button', { name: 'Sort items: Newest' }));
+    expect(await menuItems()).toEqual(['Newest', 'Oldest', 'Largest', 'A–Z']);
+    await user.click(screen.getByRole('menuitem', { name: 'A–Z' }));
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(await screen.findByRole('button', { name: 'Sort items: A–Z' })).toBeTruthy();
+    expect(names()).toEqual(['Brunch', 'Dinner', 'Taxi']);
+    // Kept with the account, as on a computer
+    await waitFor(() =>
+      expect(server.me.settings).toMatchObject({
+        itemsGroupBy: 'none',
+        itemsSortKey: 'name',
+        itemsSortDir: 'asc',
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Sort items: A–Z' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Largest' }));
+    expect(await screen.findByRole('button', { name: 'Sort items: Largest' })).toBeTruthy();
+    expect(names()).toEqual(['Dinner', 'Taxi', 'Brunch']);
+  });
+
   test('on a phone, an item duplicates from its own sheet, keeping its date', async () => {
     const server = fakeServer(trip());
     const taxi = structuredClone(server.splits.get('trip')!.items[1]);
