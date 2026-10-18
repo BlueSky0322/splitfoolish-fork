@@ -1,12 +1,3 @@
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--sf-text-muted);
-}
-
 .list {
   background: var(--sf-tint);
   border-radius: 8px;

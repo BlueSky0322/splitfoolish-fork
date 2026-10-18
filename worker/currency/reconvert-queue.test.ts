@@ -14,11 +14,11 @@ vi.mock('./reconvert', async (actual) => ({
 vi.mock('../accounts/profiles', () => ({
   getRatePreference: vi.fn(() => Promise.resolve('frankfurter')),
 }));
-vi.mock('./exchange-rates', () => ({ getRate: vi.fn() }));
+vi.mock('./exchange-rates', () => ({ getRateOn: vi.fn() }));
 vi.mock('../splits/room', () => ({ notifySplit: vi.fn() }));
 
 const { reconvertSplit, retryDelaySeconds } = await import('./reconvert');
-const { getRate } = await import('./exchange-rates');
+const { getRateOn } = await import('./exchange-rates');
 const { notifySplit } = await import('../splits/room');
 const { handleReconvertQueue, queueReconvert, retryDelay } = await import('./reconvert-queue');
 
@@ -60,8 +60,8 @@ describe('retrying a conversion', () => {
     // For the change the job was queued for, at the rates its owner prefers
     const [, splitId, fetchRate, since] = vi.mocked(reconvertSplit).mock.calls[0];
     expect([splitId, since]).toEqual(['trip', 42]);
-    await fetchRate('MYR', 'GBP');
-    expect(getRate).toHaveBeenCalledWith(env, 'MYR', 'GBP', { prefer: 'frankfurter' });
+    await fetchRate('MYR', 'GBP', 7);
+    expect(getRateOn).toHaveBeenCalledWith(env, 'MYR', 'GBP', 7, { prefer: 'frankfurter' });
   });
 
   test('a job with nothing to do (done already, or for an older change) is done with quietly', async () => {

@@ -26,14 +26,14 @@ export interface RateInputs {
   ownRate: number | '';
   /** What the item was saved with, when editing one */
   original: ItemOriginal | null;
-  /** Today's rate, once fetched */
+  /** The rate on the day it was paid, once fetched */
   fetched: { rate: number; source: RateSource } | undefined;
 }
 
 /**
  * The rate for the preview, and where it came from: 1 in the split's own currency; the
  * one typed; the one the item was saved with, if the server would keep it too
- * (keepsSavedConversion); or else today's rate. Null until there is one.
+ * (keepsSavedConversion); or else the rate on the day it was paid. Null until there is one.
  */
 export function chooseRate(r: RateInputs): { rate: number | null; source: RateSource | null } {
   if (!r.foreign) return { rate: 1, source: null };

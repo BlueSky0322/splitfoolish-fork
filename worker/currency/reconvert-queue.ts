@@ -6,7 +6,7 @@
 // opening the split still retries it (retryStalledReconvert).
 
 import type { Env } from '../app';
-import { getRate } from './exchange-rates';
+import { getRateOn } from './exchange-rates';
 import { getRatePreference } from '../accounts/profiles';
 import { FIRST_RETRY_S, type ReconvertJob, reconvertSplit, retryDelaySeconds } from './reconvert';
 import { notifySplit } from '../splits/room';
@@ -31,7 +31,12 @@ export async function queueReconvert(env: Env, job: ReconvertJob) {
 /** Converts the split, at the rates the person who changed its currency prefers */
 async function convert(env: Env, { splitId, since, email }: ReconvertJob) {
   const prefer = await getRatePreference(env.DB, email);
-  return reconvertSplit(env.DB, splitId, (from, to) => getRate(env, from, to, { prefer }), since);
+  return reconvertSplit(
+    env.DB,
+    splitId,
+    (from, to, at) => getRateOn(env, from, to, at, { prefer }),
+    since,
+  );
 }
 
 /**

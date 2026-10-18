@@ -17,7 +17,7 @@ const item = (original: SplitItem['original']): SplitItem => ({
 });
 
 describe('usedCurrencies', () => {
-  it('shows the newest live rate, and a typed one only when every item is typed', () => {
+  it('shows the newest live rate, a typed one only when every item is typed, and whether its items are on different rates', () => {
     const used = usedCurrencies([
       item(null),
       item({ currency: 'JPY', amount: 1, rate: 0.03, rateSource: 'wise', rateAt: 1 }),
@@ -26,15 +26,15 @@ describe('usedCurrencies', () => {
       item({ currency: 'THB', amount: 1, rate: 0.13, rateSource: 'manual', rateAt: 1 }),
     ]);
     expect(used).toEqual([
-      { code: 'JPY', count: 3, rate: 0.031, source: 'wise', at: 2, manual: false },
-      { code: 'THB', count: 1, rate: 0.13, source: 'manual', at: 1, manual: true },
+      { code: 'JPY', count: 3, rate: 0.031, source: 'wise', at: 2, manual: false, varied: true },
+      { code: 'THB', count: 1, rate: 0.13, source: 'manual', at: 1, manual: true, varied: false },
     ]);
   });
 
   it('reads a rate saved without a source (older builds) as typed, like everywhere else', () => {
     const used = usedCurrencies([item({ currency: 'JPY', amount: 1, rate: 0.5, rateAt: 3 })]);
     expect(used).toEqual([
-      { code: 'JPY', count: 1, rate: 0.5, source: 'manual', at: 3, manual: true },
+      { code: 'JPY', count: 1, rate: 0.5, source: 'manual', at: 3, manual: true, varied: false },
     ]);
   });
 
@@ -45,7 +45,7 @@ describe('usedCurrencies', () => {
       item({ currency: 'JPY', amount: 1, rate: 0.5, rateAt: 3 }),
     ]);
     expect(used).toEqual([
-      { code: 'JPY', count: 2, rate: 0.031, source: 'wise', at: 2, manual: false },
+      { code: 'JPY', count: 2, rate: 0.031, source: 'wise', at: 2, manual: false, varied: true },
     ]);
   });
 

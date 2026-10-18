@@ -2,9 +2,10 @@
 // keeps what was originally paid: items already in another currency are converted
 // again from that, plain items become "paid in the old currency", and items paid in
 // the new currency become plain again, so switching back restores the exact amounts.
+// Each is converted at the rate on the day it was paid.
 
 import type { RateSource } from '../../shared/rates';
-import { convertCents, convertParts } from '../../shared/rates';
+import { convertCents, convertParts, rateDay } from '../../shared/rates';
 import type { SplitMode } from '../../shared/settle';
 import type { Rate } from './exchange-rates';
 
@@ -36,6 +37,7 @@ interface ItemRow {
   id: string;
   costCents: number;
   splitMode: SplitMode;
+  createdAt: number;
   originalCurrency: string | null;
   originalCents: number | null;
   rate: number | null;
@@ -60,7 +62,8 @@ interface PartRow {
 export async function reconvertSplit(
   db: D1Database,
   splitId: string,
-  fetchRate: (from: string, to: string) => Promise<Rate>,
+  /** The rate for an item paid at `at`, as getRateOn finds it */
+  fetchRate: (from: string, to: string, at: number) => Promise<Rate>,
   onlySince?: number,
 ): Promise<boolean> {
   const [splitRows, itemRows, partRows] = await db.batch([
@@ -72,7 +75,7 @@ export async function reconvertSplit(
       .bind(splitId),
     db
       .prepare(
-        `SELECT id, cost_cents AS costCents, split_mode AS splitMode,
+        `SELECT id, cost_cents AS costCents, split_mode AS splitMode, created_at AS createdAt,
            original_currency AS originalCurrency, original_cents AS originalCents,
            rate, rate_source AS rateSource, rate_at AS rateAt
          FROM items WHERE split_id = ?`,
@@ -101,11 +104,17 @@ export async function reconvertSplit(
   // What each item was paid in: its own currency, or the split's old one
   const paidIn = (item: ItemRow) => item.originalCurrency ?? fromCurrency;
 
-  // Throws if a rate can't be had; the split stays converting and is retried
-  const rates = new Map<string, Rate>();
-  for (const from of new Set(items.map(paidIn).filter((c) => c !== to))) {
-    rates.set(from, await fetchRate(from, to));
-  }
+  // One rate per currency and day. Throws if one can't be had; the split stays
+  // converting and is retried.
+  const keyOf = (item: ItemRow) => `${paidIn(item)} ${rateDay(item.createdAt)}`;
+  const wanted = new Map(items.filter((i) => paidIn(i) !== to).map((i) => [keyOf(i), i]));
+  const rates = new Map(
+    await Promise.all(
+      [...wanted].map(
+        async ([key, i]) => [key, await fetchRate(paidIn(i), to, i.createdAt)] as const,
+      ),
+    ),
+  );
 
   // Each write only applies while the split is still in the currency read above
   const stillTo = `(SELECT currency FROM splits WHERE id = ?) = ?`;
@@ -144,7 +153,7 @@ export async function reconvertSplit(
       continue;
     }
 
-    const rate = rates.get(from)!;
+    const rate = rates.get(keyOf(item))!;
     const costCents = convertCents(paidCents, rate.rate);
     statements.push(
       db

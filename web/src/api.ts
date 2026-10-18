@@ -183,13 +183,20 @@ export const api = {
     request<AcceptResult>('POST', `/api/invites/${encodeURIComponent(inviteId)}/accept`),
   declineInvite: (inviteId: string) =>
     request<Ok>('POST', `/api/invites/${encodeURIComponent(inviteId)}/decline`),
-  /** The rate to convert `from` into `to`, for previews; the server converts again on save */
-  getRate: (from: string, to: string, { fresh = false } = {}) =>
+  /**
+   * The rate to convert `from` into `to`, for previews: today's, or with `at` the one for
+   * an item paid then. The server converts again on save.
+   */
+  getRate: (
+    from: string,
+    to: string,
+    { fresh = false, at }: { fresh?: boolean; at?: number } = {},
+  ) =>
     request<RateQuote>(
       'GET',
       `/api/rates?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${
         fresh ? '&fresh=1' : ''
-      }`,
+      }${at != null ? `&at=${at}` : ''}`,
     ),
   /** The other currencies in your splits, with today's rate into `to` (Settings) */
   listUsedCurrencyRates: (to: string) =>

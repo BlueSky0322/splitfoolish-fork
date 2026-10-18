@@ -3,7 +3,9 @@
 // the one the person prefers tried first and the other after.
 // Each pair is kept in Cloudflare's cache and reused for 4 hours, so a day costs the
 // services a few requests per pair, and a day-old rate still serves if both are down.
-// Refresh in the Currencies sheet asks for one no older than 10 minutes.
+// Refresh on the Convert page asks for one no older than 10 minutes.
+// Items are converted at the rate on the day they were paid (getRateOn): today's live
+// rate, or for an earlier day the ECB's rate for it, then Wise's.
 
 import {
   DEFAULT_SETTINGS,
@@ -12,7 +14,7 @@ import {
   RATE_PROVIDERS,
   type RatePreference,
 } from '../../shared/api';
-import { isValidRate } from '../../shared/rates';
+import { isValidRate, rateDay } from '../../shared/rates';
 
 export interface RatesEnv {
   /** Wise personal API token (a Worker secret); without it Wise is skipped */
@@ -25,7 +27,10 @@ export interface RatesEnv {
 export interface Rate {
   rate: number;
   source: FetchedRateSource;
-  /** When the rate was fetched from the service, in ms */
+  /**
+   * When the rate was fetched from the service, in ms; for an earlier day's rate, noon
+   * UTC on that day, so it reads as that day wherever people are
+   */
   fetchedAt: number;
 }
 
@@ -37,6 +42,8 @@ const FRESH_MS = 4 * 60 * 60 * 1000;
 export const REFRESH_MAX_AGE_MS = 10 * 60 * 1000;
 /** How long Cloudflare keeps a copy at all */
 const KEEP_SECONDS = 24 * 60 * 60;
+/** An earlier day's rate never changes, so its copy is kept longer */
+const KEEP_DAY_SECONDS = 30 * 24 * 60 * 60;
 const TIMEOUT_MS = 4000;
 
 export interface Deps {
@@ -120,6 +127,16 @@ async function readKept(cache: Cache | null, key: string): Promise<Rate | null> 
   }
 }
 
+/** Keeps a copy of a rate. A bonus: a rate that can't be cached is still the rate. */
+async function keep(cache: Cache | null, key: string, rate: Rate, seconds: number) {
+  await cache
+    ?.put(
+      key,
+      new Response(JSON.stringify(rate), { headers: { 'Cache-Control': `max-age=${seconds}` } }),
+    )
+    .catch((err: unknown) => console.error(err));
+}
+
 /** The rate to convert `from` into `to`: 1 unit of `from` is `rate` units of `to` */
 export async function getRate(
   env: RatesEnv,
@@ -151,15 +168,7 @@ export async function getRate(
     }
     if (rate == null) continue;
     const fresh: Rate = { rate, source, fetchedAt: deps.now() };
-    // Keeping a copy is a bonus: a rate that can't be cached is still the rate
-    await deps.cache
-      ?.put(
-        key,
-        new Response(JSON.stringify(fresh), {
-          headers: { 'Cache-Control': `max-age=${KEEP_SECONDS}` },
-        }),
-      )
-      .catch((err: unknown) => console.error(err));
+    await keep(deps.cache, key, fresh, KEEP_SECONDS);
     return fresh;
   }
 
@@ -174,3 +183,93 @@ export const rateOrNull = (env: RatesEnv, from: string, to: string, options?: Ra
     if (err instanceof RatesUnavailable) return null;
     throw err;
   });
+
+/**
+ * A service saying it has no rate for that day or those currencies, as opposed to one
+ * that's down, turning us away (a token, too many requests) or failing
+ */
+const noRateFor = (status: number) => status === 400 || status === 404 || status === 422;
+
+/** The ECB's rate on a day, or on the working day before it when it publishes none */
+async function frankfurterOn(env: RatesEnv, from: string, to: string, day: string, deps: Deps) {
+  const base = env.FRANKFURTER_BASE ?? 'https://api.frankfurter.dev';
+  const res = await deps.fetch(`${base}/v1/${day}?base=${from}&symbols=${to}`, {
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (noRateFor(res.status)) return null;
+  if (!res.ok) throw new Error(`Frankfurter: ${res.status}`);
+  const body = await res.json<{ date?: unknown; rates?: Record<string, unknown> }>();
+  const rate = body.rates?.[to];
+  // A rate for a later day isn't that day's
+  const forDay = typeof body.date === 'string' && body.date <= day;
+  return forDay && isValidRate(rate) ? rate : null;
+}
+
+/**
+ * Wise's rate at noon UTC on a day. Used only if Wise says the rate is from that day,
+ * so an answer with today's rate instead is no answer.
+ */
+async function wiseOn(env: RatesEnv, from: string, to: string, day: string, deps: Deps) {
+  if (!env.WISE_TOKEN) return null;
+  const base = env.WISE_BASE ?? 'https://api.wise.com';
+  const res = await deps.fetch(
+    `${base}/v1/rates?source=${from}&target=${to}&time=${day}T12:00:00`,
+    {
+      headers: { Authorization: `Bearer ${env.WISE_TOKEN}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    },
+  );
+  if (noRateFor(res.status)) return null;
+  if (!res.ok) throw new Error(`Wise rates: ${res.status}`);
+  const body = await res.json<{ rate?: unknown; time?: unknown }[]>();
+  const { rate, time } = body[0] ?? {};
+  // Wise writes the offset as +0000, which not every date parser reads
+  const at =
+    typeof time === 'string' ? Date.parse(time.replace(/([+-]\d{2})(\d{2})$/, '$1:$2')) : NaN;
+  return Number.isFinite(at) && rateDay(at) === day && isValidRate(rate) ? rate : null;
+}
+
+const DAY_FETCHERS: [FetchedRateSource, typeof frankfurterOn][] = [
+  ['frankfurter', frankfurterOn],
+  ['wise', wiseOn],
+];
+
+/**
+ * The rate to convert an item paid at `at`: the live rate (getRate) for one paid today,
+ * and for an earlier day the ECB's rate on it, else Wise's. When neither has that day's
+ * rate for these currencies (the ECB doesn't publish them all), it's today's rate, which
+ * then says so by its date. A service that is down throws RatesUnavailable instead, so
+ * the change is tried again rather than settling for today's rate.
+ */
+export async function getRateOn(
+  env: RatesEnv,
+  from: string,
+  to: string,
+  at: number,
+  { prefer, deps = defaultDeps() }: Omit<RateOptions, 'maxAgeMs'> = {},
+): Promise<Rate> {
+  const day = rateDay(at);
+  if (from === to || day >= rateDay(deps.now())) return getRate(env, from, to, { prefer, deps });
+
+  const key = `https://rates.internal/v1/day/${day}/${from}/${to}`;
+  const saved = await readKept(deps.cache, key);
+  if (saved) return saved;
+
+  let down = false;
+  for (const [source, fetcher] of DAY_FETCHERS) {
+    let rate: number | null;
+    try {
+      rate = await fetcher(env, from, to, day, deps);
+    } catch (err) {
+      console.error(err);
+      down = true;
+      continue;
+    }
+    if (rate == null) continue;
+    const found: Rate = { rate, source, fetchedAt: Date.parse(`${day}T12:00:00Z`) };
+    await keep(deps.cache, key, found, KEEP_DAY_SECONDS);
+    return found;
+  }
+  if (down) throw new RatesUnavailable(`No rate for ${from} to ${to} on ${day} right now`);
+  return getRate(env, from, to, { prefer, deps });
+}

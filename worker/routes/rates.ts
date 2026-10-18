@@ -1,5 +1,6 @@
-// Exchange rates for the app's live preview when an item is in another currency. The
-// rate actually saved with an item is fetched again by the server when it's saved.
+// Exchange rates for the app's live preview when an item is in another currency: today's,
+// or with `at` the one for an item paid then. The rate actually saved with an item is
+// fetched again by the server when it's saved.
 
 import { Hono } from 'hono';
 import type { RateQuote, UsedCurrencyRate, UsedCurrencyRates } from '../../shared/api';
@@ -8,10 +9,12 @@ import { MAX_COST } from '../../shared/types';
 import type { AppEnv } from '../app';
 import { json, fail } from '../http';
 import { getRatePreference } from '../accounts/profiles';
+import { isItemDate } from '../bill/input';
 import {
   REFRESH_MAX_AGE_MS,
   RatesUnavailable,
   getRate,
+  getRateOn,
   rateOrNull,
 } from '../currency/exchange-rates';
 import { listUsedCurrencies } from '../splits/summaries';
@@ -29,15 +32,18 @@ rates.get('/rates', async (c) => {
   if (amount != null && (!Number.isFinite(amount) || amount < 0 || amount > MAX_COST)) {
     return fail(`Amount must be between 0 and ${MAX_COST.toLocaleString('en-US')}`, 400);
   }
+  const rawAt = c.req.query('at');
+  const at = rawAt == null ? null : Number(rawAt);
+  if (at != null && !isItemDate(at)) return fail('Give at as a time that has come, in ms', 400);
 
   try {
     const prefer = await getRatePreference(c.env.DB, c.var.email);
     // Refresh asks for a recent rate rather than one from hours ago
     const maxAgeMs = c.req.query('fresh') != null ? REFRESH_MAX_AGE_MS : undefined;
-    const { rate, source, fetchedAt } = await getRate(c.env, from, to, {
-      prefer,
-      maxAgeMs,
-    });
+    const { rate, source, fetchedAt } =
+      at == null
+        ? await getRate(c.env, from, to, { prefer, maxAgeMs })
+        : await getRateOn(c.env, from, to, at, { prefer });
     return json<RateQuote>({
       from,
       to,

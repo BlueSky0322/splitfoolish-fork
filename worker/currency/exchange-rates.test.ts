@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RatesUnavailable, getRate } from './exchange-rates';
+import { RatesUnavailable, getRate, getRateOn } from './exchange-rates';
 
 // A cache that behaves like Cloudflare's for these tests, keeping each copy's headers
 const memoryCache = () => {
@@ -296,5 +296,86 @@ describe('getRate', () => {
     });
     expect(rate).toMatchObject({ rate: 4.2, source: 'wise' });
     expect(s.calls.frankfurter).toBe(0);
+  });
+});
+
+describe('getRateOn', () => {
+  const now = Date.parse('2026-10-17T09:00:00Z');
+  // A Sunday: the ECB answers with the Friday before
+  const sunday = Date.parse('2026-10-11T03:00:00Z');
+  const deps = (s: ReturnType<typeof services>, cache: Cache | null = null) => ({
+    fetch: s.fetch,
+    cache,
+    now: () => now,
+  });
+  const ecbOn = (date: string, rate: number) => () =>
+    ok({ base: 'USD', date, rates: { MYR: rate } });
+  const wiseAt = (time: string, rate: number) => () =>
+    ok([{ rate, source: 'USD', target: 'MYR', time }]);
+
+  it("takes today's live rate for an item paid today", async () => {
+    const s = services(wiseRate(4.2), ecbRate(4.1));
+    const rate = await getRateOn({ WISE_TOKEN: 't' }, 'USD', 'MYR', now - 60_000, {
+      deps: deps(s),
+    });
+    expect(rate).toEqual({ rate: 4.2, source: 'wise', fetchedAt: now });
+  });
+
+  it("takes the ECB's rate for an earlier day, the working day before on a weekend, said to be from that day", async () => {
+    const s = services(wiseRate(4.2), ecbOn('2026-10-09', 4.08));
+    const cache = memoryCache();
+    const rate = await getRateOn({ WISE_TOKEN: 't' }, 'USD', 'MYR', sunday, {
+      deps: deps(s, cache),
+    });
+    expect(rate).toEqual({
+      rate: 4.08,
+      source: 'frankfurter',
+      fetchedAt: Date.parse('2026-10-11T12:00:00Z'),
+    });
+    expect(s.requests[0].url).toContain('/v1/2026-10-11?base=USD&symbols=MYR');
+    expect(s.calls.wise).toBe(0);
+    // A past day's rate never changes, so it's kept a month, and asked for only once
+    expect(cache.keptFor()).toEqual([`max-age=${30 * 24 * 60 * 60}`]);
+    await getRateOn({ WISE_TOKEN: 't' }, 'USD', 'MYR', sunday, { deps: deps(s, cache) });
+    expect(s.calls.frankfurter).toBe(1);
+  });
+
+  it("uses Wise's rate only when Wise says it is from that day", async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const missing = () => new Response('', { status: 404 });
+    const onDay = services(wiseAt('2026-10-11T12:00:00+0000', 0.14), missing);
+    expect(
+      await getRateOn({ WISE_TOKEN: 't' }, 'TWD', 'MYR', sunday, { deps: deps(onDay) }),
+    ).toMatchObject({ rate: 0.14, source: 'wise' });
+    expect(onDay.requests.at(-1)?.url).toContain('time=2026-10-11T12:00:00');
+
+    // Today's rate in its place: not that day's, so today's rate is fetched as today's
+    const today = services(wiseAt('2026-10-17T08:00:00+0000', 0.15), missing);
+    expect(
+      await getRateOn({ WISE_TOKEN: 't' }, 'TWD', 'MYR', sunday, { deps: deps(today) }),
+    ).toEqual({ rate: 0.15, source: 'wise', fetchedAt: now });
+  });
+
+  it('refuses an ECB answer for a later day than the one asked', async () => {
+    const s = services(down, ecbOn('2026-10-12', 4.1));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(getRateOn({}, 'USD', 'MYR', sunday, { deps: deps(s) })).resolves.toMatchObject({
+      fetchedAt: now,
+    });
+  });
+
+  it("throws rather than fall back to today's rate when a service is down or turns us away", async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const missing = () => new Response('', { status: 404 });
+    for (const [wise, ecb] of [
+      [wiseRate(4.2), down],
+      [() => new Response('', { status: 429 }), missing],
+      [() => new Response('', { status: 401 }), missing],
+    ] as const) {
+      const s = services(wise, ecb);
+      await expect(
+        getRateOn({ WISE_TOKEN: 't' }, 'USD', 'MYR', sunday, { deps: deps(s) }),
+      ).rejects.toBeInstanceOf(RatesUnavailable);
+    }
   });
 });

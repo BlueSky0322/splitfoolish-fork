@@ -53,7 +53,7 @@ import {
 import { deleteAttachments, serveAttachment, uploadAttachment } from '../photos/attachments';
 import { deleteSplitPicture, putSplitPicture, serveSplitPicture } from '../photos/pictures';
 import { getRatePreference } from '../accounts/profiles';
-import { REFRESH_MAX_AGE_MS, getRate } from '../currency/exchange-rates';
+import { getRateOn } from '../currency/exchange-rates';
 import { evictFromRoom, joinRoom } from '../splits/room';
 import {
   leaveStatement,
@@ -231,10 +231,9 @@ splits.post(`${SPLIT_PATH}/changes`, membersOnly, async (c) => {
   // Looked up only if the changes need a rate
   let prefer: Promise<RatePreference> | null = null;
   return applyChanges(c.env.DB, c.req.param('id'), { email: c.var.email, role: c.var.role }, body, {
-    fetchRate: async (from, to, { fresh }) =>
-      getRate(c.env, from, to, {
+    fetchRate: async (from, to, at) =>
+      getRateOn(c.env, from, to, at, {
         prefer: await (prefer ??= getRatePreference(c.env.DB, c.var.email)),
-        maxAgeMs: fresh ? REFRESH_MAX_AGE_MS : undefined,
       }),
     onAccessRemoved: (emails) => evictFromRoom(c.env, c.executionCtx, c.req.param('id'), emails),
   });

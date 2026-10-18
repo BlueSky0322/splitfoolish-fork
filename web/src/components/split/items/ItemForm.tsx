@@ -13,7 +13,7 @@ import {
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useEffect, useId, useMemo, useState } from 'react';
-import { type RateSource, convertCents, isValidRate, toCents } from '@shared/rates';
+import { type RateSource, convertCents, isValidRate, rateDay, toCents } from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
 import { itemShares, MAX_SHARES } from '@shared/settle';
 import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH, type Person } from '@shared/types';
@@ -156,9 +156,14 @@ const ItemForm = ({
   const enteredCents = cost == null || cost < 0 ? null : toCents(cost);
   const chosen = people.filter((p) => included.has(p.id));
 
-  // The rate for the preview. The server converts again when saving, except that an
-  // edit leaving the amount alone keeps the rate the item was saved with.
-  const fetchedRate = useRate(entryCurrency, currency, { enabled: foreign && !ownRateChosen });
+  // The rate for the preview: the one on the day the item was paid (today, for a new
+  // one). The server converts again when saving, except that an edit leaving the amount
+  // alone keeps the rate the item was saved with.
+  const paidAt = item?.createdAt;
+  const fetchedRate = useRate(entryCurrency, currency, {
+    enabled: foreign && !ownRateChosen,
+    at: paidAt,
+  });
   const { rate, source: rateSource } = chooseRate({
     foreign,
     entryCurrency,
@@ -354,6 +359,7 @@ const ItemForm = ({
           compact={isMobile}
           rate={rate}
           rateSource={rateSource}
+          paidBefore={paidAt != null && rateDay(paidAt) < rateDay(Date.now())}
           onChooseOwn={() => {
             setOwnRateChosen(true);
             if (ownRate === '' && rate != null) setOwnRate(rate);
@@ -673,7 +679,7 @@ function describeEntered(amount: boolean, name: boolean) {
   return "What you've entered will be lost.";
 }
 
-/** Paid in another currency: the rate it's converted at, today's or one typed */
+/** Paid in another currency: the rate it's converted at, the day's or one typed */
 function ConversionRow({
   entryCurrency,
   currency,
@@ -685,6 +691,7 @@ function ConversionRow({
   note,
   rate,
   rateSource,
+  paidBefore,
   compact,
   onChooseOwn,
   onUseLive,
@@ -701,6 +708,8 @@ function ConversionRow({
   note: string;
   rate: number | null;
   rateSource: RateSource | null;
+  /** Paid before today, so it goes back to that day's rate rather than the live one */
+  paidBefore: boolean;
   onChooseOwn: () => void;
   onUseLive: () => void;
 }) {
@@ -729,7 +738,7 @@ function ConversionRow({
             className={classes.rateToggle}
             onClick={onUseLive}
           >
-            Use the live rate
+            {paidBefore ? "Use that day's rate" : 'Use the live rate'}
           </UnstyledButton>
         </>
       ) : (
