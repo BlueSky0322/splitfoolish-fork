@@ -158,8 +158,10 @@ Currencies sheet, and the Convert page (`?convert`).
 **Owner.** Settling is worked out, not stored: [split/derive.ts](../web/src/split/derive.ts)
 turns the bill into totals, balances and transfers with
 [shared/settle.ts](../shared/settle.ts). Converted items keep their original amount and
-rate; [split/currencies.ts](../web/src/split/currencies.ts) lists them for the
-Currencies sheet, and rate changes go through the split's actions.
+the rate on the day they were paid (`getRateOn` in
+[worker/currency/exchange-rates.ts](../worker/currency/exchange-rates.ts)), so settling
+never moves with today's rates; [split/currencies.ts](../web/src/split/currencies.ts)
+lists them for the Currencies sheet, and typed rates go through the split's actions.
 
 **Parts.**
 
@@ -168,14 +170,16 @@ Currencies sheet, and rate changes go through the split's actions.
   [components/convert/](../web/src/components/convert/ConvertPage.tsx), and the rate
   hook [hooks/useRate.ts](../web/src/hooks/useRate.ts).
 - API: [worker/currency/exchange-rates.ts](../worker/currency/exchange-rates.ts) (Wise and the ECB,
-  cached), [worker/routes/rates.ts](../worker/routes/rates.ts), and
+  cached; `getRateOn` for an item's day: today's live rate, or the ECB's for an earlier
+  day, then Wise's), [worker/routes/rates.ts](../worker/routes/rates.ts) (`?at=` for the
+  item form's preview of an item's day), and
   [worker/currency/reconvert.ts](../worker/currency/reconvert.ts) (converting every item after the
-  split's currency changes, in the background). A failed conversion is retried by the
+  split's currency changes, each at its own day's rate, in the background). A failed conversion is retried by the
   `reconvert` queue with growing waits ([worker/currency/reconvert-queue.ts](../worker/currency/reconvert-queue.ts),
   wired in `worker/index.ts` and `wrangler.jsonc`); opening a split retries one stuck
   for 10 minutes.
 - Shared: [shared/rates.ts](../shared/rates.ts) (`toCents`, `convertCents`,
-  `convertParts`, rate validity) and [shared/settle.ts](../shared/settle.ts).
+  `convertParts`, `rateDay`, rate validity) and [shared/settle.ts](../shared/settle.ts).
 
 **Invariants.**
 
@@ -183,7 +187,14 @@ Currencies sheet, and rate changes go through the split's actions.
   [AGENTS.md](../AGENTS.md)).
 - Converted exact parts add up to the converted total, the leftover cents going by
   largest remainder (`convertParts`).
-- A rate someone typed is kept as typed; only live rates are refreshed.
+- An item is converted at the rate on the UTC day it was paid (`rateDay`), and nothing
+  refreshes it: adding it, editing its amount or currency, moving it to another day
+  (`setItemDate`) or changing the split's currency use that day's rate. With no rate for
+  that day from either service, today's is used and its date says so; with a service
+  down, the change waits (503) rather than taking today's.
+- A rate someone typed is kept as typed, through edits and date moves, until `setRate`
+  with no rate puts the currency's items back on their days' rates. `refreshRates`,
+  sent by older apps, does nothing.
 - Every conversion run is idempotent and only finishes the change it was started for
   (`converting_since`), so the first attempt, queued retries and the open-split retry
   can overlap safely.
@@ -540,7 +551,8 @@ receipt → the split's room tells open apps.
   `requestId` returns the first answer and never applies the change again, and the same
   id for a different change is refused.
 - Writes name the split's currency and are refused when it's another. An expense paid
-  in another currency keeps its amounts and rate unless new ones are sent.
+  in another currency keeps its amounts and rate unless new ones are sent, and is
+  converted at the rate on the day it was paid, as in the app.
 - A photo or a new split is saved under an id that comes from the account and request
   id, so a retry never adds a second one; a split's people are saved with its receipt,
   so a retry finishes a split an earlier try began.

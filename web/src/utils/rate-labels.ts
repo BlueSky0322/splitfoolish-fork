@@ -6,6 +6,14 @@ export const SOURCE_LABELS = { wise: 'Wise', frankfurter: 'ECB', manual: 'your r
 export const describeRate = (rate: number, from: string, to: string) =>
   `1 ${from} = ${rate.toLocaleString(undefined, { maximumSignificantDigits: 4 })} ${to}`;
 
+/** "today", "yesterday" or "12 Oct": the day a rate is for */
+export function describeDay(at: number, now = Date.now()) {
+  const dayStart = new Date(now).setHours(0, 0, 0, 0);
+  if (at >= dayStart) return 'today';
+  if (at >= dayStart - 24 * 60 * 60 * 1000) return 'yesterday';
+  return new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 /** "today 14:20", "yesterday 09:05" or "12 Oct 14:20" */
 export function describeWhen(at: number, now = Date.now()) {
   const date = new Date(at);

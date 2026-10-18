@@ -31,6 +31,12 @@ export const COMMON_CURRENCIES = [
   'EUR',
 ] as const;
 
+/**
+ * The day an item's rate is for: the UTC day it was paid on, as 2026-10-12. Items are
+ * converted at the rate on that day, so the app's preview and the server use this one.
+ */
+export const rateDay = (at: number) => new Date(at).toISOString().slice(0, 10);
+
 /** An amount in the currency's main unit (12.34), in whole cents (1234) */
 export const toCents = (amount: number) => Math.round(amount * 100);
 

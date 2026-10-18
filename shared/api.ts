@@ -199,6 +199,7 @@ export interface RateQuote {
   to: string;
   rate: number;
   source: FetchedRateSource;
+  /** When it was fetched; for an earlier day's rate (?at=), noon UTC on that day */
   fetchedAt: number;
   /** The amount asked about (?amount=), converted */
   convertedCents?: number;

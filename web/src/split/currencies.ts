@@ -12,9 +12,14 @@ export interface UsedCurrency {
   at: number;
   /** Every item in it is on a typed rate */
   manual: boolean;
+  /** Its items are on more than one rate, each on the rate of the day it was paid */
+  varied: boolean;
 }
 
-/** The other currencies items were paid in, with the rate each is converted at now */
+/**
+ * The other currencies items were paid in, each with its newest rate: items are
+ * converted at the rate on the day they were paid, so one currency can have several
+ */
 export function usedCurrencies(items: SplitItem[]): UsedCurrency[] {
   const byCode = new Map<string, ItemOriginal[]>();
   for (const { original } of items) {
@@ -38,6 +43,7 @@ export function usedCurrencies(items: SplitItem[]): UsedCurrency[] {
         source: savedRateSource(shown.rateSource),
         at: shown.rateAt ?? 0,
         manual,
+        varied: new Set(list.map((o) => o.rate)).size > 1,
       };
     })
     .sort((a, b) => a.code.localeCompare(b.code));

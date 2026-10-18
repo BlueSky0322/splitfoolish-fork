@@ -1,5 +1,6 @@
 import type { Dispatch } from 'react';
 import type { ItemInput } from '../api';
+import { savedRateSource } from '@shared/rates';
 import type { Item as ApiItem, Change } from '@shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
@@ -30,16 +31,17 @@ export interface SplitActions {
   addItem: (item: ItemInput, options?: { id?: string; createdAt?: number }) => boolean;
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
-  /** Moves items to another day, each keeping its time of day (never later than now) */
+  /**
+   * Moves items to another day, each keeping its time of day (never later than now). One
+   * paid in another currency on a fetched rate takes the new day's rate.
+   */
   moveItemsToDay: (itemIds: string[], day: Date) => boolean;
   /** Who everyone settles up through, or null for the fewest transfers */
   setDistributor: (personId: string | null) => boolean;
   /** Puts back an item that was just removed (Undo) */
   restoreItem: (item: ApiItem) => boolean;
   clearItems: () => boolean;
-  /** Converts items in these currencies again at today's rate, leaving typed rates */
-  refreshRates: (currencies: string[]) => boolean;
-  /** Every item in a currency at a typed rate, or today's rate when null */
+  /** Every item in a currency at a typed rate, or when null at the rate on the day it was paid */
   setRate: (currency: string, rate: number | null) => boolean;
 }
 
@@ -173,6 +175,10 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
         const createdAt = Math.min(at.getTime(), now);
         if (createdAt === item.createdAt) continue;
         d.dispatch({ type: 'PATCH_ITEM', payload: { id: item.id, createdAt } });
+        // The server converts it at the new day's rate; its numbers show once saved
+        if (item.original && savedRateSource(item.original.rateSource) !== 'manual') {
+          d.reloadAfterSave();
+        }
         d.queue({ op: 'setItemDate', id: item.id, createdAt });
         moved = true;
       }
@@ -192,13 +198,6 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
     clearItems: () => {
       d.dispatch({ type: 'CLEAR_ITEMS', payload: null });
       d.queue({ op: 'clearItems' });
-      return true;
-    },
-    refreshRates: (currencies) => {
-      if (currencies.length === 0) return false;
-      // The server fetches the rates; its numbers show once saved
-      d.reloadAfterSave();
-      d.queue({ op: 'refreshRates', currencies });
       return true;
     },
     setRate: (currency, rate) => {

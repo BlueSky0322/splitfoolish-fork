@@ -15,6 +15,8 @@ export interface ModelItem {
   payerId: string;
   participantIds: string[];
   splitMode: SplitMode;
+  /** When it was paid, in ms; an item in another currency is converted at that day's rate */
+  createdAt: number;
   /** Exact split amounts as typed in the item's own currency, by person id */
   originalExact: Map<string, number>;
   /** The rate it was converted at, kept when an edit doesn't change the amount */
@@ -48,7 +50,7 @@ export async function loadModel(db: D1Database, splitId: string): Promise<Model>
       .bind(splitId),
     db
       .prepare(
-        `SELECT id, payer_id AS payerId, split_mode AS splitMode,
+        `SELECT id, payer_id AS payerId, split_mode AS splitMode, created_at AS createdAt,
              original_currency AS currency, original_cents AS cents, rate,
              rate_source AS source, rate_at AS at
            FROM items WHERE split_id = ?`,
@@ -89,6 +91,7 @@ export async function loadModel(db: D1Database, splitId: string): Promise<Model>
           id: string;
           payerId: string;
           splitMode: SplitMode;
+          createdAt: number;
           currency: string | null;
           cents: number | null;
           rate: number | null;
@@ -102,6 +105,7 @@ export async function loadModel(db: D1Database, splitId: string): Promise<Model>
           participantIds: [] as string[],
           originalExact: new Map<string, number>(),
           splitMode: i.splitMode,
+          createdAt: i.createdAt,
           converted:
             i.currency == null || i.cents == null || i.rate == null
               ? null

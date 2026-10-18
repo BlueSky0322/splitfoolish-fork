@@ -52,9 +52,10 @@ export interface ItemOriginal {
   amount: number;
   /** Exact split amounts in this currency, by person id */
   exact?: Record<string, number>;
+  /** The rate on the day it was paid, unless one was typed */
   rate?: number;
   rateSource?: RateSource;
-  /** When the rate was fetched or typed, in ms */
+  /** When the rate was fetched or typed, in ms; for an earlier day's, noon UTC that day */
   rateAt?: number;
 }
 
@@ -72,10 +73,16 @@ export type Change =
   | { op: 'addItem'; item: Item }
   | { op: 'updateItem'; item: Item }
   | { op: 'removeItem'; id: string }
-  /** Moves an item to another day: when it's dated, in ms, not after today */
+  /**
+   * Moves an item to another day: when it's dated, in ms, not after today. One paid in
+   * another currency on a fetched rate takes the new day's rate.
+   */
   | { op: 'setItemDate'; id: string; createdAt: number }
   | { op: 'clearItems' }
-  /** Converts items in these currencies again at today's rate; items on a typed rate stay */
+  /**
+   * Sent by older versions of the app, which converted items again at today's rate. Does
+   * nothing now: items keep the rate of the day they were paid.
+   */
   | { op: 'refreshRates'; currencies: string[] }
-  /** Every item in this currency at a typed rate, or at today's rate when null */
+  /** Every item in this currency at a typed rate, or when null at the rate on its day */
   | { op: 'setRate'; currency: string; rate: number | null };

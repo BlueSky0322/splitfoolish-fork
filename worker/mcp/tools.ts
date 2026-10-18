@@ -20,7 +20,7 @@ import { contentStatements, assembleContent } from '../bill/read';
 import { saveChanges } from '../bill/changes';
 import { isItemDate } from '../bill/input';
 import { getRatePreference } from '../accounts/profiles';
-import { REFRESH_MAX_AGE_MS, getRate } from '../currency/exchange-rates';
+import { getRateOn } from '../currency/exchange-rates';
 import { isConstraintError, newId, readName } from '../http';
 import { addAttachment, listAttachmentsStatement, readAttachment } from '../photos/attachments';
 import { checkImage } from '../photos/images';
@@ -170,12 +170,12 @@ const paidIn = z
       .positive()
       .optional()
       .describe(
-        "Units of the split's currency for one of this one, to use instead of today's rate",
+        "Units of the split's currency for one of this one, to use instead of the day's rate",
       ),
   })
   .describe(
     "Paid in another currency: the amount as paid. It's converted to the split's currency at " +
-      "today's rate (or the rate given), which get_split shows in original.",
+      'the rate on the day it was paid (or the rate given), which get_split shows in original.',
   );
 const page = {
   limit: z.number().int().min(1).max(200).optional(),
@@ -327,10 +327,9 @@ type FetchRate = Parameters<typeof saveChanges>[4];
 function ratesFor(caller: Caller): FetchRate {
   // Looked up only if a change needs a rate
   let prefer: Promise<RatePreference> | null = null;
-  return async (from, to, { fresh }) =>
-    getRate(caller.env, from, to, {
+  return async (from, to, at) =>
+    getRateOn(caller.env, from, to, at, {
       prefer: await (prefer ??= getRatePreference(caller.env.DB, caller.email)),
-      maxAgeMs: fresh ? REFRESH_MAX_AGE_MS : undefined,
     });
 }
 
@@ -787,8 +786,9 @@ export function registerTools(server: McpServer, caller: Caller) {
     {
       title: 'Date an expense',
       description:
-        'Changes the date an expense was paid, which orders it in the split. Retrying with the ' +
-        'same requestId returns the first answer.',
+        'Changes the date an expense was paid, which orders it in the split. One paid in ' +
+        "another currency is converted at the new day's rate, unless a rate was given. " +
+        'Retrying with the same requestId returns the first answer.',
       inputSchema: { splitId, expenseId: rowId('expense'), requestId, date },
       outputSchema: savedShape('expenseId'),
       annotations: { ...expenseWrite, destructiveHint: false },

@@ -5,7 +5,7 @@
 import type { Env } from '../app';
 import { touchSplitStatement } from '../app';
 import { getRatePreference, settingsStatements } from '../accounts/profiles';
-import { getRate } from '../currency/exchange-rates';
+import { getRateOn } from '../currency/exchange-rates';
 import { RETRY_AFTER_MS, reconvertSplit } from '../currency/reconvert';
 import { queueReconvert } from '../currency/reconvert-queue';
 import { notifySplit } from './room';
@@ -119,7 +119,8 @@ export const startReconvert = (
     (async () => {
       try {
         const prefer = await getRatePreference(env.DB, email);
-        const fetchRate = (from: string, to: string) => getRate(env, from, to, { prefer });
+        const fetchRate = (from: string, to: string, at: number) =>
+          getRateOn(env, from, to, at, { prefer });
         if (await reconvertSplit(env.DB, splitId, fetchRate, since)) {
           notifySplit(env, ctx, splitId, null);
         }

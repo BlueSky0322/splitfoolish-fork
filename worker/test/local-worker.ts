@@ -122,6 +122,12 @@ export interface FakeRates {
    * than one it was given earlier in the run: use newCurrency() for a pair of your own.
    */
   set: (from: string, to: string, rate: number, service?: Service) => void;
+  /**
+   * The same, for an earlier day (2026-10-12): Frankfurter's rate for that date, and
+   * Wise's when asked for a time on it. Wise asked about a day it has no rate for answers
+   * with today's, as a service ignoring the time would.
+   */
+  setOn: (day: string, from: string, to: string, rate: number, service?: Service) => void;
   /** Makes one service answer 500 */
   down: (service: Service, isDown: boolean) => void;
   /** Forgets every rate and brings both services back, so tests don't lean on each other */
@@ -135,7 +141,10 @@ export interface FakeRates {
   asked: (from: string, to: string) => number;
 }
 
-/** A tiny HTTP server answering like Wise's /v1/rates and Frankfurter's /v1/latest */
+/**
+ * A tiny HTTP server answering like Wise's /v1/rates (with a time or without) and
+ * Frankfurter's /v1/latest and /v1/<date>
+ */
 async function startFakeRates(): Promise<
   FakeRates & { base: string; close: () => void; heardProbe: () => boolean }
 > {
@@ -159,16 +168,34 @@ async function startFakeRates(): Promise<
     if (url.pathname === '/v1/rates') {
       const [from, to] = [url.searchParams.get('source'), url.searchParams.get('target')];
       heard(from, to);
-      const rate = table.get(`wise:${from}${to}`);
       if (isDown.wise || req.headers.authorization !== 'Bearer test-token') return send(500, {});
-      return rate == null ? send(400, {}) : send(200, [{ rate, source: from, target: to }]);
+      const day = url.searchParams.get('time')?.slice(0, 10);
+      const onDay = day == null ? null : table.get(`wise:${day}:${from}${to}`);
+      if (onDay != null) {
+        return send(200, [{ rate: onDay, source: from, target: to, time: `${day}T12:00:00+0000` }]);
+      }
+      const rate = table.get(`wise:${from}${to}`);
+      const now = new Date().toISOString().slice(0, 19);
+      return rate == null
+        ? send(400, {})
+        : send(200, [{ rate, source: from, target: to, time: `${now}+0000` }]);
     }
-    if (url.pathname === '/v1/latest') {
+    const dated = /^\/v1\/(latest|\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
+    if (dated) {
       const [from, to] = [url.searchParams.get('base'), url.searchParams.get('symbols')];
       heard(from, to);
-      const rate = table.get(`frankfurter:${from}${to}`);
+      const day = dated[1] === 'latest' ? null : dated[1];
+      const rate = table.get(
+        day == null ? `frankfurter:${from}${to}` : `frankfurter:${day}:${from}${to}`,
+      );
       if (isDown.frankfurter) return send(500, {});
-      return rate == null ? send(404, {}) : send(200, { base: from, rates: { [to!]: rate } });
+      return rate == null
+        ? send(404, {})
+        : send(200, {
+            base: from,
+            date: day ?? new Date().toISOString().slice(0, 10),
+            rates: { [to!]: rate },
+          });
     }
     send(404, {});
   });
@@ -176,23 +203,26 @@ async function startFakeRates(): Promise<
     server.once('error', fail);
     server.listen(0, '127.0.0.1', done);
   });
+  /** Gives a pair a rate, today's or (with `day` as "2026-10-12:") that day's */
+  const give = (day: string, from: string, to: string, rate: number, service?: Service) => {
+    for (const s of service == null ? (['wise', 'frankfurter'] as const) : [service]) {
+      const key = `${s}:${day}${from}${to}`;
+      const before = given.get(key);
+      if (before != null && before !== rate) {
+        throw new Error(
+          `${from} to ${to} on ${s} was already ${before} this run, and the Worker may ` +
+            'still have that rate: use rates.newCurrency() for a pair of your own',
+        );
+      }
+      given.set(key, rate);
+      table.set(key, rate);
+    }
+  };
   const { port } = server.address() as { port: number };
   return {
     base: `http://127.0.0.1:${port}`,
-    set: (from, to, rate, service) => {
-      for (const s of service == null ? (['wise', 'frankfurter'] as const) : [service]) {
-        const key = `${s}:${from}${to}`;
-        const before = given.get(key);
-        if (before != null && before !== rate) {
-          throw new Error(
-            `${from} to ${to} on ${s} was already ${before} this run, and the Worker may ` +
-              'still have that rate: use rates.newCurrency() for a pair of your own',
-          );
-        }
-        given.set(key, rate);
-        table.set(key, rate);
-      }
-    },
+    set: (from, to, rate, service) => give('', from, to, rate, service),
+    setOn: (day, from, to, rate, service) => give(`${day}:`, from, to, rate, service),
     down: (service, value) => {
       isDown[service] = value;
     },

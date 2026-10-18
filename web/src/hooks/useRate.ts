@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_SETTINGS } from '@shared/api';
+import { rateDay } from '@shared/rates';
 import { api } from '../api';
 import { useProfile } from '../profile/ProfileContext';
 import { queryClient } from '../query-client';
@@ -8,15 +9,22 @@ import { queryClient } from '../query-client';
 const RATE_FRESH_MS = 5 * 60 * 1000;
 
 /**
- * Today's rate from one currency into another, shared by everything that shows one.
- * The server picks the source from Settings, so a different source is a different rate.
+ * Today's rate from one currency into another, shared by everything that shows one, or
+ * with `at` the rate for an item paid then (an earlier day's, when it was). The server
+ * picks today's source from Settings, so a different source is a different rate.
  */
-export function useRate(from: string, to: string, { enabled = true } = {}) {
+export function useRate(
+  from: string,
+  to: string,
+  { enabled = true, at }: { enabled?: boolean; at?: number } = {},
+) {
   const source = useProfile().profile?.settings.ratePreference ?? DEFAULT_SETTINGS.ratePreference;
-  const key = ['rate', from, to, source];
+  // Today's rate whenever the item was paid today, so they share one
+  const day = at == null || rateDay(at) >= rateDay(Date.now()) ? null : rateDay(at);
+  const key = ['rate', from, to, source, ...(day == null ? [] : [day])];
   const query = useQuery({
     queryKey: key,
-    queryFn: () => api.getRate(from, to),
+    queryFn: () => api.getRate(from, to, day == null ? {} : { at }),
     enabled: enabled && from !== to,
     staleTime: RATE_FRESH_MS,
     retry: 1,

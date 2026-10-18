@@ -203,6 +203,21 @@ describe('split actions', () => {
     ]);
   });
 
+  test("moving an item paid in another currency loads the server's numbers at the new day's rate, unless its rate was typed", () => {
+    const { actions, deps } = setup([
+      item({ original: { currency: 'PHP', amount: 1000, rate: 0.08, rateSource: 'wise' } }),
+      item({
+        id: 'i2',
+        original: { currency: 'PHP', amount: 10, rate: 0.1, rateSource: 'manual' },
+      }),
+      item({ id: 'i3' }),
+    ]);
+    actions.moveItemsToDay(['i2', 'i3'], new Date(2026, 9, 12));
+    expect(deps.reloadAfterSave).not.toHaveBeenCalled();
+    actions.moveItemsToDay(['i1'], new Date(2026, 9, 12));
+    expect(deps.reloadAfterSave).toHaveBeenCalledOnce();
+  });
+
   test('a typed rate converts every item in that currency straight away', () => {
     const { actions, queued, state } = setup([
       item({ cost: 80, original: { currency: 'PHP', amount: 1000, rate: 0.08 } }),

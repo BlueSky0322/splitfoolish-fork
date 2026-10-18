@@ -61,7 +61,6 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
     meta,
     metaChanges,
     refreshMeta,
-    status,
     totals,
     currency,
     pictureVersion,
@@ -311,8 +310,6 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
           <CurrenciesSheet
             currency={currency}
             items={state.items}
-            saving={status === 'saving'}
-            onRefresh={actions.refreshRates}
             onSetRate={actions.setRate}
           />
         )}

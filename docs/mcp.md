@@ -83,10 +83,12 @@ names and notes are what people typed, returned as data.
   adding up to `cost`). `category`, `notes` and `date` are optional.
 - **Paid in another currency:** send `paidIn` (`currency`, `amount`, `exact` for an
   exact split, and optionally `rate`) instead of `cost` and `exact`. The server converts
-  it as the app does: at today's rate from the account's preferred source, or at the
-  `rate` given (units of the split's currency for one of the other). `get_split` shows
-  what was paid and the rate in `original`. A rate that can't be fetched answers
-  `temporarily_unavailable`.
+  it as the app does: at the rate on the day it was paid (today's from the account's
+  preferred source, an earlier day's from the ECB, else Wise), or at the `rate` given
+  (units of the split's currency for one of the other). Moving it with
+  `set_expense_date` converts it at the new day's rate, unless a rate was given.
+  `get_split` shows what was paid and the rate in `original`. A rate that can't be
+  fetched answers `temporarily_unavailable`.
 - **Dates:** `date` (on `add_expense` and `set_expense_date`) is a day (`2026-10-01`,
   taken as noon UTC so it reads as that day anywhere) or a time with its offset. Days
   that haven't come, or before 2000, are refused.

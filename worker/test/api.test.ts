@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { LocalWorker } from './local-worker';
 import { startLocalWorker } from './local-worker';
 import { MAX_CHANGES } from '../../shared/api';
+import { rateDay } from '../../shared/rates';
 
 let api: LocalWorker;
 let n = 0;
@@ -1542,7 +1543,7 @@ describe("a currency's rate across the split", () => {
     expect(typed.every((i) => i.original.rateSource === 'manual')).toBe(true);
     expect(Math.round((typed[1].exact[a] + typed[1].exact[b]) * 100)).toBe(100);
 
-    // Refreshing leaves typed rates alone; asking for the live rate replaces them
+    // A refresh from an older app does nothing; going back to fetched rates replaces them
     await change(owner, id, { op: 'refreshRates', currencies: ['PHP'] });
     expect((await items()).map((i) => i.cost)).toEqual([100, 1]);
     await change(owner, id, { op: 'setRate', currency: 'PHP', rate: null });
@@ -1572,6 +1573,210 @@ describe("a currency's rate across the split", () => {
       503,
     );
     expect((await items())[0].cost).toBe(30);
+  });
+});
+
+describe('the rate on the day an item was paid', () => {
+  const DAY = 864e5;
+  /** Noon UTC some days ago, and its day as the rate services name it */
+  const daysAgo = (days: number) => {
+    const at = Date.parse(`${rateDay(Date.now() - days * DAY)}T12:00:00Z`);
+    return { at, day: rateDay(at) };
+  };
+
+  /** A MYR split with A in it, and an item paid in `currency` at `at` (now, by default) */
+  async function paidIn(currency: string, amount: number, at?: number) {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [a, itemId] = [hex(), hex()];
+    const added = await change(
+      owner,
+      id,
+      { op: 'addPerson', id: a, name: 'A' },
+      {
+        op: 'addItem',
+        item: {
+          id: itemId,
+          name: 'Dinner',
+          cost: 0,
+          payerId: a,
+          participantIds: [a],
+          original: { currency, amount },
+          ...(at != null && { createdAt: at }),
+        },
+      },
+    );
+    const read = async () => (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0];
+    return { owner, id, a, itemId, added, read };
+  }
+
+  it("converts an item paid on an earlier day at the ECB's rate for that day", async () => {
+    const cur = api.rates.newCurrency();
+    const { at, day } = daysAgo(3);
+    api.rates.set(cur, 'MYR', 4);
+    api.rates.setOn(day, cur, 'MYR', 3);
+    const { added, read } = await paidIn(cur, 10, at);
+    expect(added.status).toBe(200);
+    expect(await read()).toMatchObject({
+      cost: 30,
+      original: { rate: 3, rateSource: 'frankfurter', rateAt: at },
+    });
+  });
+
+  it("moving an item to another day converts it at that day's rate, and a typed rate stays", async () => {
+    const cur = api.rates.newCurrency();
+    const [week, twoDays] = [daysAgo(7), daysAgo(2)];
+    api.rates.set(cur, 'MYR', 4);
+    api.rates.setOn(week.day, cur, 'MYR', 3.5);
+    api.rates.setOn(twoDays.day, cur, 'MYR', 3.8);
+    const { owner, id, itemId, read } = await paidIn(cur, 10);
+    expect((await read()).cost).toBe(40);
+
+    await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: week.at });
+    expect(await read()).toMatchObject({ cost: 35, original: { rate: 3.5 } });
+    await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: twoDays.at });
+    expect(await read()).toMatchObject({ cost: 38, original: { rate: 3.8 } });
+
+    await change(owner, id, { op: 'setRate', currency: cur, rate: 5 });
+    await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: week.at });
+    expect(await read()).toMatchObject({ cost: 50, original: { rate: 5, rateSource: 'manual' } });
+    // Back on fetched rates: the rate of the day it's on now
+    await change(owner, id, { op: 'setRate', currency: cur, rate: null });
+    expect(await read()).toMatchObject({ cost: 35, original: { rate: 3.5 } });
+  });
+
+  it('an item added and moved in one batch, as from a device that was offline, takes the day it was moved to', async () => {
+    const cur = api.rates.newCurrency();
+    const [week, twoDays] = [daysAgo(7), daysAgo(2)];
+    api.rates.set(cur, 'MYR', 4);
+    api.rates.setOn(week.day, cur, 'MYR', 3.5);
+    api.rates.setOn(twoDays.day, cur, 'MYR', 3.8);
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const [a, itemId] = [hex(), hex()];
+    const dinner = {
+      id: itemId,
+      name: 'Dinner',
+      cost: 0,
+      payerId: a,
+      participantIds: [a],
+      original: { currency: cur, amount: 10 },
+    };
+    const saved = await change(
+      owner,
+      id,
+      { op: 'addPerson', id: a, name: 'A' },
+      { op: 'addItem', item: dinner },
+      { op: 'setItemDate', id: itemId, createdAt: week.at },
+      // An edit after the move is for the day it's on now
+      { op: 'updateItem', item: { ...dinner, original: { currency: cur, amount: 20 } } },
+    );
+    expect(saved.status).toBe(200);
+    const read = async () => (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0];
+    expect(await read()).toMatchObject({ cost: 70, createdAt: week.at, original: { rate: 3.5 } });
+
+    // Typed, then moved, in one batch: the typed rate stays
+    expect(
+      (
+        await change(
+          owner,
+          id,
+          { op: 'setRate', currency: cur, rate: 5 },
+          { op: 'setItemDate', id: itemId, createdAt: twoDays.at },
+        )
+      ).status,
+    ).toBe(200);
+    expect(await read()).toMatchObject({ cost: 100, original: { rate: 5, rateSource: 'manual' } });
+  });
+
+  it("an edit converts at the item's own day, not today", async () => {
+    const cur = api.rates.newCurrency();
+    const { at, day } = daysAgo(4);
+    api.rates.set(cur, 'MYR', 4);
+    api.rates.setOn(day, cur, 'MYR', 3);
+    const { owner, id, a, itemId, read } = await paidIn(cur, 10, at);
+    await change(owner, id, {
+      op: 'updateItem',
+      item: {
+        id: itemId,
+        name: 'Dinner',
+        cost: 0,
+        payerId: a,
+        participantIds: [a],
+        original: { currency: cur, amount: 20 },
+      },
+    });
+    expect(await read()).toMatchObject({ cost: 60, createdAt: at, original: { rate: 3 } });
+  });
+
+  it("takes Wise's rate for the day when the ECB has none, and today's when neither has it", async () => {
+    const [wiseOnly, neither] = [api.rates.newCurrency(), api.rates.newCurrency()];
+    const { at, day } = daysAgo(5);
+    api.rates.setOn(day, wiseOnly, 'MYR', 0.2, 'wise');
+    const fromWise = await paidIn(wiseOnly, 100, at);
+    expect(await fromWise.read()).toMatchObject({
+      cost: 20,
+      original: { rate: 0.2, rateSource: 'wise', rateAt: at },
+    });
+
+    // Wise answers with today's rate for that day: not the day's, so today's is used
+    // and says so by its date
+    api.rates.set(neither, 'MYR', 0.3, 'wise');
+    const today = await paidIn(neither, 100, at);
+    const item = await today.read();
+    expect(item).toMatchObject({ cost: 30, original: { rate: 0.3, rateSource: 'wise' } });
+    expect(rateDay(item.original.rateAt)).toBe(rateDay(Date.now()));
+  });
+
+  it("waits rather than settle for today's rate when a service is down", async () => {
+    const cur = api.rates.newCurrency();
+    const { at } = daysAgo(6);
+    // Wise has only today's rate, and the ECB, which might have had the day's, is down
+    api.rates.set(cur, 'MYR', 4, 'wise');
+    api.rates.down('frankfurter', true);
+    const { added, read } = await paidIn(cur, 10, at);
+    expect(added.status).toBe(503);
+    expect(await read()).toBeUndefined();
+  });
+
+  it('previews the rate for a day, and refuses a time that has not come', async () => {
+    const me = person('me');
+    const cur = api.rates.newCurrency();
+    const { at, day } = daysAgo(3);
+    api.rates.set(cur, 'MYR', 4);
+    api.rates.setOn(day, cur, 'MYR', 3);
+    const quote = await api.call(me, 'GET', `/api/rates?from=${cur}&to=MYR&at=${at}`);
+    expect(quote.data).toMatchObject({ rate: 3, source: 'frankfurter', fetchedAt: at });
+    const now = await api.call(me, 'GET', `/api/rates?from=${cur}&to=MYR&at=${Date.now()}`);
+    expect(now.data).toMatchObject({ rate: 4, source: 'wise' });
+    const later = Date.now() + 30 * DAY;
+    expect((await api.call(me, 'GET', `/api/rates?from=${cur}&to=MYR&at=${later}`)).status).toBe(
+      400,
+    );
+  });
+
+  it("converts each item at its own day's rate when the split's currency changes", async () => {
+    const [cur, to] = [api.rates.newCurrency(), api.rates.newCurrency()];
+    const { at, day } = daysAgo(3);
+    api.rates.set(cur, 'MYR', 4);
+    api.rates.set(cur, to, 0.25);
+    api.rates.setOn(day, cur, to, 0.2);
+    api.rates.set('MYR', to, 0.21);
+    api.rates.setOn(day, 'MYR', to, 0.19);
+    const { owner, id, a } = await paidIn(cur, 10, at);
+    await change(owner, id, {
+      op: 'addItem',
+      item: { id: hex(), name: 'Taxi', cost: 10, payerId: a, participantIds: [a], createdAt: at },
+    });
+    await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: to });
+    let split = (await api.call(owner, 'GET', `/api/splits/${id}`)).data;
+    for (let i = 0; split.converting && i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+      split = (await api.call(owner, 'GET', `/api/splits/${id}`)).data;
+    }
+    const byName = (name: string) => split.items.find((i: { name: string }) => i.name === name);
+    expect(byName('Dinner')).toMatchObject({ cost: 2, original: { rate: 0.2 } });
+    expect(byName('Taxi')).toMatchObject({ cost: 1.9, original: { currency: 'MYR', rate: 0.19 } });
   });
 });
 

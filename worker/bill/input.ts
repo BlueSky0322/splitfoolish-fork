@@ -8,6 +8,7 @@ import {
   isCurrency,
   isValidRate,
   keepsSavedConversion,
+  rateDay,
   toCents,
 } from '../../shared/rates';
 import type { SplitMode } from '../../shared/settle';
@@ -35,8 +36,17 @@ export function readMemberEmail(model: Model, value: unknown, personId: string):
   return email;
 }
 
-/** Rates fetched before a batch is checked, by currency */
+/** Rates fetched before a batch is checked, by rateKey */
 export type FetchedRates = Map<string, Rate>;
+
+/** Which rate an item paid in `currency` at `at` takes: the one for that currency and day */
+export const rateKey = (currency: string, at: number) => `${currency} ${rateDay(at)}`;
+
+/** A rate a batch needs: a currency, and when the item was paid */
+export interface RateWanted {
+  currency: string;
+  at: number;
+}
 
 interface OriginalInput {
   currency: string;
@@ -81,37 +91,72 @@ const reusableConversion = (model: Model, itemId: unknown, original: OriginalInp
   return saved != null && keepsSavedConversion(saved, original) ? saved : null;
 };
 
-/** Whether a rate change converts this item again: one of its currencies, and not kept */
-export const convertsAgain = (
-  c: ModelItem['converted'],
-  currencies: string[],
-  keepManual: boolean,
-): c is NonNullable<ModelItem['converted']> =>
-  c != null && currencies.includes(c.currency) && !(keepManual && c.source === 'manual');
+/** What a setRate change does, checked: the currency, and the rate typed (or null) */
+export function readRateChange(
+  model: Model,
+  change: Extract<UncheckedChange, { op: 'setRate' }>,
+): { currency: string; manualRate: number | null } {
+  if (!isCurrency(change.currency) || change.currency === model.currency) {
+    throw new Refused('Invalid currency');
+  }
+  if (change.rate != null && !isValidRate(change.rate)) {
+    throw new Refused('Enter an exchange rate above 0');
+  }
+  return { currency: change.currency, manualRate: change.rate ?? null };
+}
 
-/** The currencies a batch needs a fetched rate for, read before the batch is checked */
-export function currenciesToFetch(model: Model, changes: Batch): Set<string> {
-  const needed = new Set<string>();
+/**
+ * The rates a batch needs fetched, read before the batch is checked, by rateKey: each
+ * converted item's currency and the day it was paid. Earlier changes in the batch count,
+ * as they will when it's checked: an item added offline and then moved to another day
+ * arrives as both, and is converted at the day it was moved to.
+ */
+export function ratesToFetch(model: Model, changes: Batch): Map<string, RateWanted> {
+  const needed = new Map<string, RateWanted>();
+  const want = (currency: string, at: number) =>
+    needed.set(rateKey(currency, at), { currency, at });
+  // What earlier changes in the batch made of an item: its date, and its currency with
+  // whether its rate was typed (null when it's in the split's own currency)
+  const dates = new Map<string, number>();
+  const currencies = new Map<string, { currency: string; typed: boolean } | null>();
+  const dateOf = (id: string) => dates.get(id) ?? model.items.get(id)?.createdAt;
+  const currencyOf = (id: string) => {
+    if (currencies.has(id)) return currencies.get(id) ?? null;
+    const c = model.items.get(id)?.converted;
+    return c == null ? null : { currency: c.currency, typed: c.source === 'manual' };
+  };
+
   for (const change of changes) {
-    if (change?.op === 'refreshRates' || change?.op === 'setRate') {
-      try {
-        // Only for currencies some item would take the fetched rate in
-        const { toFetch, keepManual } = readRateChange(model, change);
-        for (const { converted } of model.items.values()) {
-          if (convertsAgain(converted, toFetch, keepManual)) needed.add(converted.currency);
-        }
-      } catch (err) {
-        // Refused properly when the batch is checked
-        if (!(err instanceof Refused)) throw err;
-      }
-      continue;
-    }
-    if (change?.op !== 'addItem' && change?.op !== 'updateItem') continue;
     try {
-      const item = (change.item ?? {}) as Record<string, unknown>;
-      const original = readOriginal(model, item.original);
-      if (original == null || original.manualRate != null) continue;
-      if (reusableConversion(model, item.id, original) == null) needed.add(original.currency);
+      if (change?.op === 'setRate') {
+        const { currency, manualRate } = readRateChange(model, change);
+        for (const id of new Set([...model.items.keys(), ...currencies.keys()])) {
+          if (currencyOf(id)?.currency !== currency) continue;
+          currencies.set(id, { currency, typed: manualRate != null });
+          // Back on fetched rates: each item at its own day's
+          const at = dateOf(id);
+          if (manualRate == null && at != null) want(currency, at);
+        }
+      } else if (change?.op === 'setItemDate') {
+        const id = readId(change.id);
+        if (!isItemDate(change.createdAt)) continue;
+        dates.set(id, change.createdAt);
+        const c = currencyOf(id);
+        if (c != null && !c.typed) want(c.currency, change.createdAt);
+      } else if (change?.op === 'addItem' || change?.op === 'updateItem') {
+        const item = (change.item ?? {}) as Record<string, unknown>;
+        const id = readId(item.id);
+        const at = change.op === 'addItem' ? readCreatedAt(change.item) : dateOf(id) ?? Date.now();
+        dates.set(id, at);
+        const original = readOriginal(model, item.original);
+        currencies.set(
+          id,
+          original && { currency: original.currency, typed: original.manualRate != null },
+        );
+        if (original == null || original.manualRate != null) continue;
+        if (reusableConversion(model, id, original) != null) continue;
+        want(original.currency, at);
+      }
     } catch (err) {
       // Refused properly when the batch is checked
       if (!(err instanceof Refused)) throw err;
@@ -120,44 +165,14 @@ export function currenciesToFetch(model: Model, changes: Batch): Set<string> {
   return needed;
 }
 
-const MAX_RATE_CURRENCIES = 50;
-
-interface RateChange {
-  /** The currencies whose items it converts again */
-  affected: string[];
-  /** Those that need a fetched rate: none when a rate was typed */
-  toFetch: string[];
-  manualRate: number | null;
-  /** Items already on a typed rate stay on it (a refresh, not a new rate) */
-  keepManual: boolean;
-}
-
-/** What a rate change does, checked */
-export function readRateChange(
-  model: Model,
-  change: Extract<UncheckedChange, { op: 'refreshRates' | 'setRate' }>,
-): RateChange {
-  if (change.op === 'refreshRates') {
-    const list = change.currencies;
-    if (!Array.isArray(list) || list.length > MAX_RATE_CURRENCIES || !list.every(isCurrency)) {
-      throw new Refused('Invalid currency');
-    }
-    const affected = [...new Set(list)].filter((c) => c !== model.currency);
-    return { affected, toFetch: affected, manualRate: null, keepManual: true };
-  }
-  if (!isCurrency(change.currency) || change.currency === model.currency) {
-    throw new Refused('Invalid currency');
-  }
-  if (change.rate != null && !isValidRate(change.rate)) {
-    throw new Refused('Enter an exchange rate above 0');
-  }
-  const manualRate = change.rate ?? null;
-  return {
-    affected: [change.currency],
-    toFetch: manualRate == null ? [change.currency] : [],
-    manualRate,
-    keepManual: false,
-  };
+/**
+ * When an item being saved was paid: for a new one, the time it brings (readCreatedAt);
+ * for an edit, the date it has now, which only setItemDate changes
+ */
+export function paidAt(model: Model, op: 'addItem' | 'updateItem', raw: unknown) {
+  if (op === 'addItem') return readCreatedAt(raw);
+  const id = (raw as { id?: unknown } | null)?.id;
+  return (typeof id === 'string' ? model.items.get(id)?.createdAt : null) ?? Date.now();
 }
 
 const exactOriginals = (participants: { personId: string; originalExactCents: number | null }[]) =>
@@ -168,8 +183,9 @@ const exactOriginals = (participants: { personId: string; originalExactCents: nu
   );
 
 /** What the model keeps of an item that was just checked, as it will be saved */
-export const toModelItem = (item: ReturnType<typeof readItem>): ModelItem => ({
+export const toModelItem = (item: ReturnType<typeof readItem>, createdAt: number): ModelItem => ({
   payerId: item.payerId,
+  createdAt,
   participantIds: item.participants.map((p) => p.personId),
   originalExact: exactOriginals(item.participants),
   splitMode: item.splitMode,
@@ -201,13 +217,21 @@ export const isItemDate = (at: unknown): at is number =>
   at >= EARLIEST_ITEM &&
   at <= Date.now() + DAY_MS;
 
+/** "Now" for an item sent without a sensible time, the same each time it's read */
+const sentAt = new WeakMap<object, number>();
+
 /**
  * When a new item was added: the time it brings with it (a duplicate keeping its
- * original date, or one put back with Undo) if that's a sensible one, else now
+ * original date, or one put back with Undo) if that's a sensible one, else now. Read
+ * once for its rate and again to save it, so both are for the same day.
  */
 export function readCreatedAt(raw: unknown) {
   const at = (raw as { createdAt?: unknown } | null)?.createdAt;
-  return isItemDate(at) ? at : Date.now();
+  if (isItemDate(at)) return at;
+  if (raw == null || typeof raw !== 'object') return Date.now();
+  const now = sentAt.get(raw) ?? Date.now();
+  sentAt.set(raw, now);
+  return now;
 }
 
 /** Someone on an item, and their part of it, as saved */
@@ -277,7 +301,8 @@ function readParticipants(
   return participants;
 }
 
-export function readItem(model: Model, raw: unknown, rates: FetchedRates) {
+/** An item as sent, checked; one in another currency is converted at the rate for `paid` */
+export function readItem(model: Model, raw: unknown, rates: FetchedRates, paid: number) {
   const item = (raw ?? {}) as Record<string, unknown>;
   // Ids are made by the app so its changes can refer to people and items it just added
   if (!isRowId(item.id)) throw new Refused('Invalid item');
@@ -291,7 +316,7 @@ export function readItem(model: Model, raw: unknown, rates: FetchedRates) {
   if (original != null) {
     const { rate, source, at } =
       reusableConversion(model, item.id, original) ??
-      chooseRate(original.manualRate, rates.get(original.currency));
+      chooseRate(original.manualRate, rates.get(rateKey(original.currency, paid)));
     converted = { currency: original.currency, cents: original.cents, rate, source, at };
     costCents = convertCents(original.cents, rate);
   } else {

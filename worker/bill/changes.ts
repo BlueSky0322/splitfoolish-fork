@@ -16,11 +16,11 @@ import { revokeMemberStatements } from '../splits/sharing';
 import type { FetchedRates, Participant } from './input';
 import {
   chooseRate,
-  convertsAgain,
-  currenciesToFetch,
   isItemDate,
   nameTaken,
-  readCreatedAt,
+  paidAt,
+  rateKey,
+  ratesToFetch,
   readId,
   readItem,
   readMemberEmail,
@@ -39,42 +39,60 @@ const PEOPLE_OPS = new Set<Change['op']>([
   'clearPeople',
 ]);
 
-/** Converts the items paid in some currencies again, at a new rate each */
-function rateStatements(
+/** Converts an item paid in another currency again, at a new rate */
+function convertAgainStatements(
   db: D1Database,
-  model: Model,
-  change: Extract<UncheckedChange, { op: 'refreshRates' | 'setRate' }>,
-  rates: FetchedRates,
+  id: string,
+  item: ModelItem,
+  rate: ReturnType<typeof chooseRate>,
 ): D1PreparedStatement[] {
-  const { affected, manualRate, keepManual } = readRateChange(model, change);
-  const statements: D1PreparedStatement[] = [];
-  for (const [id, item] of model.items) {
-    const c = item.converted;
-    if (!convertsAgain(c, affected, keepManual)) continue;
-    const next = { ...c, ...chooseRate(manualRate, rates.get(c.currency)) };
-    item.converted = next;
-    const costCents = convertCents(c.cents, next.rate);
-    statements.push(
-      db
-        .prepare(
-          'UPDATE items SET cost_cents = ?, rate = ?, rate_source = ?, rate_at = ? WHERE id = ?',
-        )
-        .bind(costCents, next.rate, next.source, next.at, id),
-    );
-    if (item.splitMode === 'exact') {
-      const parts = convertParts([...item.originalExact], next.rate, costCents);
-      for (const [personId, cents] of parts) {
-        statements.push(
-          db
-            .prepare(
-              'UPDATE item_participants SET exact_cents = ? WHERE item_id = ? AND person_id = ?',
-            )
-            .bind(cents, id, personId),
-        );
-      }
+  const c = item.converted!;
+  const next = { ...c, ...rate };
+  item.converted = next;
+  const costCents = convertCents(c.cents, next.rate);
+  const statements = [
+    db
+      .prepare(
+        'UPDATE items SET cost_cents = ?, rate = ?, rate_source = ?, rate_at = ? WHERE id = ?',
+      )
+      .bind(costCents, next.rate, next.source, next.at, id),
+  ];
+  if (item.splitMode === 'exact') {
+    const parts = convertParts([...item.originalExact], next.rate, costCents);
+    for (const [personId, cents] of parts) {
+      statements.push(
+        db
+          .prepare(
+            'UPDATE item_participants SET exact_cents = ? WHERE item_id = ? AND person_id = ?',
+          )
+          .bind(cents, id, personId),
+      );
     }
   }
   return statements;
+}
+
+/**
+ * Every item paid in a currency at a typed rate, or with none, back at the rate on the
+ * day each was paid
+ */
+function rateStatements(
+  db: D1Database,
+  model: Model,
+  change: Extract<UncheckedChange, { op: 'setRate' }>,
+  rates: FetchedRates,
+): D1PreparedStatement[] {
+  const { currency, manualRate } = readRateChange(model, change);
+  return [...model.items].flatMap(([id, item]) =>
+    item.converted?.currency === currency
+      ? convertAgainStatements(
+          db,
+          id,
+          item,
+          chooseRate(manualRate, rates.get(rateKey(currency, item.createdAt))),
+        )
+      : [],
+  );
 }
 
 const insertParticipantsStatements = (
@@ -251,9 +269,10 @@ function changeStatements(
     }
 
     case 'addItem': {
-      const item = readItem(model, change.item, rates);
+      const createdAt = paidAt(model, 'addItem', change.item);
+      const item = readItem(model, change.item, rates, createdAt);
       if (model.items.has(item.id)) throw new Refused('Invalid item');
-      model.items.set(item.id, toModelItem(item));
+      model.items.set(item.id, toModelItem(item, createdAt));
       return [
         db
           .prepare(
@@ -272,7 +291,7 @@ function changeStatements(
             item.splitMode,
             item.category,
             item.notes,
-            readCreatedAt(change.item),
+            createdAt,
             ...conversionValues(item.converted),
           ),
         ...insertParticipantsStatements(db, item.id, item.participants),
@@ -280,9 +299,10 @@ function changeStatements(
     }
 
     case 'updateItem': {
-      const item = readItem(model, change.item, rates);
+      const createdAt = paidAt(model, 'updateItem', change.item);
+      const item = readItem(model, change.item, rates, createdAt);
       if (!model.items.has(item.id)) throw new Refused('This item was removed by someone else');
-      model.items.set(item.id, toModelItem(item));
+      model.items.set(item.id, toModelItem(item, createdAt));
       return [
         db
           .prepare(
@@ -314,11 +334,25 @@ function changeStatements(
 
     case 'setItemDate': {
       const id = readId(change.id);
+      const item = model.items.get(id);
       // Already removed (by someone else): nothing to move
-      if (!model.items.has(id)) return [];
+      if (item == null) return [];
       const at = change.createdAt;
       if (!isItemDate(at)) throw new Refused('Pick a date that has already come');
-      return [db.prepare('UPDATE items SET created_at = ? WHERE id = ?').bind(at, id)];
+      item.createdAt = at;
+      const moved = [db.prepare('UPDATE items SET created_at = ? WHERE id = ?').bind(at, id)];
+      // Paid in another currency on a fetched rate: now at the new day's
+      const c = item.converted;
+      if (c == null || c.source === 'manual') return moved;
+      return [
+        ...moved,
+        ...convertAgainStatements(
+          db,
+          id,
+          item,
+          chooseRate(null, rates.get(rateKey(c.currency, at))),
+        ),
+      ];
     }
 
     case 'clearItems':
@@ -326,6 +360,10 @@ function changeStatements(
       return deleteItemsStatements(db, 'split_id = ?', splitId);
 
     case 'refreshRates':
+      // Sent by older versions of the app, perhaps from a device's outbox. Items keep the
+      // rate of the day they were paid now, so there's nothing to refresh.
+      return [];
+
     case 'setRate':
       return rateStatements(db, model, change, rates);
 
@@ -335,16 +373,14 @@ function changeStatements(
 }
 
 /** Changes that convert amounts, held back while the split changes currency */
-const CONVERTING_OPS = new Set<Change['op']>(['addItem', 'updateItem', 'refreshRates', 'setRate']);
+const CONVERTING_OPS = new Set<Change['op']>(['addItem', 'updateItem', 'setItemDate', 'setRate']);
 
 interface ApplyOptions {
-  /** Fetches a rate into the split's currency; throws RatesUnavailable if none can be had */
-  fetchRate: (
-    from: string,
-    to: string,
-    /** fresh: refreshing rates on purpose, so a recent rate, not one from hours ago */
-    options: { fresh: boolean },
-  ) => Promise<Rate>;
+  /**
+   * Fetches the rate into the split's currency for an item paid at `at` (getRateOn);
+   * throws RatesUnavailable if none can be had
+   */
+  fetchRate: (from: string, to: string, at: number) => Promise<Rate>;
   /** Called once saved with the accounts the changes took out of the split */
   onAccessRemoved?: (emails: string[]) => void;
 }
@@ -393,13 +429,10 @@ export async function saveChanges(
 
   // Rates for items in other currencies, fetched before anything is checked or saved
   const rates: FetchedRates = new Map();
-  const fresh = batch.some(
-    (c) => c?.op === 'refreshRates' || (c?.op === 'setRate' && c.rate == null),
-  );
   try {
     await Promise.all(
-      [...currenciesToFetch(model, batch)].map(async (from) => {
-        rates.set(from, await fetchRate(from, model.currency, { fresh }));
+      [...ratesToFetch(model, batch)].map(async ([key, { currency, at }]) => {
+        rates.set(key, await fetchRate(currency, model.currency, at));
       }),
     );
   } catch (err) {

@@ -16,7 +16,7 @@ import {
   PHOTO_ID_PARAM,
   isRowId,
 } from '@shared/api';
-import { toCents } from '@shared/rates';
+import { convertCents, convertParts, rateDay, toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
 import { Root } from '../Root';
@@ -123,7 +123,10 @@ export interface FakeServer {
   /** Splits whose share link you can open, but that you're not in yet */
   notJoined: SplitDetail[];
   invites: MyInvite[];
-  /** 1 `from` is `rate` `to` */
+  /**
+   * 1 `from` is `rate` `to`: today's by `${from}${to}`, an earlier day's by
+   * `${from}${to}@2026-10-12`. Asked about a day with none, it's today's, as the real one does.
+   */
   rates: Map<string, number>;
   /** Every batch of changes the app sent, by split */
   sent: { splitId: string; changes: Change[] }[];
@@ -250,9 +253,60 @@ const json = (body: unknown, status = 200) =>
     }),
   );
 
+/**
+ * The rate for an item paid in `from` at `at`, as the real server finds it: that day's
+ * when there's one (from the ECB), else today's (from Wise); null when there's none
+ */
+function rateOn(server: FakeServer, from: string, to: string, at?: number) {
+  const day = at == null ? null : rateDay(at);
+  const onDay = day == null ? null : server.rates.get(`${from}${to}@${day}`);
+  if (onDay != null) {
+    return { rate: onDay, source: 'frankfurter' as const, at: Date.parse(`${day}T12:00:00Z`) };
+  }
+  const rate = server.rates.get(`${from}${to}`);
+  return rate == null ? null : { rate, source: 'wise' as const, at: Date.now() };
+}
+
+/**
+ * A setRate change: every item paid in its currency at the typed rate, or with none at
+ * the rate on the day each was paid. Null when one of those rates can't be had.
+ */
+function setRate(server: FakeServer, split: SplitDetail, currency: string, typed: number | null) {
+  const items = split.items.map((i) => {
+    if (i.original?.currency !== currency) return i;
+    const found =
+      typed == null
+        ? rateOn(server, currency, split.currency, i.createdAt)
+        : { rate: typed, source: 'manual' as const, at: Date.now() };
+    if (found == null) return null;
+    const costCents = convertCents(toCents(i.original.amount), found.rate);
+    const exact = i.original.exact;
+    const parts =
+      exact == null
+        ? null
+        : convertParts(
+            Object.entries(exact).map(([id, amount]) => [id, toCents(amount)]),
+            found.rate,
+            costCents,
+          );
+    return {
+      ...i,
+      cost: costCents / 100,
+      ...(parts != null && {
+        exact: Object.fromEntries([...parts].map(([id, cents]) => [id, cents / 100])),
+      }),
+      original: { ...i.original, rate: found.rate, rateSource: found.source, rateAt: found.at },
+    };
+  });
+  return items.every((i): i is Item => i != null) ? items : null;
+}
+
 /** Applies the changes the app sends, as far as the screens in these tests need */
-function apply(split: SplitDetail, change: Change) {
+function apply(server: FakeServer, split: SplitDetail, change: Change) {
   switch (change.op) {
+    case 'setRate':
+      split.items = setRate(server, split, change.currency, change.rate) ?? split.items;
+      break;
     case 'addItem':
       split.items.push(change.item);
       break;
@@ -459,11 +513,12 @@ function answerNow(server: FakeServer) {
       return json({ items });
     }
     if (path === '/api/rates') {
-      const [from, to] = [url.searchParams.get('from'), url.searchParams.get('to')];
-      const rate = server.rates.get(`${from}${to}`);
-      return rate == null
+      const [from, to] = [url.searchParams.get('from') ?? '', url.searchParams.get('to') ?? ''];
+      const at = url.searchParams.get('at');
+      const found = rateOn(server, from, to, at == null ? undefined : Number(at));
+      return found == null
         ? json({ error: 'No rate' }, 503)
-        : json({ from, to, rate, source: 'wise', fetchedAt: Date.now() });
+        : json({ from, to, rate: found.rate, source: found.source, fetchedAt: found.at });
     }
     // A photo's bytes: its id, so a test can tell which one it got
     const photoFile = path.match(/^\/api\/splits\/([^/]+)\/attachments\/([^/]+)$/);
@@ -540,8 +595,14 @@ function answerNow(server: FakeServer) {
         if (changes.length === 0 || changes.length > MAX_CHANGES) {
           return json({ error: `Send 1-${MAX_CHANGES} changes` }, 400);
         }
+        // No rate to be had: the real API asks for the batch again later
+        const noRate = changes.some(
+          (c) => c.op === 'setRate' && setRate(server, split, c.currency, c.rate) == null,
+        );
+        if (noRate)
+          return json({ error: "Couldn't get an exchange rate. We'll keep trying." }, 503);
         server.sent.push({ splitId: split.id, changes });
-        for (const change of changes) apply(split, change);
+        for (const change of changes) apply(server, split, change);
         return json({ ok: true });
       }
       if (method === 'GET') return json(structuredClone(split));

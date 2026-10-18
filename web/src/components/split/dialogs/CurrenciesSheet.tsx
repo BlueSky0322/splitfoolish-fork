@@ -1,19 +1,20 @@
-import { Button, NumberInput, Tooltip, UnstyledButton } from '@mantine/core';
-import { ArrowClockwise } from '@phosphor-icons/react';
+import { Button, NumberInput, UnstyledButton } from '@mantine/core';
 import { useState } from 'react';
 import { isValidRate } from '@shared/rates';
 import type { SplitItem } from '../../../split/state';
 import type { UsedCurrency } from '../../../split/currencies';
 import { usedCurrencies } from '../../../split/currencies';
-import { SOURCE_LABELS, describeRate, describeWhen } from '../../../utils/rate-labels';
+import { SOURCE_LABELS, describeDay, describeRate } from '../../../utils/rate-labels';
 import classes from './CurrenciesSheet.module.css';
 import { plural } from '../../../utils/text';
+
+// Each other currency items were paid in. Items are converted at the rate on the day
+// they were paid, which never changes; a rate typed here goes on all of a currency's
+// items, until they're put back on their days' rates.
 
 interface CurrenciesSheetProps {
   currency: string;
   items: SplitItem[];
-  saving: boolean;
-  onRefresh: (currencies: string[]) => void;
   onSetRate: (currency: string, rate: number | null) => void;
 }
 
@@ -82,9 +83,12 @@ function RateRow({
     <div className={classes.row}>
       <span className={classes.code}>{used.code}</span>
       <div className="min-w-0 flex-1">
-        <div className={classes.rate}>{describeRate(used.rate, used.code, currency)}</div>
+        <div className={classes.rate}>
+          {used.varied && !used.manual && 'Newest: '}
+          {describeRate(used.rate, used.code, currency)}
+        </div>
         <div className={classes.source}>
-          {used.manual ? 'Your rate' : `${SOURCE_LABELS[used.source]}, ${describeWhen(used.at)}`}
+          {used.manual ? 'Your rate' : `${SOURCE_LABELS[used.source]}, ${describeDay(used.at)}`}
         </div>
       </div>
       <div className={classes.side}>
@@ -100,51 +104,26 @@ function RateRow({
             }
           }}
         >
-          {used.manual ? 'Use live rate' : 'Use my own rate'}
+          {used.manual ? "Use each day's rate" : 'Use my own rate'}
         </UnstyledButton>
       </div>
     </div>
   );
 }
 
-const CurrenciesSheet = ({
-  currency,
-  items,
-  saving,
-  onRefresh,
-  onSetRate,
-}: CurrenciesSheetProps) => {
+const CurrenciesSheet = ({ currency, items, onSetRate }: CurrenciesSheetProps) => {
   const used = usedCurrencies(items);
-  const live = used.filter((u) => !u.manual);
-  const updated = live.length > 0 ? Math.max(...live.map((u) => u.at)) : null;
 
   return (
     <div className="flex flex-col gap-3">
       <p className="sf-muted -mt-1 text-sm">
-        Everything converts to {currency}, the split's currency
+        Everything converts to {currency}, the split's currency, at the rate on the day each item
+        was paid
       </p>
       {used.length === 0 ? (
         <p className="sf-muted text-sm">No items are in another currency.</p>
       ) : (
         <>
-          <div className={classes.toolbar}>
-            <span>
-              {updated != null ? `Updated ${describeWhen(updated)}` : 'All on your rates'}
-            </span>
-            {live.length > 0 && (
-              <Tooltip label="Fetch all live rates">
-                <Button
-                  variant="subtle"
-                  size="compact-sm"
-                  leftSection={<ArrowClockwise size={14} />}
-                  loading={saving}
-                  onClick={() => onRefresh(live.map((u) => u.code))}
-                >
-                  Refresh
-                </Button>
-              </Tooltip>
-            )}
-          </div>
           <div className={classes.list}>
             {used.map((u) => (
               <RateRow
