@@ -457,7 +457,7 @@ export function ItemTable({
           )}
           {group.items.map((item) => {
             const share = myShare(item);
-            const shareText = share == null ? '—' : formatMoney(share, currency);
+            const shareText = share == null ? '' : formatMoney(share, currency);
             if (mobile) {
               return (
                 <ItemButton
@@ -494,7 +494,7 @@ export function ItemTable({
                     </span>
                   </span>
                   <span className={`${classes.num} sf-muted text-[13px]`}>
-                    {share == null ? '—' : (share / 100).toFixed(2)}
+                    {share == null ? '' : (share / 100).toFixed(2)}
                   </span>
                   <span className={classes.num}>
                     {item.cost.toFixed(2)}

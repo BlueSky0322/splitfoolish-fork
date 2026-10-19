@@ -84,6 +84,14 @@ describe('the split page', () => {
     expect(gift.textContent).not.toMatch(/yours/);
     const socks = screen.getByText('Socks').closest('button')!;
     expect(socks.textContent).toMatch(/yours 15\.00/);
+
+    // The table leaves the cell empty, with nothing in its place
+    await userEvent.setup().click(screen.getByLabelText('Table view'));
+    const giftCells = (await screen.findByText('Gift')).closest('[role="row"]')!;
+    expect(giftCells.textContent).not.toContain('—');
+    expect(giftCells.textContent).not.toMatch(/(^|[^4])0\.00/);
+    const socksCells = screen.getByText('Socks').closest('[role="row"]')!;
+    expect(socksCells.textContent).toMatch(/15\.00.*15\.00/);
   });
 
   test('adds an item typed as a sum, and sends it to the server', async () => {
