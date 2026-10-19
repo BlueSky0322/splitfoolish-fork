@@ -21,6 +21,8 @@ import type { RowSelection } from './useItemSelection';
 import { useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
 import PersonAvatar, { PersonName, PersonNames } from '../PersonAvatar';
+import { ForWhom, PaidBy } from './PaidBy';
+import { onlyFor } from './only-for';
 import classes from './ItemViews.module.css';
 import { toCents } from '@shared/rates';
 import { plural } from '../../../utils/text';
@@ -126,9 +128,6 @@ function OriginalAmount({ item }: { item: SplitItem }) {
     </span>
   );
 }
-
-/** The one person an item is for, when it's on no one else: "Ryan paid for simpson" */
-const onlyFor = (item: SplitItem) => (item.participants.length === 1 ? item.participants[0] : null);
 
 const who = (item: SplitItem, people: Person[]) =>
   item.participants.length === people.length && people.length > 1 ? (
@@ -252,13 +251,7 @@ export function ItemCards({
                       </div>
                     )}
                     <div className={classes.itemMeta}>
-                      <PersonName person={item.payer} /> paid
-                      {onlyFor(item) && (
-                        <>
-                          {' for '}
-                          <PersonName person={onlyFor(item)!} />
-                        </>
-                      )}
+                      <PaidBy item={item} />
                       {mobile
                         ? share != null && `, yours ${formatAmount(share, currency)}`
                         : !onlyFor(item) && (
@@ -443,9 +436,7 @@ export function ItemTable({
                       </span>
                       <span className={`${classes.cellEllipsis} block text-[11px] sf-muted`}>
                         {onlyFor(item) ? (
-                          <>
-                            For <PersonName person={onlyFor(item)!} />
-                          </>
+                          <ForWhom item={item} />
                         ) : (
                           <>
                             {MODE_LABELS[item.splitMode]} · {who(item, people)}
@@ -505,9 +496,7 @@ export function ItemTable({
                 </span>
                 <span className={classes.cellEllipsis}>
                   {onlyFor(item) ? (
-                    <>
-                      For <PersonName person={onlyFor(item)!} />
-                    </>
+                    <ForWhom item={item} />
                   ) : (
                     <>
                       <span className={classes.modePill}>{MODE_LABELS[item.splitMode]}</span>
