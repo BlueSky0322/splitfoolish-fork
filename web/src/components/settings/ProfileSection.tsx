@@ -96,7 +96,7 @@ const ProfileSection = ({ track }: { track: Track }) => {
               {(props) => (
                 <Button
                   variant="default"
-                  size="compact-md"
+                  size="compact-sm"
                   loading={busy}
                   {...props}
                 >
@@ -108,7 +108,7 @@ const ProfileSection = ({ track }: { track: Track }) => {
               <Button
                 variant="subtle"
                 color="gray"
-                size="compact-md"
+                size="compact-sm"
                 disabled={busy}
                 onClick={removeAvatar}
               >

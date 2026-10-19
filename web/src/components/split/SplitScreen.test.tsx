@@ -95,6 +95,33 @@ describe('the split page', () => {
     await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(2));
   });
 
+  test('moving items to another day says so, with Undo to put each back on its own date', async () => {
+    const split = trip();
+    split.items[1].createdAt = Date.UTC(2026, 9, 8, 12);
+    const server = fakeServer(split);
+    const before = server.splits.get('trip')!.items.map((i) => i.createdAt);
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Taxi');
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getByText('Dinner'));
+    await user.click(screen.getByText('Taxi'));
+    await user.click(screen.getByRole('button', { name: 'Change date' }));
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.click(dialog.getByText('Yesterday'));
+    await user.click(dialog.getByRole('button', { name: 'Move' }));
+
+    expect(await screen.findByText(/^Moved 2 items to /)).toBeTruthy();
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.map((i) => i.createdAt)).not.toEqual(before),
+    );
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    // Each back on the date it had, not both on one
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.map((i) => i.createdAt)).toEqual(before),
+    );
+  });
+
   test('shows what someone else saves, as soon as the server says so', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');

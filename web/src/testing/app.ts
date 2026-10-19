@@ -328,6 +328,11 @@ function apply(server: FakeServer, split: SplitDetail, change: Change) {
     case 'removeItem':
       split.items = split.items.filter((i) => i.id !== change.id);
       break;
+    case 'setItemDate':
+      split.items = split.items.map((i) =>
+        i.id === change.id ? { ...i, createdAt: change.createdAt } : i,
+      );
+      break;
     case 'addPerson':
       split.people.push(person(change.id, change.name, change.memberEmail ?? null));
       break;

@@ -215,6 +215,22 @@ describe('split actions', () => {
     expect(deps.reloadAfterSave).not.toHaveBeenCalled();
   });
 
+  test('putting items back on their dates changes only those that moved', () => {
+    const { actions, queued, state } = setup([item(), item({ id: 'i2', createdAt: 5 })]);
+    const was = state().items[0].createdAt;
+    expect(actions.moveItemsToDay(['i1'], new Date(2026, 9, 12))).toBe(true);
+    queued.length = 0;
+    expect(
+      actions.restoreItemDates([
+        { id: 'i1', createdAt: was },
+        { id: 'i2', createdAt: 5 },
+        { id: 'gone', createdAt: 1 },
+      ]),
+    ).toBe(true);
+    expect(state().items.map((i) => i.createdAt)).toEqual([was, 5]);
+    expect(queued).toEqual([{ op: 'setItemDate', id: 'i1', createdAt: was }]);
+  });
+
   test('a typed rate converts every item in that currency straight away', () => {
     const { actions, queued, state } = setup([
       item({ cost: 80, original: { currency: 'PHP', amount: 1000, rate: 0.08 } }),

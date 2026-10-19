@@ -1,5 +1,5 @@
-import { Button } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { showUndo } from '../../common/undo-toast';
 import type { SplitActions } from '../../../split/actions';
 import type { SplitItem } from '../../../split/state';
 import { toApiItem } from '../../../split/state';
@@ -55,23 +55,8 @@ export function makeDeleteItems({
         return;
       }
       const saved = removed.map(toApiItem);
-      const id = notifications.show({
-        message: (
-          <div className="flex items-center justify-between gap-3">
-            <span>Deleted {label}</span>
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              onClick={() => {
-                for (const item of saved) actions.restoreItem(item);
-                notifications.hide(id);
-              }}
-            >
-              Undo
-            </Button>
-          </div>
-        ),
-        autoClose: 6000,
+      showUndo(`Deleted ${label}`, () => {
+        for (const item of saved) actions.restoreItem(item);
       });
     };
 
