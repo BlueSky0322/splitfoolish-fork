@@ -208,14 +208,17 @@
   z-index: 1;
 }
 
-/* In an item card they sit just before the amount (96px wide, after the row's 16px
-   padding and 12px gap), over "Your share", so the amount stays in view */
+/* In an item card they have a place of their own at the end, after the amount, kept
+   while they're hidden so nothing moves on hover. Above the row's click area. */
 .itemRow .rowActions {
-  right: 124px;
-}
-
-.mobile .itemRow .rowActions {
-  right: 8px;
+  position: relative;
+  right: auto;
+  top: auto;
+  transform: none;
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
 }
 
 /* Keyboard focus only: a dialog closed with the mouse hands focus back to the Edit
