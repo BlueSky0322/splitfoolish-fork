@@ -1,4 +1,5 @@
 import { ActionIcon, Loader } from '@mantine/core';
+import ViewablePicture from '../../ui/ViewablePicture';
 import { CloudSlash, X } from '@phosphor-icons/react';
 import type { CSSProperties } from 'react';
 import { useMemo } from 'react';
@@ -35,11 +36,17 @@ const QueuedPhotoTile = ({
       ) : (
         <>
           {url && (
-            <img
-              className={classes.image}
+            <ViewablePicture
               src={url}
-              alt=""
-            />
+              label="View photo waiting to upload"
+              className={classes.image}
+            >
+              <img
+                className={classes.image}
+                src={url}
+                alt=""
+              />
+            </ViewablePicture>
           )}
           <span className={classes.waiting}>
             <CloudSlash size={12} />

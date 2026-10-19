@@ -50,21 +50,28 @@
 
 .transfer {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--sf-tint);
 }
 
-.transfer[data-size='lg'] {
-  min-height: 56px;
+/* The avatars, and the amount at the end */
+.transferTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .transfer[data-size='xl'] {
-  gap: 20px;
+  gap: 14px;
   padding: 20px 24px;
   border-radius: 16px;
+}
+
+.transfer[data-size='xl'] .transferTop {
+  gap: 20px;
 }
 
 .transferArrow {
@@ -77,24 +84,29 @@
 }
 
 .transferText {
-  flex: 1;
+  display: flex;
   min-width: 0;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.3;
+  white-space: pre;
 }
 
-/* A name in a transfer: kept whole when the line wraps, ending in "…" only when it's
-   too long for a line of its own */
+/* A name in a transfer: shortened with "…" when both don't fit on the line */
 .transferName {
-  display: inline-block;
-  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: top;
+}
+
+/* "pays" always shows, whatever the names' length */
+.transferPays {
+  flex-shrink: 0;
+  color: var(--sf-text-secondary);
 }
 
 .transferAmount {
+  margin-left: auto;
   font-family: var(--sf-font-num);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -105,7 +117,14 @@
   font-size: 16px;
 }
 
-.transfer[data-size='xl'] .transferText,
+.transfer[data-size='lg'] .transferText {
+  font-size: 13px;
+}
+
+.transfer[data-size='xl'] .transferText {
+  font-size: 24px;
+}
+
 .transfer[data-size='xl'] .transferAmount {
   font-size: 30px;
 }

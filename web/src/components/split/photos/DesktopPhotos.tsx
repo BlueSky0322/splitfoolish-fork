@@ -400,7 +400,6 @@ const DesktopPhotos = () => {
                         avatarVersion={who.avatarVersion}
                         color={who.colors?.fill}
                         size={18}
-                        preview={false}
                       />
                       <span
                         className={classes.who}

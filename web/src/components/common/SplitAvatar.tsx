@@ -1,6 +1,7 @@
 import { Avatar } from '@mantine/core';
 import { splitPictureUrl } from '../../api';
 import { useSplitPicturePreview } from '../../split/pictures';
+import ViewablePicture from '../ui/ViewablePicture';
 
 interface SplitAvatarProps {
   splitId: string;
@@ -8,13 +9,25 @@ interface SplitAvatarProps {
   pictureVersion?: number | null;
   size?: number;
   active?: boolean;
+  /**
+   * Tapping its picture shows it full size. Off where the avatar is a link to the
+   * split, as in lists of splits.
+   */
+  preview?: boolean;
 }
 
 // A split's picture, or its first letter. Rounded squares, so splits never look like people.
-const SplitAvatar = ({ splitId, name, pictureVersion, size = 24, active }: SplitAvatarProps) => {
-  const preview = useSplitPicturePreview(splitId);
-  const src = preview ?? (pictureVersion ? splitPictureUrl(splitId, pictureVersion) : null);
-  return (
+const SplitAvatar = ({
+  splitId,
+  name,
+  pictureVersion,
+  size = 24,
+  active,
+  preview = false,
+}: SplitAvatarProps) => {
+  const picked = useSplitPicturePreview(splitId);
+  const src = picked ?? (pictureVersion ? splitPictureUrl(splitId, pictureVersion) : null);
+  const avatar = (
     <Avatar
       src={src}
       alt={name}
@@ -31,6 +44,15 @@ const SplitAvatar = ({ splitId, name, pictureVersion, size = 24, active }: Split
     >
       {name.trim().charAt(0).toUpperCase() || '?'}
     </Avatar>
+  );
+  if (!preview) return avatar;
+  return (
+    <ViewablePicture
+      src={src}
+      label={`View ${name}'s picture`}
+    >
+      {avatar}
+    </ViewablePicture>
   );
 };
 

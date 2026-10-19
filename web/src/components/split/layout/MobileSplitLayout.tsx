@@ -200,6 +200,7 @@ const MobileSplitLayout = ({
                 name={meta.name}
                 pictureVersion={pictureVersion}
                 size={36}
+                preview
               />
             )}
             {meta == null && status === 'loading' && (

@@ -426,7 +426,6 @@ export function ItemTable({
                       selection={selection}
                     />
                     <PersonAvatar
-                      preview={false}
                       person={item.payer}
                       size={26}
                     />

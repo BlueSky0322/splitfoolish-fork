@@ -1,8 +1,6 @@
-import { Avatar, UnstyledButton } from '@mantine/core';
-import { useState } from 'react';
+import { Avatar } from '@mantine/core';
 import { avatarUrl } from '../../api';
-import PhotoViewer from '../ui/PhotoViewer';
-import classes from './UserAvatar.module.css';
+import ViewablePicture from '../ui/ViewablePicture';
 
 interface UserAvatarProps {
   /** The name the initial comes from */
@@ -13,8 +11,8 @@ interface UserAvatarProps {
   size?: number;
   active?: boolean;
   /**
-   * Tapping a profile picture shows it full size. Off where the avatar sits inside
-   * something that already does something when tapped, such as a row or a chip.
+   * Tapping a profile picture shows it full size, inside a row or chip too. Off only
+   * where the avatar is itself a link somewhere, such as your own to Settings.
    */
   preview?: boolean;
   /** A picture to show instead, such as one still uploading */
@@ -35,7 +33,6 @@ const UserAvatar = ({
   previewSrc,
   color,
 }: UserAvatarProps) => {
-  const [open, setOpen] = useState(false);
   const src = previewSrc ?? (email && avatarVersion ? avatarUrl(email, avatarVersion) : null);
 
   const avatar = (
@@ -64,26 +61,15 @@ const UserAvatar = ({
     </Avatar>
   );
 
-  if (!preview || src == null) return avatar;
-
+  if (!preview) return avatar;
   return (
-    <>
-      <UnstyledButton
-        className={classes.trigger}
-        aria-label={`View ${name}'s picture`}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen(true);
-        }}
-      >
-        {avatar}
-      </UnstyledButton>
-      <PhotoViewer
-        photos={[{ key: src, src }]}
-        index={open ? 0 : null}
-        onIndexChange={(ix) => setOpen(ix != null)}
-      />
-    </>
+    <ViewablePicture
+      src={src}
+      label={`View ${name}'s picture`}
+      round
+    >
+      {avatar}
+    </ViewablePicture>
   );
 };
 

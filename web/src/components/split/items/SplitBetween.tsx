@@ -163,7 +163,6 @@ function PersonRow({
       >
         <span className={classes.avatar}>
           <PersonAvatar
-            preview={false}
             person={person}
             size={30}
           />

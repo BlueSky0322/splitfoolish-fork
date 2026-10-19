@@ -1,4 +1,5 @@
 import { Autocomplete, Button, Loader, Select, TextInput, UnstyledButton } from '@mantine/core';
+import ViewablePicture from '../ui/ViewablePicture';
 import { Camera, Image, PencilSimple, Plus, QrCode, UploadSimple } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
@@ -133,10 +134,16 @@ function QrField({
     <div className={classes.qrPicked}>
       {inputs}
       <div className={classes.qrTile}>
-        <img
+        <ViewablePicture
           src={src}
-          alt="Your QR code"
-        />
+          label="View your QR code"
+          fill
+        >
+          <img
+            src={src}
+            alt="Your QR code"
+          />
+        </ViewablePicture>
         {busy && (
           <span className={classes.qrBusy}>
             <Loader size={20} />
@@ -444,11 +451,16 @@ const PaymentMethods = ({
                   aria-hidden
                 />
                 {isQr(m) && m.qrVersion != null && (
-                  <img
-                    className={classes.qrThumb}
+                  <ViewablePicture
                     src={paymentQrUrl(m.id, m.qrVersion)}
-                    alt=""
-                  />
+                    label={`View ${methodName(m)}`}
+                  >
+                    <img
+                      className={classes.qrThumb}
+                      src={paymentQrUrl(m.id, m.qrVersion)}
+                      alt=""
+                    />
+                  </ViewablePicture>
                 )}
                 <span className="min-w-0 flex-1">
                   <span className={classes.methodType}>{isQr(m) ? methodName(m) : m.type}</span>

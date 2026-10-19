@@ -1,6 +1,13 @@
 import { ActionIcon, Modal, Tooltip } from '@mantine/core';
 import { CaretLeft, CaretRight, DownloadSimple, Trash, X } from '@phosphor-icons/react';
-import { type ReactNode, type TouchEvent, useEffect, useRef, useState } from 'react';
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type TouchEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useBackDismiss } from '../../hooks/useBackDismiss';
 import classes from './PhotoViewer.module.css';
 
@@ -44,9 +51,9 @@ const distance = (
 ) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 
 // Photos full screen, on phones and computers alike: arrows, keys or a swipe move
-// between them, and a swipe down closes it. Pinch or double tap to zoom on a phone (and
-// drag a zoomed photo around); a click zooms on a computer. With details, they sit in a
-// panel on the right.
+// between them, and a swipe down closes it. Pinch or double tap to zoom on a phone, a
+// click on a computer; either way a zoomed photo can be dragged around. With details,
+// they sit in a panel on the right.
 const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
   const count = photos.length;
   // A photo removed while open: show the one that took its place, or close
@@ -61,6 +68,9 @@ const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
   const lastTap = useRef(0);
   const touchedAt = useRef(0);
   const [moving, setMoving] = useState(false);
+  // A mouse dragging a zoomed photo: where it started; dragged once it has moved, so
+  // letting go doesn't also count as a click that zooms back out
+  const drag = useRef<{ x: number; y: number; from: View; dragged: boolean } | null>(null);
 
   useEffect(() => setView(FIT), [current]);
 
@@ -125,6 +135,35 @@ const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
     if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1);
     else if (dy > SWIPE_PX * 2 && dy > Math.abs(dx)) close();
   };
+
+  const onMouseDown = (e: ReactMouseEvent) => {
+    if (!zoomed || e.button !== 0) return;
+    e.preventDefault();
+    drag.current = { x: e.clientX, y: e.clientY, from: view, dragged: false };
+    setMoving(true);
+  };
+  useEffect(() => {
+    if (!moving || drag.current == null) return;
+    const onMove = (e: MouseEvent) => {
+      const d = drag.current;
+      if (d == null) return;
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.dragged = true;
+      setView({ scale: d.from.scale, x: d.from.x + dx, y: d.from.y + dy });
+    };
+    const onUp = () => {
+      setMoving(false);
+      // Cleared after the click this release makes
+      setTimeout(() => (drag.current = null), 0);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [moving]);
 
   const go = (step: number) => {
     if (current == null || count < 2) return;
@@ -233,13 +272,15 @@ const PhotoViewer = ({ photos, index, onIndexChange }: PhotoViewerProps) => {
               className={classes.stage}
               data-zoomed={zoomed || undefined}
               onClick={(e) => {
-                // A tap has done its work already
+                // A tap has done its work already, and so has a drag
                 if (Date.now() - touchedAt.current < 600) return;
+                if (drag.current?.dragged) return;
                 // A click on the dark area closes; on the photo, zooms in or out
                 if (e.target !== e.currentTarget)
                   setView(zoomed ? FIT : { scale: STEP_SCALE, x: 0, y: 0 });
                 else if (!zoomed) close();
               }}
+              onMouseDown={onMouseDown}
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
