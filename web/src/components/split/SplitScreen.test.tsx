@@ -354,7 +354,7 @@ describe('the split page', () => {
       [100, 410],
     ]);
     expect(selectedTab()).toBe('Photos');
-    expect(await screen.findByText(/No photos yet/)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Take photo' })).toBeTruthy();
   });
 
   test("on a phone, the split's menu is a sheet", async () => {

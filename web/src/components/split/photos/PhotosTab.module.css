@@ -86,3 +86,96 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* No photos yet: a dashed card with the two ways to add the first */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 380px;
+  padding: 28px 20px;
+  border: 1.5px dashed color-mix(in srgb, var(--sf-text) 22%, transparent);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--sf-accent-tint);
+  color: var(--sf-accent);
+}
+
+.emptyTitle {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.emptyBody {
+  max-width: 280px;
+  font-size: 14px;
+  color: var(--sf-text-muted);
+}
+
+.emptyActions {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.emptyActions > button {
+  min-height: 48px;
+}
+
+/* The Add photos sheet's two choices */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  padding: 0 8px;
+  border-radius: 10px;
+}
+
+.choice:hover {
+  background: var(--sf-hover);
+}
+
+.choice > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.choiceIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--sf-accent-tint);
+  color: var(--sf-accent);
+}
+
+.choiceTitle {
+  font-size: 15px;
+}
+
+.choiceHint {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+}

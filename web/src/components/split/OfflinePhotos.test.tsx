@@ -84,6 +84,7 @@ async function pickPhotos(
   opening.mockRestore();
   expect(opened.map((input) => input.type)).toEqual(['file']);
   await user.upload(opened[0], files);
+  return opened[0];
 }
 
 /** A blob's bytes as text; jsdom's Blob can only be read through a FileReader */
@@ -109,10 +110,11 @@ describe('photos picked offline', () => {
     renderApp(server, '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     await user.click(await screen.findByRole('tab', { name: 'Photos' }));
-    expect(await screen.findByText(/No photos yet/)).toBeTruthy();
 
     goOffline(server);
-    await pickPhotos(user, screen.getByRole('button', { name: 'Add photos' }), [file('beach.jpg')]);
+    await pickPhotos(user, await screen.findByRole('button', { name: 'Choose from library' }), [
+      file('beach.jpg'),
+    ]);
     expect(await screen.findByText('Waiting to upload')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remove beach.jpg' })).toBeTruthy();
 
@@ -236,15 +238,108 @@ describe('photos picked online', () => {
     await pickPhotos(user, screen.getByRole('button', { name: 'Add photos' }), [file('beach.jpg')]);
 
     expect(await screen.findByText('Refused')).toBeTruthy();
-    expect(await screen.findByText(/No photos yet/)).toBeTruthy();
+    expect(await screen.findByText('Drop photos here')).toBeTruthy();
     expect(screen.queryByText('Waiting to upload')).toBeNull();
 
     // Opening the app again doesn't bring it back
     reopen(server, '/?s=trip');
     await userEvent.setup().click(await screen.findByRole('tab', { name: /^Photos/ }));
-    expect(await screen.findByText(/No photos yet/)).toBeTruthy();
+    expect(await screen.findByText('Drop photos here')).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByText('Waiting to upload')).toBeNull();
     expect(server.uploads).toEqual([]);
+  });
+});
+
+describe('adding the first photos', () => {
+  test('on a computer, the empty tab is the place to choose them, with no toolbar', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: /^Photos/ }));
+    expect(await screen.findByText('Drop photos here')).toBeTruthy();
+    expect(screen.getByText('JPEG, PNG, HEIC or WebP')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Sort photos/ })).toBeNull();
+    expect(screen.queryByRole('radiogroup', { name: 'Show' })).toBeNull();
+
+    const chooser = await pickPhotos(user, screen.getByRole('button', { name: 'Choose photos' }), [
+      file('beach.jpg'),
+      file('pool.jpg'),
+    ]);
+    expect(chooser.multiple).toBe(true);
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(2),
+    );
+    expect(screen.queryByText('Drop photos here')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Sort photos/ })).toBeTruthy();
+    expect((await uploaded(server)).map((u) => u.photo)).toEqual([
+      'small beach.jpg',
+      'small pool.jpg',
+    ]);
+  });
+
+  test('on a computer, a filter with none says so, and Show all photos goes back', async () => {
+    const split = trip();
+    split.attachments = [
+      {
+        id: 'beach',
+        itemId: null,
+        size: 1000,
+        contentType: 'image/jpeg',
+        uploadedBy: 'ryan@example.com',
+        createdAt: Date.UTC(2026, 9, 11, 9),
+      },
+    ];
+    renderApp(fakeServer(split), '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: /^Photos/ }));
+    await user.click(await screen.findByText('Receipts'));
+    expect(await screen.findByText('No receipts yet')).toBeTruthy();
+    expect(screen.getByText('Add one on its item and it shows here.')).toBeTruthy();
+    expect(screen.queryByText('Drop photos here')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Show all photos' }));
+    expect(await screen.findByRole('button', { name: 'Photo of the split' })).toBeTruthy();
+    expect(screen.queryByText('No receipts yet')).toBeNull();
+  });
+
+  test('on a phone, the empty tab offers the camera or the library, and no Add photos button', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: 'Photos' }));
+    expect(
+      await screen.findByText('Photos for the whole split. Receipts for one item go on that item.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add photos' })).toBeNull();
+
+    const camera = await pickPhotos(user, screen.getByRole('button', { name: 'Take photo' }), [
+      file('beach.jpg'),
+    ]);
+    expect(camera.getAttribute('capture')).toBe('environment');
+    expect(camera.multiple).toBe(false);
+    expect(await screen.findByRole('button', { name: 'Photo of the split' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Take photo' })).toBeNull();
+
+    // Once there are photos, Add photos opens a sheet with the same two choices
+    await user.click(screen.getByRole('button', { name: 'Add photos' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Add photos' });
+    expect(within(sheet).getByText('Opens the camera')).toBeTruthy();
+    const library = await pickPhotos(
+      user,
+      within(sheet).getByRole('button', { name: /Choose from library/ }),
+      [file('pool.jpg'), file('sunset.jpg')],
+    );
+    expect(library.multiple).toBe(true);
+    expect(library.hasAttribute('capture')).toBe(false);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add photos' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(3),
+    );
+    expect((await uploaded(server)).map((u) => u.photo)).toEqual([
+      'small beach.jpg',
+      'small pool.jpg',
+      'small sunset.jpg',
+    ]);
   });
 });
