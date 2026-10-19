@@ -131,6 +131,7 @@
   margin-top: 12px;
 }
 
-.emptyActions > button {
-  min-height: 48px;
+/* The usual button text, on 48px buttons as the share sheet's */
+.emptyActions > :global(.mantine-Button-root) {
+  height: 48px;
 }

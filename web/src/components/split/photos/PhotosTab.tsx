@@ -241,14 +241,12 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
           </div>
           <div className={classes.emptyActions}>
             <Button
-              size="lg"
               leftSection={<Camera size={18} />}
               onClick={picker.takePhoto}
             >
               Take photo
             </Button>
             <Button
-              size="lg"
               variant="default"
               leftSection={<Images size={18} />}
               onClick={picker.chooseFromLibrary}
