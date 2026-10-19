@@ -343,3 +343,37 @@ describe('adding the first photos', () => {
     ]);
   });
 });
+
+describe("an item's photos", () => {
+  test('on a phone, Add photo offers the camera or the library, as the Photos tab does', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Add item' }));
+    const form = await screen.findByRole('dialog', { name: /Add item/ });
+    await user.click(within(form).getByRole('button', { name: 'Add photo' }));
+
+    const sheet = await screen.findByRole('dialog', { name: 'Add photo' });
+    expect(within(sheet).getByText('Opens the camera')).toBeTruthy();
+    const camera = await pickPhotos(
+      user,
+      within(sheet).getByRole('button', { name: /Take photo/ }),
+      [file('receipt.jpg')],
+    );
+    expect(camera.getAttribute('capture')).toBe('environment');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add photo' })).toBeNull());
+    expect(await within(form).findByRole('button', { name: 'Open receipt.jpg' })).toBeTruthy();
+
+    await user.click(within(form).getByRole('button', { name: 'Add photo' }));
+    const again = await screen.findByRole('dialog', { name: 'Add photo' });
+    const library = await pickPhotos(
+      user,
+      within(again).getByRole('button', { name: /Choose from library/ }),
+      [file('menu.jpg')],
+    );
+    expect(library.multiple).toBe(true);
+    expect(await within(form).findByRole('button', { name: 'Open menu.jpg' })).toBeTruthy();
+    // Still the item form, with both waiting for the item to be added
+    expect(screen.getByRole('dialog', { name: /Add item/ })).toBe(form);
+  }, 15_000);
+});

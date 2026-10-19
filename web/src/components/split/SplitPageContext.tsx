@@ -14,8 +14,8 @@ import type { DeleteConfirmation } from './items/delete-items';
 
 /** Everything the split page opens over itself: one at a time, each a sheet on phones */
 export type Dialog =
-  /** prefill: an amount and currency from Convert */
-  | { kind: 'add'; prefill?: Prefill }
+  /** prefill: an amount and currency from Convert; day: added from that day's heading */
+  | { kind: 'add'; prefill?: Prefill; day?: number }
   | { kind: 'edit'; item: SplitItem }
   /** An item as it stands, on phones, with Edit to open the form */
   | { kind: 'item'; itemId: string }

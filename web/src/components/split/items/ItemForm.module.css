@@ -269,3 +269,24 @@
 .mainAction :global(.mantine-Button-root) {
   height: 52px;
 }
+
+/* A new item added from a day's heading: the date it goes on, picked out */
+.dayLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dayTag {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--sf-accent-tint);
+  color: var(--sf-accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dayInput {
+  border-color: var(--sf-accent);
+  box-shadow: 0 0 0 1px var(--sf-accent);
+}

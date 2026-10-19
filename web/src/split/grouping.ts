@@ -12,6 +12,8 @@ export interface ItemGroup {
   label: string;
   items: SplitItem[];
   subtotalCents: number;
+  /** Grouped by day: the start of that day, so an item can be added to it */
+  day?: number;
 }
 
 export const GROUP_LABELS: Record<GroupBy, string> = {
@@ -88,6 +90,10 @@ export function groupItems(
     let group = groups.get(groupKey);
     if (group == null) {
       group = { key: groupKey, label, items: [], subtotalCents: 0 };
+      if (groupBy === 'day') {
+        const d = new Date(item.createdAt);
+        group.day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      }
       groups.set(groupKey, group);
     }
     group.items.push(item);

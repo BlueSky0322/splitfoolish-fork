@@ -1,17 +1,19 @@
 import { AppShell } from '@mantine/core';
 import { useHotkeys } from '@mantine/hooks';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useIsDesktop, useIsMobile } from '../../hooks/useBreakpoints';
 import type { Route } from '../../hooks/useRoute';
 import { useProfile } from '../../profile/ProfileContext';
 import BottomTabs from './BottomTabs';
 import OfflineNotice from './OfflineNotice';
 import UpdateNotice from './UpdateNotice';
+import ShortcutsDialog from './ShortcutsDialog';
 import Sidebar from './Sidebar';
 import classes from './AppLayout.module.css';
 
-// Desktop gets a sidebar (collapsible to a rail with the button or "["); phones get the
-// page over bottom tabs; tablets get the page alone, each with its own top bar
+// Desktop gets a sidebar (collapsible to a rail with the button or "["), and "?" lists the
+// keyboard shortcuts; phones get the page over bottom tabs; tablets get the page alone,
+// each with its own top bar
 const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) => {
   const isDesktop = useIsDesktop();
   const isMobile = useIsMobile();
@@ -19,7 +21,13 @@ const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) =
   // Saved with the account, so it's the same on every computer
   const open = profile?.settings.sidebarOpen ?? true;
   const toggle = () => rememberSettings({ sidebarOpen: !open });
-  useHotkeys([['[', toggle]]);
+  const [shortcuts, setShortcuts] = useState(false);
+  useHotkeys([
+    ['[', toggle],
+    // "?" takes Shift on most keyboards, but not all
+    ['shift+?', () => isDesktop && setShortcuts(true)],
+    ['?', () => isDesktop && setShortcuts(true)],
+  ]);
 
   if (!isDesktop) {
     return (
@@ -54,6 +62,10 @@ const AppLayout = ({ route, children }: { route: Route; children: ReactNode }) =
       <AppShell.Main className={`h-dvh overflow-auto ${classes.main}`}>{children}</AppShell.Main>
       <OfflineNotice />
       <UpdateNotice />
+      <ShortcutsDialog
+        opened={shortcuts}
+        onClose={() => setShortcuts(false)}
+      />
     </AppShell>
   );
 };

@@ -10,11 +10,13 @@ import {
   SortDescending,
   StackSimple,
 } from '@phosphor-icons/react';
+import { useHotkeys } from '@mantine/hooks';
 import { useState } from 'react';
 import { GROUP_LABELS, type SortDir, type SortKey } from '../../../split/grouping';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { currencySymbol } from '../../../utils/money';
 import ErrorBoundary from '../../ui/ErrorBoundary';
+import Key from '../../ui/Key';
 import { DesktopSelectionBar } from '../items/ItemSelection';
 import SplitAvatar from '../../common/SplitAvatar';
 import { useSplitPage } from '../SplitPageContext';
@@ -55,6 +57,10 @@ type DesktopTab = 'items' | 'photos';
 /** Add item and Add photos take the same room, so the buttons beside them stay put */
 const MAIN_BUTTON_WIDTH = 136;
 
+/** Whether a key was pressed in a dialog, where the page's keys rest */
+const inDialog = (e: KeyboardEvent) =>
+  (e.target as HTMLElement | null)?.closest?.('[role="dialog"]') != null;
+
 /** The split page on a computer: the items, with the balances alongside, or its photos */
 const DesktopSplitLayout = ({
   parts,
@@ -73,6 +79,43 @@ const DesktopSplitLayout = ({
   const [tab, setTab] = useState<DesktopTab>('items');
   const photoCount = meta?.attachments.length ?? 0;
   const onItems = tab === 'items';
+  const canAdd = loaded && hasPeople;
+  const canShare = loaded && myEmail != null;
+  const showTab = (next: DesktopTab) => {
+    if (next !== tab && selection.active) selection.clear();
+    setTab(next);
+  };
+
+  // The split's keys (the shortcuts dialog lists them; fields and dialogs don't take them)
+  const page = (run: () => void) => (e: KeyboardEvent) => {
+    if (!inDialog(e)) run();
+  };
+  const picking = onItems && selection.active;
+  useHotkeys([
+    ['n', page(() => canAdd && openDialog({ kind: 'add' }))],
+    ['i', page(() => loaded && showTab('items'))],
+    ['p', page(() => loaded && showTab('photos'))],
+    ['s', page(() => canShare && openDialog({ kind: 'members' }))],
+    [
+      'x',
+      page(() => {
+        if (!onItems || state.items.length === 0) return;
+        if (selection.active) selection.clear();
+        else selection.start();
+      }),
+    ],
+    [
+      'mod+a',
+      (e) => {
+        // Elsewhere, Ctrl A selects the page's text as usual
+        if (!picking || inDialog(e)) return;
+        e.preventDefault();
+        selection.bar.onSelectAll();
+      },
+      { preventDefault: false },
+    ],
+    ['d', page(() => picking && selection.bar.count > 0 && selection.bar.onMove())],
+  ]);
 
   return (
     <>
@@ -123,7 +166,8 @@ const DesktopSplitLayout = ({
                 variant="default"
                 leftSection={<ShareNetwork size={16} />}
                 onClick={() => openDialog({ kind: 'members' })}
-                disabled={!loaded || myEmail == null}
+                disabled={!canShare}
+                aria-keyshortcuts="S"
               >
                 Share
               </Button>
@@ -140,14 +184,18 @@ const DesktopSplitLayout = ({
                 }
               />
               {onItems ? (
-                <Button
-                  miw={MAIN_BUTTON_WIDTH}
-                  leftSection={<Plus size={16} />}
-                  onClick={() => openDialog({ kind: 'add' })}
-                  disabled={!loaded || !hasPeople}
-                >
-                  Add item
-                </Button>
+                <Tooltip label="Add item  N">
+                  <Button
+                    miw={MAIN_BUTTON_WIDTH}
+                    leftSection={<Plus size={16} />}
+                    rightSection={<Key>N</Key>}
+                    onClick={() => openDialog({ kind: 'add' })}
+                    disabled={!canAdd}
+                    aria-keyshortcuts="N"
+                  >
+                    Add item
+                  </Button>
+                </Tooltip>
               ) : (
                 <AddPhotosButton
                   disabled={!loaded}
@@ -230,10 +278,8 @@ const DesktopSplitLayout = ({
                   aria-selected={tab === key}
                   data-active={tab === key || undefined}
                   className={classes.pageTab}
-                  onClick={() => {
-                    if (key !== tab && selection.active) selection.clear();
-                    setTab(key);
-                  }}
+                  onClick={() => showTab(key)}
+                  aria-keyshortcuts={key === 'items' ? 'I' : 'P'}
                 >
                   {label}
                   <span className={classes.pageTabCount}>{count}</span>

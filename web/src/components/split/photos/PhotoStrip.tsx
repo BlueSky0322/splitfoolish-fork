@@ -1,13 +1,16 @@
 import { ActionIcon, Loader, UnstyledButton } from '@mantine/core';
 import { Camera, CloudSlash, X } from '@phosphor-icons/react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { attachmentUrl } from '../../../api';
+import { useIsDesktop } from '../../../hooks/useBreakpoints';
 import type { QueuedPhoto } from '../../../split/usePhotos';
 import type { ViewerPhoto } from '../../ui/PhotoViewer';
 import PhotoViewer from '../../ui/PhotoViewer';
 import classes from './Photos.module.css';
 import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 import { useBlobUrls } from './blob-urls';
+import AddPhotosSheet from './AddPhotosSheet';
+import { usePhotoPicker } from './usePhotoPicker';
 import type { Attachment } from '@shared/api';
 
 interface PhotoStripProps {
@@ -92,7 +95,9 @@ function PendingThumb({
   );
 }
 
-// A row of photo thumbnails after an "Add photo" tile; tapping a photo opens the viewer
+// A row of photo thumbnails after an "Add photo" tile; tapping a photo opens the viewer.
+// On a computer the tile opens the file chooser; on phones and tablets it offers the
+// camera or the library, as the Photos tab does.
 const PhotoStrip = ({
   splitId,
   photos,
@@ -105,7 +110,9 @@ const PhotoStrip = ({
   onRemoveQueued,
   label = 'Add photo',
 }: PhotoStripProps) => {
-  const input = useRef<HTMLInputElement>(null);
+  const picker = usePhotoPicker(onAdd);
+  const isDesktop = useIsDesktop();
+  const [choosing, setChoosing] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
   // Saved photos go for everyone, so removing one asks first; one not sent yet doesn't
   const { confirm, dialog: confirmDialog } = useConfirmRemovePhotos();
@@ -140,7 +147,7 @@ const PhotoStrip = ({
   const addTile = (
     <UnstyledButton
       className={`${classes.thumb} ${classes.add}`}
-      onClick={() => input.current?.click()}
+      onClick={() => (isDesktop ? picker.chooseFromLibrary() : setChoosing(true))}
     >
       <Camera size={20} />
       <span>{label}</span>
@@ -204,18 +211,7 @@ const PhotoStrip = ({
             waiting={!photo.busy}
           />
         ))}
-        <input
-          ref={input}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(e) => {
-            const files = [...(e.target.files ?? [])];
-            e.target.value = '';
-            if (files.length > 0) onAdd(files);
-          }}
-        />
+        {picker.inputs}
         <PhotoViewer
           photos={viewer}
           index={open}
@@ -223,6 +219,13 @@ const PhotoStrip = ({
         />
         {confirmDialog}
       </div>
+      <AddPhotosSheet
+        opened={choosing}
+        title={label}
+        onClose={() => setChoosing(false)}
+        onTakePhoto={picker.takePhoto}
+        onChooseFromLibrary={picker.chooseFromLibrary}
+      />
       {waiting > 0 && (
         <p className="sf-muted text-xs mt-1">
           {waiting === 1

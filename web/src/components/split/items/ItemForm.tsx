@@ -8,6 +8,7 @@ import {
   SegmentedControl,
   Select,
   Textarea,
+  TextInput,
   UnstyledButton,
 } from '@mantine/core';
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
@@ -26,6 +27,7 @@ import { CATEGORIES } from '../../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../../split/item-names';
 import { currencySymbol, formatMoney } from '../../../utils/money';
 import { evaluateSum } from '../../../utils/math';
+import { atTimeNow, fromDateInput, isPastDay, toDateInput } from '../../../utils/date-input';
 import { useIsDesktop, useIsMobile } from '../../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../../ui/CurrencySelect';
@@ -44,8 +46,13 @@ interface ItemFormProps {
   /** A new item's amount and the currency it was paid in, e.g. from Convert */
   initialAmount?: string;
   initialCurrency?: string;
-  /** Photos picked for a new item are uploaded once it's added */
-  onSave: (input: ItemInput, newPhotos: File[]) => boolean;
+  /** A new item's day, when it's added from that day's heading; its time is the time now */
+  initialDay?: number;
+  /**
+   * Photos picked for a new item are uploaded once it's added. createdAt: when it was
+   * paid, for a new item added to a day; otherwise it's now.
+   */
+  onSave: (input: ItemInput, newPhotos: File[], createdAt?: number) => boolean;
   onDelete?: () => void;
   /** Adds a copy of the item being edited, keeping its date or as of today */
   onDuplicate?: (keepDate: boolean) => void;
@@ -65,6 +72,7 @@ const ItemForm = ({
   item,
   initialAmount,
   initialCurrency,
+  initialDay,
   onSave,
   onDelete,
   onDuplicate,
@@ -114,6 +122,11 @@ const ItemForm = ({
   );
   const [category, setCategory] = useState<string | null>(item?.category ?? null);
   const [notes, setNotes] = useState(item?.notes ?? '');
+  // The day a new item goes on, when it was added from that day's heading
+  const [dayText, setDayText] = useState(
+    initialDay == null ? null : toDateInput(new Date(initialDay)),
+  );
+  const chosenDay = dayText != null && isPastDay(dayText) ? fromDateInput(dayText) : null;
   // Names used before, in any of your splits, suggested as you type
   const pastNames = useQuery({
     queryKey: ITEM_NAMES_KEY,
@@ -138,6 +151,7 @@ const ItemForm = ({
     category,
     notes,
     newPhotos.length,
+    dayText,
   ]);
   const [initialSnapshot] = useState(snapshot);
   const unsaved =
@@ -159,7 +173,7 @@ const ItemForm = ({
   // The rate for the preview. An edit keeps the rate the item was recorded with, a new
   // amount included; a new item, or a new currency, takes the rate on the day it was
   // paid (today, for a new one). The server converts again when saving, the same way.
-  const paidAt = item?.createdAt;
+  const paidAt = item?.createdAt ?? (chosenDay ? atTimeNow(chosenDay) : undefined);
   const fetchedRate = useRate(entryCurrency, currency, {
     enabled: foreign && !ownRateChosen,
     at: paidAt,
@@ -215,6 +229,7 @@ const ItemForm = ({
     payer: payerId ? null : 'Choose who paid',
     people: chosen.length > 0 ? null : 'Choose at least one person to split with',
     exact: mode === 'exact' && leftCents !== 0 ? 'Assign the whole amount' : null,
+    day: dayText != null && chosenDay == null ? 'Pick a day that has already come' : null,
   };
   const valid = Object.values(problems).every((p) => p == null);
 
@@ -249,6 +264,7 @@ const ItemForm = ({
         notes,
       }),
       newPhotos,
+      chosenDay ? atTimeNow(chosenDay) : undefined,
     );
   };
 
@@ -388,6 +404,25 @@ const ItemForm = ({
         error={tried && problems.name}
         comboboxProps={{ withinPortal: false }}
       />
+
+      {dayText != null && (
+        <TextInput
+          type="date"
+          label={
+            <span className={classes.dayLabel}>
+              Date
+              <span className={classes.dayTag}>From the day you picked</span>
+            </span>
+          }
+          description="Time is set to now. Change the date here if you need to."
+          value={dayText}
+          max={toDateInput(new Date())}
+          min="2000-01-01"
+          onChange={(e) => setDayText(e.target.value)}
+          error={tried && problems.day}
+          classNames={{ input: classes.dayInput }}
+        />
+      )}
 
       {!isMobile && categorySelect}
 

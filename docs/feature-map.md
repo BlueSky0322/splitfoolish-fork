@@ -100,8 +100,8 @@ worked out.
 
 ## Editing a split: items and people
 
-**What it is.** The split page (`?s=<id>`): its people, its items (added, edited,
-duplicated, moved to another day, deleted) and its details.
+**What it is.** The split page (`?s=<id>`): its people, its items (added, added to a
+day from its heading, edited, duplicated, moved to another day, deleted) and its details.
 
 **Owner.** The bill (people and items) is changed only through
 [split/actions.ts](../web/src/split/actions.ts), which updates
@@ -120,7 +120,9 @@ it current.
   [SplitPageContext](../web/src/components/split/SplitPageContext.tsx) and the bill from
   [SplitStateContext](../web/src/split/SplitStateContext.tsx).
 - Form logic: [split/item-input.ts](../web/src/split/item-input.ts) and
-  [split/bill-rules.ts](../web/src/split/bill-rules.ts).
+  [split/bill-rules.ts](../web/src/split/bill-rules.ts). An item added from a day's
+  heading opens the form with that day (`openDialog({ kind: 'add', day })`), and is added
+  on it at the time it is now ([utils/date-input.ts](../web/src/utils/date-input.ts)).
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
@@ -155,7 +157,8 @@ split as it is now. A refused batch drops what was queued after it and reloads t
 [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx),
 [SplitLoading.test.tsx](../web/src/components/split/SplitLoading.test.tsx) (load
 order), [person-colors.test.ts](../web/src/split/person-colors.test.ts),
-[PersonColors.test.tsx](../web/src/components/split/PersonColors.test.tsx), and the change and permission cases in
+[PersonColors.test.tsx](../web/src/components/split/PersonColors.test.tsx),
+[AddToDay.test.tsx](../web/src/components/split/AddToDay.test.tsx), and the change and permission cases in
 [worker/test/api.test.ts](../worker/test/api.test.ts).
 
 ## Settling up and currencies
@@ -407,7 +410,9 @@ method through a profile change.
   orders and kinds shown, the same on phones and computers) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
 - Choosing photos to add: [usePhotoPicker](../web/src/components/split/photos/usePhotoPicker.tsx)
-  (the camera or the library), for an empty Photos tab and the phone's Add photos sheet.
+  (the camera or the library) and, on phones and tablets,
+  [AddPhotosSheet](../web/src/components/split/photos/AddPhotosSheet.tsx) to pick
+  between them: for the Photos tab and an item's Add photo alike.
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
@@ -477,7 +482,10 @@ what Back does.
 **Parts.**
 
 - [components/shell/](../web/src/components/shell/AppLayout.tsx): sidebar, bottom tabs,
-  notices.
+  notices, and the keyboard shortcuts on computers: `[` and `?` (the list,
+  [ShortcutsDialog](../web/src/components/shell/ShortcutsDialog.tsx)) in AppLayout, the
+  split's own keys in DesktopSplitLayout, and Esc and Del while picking items in
+  `useSelectionKeys`. Change the list with the keys.
 - [ResponsiveDialog](../web/src/components/ui/ResponsiveDialog.tsx): a sheet on phones,
   a dialog elsewhere.
 - [DesktopSplitLayout](../web/src/components/split/layout/DesktopSplitLayout.tsx) and
@@ -495,6 +503,7 @@ what Back does.
   `ResponsiveDialog` or `useBackDismiss`, so Back closes the top one first.
 - The split's tabs on phones are not history entries, so Back leaves the split rather
   than stepping through tabs.
+- Keyboard shortcuts never fire while typing in a field or inside a dialog.
 - Until a page's data arrives it shows placeholders the size of what will replace them,
   never an empty or zero state that then changes (no "RM 0.00" before the split loads).
   A copy kept on the device shows instead of them when there is one.
@@ -502,7 +511,8 @@ what Back does.
 **Tests.** [App.test.tsx](../web/src/App.test.tsx) (pages and Back), the placeholder
 cases in [SplitLoading.test.tsx](../web/src/components/split/SplitLoading.test.tsx),
 [SettingsPage.test.tsx](../web/src/components/settings/SettingsPage.test.tsx) and
-[ConvertPage.test.tsx](../web/src/components/convert/ConvertPage.test.tsx), and the phone
+[ConvertPage.test.tsx](../web/src/components/convert/ConvertPage.test.tsx),
+[Shortcuts.test.tsx](../web/src/components/split/Shortcuts.test.tsx), and the phone
 cases (`{ size: 'phone' }`) in
 [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx) and
 [SplitsHome.test.tsx](../web/src/components/home/SplitsHome.test.tsx).
