@@ -76,7 +76,6 @@ const ItemDetail = ({
             className={classes.part}
           >
             <PersonAvatar
-              preview={false}
               person={p}
               size={30}
             />

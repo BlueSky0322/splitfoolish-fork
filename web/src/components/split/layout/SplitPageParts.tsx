@@ -64,7 +64,6 @@ export function AvatarStack({
     >
       {shown.map((p) => (
         <PersonAvatar
-          preview={false}
           key={p.id}
           person={p}
           size={size}

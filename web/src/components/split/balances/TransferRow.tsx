@@ -18,7 +18,8 @@ interface TransferRowProps {
   payLine?: ReactNode;
 }
 
-// "Chen pays Ben RM 102.50", used in the balance panel, Settle up and the share image
+// "Chen pays Ben RM 102.50", used in the balance panel, Settle up and the share image:
+// the two avatars and the amount on one line, and who pays whom under them
 const TransferRow = ({
   from,
   to,
@@ -34,39 +35,40 @@ const TransferRow = ({
       className={classes.transfer}
       data-size={size}
     >
-      <PersonAvatar
-        person={from}
-        size={avatar}
-      />
-      <ArrowRight
-        size={size === 'xl' ? 28 : 14}
-        className={classes.transferArrow}
-      />
-      <PersonAvatar
-        person={to}
-        size={avatar}
-      />
-      {/* Wraps between words only, never inside a name; a name too long for a line
-          of its own ends in "…" */}
+      <div className={classes.transferTop}>
+        <PersonAvatar
+          person={from}
+          size={avatar}
+        />
+        <ArrowRight
+          size={size === 'xl' ? 28 : 14}
+          className={classes.transferArrow}
+        />
+        <PersonAvatar
+          person={to}
+          size={avatar}
+        />
+        <span className={classes.transferAmount}>{formatMoney(amountCents, currency)}</span>
+      </div>
+      {/* One line: names too long for it shorten with "…", so "pays" always shows */}
       <span
         className={classes.transferText}
         title={fromMe ? `You pay ${to.name}` : `${from.name} pays ${to.name}`}
       >
         {fromMe ? (
-          'You pay'
+          <span className={classes.transferPays}>You pay </span>
         ) : (
           <>
             <span className={classes.transferName}>
               <PersonName person={from} />
-            </span>{' '}
-            pays
+            </span>
+            <span className={classes.transferPays}> pays </span>
           </>
-        )}{' '}
+        )}
         <span className={classes.transferName}>
           <PersonName person={to} />
         </span>
       </span>
-      <span className={classes.transferAmount}>{formatMoney(amountCents, currency)}</span>
     </div>
   );
   if (payLine == null) return row;

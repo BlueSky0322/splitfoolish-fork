@@ -16,6 +16,7 @@ import { formatMoney } from '../../utils/money';
 import { isQr, methodLine, methodName } from '../../utils/payment-labels';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import UserAvatar from './UserAvatar';
+import ViewablePicture from '../ui/ViewablePicture';
 import classes from './QrViewer.module.css';
 
 interface QrViewerProps {
@@ -79,7 +80,6 @@ const QrViewer = ({
             email={email}
             avatarVersion={avatarVersion}
             size={40}
-            preview={false}
           />
           <span className="min-w-0">
             <span className={classes.payWho}>Pay {name}</span>
@@ -92,11 +92,17 @@ const QrViewer = ({
         <div className="flex flex-col gap-3">
           <div className={classes.card}>
             {shown.detail && <div className={classes.label}>{shown.detail}</div>}
-            <img
-              className={classes.code}
+            <ViewablePicture
               src={paymentQrUrl(shown.id, shown.qrVersion)}
-              alt={`${methodName(shown)} for ${name}`}
-            />
+              label={`View ${methodName(shown)} for ${name} full size`}
+              className={classes.codeButton}
+            >
+              <img
+                className={classes.code}
+                src={paymentQrUrl(shown.id, shown.qrVersion)}
+                alt={`${methodName(shown)} for ${name}`}
+              />
+            </ViewablePicture>
             <div className={classes.hint}>Scan with your banking app, then enter {amount}</div>
           </div>
           <div className={classes.actions}>

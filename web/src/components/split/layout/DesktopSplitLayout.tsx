@@ -91,6 +91,7 @@ const DesktopSplitLayout = ({
                     name={meta.name}
                     pictureVersion={pictureVersion}
                     size={40}
+                    preview
                   />
                 )}
                 {loading ? (

@@ -77,6 +77,7 @@ const SplitMenuSheet = () => {
           name={meta.name}
           pictureVersion={pictureVersion}
           size={44}
+          preview
         />
         <span className="min-w-0 flex-1">
           <span className={classes.name}>{meta.name}</span>

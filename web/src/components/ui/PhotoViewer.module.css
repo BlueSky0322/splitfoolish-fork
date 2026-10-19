@@ -60,13 +60,18 @@
   transition: transform 180ms ease-out;
 }
 
-/* Following the fingers: no easing to lag behind them */
+/* Following the fingers or the mouse: no easing to lag behind them */
 .image[data-moving] {
   transition: none;
 }
 
+/* Zoomed in: drag it around, or click to zoom back out */
 .stage[data-zoomed] .image {
-  cursor: zoom-out;
+  cursor: grab;
+}
+
+.stage[data-zoomed] .image[data-moving] {
+  cursor: grabbing;
 }
 
 /* Centred without a transform: a pressed button nudges itself down with one, which

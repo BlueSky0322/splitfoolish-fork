@@ -40,7 +40,6 @@ const PhotoDetails = ({
       avatarVersion={addedBy.avatarVersion}
       color={addedBy.colors?.fill}
       size={size}
-      preview={false}
     />
   );
 

@@ -1,4 +1,5 @@
 import { Avatar, Button, FileButton, Select, TextInput, UnstyledButton } from '@mantine/core';
+import ViewablePicture from '../../ui/ViewablePicture';
 import { Camera } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
@@ -75,18 +76,24 @@ const SplitForm = ({
     >
       <div className={classes.pictureRow}>
         {pictureUrl ? (
-          <Avatar
+          <ViewablePicture
             src={pictureUrl}
-            alt=""
-            size={size}
-            radius={14}
-          />
+            label="View the new picture"
+          >
+            <Avatar
+              src={pictureUrl}
+              alt=""
+              size={size}
+              radius={14}
+            />
+          </ViewablePicture>
         ) : splitId && picture !== 'remove' ? (
           <SplitAvatar
             splitId={splitId}
             name={letter}
             pictureVersion={initial.pictureVersion}
             size={size}
+            preview
           />
         ) : (
           <Avatar

@@ -37,6 +37,11 @@
   font-weight: 500;
 }
 
+/* The code's button, as wide as the code, so the code inside can size to it */
+.codeButton {
+  width: min(260px, 100%);
+}
+
 .code {
   display: block;
   width: min(260px, 100%);

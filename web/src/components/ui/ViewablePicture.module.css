@@ -1,0 +1,25 @@
+.trigger {
+  /* Exactly the picture's size: inline, it gained a line's spacing below */
+  display: block;
+  line-height: 0;
+  flex-shrink: 0;
+  cursor: zoom-in;
+}
+
+.trigger[data-fill] {
+  width: 100%;
+  height: 100%;
+}
+
+.trigger[data-round] {
+  border-radius: 999px;
+}
+
+.trigger:hover {
+  filter: brightness(1.08);
+}
+
+/* Holds only the viewer, which draws itself elsewhere */
+.viewer {
+  display: contents;
+}

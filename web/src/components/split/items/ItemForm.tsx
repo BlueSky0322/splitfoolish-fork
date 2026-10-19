@@ -408,7 +408,6 @@ const ItemForm = ({
               onClick={() => setPayerId(p.id)}
             >
               <PersonAvatar
-                preview={false}
                 person={p}
                 size={22}
               />

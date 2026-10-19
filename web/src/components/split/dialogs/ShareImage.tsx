@@ -1,4 +1,5 @@
 import { Button, Loader } from '@mantine/core';
+import ViewablePicture from '../../ui/ViewablePicture';
 import { ArrowsSplit, DownloadSimple, ShareNetwork } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { SplitItem } from '../../../split/state';
@@ -78,11 +79,18 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
     <div className="flex flex-col gap-4">
       <div className={classes.preview}>
         {image ? (
-          <img
+          <ViewablePicture
             src={image.url}
-            alt={`Who pays who in ${name}`}
-            className={classes.previewImage}
-          />
+            label="View the image full size"
+            fileName={fileName}
+            fill
+          >
+            <img
+              src={image.url}
+              alt={`Who pays who in ${name}`}
+              className={classes.previewImage}
+            />
+          </ViewablePicture>
         ) : error ? (
           <div className="sf-negative text-sm p-6 text-center">{error}</div>
         ) : (
