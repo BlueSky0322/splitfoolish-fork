@@ -23,6 +23,8 @@ import { MoveDateDialog } from './items/ItemSelection';
 import { ItemCards, ItemTable } from './items/ItemViews';
 import MobileSplitLayout from './layout/MobileSplitLayout';
 import { AvatarVersionsContext } from './PersonAvatar';
+import { PersonColorsContext } from './person-colors-context';
+import { personColors } from '../../split/person-colors';
 import SplitDialogs from './dialogs/SplitDialogs';
 import { type Dialog, type SplitPage, SplitPageProvider } from './SplitPageContext';
 import { type SelectionUi, type SplitPageParts } from './layout/SplitPageParts';
@@ -89,6 +91,15 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     () => new Map((meta?.members ?? []).map((m) => [m.email, m.avatarVersion])),
     [meta?.members],
   );
+  const colors = useMemo(() => {
+    const byPerson = personColors(splitId, state.people);
+    const byEmail = new Map(
+      state.people.flatMap((p) =>
+        p.memberEmail == null ? [] : [[p.memberEmail, byPerson.get(p.id)!] as const],
+      ),
+    );
+    return { byPerson, byEmail };
+  }, [splitId, state.people]);
 
   const photoCounts = new Map<string, number>();
   for (const a of meta?.attachments ?? []) {
@@ -282,17 +293,19 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     <SplitPageProvider page={page}>
       <SplitActionsContext.Provider value={actions}>
         <AvatarVersionsContext.Provider value={avatarVersions}>
-          {isDesktop ? (
-            <DesktopSplitLayout
-              parts={parts}
-              selection={selectionUi}
-            />
-          ) : (
-            <MobileSplitLayout
-              parts={parts}
-              selection={selectionUi}
-            />
-          )}
+          <PersonColorsContext.Provider value={colors}>
+            {isDesktop ? (
+              <DesktopSplitLayout
+                parts={parts}
+                selection={selectionUi}
+              />
+            ) : (
+              <MobileSplitLayout
+                parts={parts}
+                selection={selectionUi}
+              />
+            )}
+          </PersonColorsContext.Provider>
         </AvatarVersionsContext.Provider>
       </SplitActionsContext.Provider>
     </SplitPageProvider>

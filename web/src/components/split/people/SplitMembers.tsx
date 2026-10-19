@@ -7,6 +7,7 @@ import type { MetaChanges } from '../../../split/state';
 import type { SplitMeta } from '../../../split/state';
 import { nameFor } from '../../../profile/ProfileContext';
 import UserAvatar from '../../common/UserAvatar';
+import { usePersonColors } from '../person-colors-context';
 import classes from './SplitMembers.module.css';
 import type { SplitInvite } from '@shared/api';
 import { reloadMySplits } from '../../../my-splits/my-splits';
@@ -45,6 +46,7 @@ export const ShareTitle = ({ name }: { name: string }) => (
 // Sharing: the share link, who's in the split, who's yet to
 // accept, and deleting or leaving the split
 const SplitMembers = ({ meta, myEmail, onChange, changeMeta, splitId }: SplitMembersProps) => {
+  const colorOf = usePersonColors();
   const isMobile = useIsMobile();
   // Resetting the link asks first, in place under it; then says the new one is ready
   const [resetting, setResetting] = useState(false);
@@ -216,6 +218,7 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, splitId }: SplitMem
                 name={nameFor(m.email, m.displayName)}
                 email={m.email}
                 avatarVersion={m.avatarVersion}
+                color={colorOf({ email: m.email })}
                 size={isMobile ? 36 : 32}
                 preview
               />

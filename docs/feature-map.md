@@ -121,6 +121,10 @@ it current.
   [SplitStateContext](../web/src/split/SplitStateContext.tsx).
 - Form logic: [split/item-input.ts](../web/src/split/item-input.ts) and
   [split/bill-rules.ts](../web/src/split/bill-rules.ts).
+- People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
+  each person one (`personColors`), SplitScreen provides them through
+  [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
+  `PersonAvatar`, `PersonDot` and account avatars in the split read them.
 - API: [worker/bill/changes.ts](../worker/bill/changes.ts) applies a batch of changes
   (all or none, `saveChanges`, which the MCP tools use too), checking each against the
   bill as it stands
@@ -141,13 +145,17 @@ split as it is now. A refused batch drops what was queued after it and reloads t
   part of itself (`bill/changes.ts`).
 - Only the newest load of a split is shown, and a device copy never replaces what the
   server said (`useSplit.ts`).
+- People's colours are worked out, not stored: by their order in the split, the first
+  four on the four most distinct hues in an order picked by the split's id. Green and
+  red stay for owed and owing, and a name is always shown beside a colour.
 
 **Tests.** [actions.test.ts](../web/src/split/actions.test.ts),
 [state.test.ts](../web/src/split/state.test.ts),
 [item-input.test.ts](../web/src/split/item-input.test.ts),
 [SplitScreen.test.tsx](../web/src/components/split/SplitScreen.test.tsx),
 [SplitLoading.test.tsx](../web/src/components/split/SplitLoading.test.tsx) (load
-order), and the change and permission cases in
+order), [person-colors.test.ts](../web/src/split/person-colors.test.ts),
+[PersonColors.test.tsx](../web/src/components/split/PersonColors.test.tsx), and the change and permission cases in
 [worker/test/api.test.ts](../worker/test/api.test.ts).
 
 ## Settling up and currencies
