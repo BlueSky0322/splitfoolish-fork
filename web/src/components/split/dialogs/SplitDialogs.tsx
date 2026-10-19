@@ -91,14 +91,14 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
   // The item being edited, when the item form is open for one
   const editing = dialog?.kind === 'edit' ? dialog.item : null;
 
-  const saveItem = (input: ItemInput, newPhotos: File[]) => {
+  const saveItem = (input: ItemInput, newPhotos: File[], createdAt?: number) => {
     if (dialog?.kind === 'edit') {
       const ok = actions.updateItem(dialog.item.id, input);
       if (ok) close();
       return ok;
     }
     const id = newId();
-    const ok = actions.addItem(input, { id });
+    const ok = actions.addItem(input, createdAt == null ? { id } : { id, createdAt });
     if (ok) {
       close();
       if (newPhotos.length > 0) void photos.upload(newPhotos, id);
@@ -153,6 +153,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
               key="new"
               initialAmount={dialog.prefill?.amount}
               initialCurrency={dialog.prefill?.currency}
+              initialDay={dialog.day}
               onSave={saveItem}
               onCancel={close}
               onDirtyChange={(u) => {

@@ -87,6 +87,12 @@ describe('grouping items', () => {
       ['4', '3'],
     ]);
     expect(groups.map((g) => g.subtotalCents)).toEqual([33800, 13575]);
+    // Each day knows where it starts, so an item can be added to it
+    for (const g of groups) {
+      const d = new Date(g.items[0].createdAt);
+      expect(g.day).toBe(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime());
+    }
+    expect(groupItems(items, 'payer', 'date', 'asc').every((g) => g.day == null)).toBe(true);
   });
 
   test('by payer names the group after the payer', () => {

@@ -5,6 +5,7 @@ import type { RowSelection } from './useItemSelection';
 import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import classes from './ItemSelection.module.css';
 import { plural } from '../../../utils/text';
+import { fromDateInput, isPastDay, toDateInput } from '../../../utils/date-input';
 
 // Picking several items at once to delete them or move them to another day. Phones
 // start with a long press on an item; computers with the checkbox that shows on hover.
@@ -170,14 +171,6 @@ export function DesktopSelectionBar({
   );
 }
 
-const pad = (n: number) => String(n).padStart(2, '0');
-/** "2026-10-14" for a date input, in local time */
-const toInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const fromInput = (text: string) => {
-  const [y, m, d] = text.split('-').map(Number);
-  return y && m && d ? new Date(y, m - 1, d) : null;
-};
-
 /** Which day to move the selected items to: today, yesterday, or any earlier day */
 export function MoveDateDialog({
   opened,
@@ -192,12 +185,12 @@ export function MoveDateDialog({
 }) {
   const today = new Date();
   const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  const [value, setValue] = useState(toInput(today));
+  const [value, setValue] = useState(toDateInput(today));
   useEffect(() => {
-    if (opened) setValue(toInput(new Date()));
+    if (opened) setValue(toDateInput(new Date()));
   }, [opened]);
-  const day = fromInput(value);
-  const valid = day != null && value <= toInput(today) && day.getFullYear() >= 2000;
+  const day = fromDateInput(value);
+  const valid = day != null && isPastDay(value);
 
   return (
     <ResponsiveDialog
@@ -223,8 +216,8 @@ export function MoveDateDialog({
             <UnstyledButton
               key={label}
               className={classes.chip}
-              data-selected={value === toInput(d) || undefined}
-              onClick={() => setValue(toInput(d))}
+              data-selected={value === toDateInput(d) || undefined}
+              onClick={() => setValue(toDateInput(d))}
             >
               {label}
             </UnstyledButton>
@@ -234,7 +227,7 @@ export function MoveDateDialog({
           type="date"
           label="Date"
           value={value}
-          max={toInput(today)}
+          max={toDateInput(today)}
           min="2000-01-01"
           onChange={(e) => setValue(e.target.value)}
           error={value && !valid ? 'Pick a day that has already come' : undefined}

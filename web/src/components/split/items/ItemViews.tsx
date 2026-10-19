@@ -7,6 +7,7 @@ import {
   Note,
   Paperclip,
   PencilSimple,
+  Plus,
   Receipt,
   Trash,
 } from '@phosphor-icons/react';
@@ -38,6 +39,34 @@ interface ItemViewProps {
   photoCounts: Map<string, number>;
   /** Picking several items at once; absent where items can't be picked */
   selection?: RowSelection;
+  /** Grouped by day: adds an item to that day, from its heading */
+  onAddToDay?: (day: number) => void;
+}
+
+/** On a day's heading: adds an item to that day. Computers widen it to say so on hover. */
+function AddToDay({
+  group,
+  mobile,
+  onAdd,
+}: {
+  group: ItemGroup;
+  mobile: boolean;
+  onAdd?: (day: number) => void;
+}) {
+  if (onAdd == null || group.day == null) return null;
+  const day = group.day;
+  return (
+    <UnstyledButton
+      className={classes.addToDay}
+      onClick={() => onAdd(day)}
+      aria-label={`Add to ${group.label}`}
+    >
+      {!mobile && <span className={classes.addToDayText}>Add to {group.label}</span>}
+      <span className={classes.addToDayIcon}>
+        <Plus size={mobile ? 18 : 14} />
+      </span>
+    </UnstyledButton>
+  );
 }
 
 /**
@@ -185,8 +214,11 @@ export function ItemCards({
   onEdit,
   onDelete,
   selection,
+  onAddToDay,
 }: ItemViewProps) {
   const { currency } = useSplitPage();
+  // Hidden while picking items, when a tap on the page picks rather than adds
+  const onAdd = selection?.active ? undefined : onAddToDay;
   const { people } = useSplitState().state;
   const myShare = useMyShare();
   return (
@@ -202,8 +234,15 @@ export function ItemCards({
         >
           {grouped && (
             <div className={classes.groupHeader}>
-              <span>{group.label}</span>
-              <span>{formatMoney(group.subtotalCents, currency)}</span>
+              <span className={classes.groupLabel}>{group.label}</span>
+              <span className={classes.groupTotal}>
+                {formatMoney(group.subtotalCents, currency)}
+              </span>
+              <AddToDay
+                group={group}
+                mobile={mobile}
+                onAdd={onAdd}
+              />
             </div>
           )}
           <div className={classes.itemCard}>
@@ -347,8 +386,10 @@ export function ItemTable({
   onSort,
   totalCents,
   selection,
+  onAddToDay,
 }: ItemTableProps) {
   const { totals, me, currency } = useSplitPage();
+  const onAdd = selection?.active ? undefined : onAddToDay;
   const { people } = useSplitState().state;
   const myShare = useMyShare();
   const sort = { sortKey, sortDir, onSort };
@@ -404,6 +445,11 @@ export function ItemTable({
               <span className={classes.tableGroupTotal}>
                 {formatMoney(group.subtotalCents, currency)}
               </span>
+              <AddToDay
+                group={group}
+                mobile={mobile}
+                onAdd={onAdd}
+              />
             </div>
           )}
           {group.items.map((item) => {

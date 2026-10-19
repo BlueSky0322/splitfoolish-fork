@@ -246,6 +246,7 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     onDelete: (item: SplitItem) => deleteItems([item]),
     photoCounts,
     selection: selection.row,
+    onAddToDay: (day: number) => setDialog({ kind: 'add', day }),
   };
   const list = loading ? (
     <ItemsSkeleton mobile={!isDesktop} />

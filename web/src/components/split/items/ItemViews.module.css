@@ -20,7 +20,9 @@
 
 .groupHeader {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -30,7 +32,6 @@
 
 /* Phones: a 36px band across the page, the day on the left and its total on the right */
 .mobile .groupHeader {
-  align-items: center;
   height: 36px;
   padding: 0 20px;
   background: color-mix(in srgb, var(--sf-text) 5%, transparent);
@@ -41,7 +42,15 @@
   color: var(--sf-text);
 }
 
-.mobile .groupHeader > :last-child {
+.groupLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile .groupTotal {
   font-weight: 400;
   color: var(--sf-text-muted);
 }
@@ -434,4 +443,69 @@
   font-size: 11px;
   color: var(--sf-text-muted);
   vertical-align: middle;
+}
+
+/* Add to a day: a quiet + at the end of the day's heading; on a computer, hovering the
+   heading widens it to say which day */
+.addToDay {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 8px;
+  color: var(--sf-text-muted);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.addToDayIcon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+}
+
+.addToDayText {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 150ms ease-out;
+}
+
+.groupHeader:hover .addToDay,
+.tableGroup:hover .addToDay,
+.addToDay:focus-visible {
+  color: var(--sf-accent);
+  background: var(--sf-accent-tint);
+}
+
+.groupHeader:hover .addToDayText,
+.tableGroup:hover .addToDayText,
+.addToDay:focus-visible .addToDayText {
+  max-width: 220px;
+  padding-left: 10px;
+}
+
+.tableGroup .addToDay {
+  align-self: center;
+  margin: -6px -4px -6px 0;
+}
+
+/* Phones: the day's band grows to 44px, with a 44px + in the accent colour */
+.mobile .groupHeader:has(.addToDay) {
+  height: 44px;
+  padding-right: 0;
+}
+
+.mobile .addToDay,
+.mobile .addToDayIcon {
+  width: 44px;
+  height: 44px;
+  color: var(--sf-accent);
+}
+
+.mobile .tableGroup .addToDay {
+  margin: -12px -10px -12px 0;
 }
