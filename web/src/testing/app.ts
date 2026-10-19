@@ -154,6 +154,18 @@ export function holdNext(server: FakeServer, method: string, path: string) {
   return { release };
 }
 
+/**
+ * Finds an element by the text a person reads in it, even when parts of it are their own
+ * elements (a name in its colour, say): the innermost element whose whole text matches
+ */
+export const readsAs =
+  (text: string | RegExp) =>
+  (_: string, el: Element | null): boolean => {
+    const matches = (e: Element) =>
+      typeof text === 'string' ? e.textContent === text : text.test(e.textContent ?? '');
+    return el != null && matches(el) && ![...el.children].some(matches);
+  };
+
 export const person = (id: string, name: string, memberEmail: string | null = null) => ({
   id,
   name,

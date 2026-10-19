@@ -20,7 +20,7 @@ import { currencySymbol, formatAmount, formatMoney } from '../../../utils/money'
 import type { RowSelection } from './useItemSelection';
 import { useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
-import PersonAvatar, { PersonDot } from '../PersonAvatar';
+import PersonAvatar, { PersonName, PersonNames } from '../PersonAvatar';
 import classes from './ItemViews.module.css';
 import { toCents } from '@shared/rates';
 import { plural } from '../../../utils/text';
@@ -128,9 +128,11 @@ function OriginalAmount({ item }: { item: SplitItem }) {
 }
 
 const who = (item: SplitItem, people: Person[]) =>
-  item.participants.length === people.length && people.length > 1
-    ? 'everyone'
-    : item.participants.map((p) => p.name).join(', ');
+  item.participants.length === people.length && people.length > 1 ? (
+    'everyone'
+  ) : (
+    <PersonNames people={item.participants} />
+  );
 
 function useMyShare() {
   const { totals, me } = useSplitPage();
@@ -247,10 +249,15 @@ export function ItemCards({
                       </div>
                     )}
                     <div className={classes.itemMeta}>
-                      <PersonDot person={item.payer} />
-                      {mobile
-                        ? `${item.payer.name} paid${share != null ? `, yours ${formatAmount(share, currency)}` : ''}`
-                        : `${item.payer.name} paid · ${MODE_LABELS[item.splitMode]} between ${who(item, people)}`}
+                      <PersonName person={item.payer} /> paid
+                      {mobile ? (
+                        share != null && `, yours ${formatAmount(share, currency)}`
+                      ) : (
+                        <>
+                          {` · ${MODE_LABELS[item.splitMode]} between `}
+                          {who(item, people)}
+                        </>
+                      )}
                     </div>
                   </ItemButton>
                   {!mobile && share != null && (
@@ -475,7 +482,9 @@ export function ItemTable({
                     person={item.payer}
                     size={22}
                   />
-                  <span className={classes.cellEllipsis}>{item.payer.name}</span>
+                  <span className={classes.cellEllipsis}>
+                    <PersonName person={item.payer} />
+                  </span>
                 </span>
                 <span className={classes.cellEllipsis}>
                   <span className={classes.modePill}>{MODE_LABELS[item.splitMode]}</span>

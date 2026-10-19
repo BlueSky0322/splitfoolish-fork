@@ -7,6 +7,7 @@ import { type SplitTotals, dateRange } from '../../../split/derive';
 import { deliverFile, saveFile } from '../../../utils/deliver-file';
 import { formatMoney } from '../../../utils/money';
 import TransferRow from '../balances/TransferRow';
+import { PersonName } from '../PersonAvatar';
 import classes from './ShareImage.module.css';
 import { toCents } from '@shared/rates';
 import { plural } from '../../../utils/text';
@@ -160,7 +161,9 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
                     className={classes.itemRow}
                   >
                     <span className={classes.itemName}>{i.name}</span>
-                    <span className={classes.itemPayer}>{i.payer.name} paid</span>
+                    <span className={classes.itemPayer}>
+                      <PersonName person={i.payer} /> paid
+                    </span>
                     <span className={classes.itemAmount}>
                       {formatMoney(toCents(i.cost), currency)}
                       {i.original && (

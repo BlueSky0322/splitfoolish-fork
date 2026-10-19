@@ -19,7 +19,7 @@ export function useAddedBy() {
       name: nameFor(email, member?.displayName),
       email,
       avatarVersion: member?.avatarVersion ?? null,
-      color: colorOf({ email }),
+      colors: colorOf({ email }),
     };
   };
 }

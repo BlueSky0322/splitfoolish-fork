@@ -398,11 +398,16 @@ const DesktopPhotos = () => {
                         name={who.name}
                         email={who.email}
                         avatarVersion={who.avatarVersion}
-                        color={who.color}
+                        color={who.colors?.fill}
                         size={18}
                         preview={false}
                       />
-                      <span className={classes.who}>{who.name}</span>
+                      <span
+                        className={classes.who}
+                        style={{ color: who.colors?.text }}
+                      >
+                        {who.name}
+                      </span>
                       <span>{timeLabel(photo.createdAt)}</span>
                     </div>
                     <UnstyledButton

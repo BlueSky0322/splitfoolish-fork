@@ -8,6 +8,7 @@ import {
   item,
   liveRoom,
   liveSockets,
+  readsAs,
   renderApp,
   setupAppTests,
   splitDetail,
@@ -38,7 +39,9 @@ describe('the split page', () => {
     expect(screen.getByText('Taxi')).toBeTruthy();
     // Ryan paid 90 and Ann 30, split evenly: Ann owes Ryan 30, the one transfer
     const settling = screen.getByText('Who pays who').closest('section')!;
-    const transfer = within(settling).getByText(/^(Ann pays|Ryan pays|You pay) (Ann|Ryan)$/);
+    const transfer = within(settling).getByText(
+      readsAs(/^(Ann pays|Ryan pays|You pay) (Ann|Ryan)$/),
+    );
     expect(transfer.textContent).toBe('Ann pays Ryan');
     expect(within(transfer.parentElement!).getByText(/^RM\s?30\.00$/)).toBeTruthy();
   });
@@ -295,7 +298,7 @@ describe('the split page', () => {
     expect(screen.getByRole('tab', { name: 'Settle up' }).getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(await screen.findByText('Ann pays Ryan')).toBeTruthy();
+    expect(await screen.findByText(readsAs('Ann pays Ryan'))).toBeTruthy();
     expect(screen.queryByText('Dinner')).toBeNull();
 
     // A swipe moves on to the next tab
@@ -345,7 +348,7 @@ describe('the split page', () => {
       [200, 402],
     ]);
     expect(selectedTab()).toBe('Settle up');
-    expect(await screen.findByText('Ann pays Ryan')).toBeTruthy();
+    expect(await screen.findByText(readsAs('Ann pays Ryan'))).toBeTruthy();
     swipe(tabContent('Ann pays Ryan'), [
       [100, 400],
       [120, 400],
@@ -373,7 +376,7 @@ describe('the split page', () => {
     ]);
     expect(selectedTab()).toBe('Items');
     expect(screen.getByText('Dinner')).toBeTruthy();
-    expect(screen.queryByText('Ann pays Ryan')).toBeNull();
+    expect(screen.queryByText(readsAs('Ann pays Ryan'))).toBeNull();
   });
 
   test('on a computer, sorts items from the toolbar, either way round', async () => {
@@ -476,7 +479,7 @@ describe('the split page', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByText('Taxi'));
     const detail = await screen.findByRole('dialog');
-    expect(within(detail).getByText('Ann paid')).toBeTruthy();
+    expect(within(detail).getByText(readsAs('Ann paid'))).toBeTruthy();
     expect(within(detail).getAllByText('15.00')).toHaveLength(2);
 
     await user.click(within(detail).getByRole('button', { name: 'Edit item' }));
@@ -621,7 +624,8 @@ function swipe(el: Element, points: [number, number][]) {
 }
 
 /** Under the tabs on a phone, where `shown` is: what's swiped */
-const tabContent = (shown: string) => screen.getByText(shown).closest('[class*=_content_]')!;
+const tabContent = (shown: string) =>
+  screen.getByText(readsAs(shown)).closest('[class*=_content_]')!;
 
 const selectedTab = () => screen.getByRole('tab', { selected: true }).textContent;
 

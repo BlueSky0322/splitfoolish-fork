@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { personColor } from '../../split/person-colors';
+import { personColor, personTextColor } from '../../split/person-colors';
 
 /**
  * Each person's colour in the open split (personColors), by person id and, for people
@@ -14,7 +14,8 @@ type Who = { personId?: string | null; email?: string | null };
 
 /**
  * Looks up colours as CSS, for lists: a person's by id, an account's by its email (that
- * of the person it's linked to). Null outside a split, or for an account no one is.
+ * of the person it's linked to), as an avatar's fill and as their name's colour. Null
+ * outside a split, or for an account no one is.
  */
 export function usePersonColors() {
   const { byPerson, byEmail } = useContext(PersonColorsContext);
@@ -22,7 +23,7 @@ export function usePersonColors() {
     const color =
       (who.personId != null ? byPerson.get(who.personId) : undefined) ??
       (who.email != null ? byEmail.get(who.email) : undefined);
-    return color == null ? null : personColor(color);
+    return color == null ? null : { fill: personColor(color), text: personTextColor(color) };
   };
 }
 
