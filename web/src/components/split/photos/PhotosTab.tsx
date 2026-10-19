@@ -28,7 +28,6 @@ import { photoFileName, usePhotoDownload } from '../../../split/photo-download';
 import { useSplitState } from '../../../split/SplitStateContext';
 import Fab from '../../ui/Fab';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
-import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import { useLongPress } from '../items/useItemSelection';
 import bar from '../items/ItemSelection.module.css';
 import PillMenu from '../PillMenu';
@@ -38,6 +37,7 @@ import QueuedPhotoTile from './QueuedPhotoTile';
 import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 import type { PhotoSelection } from './usePhotoSelection';
 import { usePhotoPicker } from './usePhotoPicker';
+import AddPhotosSheet from './AddPhotosSheet';
 
 /** One photo: a tap opens it, or picks it while picking; a long press starts picking */
 function PhotoTile({
@@ -95,7 +95,7 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
   const [open, setOpen] = useState<number | null>(null);
   const [view, setView] = useState<PhotoView>(DEFAULT_PHOTO_VIEW);
   const queued = photos.queuedOf(null);
-  const picker = usePhotoPicker();
+  const picker = usePhotoPicker((files) => void photos.upload(files, null));
 
   const all = useMemo(() => meta?.attachments ?? [], [meta?.attachments]);
   const days = useMemo(
@@ -303,13 +303,9 @@ export default PhotosTab;
  */
 export function AddPhotosFab() {
   const { meta, photos } = useSplitPage();
-  const picker = usePhotoPicker();
+  const picker = usePhotoPicker((files) => void photos.upload(files, null));
   const [open, setOpen] = useState(false);
   if ((meta?.attachments.length ?? 0) === 0 && photos.queuedOf(null).length === 0) return null;
-  const choose = (pick: () => void) => {
-    setOpen(false);
-    pick();
-  };
   return (
     <>
       {picker.inputs}
@@ -317,39 +313,12 @@ export function AddPhotosFab() {
         label="Add photos"
         onClick={() => setOpen(true)}
       />
-      <ResponsiveDialog
+      <AddPhotosSheet
         opened={open}
         onClose={() => setOpen(false)}
-        title="Add photos"
-        width={400}
-      >
-        <div className={classes.choices}>
-          <UnstyledButton
-            className={classes.choice}
-            onClick={() => choose(picker.takePhoto)}
-          >
-            <span className={classes.choiceIcon}>
-              <Camera size={20} />
-            </span>
-            <span>
-              <span className={classes.choiceTitle}>Take photo</span>
-              <span className={classes.choiceHint}>Opens the camera</span>
-            </span>
-          </UnstyledButton>
-          <UnstyledButton
-            className={classes.choice}
-            onClick={() => choose(picker.chooseFromLibrary)}
-          >
-            <span className={classes.choiceIcon}>
-              <Images size={20} />
-            </span>
-            <span>
-              <span className={classes.choiceTitle}>Choose from library</span>
-              <span className={classes.choiceHint}>Pick one or several</span>
-            </span>
-          </UnstyledButton>
-        </div>
-      </ResponsiveDialog>
+        onTakePhoto={picker.takePhoto}
+        onChooseFromLibrary={picker.chooseFromLibrary}
+      />
     </>
   );
 }

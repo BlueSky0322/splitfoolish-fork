@@ -80,7 +80,7 @@ const DesktopPhotos = () => {
   const counts = photoCounts(all);
   const shown = days.flatMap((d) => d.photos);
   const queued = photos.queuedOf(null);
-  const picker = usePhotoPicker();
+  const picker = usePhotoPicker((files) => void photos.upload(files, null));
   // Nothing at all yet: the whole tab is a place to add the first photos
   const empty = all.length === 0 && queued.length === 0;
 

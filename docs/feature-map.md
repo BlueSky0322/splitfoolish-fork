@@ -410,7 +410,9 @@ method through a profile change.
   orders and kinds shown, the same on phones and computers) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
 - Choosing photos to add: [usePhotoPicker](../web/src/components/split/photos/usePhotoPicker.tsx)
-  (the camera or the library), for an empty Photos tab and the phone's Add photos sheet.
+  (the camera or the library) and, on phones and tablets,
+  [AddPhotosSheet](../web/src/components/split/photos/AddPhotosSheet.tsx) to pick
+  between them: for the Photos tab and an item's Add photo alike.
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
