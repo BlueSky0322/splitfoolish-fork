@@ -43,13 +43,8 @@ export function chooseRate(r: RateInputs): { rate: number | null; source: RateSo
     saved?.rate != null &&
     r.enteredCents != null &&
     keepsSavedConversion(
-      {
-        currency: saved.currency,
-        cents: toCents(saved.amount),
-        rate: saved.rate,
-        source: savedRateSource(saved.rateSource),
-      },
-      { currency: r.entryCurrency, cents: r.enteredCents, manualRate: null },
+      { currency: saved.currency, rate: saved.rate, source: savedRateSource(saved.rateSource) },
+      { currency: r.entryCurrency, manualRate: null },
     )
   ) {
     return { rate: saved.rate, source: savedRateSource(saved.rateSource) };

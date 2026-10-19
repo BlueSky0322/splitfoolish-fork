@@ -339,20 +339,9 @@ function changeStatements(
       if (item == null) return [];
       const at = change.createdAt;
       if (!isItemDate(at)) throw new Refused('Pick a date that has already come');
+      // Moved, but still at the rate it was recorded with
       item.createdAt = at;
-      const moved = [db.prepare('UPDATE items SET created_at = ? WHERE id = ?').bind(at, id)];
-      // Paid in another currency on a fetched rate: now at the new day's
-      const c = item.converted;
-      if (c == null || c.source === 'manual') return moved;
-      return [
-        ...moved,
-        ...convertAgainStatements(
-          db,
-          id,
-          item,
-          chooseRate(null, rates.get(rateKey(c.currency, at))),
-        ),
-      ];
+      return [db.prepare('UPDATE items SET created_at = ? WHERE id = ?').bind(at, id)];
     }
 
     case 'clearItems':
@@ -373,7 +362,7 @@ function changeStatements(
 }
 
 /** Changes that convert amounts, held back while the split changes currency */
-const CONVERTING_OPS = new Set<Change['op']>(['addItem', 'updateItem', 'setItemDate', 'setRate']);
+const CONVERTING_OPS = new Set<Change['op']>(['addItem', 'updateItem', 'setRate']);
 
 interface ApplyOptions {
   /**

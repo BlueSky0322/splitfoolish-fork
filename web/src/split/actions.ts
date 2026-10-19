@@ -1,6 +1,5 @@
 import type { Dispatch } from 'react';
 import type { ItemInput } from '../api';
-import { savedRateSource } from '@shared/rates';
 import type { Item as ApiItem, Change } from '@shared/types';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
@@ -32,8 +31,8 @@ export interface SplitActions {
   updateItem: (itemId: string, item: ItemInput) => boolean;
   removeItem: (itemId: string) => boolean;
   /**
-   * Moves items to another day, each keeping its time of day (never later than now). One
-   * paid in another currency on a fetched rate takes the new day's rate.
+   * Moves items to another day, each keeping its time of day (never later than now) and
+   * the rate it was recorded with
    */
   moveItemsToDay: (itemIds: string[], day: Date) => boolean;
   /** Who everyone settles up through, or null for the fewest transfers */
@@ -175,10 +174,6 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
         const createdAt = Math.min(at.getTime(), now);
         if (createdAt === item.createdAt) continue;
         d.dispatch({ type: 'PATCH_ITEM', payload: { id: item.id, createdAt } });
-        // The server converts it at the new day's rate; its numbers show once saved
-        if (item.original && savedRateSource(item.original.rateSource) !== 'manual') {
-          d.reloadAfterSave();
-        }
         d.queue({ op: 'setItemDate', id: item.id, createdAt });
         moved = true;
       }

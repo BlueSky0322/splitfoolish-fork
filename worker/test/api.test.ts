@@ -1395,7 +1395,7 @@ describe('items in another currency', () => {
     });
   });
 
-  it('keeps the saved rate when an edit leaves the amount alone, and reconverts when it changes', async () => {
+  it('keeps the rate an item was recorded with through edits, a new amount included, and converts again only for a new currency', async () => {
     const { owner, id, item, items } = await myrSplit();
     // Standing in for won and Taiwan dollars. Wise and the ECB disagree on the won, so
     // once the owner picks the ECB, today's rate is not the one the item was saved at.
@@ -1421,15 +1421,15 @@ describe('items in another currency', () => {
       original: { amount: 50000, rate: 0.0034, rateSource: 'wise' },
     });
 
-    // A new amount is converted at today's rate
+    // A new amount is converted at the rate it was recorded with, not today's
     const more = { ...renamed, original: { currency: krw, amount: 60000 } };
     expect((await change(owner, id, { op: 'updateItem', item: more })).status).toBe(200);
     expect((await items())[0]).toMatchObject({
-      cost: 300,
-      original: { currency: krw, amount: 60000, rate: 0.005, rateSource: 'frankfurter' },
+      cost: 204,
+      original: { currency: krw, amount: 60000, rate: 0.0034, rateSource: 'wise' },
     });
 
-    // So is the same amount in a new currency
+    // A new currency needs a new rate
     const moved = { ...renamed, original: { currency: twd, amount: 60000 } };
     expect((await change(owner, id, { op: 'updateItem', item: moved })).status).toBe(200);
     expect((await items())[0]).toMatchObject({
@@ -1623,78 +1623,62 @@ describe('the rate on the day an item was paid', () => {
     });
   });
 
-  it("moving an item to another day converts it at that day's rate, and a typed rate stays", async () => {
+  it('an item keeps the rate it was recorded with when moved to another day or given a new amount', async () => {
     const cur = api.rates.newCurrency();
-    const [week, twoDays] = [daysAgo(7), daysAgo(2)];
+    const week = daysAgo(7);
     api.rates.set(cur, 'MYR', 4);
     api.rates.setOn(week.day, cur, 'MYR', 3.5);
-    api.rates.setOn(twoDays.day, cur, 'MYR', 3.8);
-    const { owner, id, itemId, read } = await paidIn(cur, 10);
-    expect((await read()).cost).toBe(40);
+    const { owner, id, a, itemId, read } = await paidIn(cur, 10);
+    expect(await read()).toMatchObject({ cost: 40, original: { rate: 4, rateSource: 'wise' } });
 
     await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: week.at });
-    expect(await read()).toMatchObject({ cost: 35, original: { rate: 3.5 } });
-    await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: twoDays.at });
-    expect(await read()).toMatchObject({ cost: 38, original: { rate: 3.8 } });
+    expect(await read()).toMatchObject({ cost: 40, createdAt: week.at, original: { rate: 4 } });
+    const dinner = { id: itemId, name: 'Dinner', cost: 0, payerId: a, participantIds: [a] };
+    await change(owner, id, {
+      op: 'updateItem',
+      item: { ...dinner, original: { currency: cur, amount: 20 } },
+    });
+    expect(await read()).toMatchObject({ cost: 80, original: { rate: 4 } });
 
+    // A typed rate stays through a move; going back to fetched rates takes its day's
     await change(owner, id, { op: 'setRate', currency: cur, rate: 5 });
+    await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: daysAgo(2).at });
+    expect(await read()).toMatchObject({ cost: 100, original: { rate: 5, rateSource: 'manual' } });
     await change(owner, id, { op: 'setItemDate', id: itemId, createdAt: week.at });
-    expect(await read()).toMatchObject({ cost: 50, original: { rate: 5, rateSource: 'manual' } });
-    // Back on fetched rates: the rate of the day it's on now
     await change(owner, id, { op: 'setRate', currency: cur, rate: null });
-    expect(await read()).toMatchObject({ cost: 35, original: { rate: 3.5 } });
+    expect(await read()).toMatchObject({ cost: 70, original: { rate: 3.5 } });
   });
 
-  it('an item added and moved in one batch, as from a device that was offline, takes the day it was moved to', async () => {
-    const cur = api.rates.newCurrency();
-    const [week, twoDays] = [daysAgo(7), daysAgo(2)];
+  it('an item added offline, moved, then put in another currency, in one batch, takes the day it was moved to', async () => {
+    const [cur, other] = [api.rates.newCurrency(), api.rates.newCurrency()];
+    const week = daysAgo(7);
     api.rates.set(cur, 'MYR', 4);
-    api.rates.setOn(week.day, cur, 'MYR', 3.5);
-    api.rates.setOn(twoDays.day, cur, 'MYR', 3.8);
+    api.rates.setOn(week.day, other, 'MYR', 0.5);
     const owner = person('owner');
     const { id } = await splitWith(owner);
     const [a, itemId] = [hex(), hex()];
-    const dinner = {
-      id: itemId,
-      name: 'Dinner',
-      cost: 0,
-      payerId: a,
-      participantIds: [a],
-      original: { currency: cur, amount: 10 },
-    };
+    const dinner = { id: itemId, name: 'Dinner', cost: 0, payerId: a, participantIds: [a] };
     const saved = await change(
       owner,
       id,
       { op: 'addPerson', id: a, name: 'A' },
-      { op: 'addItem', item: dinner },
+      { op: 'addItem', item: { ...dinner, original: { currency: cur, amount: 10 } } },
       { op: 'setItemDate', id: itemId, createdAt: week.at },
-      // An edit after the move is for the day it's on now
-      { op: 'updateItem', item: { ...dinner, original: { currency: cur, amount: 20 } } },
+      { op: 'updateItem', item: { ...dinner, original: { currency: other, amount: 100 } } },
     );
     expect(saved.status).toBe(200);
-    const read = async () => (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0];
-    expect(await read()).toMatchObject({ cost: 70, createdAt: week.at, original: { rate: 3.5 } });
-
-    // Typed, then moved, in one batch: the typed rate stays
-    expect(
-      (
-        await change(
-          owner,
-          id,
-          { op: 'setRate', currency: cur, rate: 5 },
-          { op: 'setItemDate', id: itemId, createdAt: twoDays.at },
-        )
-      ).status,
-    ).toBe(200);
-    expect(await read()).toMatchObject({ cost: 100, original: { rate: 5, rateSource: 'manual' } });
+    const item = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0];
+    expect(item).toMatchObject({ cost: 50, createdAt: week.at, original: { rate: 0.5 } });
   });
 
-  it("an edit converts at the item's own day, not today", async () => {
-    const cur = api.rates.newCurrency();
+  it("an edit in another currency converts at the item's own day, not today", async () => {
+    const [old, cur] = [api.rates.newCurrency(), api.rates.newCurrency()];
     const { at, day } = daysAgo(4);
+    api.rates.setOn(day, old, 'MYR', 2);
     api.rates.set(cur, 'MYR', 4);
     api.rates.setOn(day, cur, 'MYR', 3);
-    const { owner, id, a, itemId, read } = await paidIn(cur, 10, at);
+    const { owner, id, a, itemId, read } = await paidIn(old, 10, at);
+    expect((await read()).cost).toBe(20);
     await change(owner, id, {
       op: 'updateItem',
       item: {

@@ -108,8 +108,8 @@ export function readRateChange(
 /**
  * The rates a batch needs fetched, read before the batch is checked, by rateKey: each
  * converted item's currency and the day it was paid. Earlier changes in the batch count,
- * as they will when it's checked: an item added offline and then moved to another day
- * arrives as both, and is converted at the day it was moved to.
+ * as they will when it's checked: an item added offline, moved to another day and then
+ * given a new currency arrives as all three, and takes the rate of the day it was moved to.
  */
 export function ratesToFetch(model: Model, changes: Batch): Map<string, RateWanted> {
   const needed = new Map<string, RateWanted>();
@@ -138,11 +138,9 @@ export function ratesToFetch(model: Model, changes: Batch): Map<string, RateWant
           if (manualRate == null && at != null) want(currency, at);
         }
       } else if (change?.op === 'setItemDate') {
+        // Moving keeps the item's rate, but a later change in the batch is for the new day
         const id = readId(change.id);
-        if (!isItemDate(change.createdAt)) continue;
-        dates.set(id, change.createdAt);
-        const c = currencyOf(id);
-        if (c != null && !c.typed) want(c.currency, change.createdAt);
+        if (isItemDate(change.createdAt)) dates.set(id, change.createdAt);
       } else if (change?.op === 'addItem' || change?.op === 'updateItem') {
         const item = (change.item ?? {}) as Record<string, unknown>;
         const id = readId(item.id);

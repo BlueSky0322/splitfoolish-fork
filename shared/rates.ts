@@ -58,15 +58,16 @@ export const savedRateSource = (source: RateSource | null | undefined): RateSour
   source ?? 'manual';
 
 /**
- * Whether an edit keeps an item's saved conversion instead of converting again: the
- * same currency and amount, and the same kind of rate. A fetched rate is kept while no
- * rate is typed; a typed one only when the same rate is typed again.
+ * Whether an edit keeps an item's saved rate instead of converting again: an item is
+ * kept at the rate it was recorded with, so a new amount in the same currency is
+ * converted at that rate too. A fetched rate is kept while no rate is typed; a typed one
+ * only when the same rate is typed again. A new currency needs a new rate.
  */
 export function keepsSavedConversion(
-  saved: { currency: string; cents: number; rate: number; source?: RateSource | null },
-  entered: { currency: string; cents: number; manualRate: number | null },
+  saved: { currency: string; rate: number; source?: RateSource | null },
+  entered: { currency: string; manualRate: number | null },
 ): boolean {
-  if (saved.currency !== entered.currency || saved.cents !== entered.cents) return false;
+  if (saved.currency !== entered.currency) return false;
   return entered.manualRate == null ? saved.source !== 'manual' : entered.manualRate === saved.rate;
 }
 
