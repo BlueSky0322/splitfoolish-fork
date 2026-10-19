@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import 'fake-indexeddb/auto';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
@@ -63,6 +63,27 @@ describe('the split page', () => {
     // Shared ones say how
     const taxi = screen.getByText('Taxi').closest('button')!;
     expect(within(taxi).queryByText(readsAs(/paid for/))).toBeNull();
+  });
+
+  test("your share shows only on items you're on", async () => {
+    const items = () =>
+      splitDetail('trip', [
+        item({ id: 'gift', name: 'Gift', cost: 40, payerId: 'ann', participantIds: ['ann'] }),
+        item({ id: 'socks', name: 'Socks', cost: 15, participantIds: ['me'] }),
+      ]);
+    renderApp(fakeServer(items()), '/?s=trip');
+    const giftRow = (await screen.findByText('Gift')).closest('button')!.parentElement!;
+    expect(within(giftRow).queryByText(/Your share/)).toBeNull();
+    const socksRow = screen.getByText('Socks').closest('button')!.parentElement!;
+    expect(within(socksRow).getByText(/^Your share RM\s?15\.00$/)).toBeTruthy();
+
+    // Phones: no ", yours 0.00" on someone else's item
+    cleanup();
+    renderApp(fakeServer(items()), '/?s=trip', { size: 'phone' });
+    const gift = (await screen.findByText('Gift')).closest('button')!;
+    expect(gift.textContent).not.toMatch(/yours/);
+    const socks = screen.getByText('Socks').closest('button')!;
+    expect(socks.textContent).toMatch(/yours 15\.00/);
   });
 
   test('adds an item typed as a sum, and sends it to the server', async () => {
