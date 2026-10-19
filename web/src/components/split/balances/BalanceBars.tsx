@@ -1,6 +1,7 @@
 import type { Balance } from '@shared/settle';
 import type { Person } from '@shared/types';
 import { formatSigned } from '../../../utils/money';
+import { PersonDot } from '../PersonAvatar';
 import classes from './Balances.module.css';
 
 // Each person's balance as a bar from the middle: right and green when they're owed,
@@ -23,7 +24,10 @@ const BalanceBars = ({
             key={p.id}
             className={classes.barRow}
           >
-            <span className={classes.barName}>{p.name}</span>
+            <span className={classes.barName}>
+              <PersonDot person={p} />
+              {p.name}
+            </span>
             <div
               className={classes.barTrack}
               aria-hidden

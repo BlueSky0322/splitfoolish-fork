@@ -37,6 +37,7 @@ const PhotoDetails = ({
       name={addedBy.name}
       email={addedBy.email}
       avatarVersion={addedBy.avatarVersion}
+      color={addedBy.color}
       size={size}
       preview={false}
     />

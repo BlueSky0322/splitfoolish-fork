@@ -40,6 +40,16 @@
   --sf-tag: color-mix(in srgb, var(--sf-text) 9%, transparent);
   --sf-accent-tint: color-mix(in srgb, var(--sf-accent) 14%, transparent);
   --sf-avatar: color-mix(in srgb, var(--sf-accent) 24%, var(--sf-surface));
+  /* People's colours (split/person-colors.ts): blue, amber, aqua and pink stay apart
+     side by side, then violet and orange. The same fills in both themes, each with the
+     dark ink at 4.5:1 or more and at least 2.9:1 against either surface. */
+  --sf-person-0: #3987e5;
+  --sf-person-1: #c98500;
+  --sf-person-2: #199e70;
+  --sf-person-3: #d55181;
+  --sf-person-4: #9085e9;
+  --sf-person-5: #d95926;
+  --sf-person-ink: #161826;
   --sf-safe-bottom: env(safe-area-inset-bottom, 0px);
   /* Amounts: Geist's even, tabular digits */
   --sf-font-num: Geist, Inter, system-ui, sans-serif;

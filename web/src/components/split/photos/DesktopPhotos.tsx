@@ -398,6 +398,7 @@ const DesktopPhotos = () => {
                         name={who.name}
                         email={who.email}
                         avatarVersion={who.avatarVersion}
+                        color={who.color}
                         size={18}
                         preview={false}
                       />

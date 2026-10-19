@@ -20,7 +20,7 @@ import { currencySymbol, formatAmount, formatMoney } from '../../../utils/money'
 import type { RowSelection } from './useItemSelection';
 import { useLongPress } from './useItemSelection';
 import { RowCheck } from './ItemSelection';
-import PersonAvatar from '../PersonAvatar';
+import PersonAvatar, { PersonDot } from '../PersonAvatar';
 import classes from './ItemViews.module.css';
 import { toCents } from '@shared/rates';
 import { plural } from '../../../utils/text';
@@ -247,6 +247,7 @@ export function ItemCards({
                       </div>
                     )}
                     <div className={classes.itemMeta}>
+                      <PersonDot person={item.payer} />
                       {mobile
                         ? `${item.payer.name} paid${share != null ? `, yours ${formatAmount(share, currency)}` : ''}`
                         : `${item.payer.name} paid · ${MODE_LABELS[item.splitMode]} between ${who(item, people)}`}

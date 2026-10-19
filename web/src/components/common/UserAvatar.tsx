@@ -19,9 +19,12 @@ interface UserAvatarProps {
   preview?: boolean;
   /** A picture to show instead, such as one still uploading */
   previewSrc?: string | null;
+  /** A person's colour in a split (a CSS colour), filling the initial's circle */
+  color?: string | null;
 }
 
-// A round avatar: the profile picture when there is one, else the first letter
+// A round avatar: the profile picture when there is one, else the first letter, on the
+// person's colour in a split
 const UserAvatar = ({
   name,
   email,
@@ -30,6 +33,7 @@ const UserAvatar = ({
   active,
   preview = true,
   previewSrc,
+  color,
 }: UserAvatarProps) => {
   const [open, setOpen] = useState(false);
   const src = previewSrc ?? (email && avatarVersion ? avatarUrl(email, avatarVersion) : null);
@@ -41,12 +45,19 @@ const UserAvatar = ({
       size={size}
       radius={9999}
       styles={{
-        placeholder: {
-          background: 'var(--sf-avatar)',
-          color: active ? 'var(--sf-accent)' : 'var(--sf-text)',
-          fontSize: Math.round(size * 0.42),
-          fontWeight: 500,
-        },
+        placeholder: color
+          ? {
+              background: color,
+              color: 'var(--sf-person-ink)',
+              fontSize: Math.round(size * 0.42),
+              fontWeight: 600,
+            }
+          : {
+              background: 'var(--sf-avatar)',
+              color: active ? 'var(--sf-accent)' : 'var(--sf-text)',
+              fontSize: Math.round(size * 0.42),
+              fontWeight: 500,
+            },
       }}
     >
       {name.trim().charAt(0).toUpperCase() || '?'}
