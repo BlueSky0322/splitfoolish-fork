@@ -787,7 +787,7 @@ export function registerTools(server: McpServer, caller: Caller) {
       title: 'Date an expense',
       description:
         'Changes the date an expense was paid, which orders it in the split. One paid in ' +
-        "another currency is converted at the new day's rate, unless a rate was given. " +
+        'another currency keeps the rate it was recorded with. ' +
         'Retrying with the same requestId returns the first answer.',
       inputSchema: { splitId, expenseId: rowId('expense'), requestId, date },
       outputSchema: savedShape('expenseId'),

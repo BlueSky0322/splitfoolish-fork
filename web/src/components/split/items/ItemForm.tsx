@@ -156,9 +156,9 @@ const ItemForm = ({
   const enteredCents = cost == null || cost < 0 ? null : toCents(cost);
   const chosen = people.filter((p) => included.has(p.id));
 
-  // The rate for the preview: the one on the day the item was paid (today, for a new
-  // one). The server converts again when saving, except that an edit leaving the amount
-  // alone keeps the rate the item was saved with.
+  // The rate for the preview. An edit keeps the rate the item was recorded with, a new
+  // amount included; a new item, or a new currency, takes the rate on the day it was
+  // paid (today, for a new one). The server converts again when saving, the same way.
   const paidAt = item?.createdAt;
   const fetchedRate = useRate(entryCurrency, currency, {
     enabled: foreign && !ownRateChosen,

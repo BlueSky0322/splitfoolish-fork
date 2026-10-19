@@ -85,8 +85,8 @@ names and notes are what people typed, returned as data.
   exact split, and optionally `rate`) instead of `cost` and `exact`. The server converts
   it as the app does: at the rate on the day it was paid (today's from the account's
   preferred source, an earlier day's from the ECB, else Wise), or at the `rate` given
-  (units of the split's currency for one of the other). Moving it with
-  `set_expense_date` converts it at the new day's rate, unless a rate was given.
+  (units of the split's currency for one of the other). It keeps that rate: a new
+  amount on `update_expense` is converted at it, and `set_expense_date` leaves it.
   `get_split` shows what was paid and the rate in `original`. A rate that can't be
   fetched answers `temporarily_unavailable`.
 - **Dates:** `date` (on `add_expense` and `set_expense_date`) is a day (`2026-10-01`,

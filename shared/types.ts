@@ -52,7 +52,7 @@ export interface ItemOriginal {
   amount: number;
   /** Exact split amounts in this currency, by person id */
   exact?: Record<string, number>;
-  /** The rate on the day it was paid, unless one was typed */
+  /** The rate it was recorded with: the one on the day it was paid, or one typed */
   rate?: number;
   rateSource?: RateSource;
   /** When the rate was fetched or typed, in ms; for an earlier day's, noon UTC that day */
@@ -75,7 +75,7 @@ export type Change =
   | { op: 'removeItem'; id: string }
   /**
    * Moves an item to another day: when it's dated, in ms, not after today. One paid in
-   * another currency on a fetched rate takes the new day's rate.
+   * another currency keeps the rate it was recorded with.
    */
   | { op: 'setItemDate'; id: string; createdAt: number }
   | { op: 'clearItems' }

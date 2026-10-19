@@ -187,14 +187,16 @@ lists them for the Currencies sheet, and typed rates go through the split's acti
   [AGENTS.md](../AGENTS.md)).
 - Converted exact parts add up to the converted total, the leftover cents going by
   largest remainder (`convertParts`).
-- An item is converted at the rate on the UTC day it was paid (`rateDay`), and nothing
-  refreshes it: adding it, editing its amount or currency, moving it to another day
-  (`setItemDate`) or changing the split's currency use that day's rate. With no rate for
+- An item is recorded at the rate on the UTC day it was paid (`rateDay`) and kept at
+  it, so what someone owes never moves with the rates: a new amount is converted at the
+  same rate (`keepsSavedConversion`), and moving it to another day (`setItemDate`)
+  leaves the rate. Only a typed rate, a new currency for the item, or a new currency for
+  the split gives it another, the last two at the rate for its day. With no rate for
   that day from either service, today's is used and its date says so; with a service
   down, the change waits (503) rather than taking today's.
-- A rate someone typed is kept as typed, through edits and date moves, until `setRate`
-  with no rate puts the currency's items back on their days' rates. `refreshRates`,
-  sent by older apps, does nothing.
+- A rate someone typed is kept as typed until `setRate` with no rate puts the
+  currency's items back on their days' rates. `refreshRates`, sent by older apps, does
+  nothing.
 - Every conversion run is idempotent and only finishes the change it was started for
   (`converting_since`), so the first attempt, queued retries and the open-split retry
   can overlap safely.

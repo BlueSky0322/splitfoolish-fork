@@ -28,13 +28,15 @@ describe('chooseRate', () => {
     expect(chooseRate(inputs({ ownRateChosen: true, ownRate: '' })).rate).toBeNull();
   });
 
-  test('keeps the saved rate while the amount and currency are unchanged', () => {
+  test('keeps the rate the item was recorded with, a new amount included, as the server does', () => {
     expect(chooseRate(inputs({ original: saved }))).toEqual({
       rate: 0.029,
       source: 'frankfurter',
     });
-    // A new amount is converted at today's rate, as the server does
-    expect(chooseRate(inputs({ original: saved, enteredCents: 200000 })).rate).toBe(0.03);
+    expect(chooseRate(inputs({ original: saved, enteredCents: 200000 }))).toEqual({
+      rate: 0.029,
+      source: 'frankfurter',
+    });
   });
 
   test('converts at today’s rate when the currency changed or the saved rate was typed', () => {
