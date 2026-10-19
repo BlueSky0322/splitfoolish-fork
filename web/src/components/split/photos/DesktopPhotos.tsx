@@ -4,6 +4,8 @@ import {
   Check,
   CheckSquare,
   DownloadSimple,
+  FolderOpen,
+  Images,
   Receipt,
   SortAscending,
   SortDescending,
@@ -32,6 +34,7 @@ import { timeLabel, useAddedBy } from './added-by';
 import PhotoDetails from './PhotoDetails';
 import QueuedPhotoTile from './QueuedPhotoTile';
 import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
+import { usePhotoPicker } from './usePhotoPicker';
 
 /** Every row of photos is this tall; each photo is as wide as its shape makes it */
 const ROW_PX = 150;
@@ -77,6 +80,9 @@ const DesktopPhotos = () => {
   const counts = photoCounts(all);
   const shown = days.flatMap((d) => d.photos);
   const queued = photos.queuedOf(null);
+  const picker = usePhotoPicker();
+  // Nothing at all yet: the whole tab is a place to add the first photos
+  const empty = all.length === 0 && queued.length === 0;
 
   // Selected photos still there (one removed elsewhere drops out)
   const chosen = shown.filter((p) => selected.has(p.id));
@@ -197,7 +203,7 @@ const DesktopPhotos = () => {
             </Button>
           </Tooltip>
         </div>
-      ) : (
+      ) : empty ? null : (
         <div className={classes.toolbar}>
           <Menu
             position="bottom-start"
@@ -324,14 +330,54 @@ const DesktopPhotos = () => {
         </div>
       )}
 
-      {shown.length === 0 && queued.length === 0 && dragging === 0 && (
-        <p className="sf-muted text-sm text-center py-10">
-          {all.length === 0
-            ? 'No photos yet. Drop some here, or add a receipt on its item.'
-            : view.filter === 'receipts'
-              ? 'No receipts yet. Add one on its item.'
-              : 'No photos of the split yet. Drop some here.'}
-        </p>
+      {empty && dragging === 0 && (
+        <div
+          className={classes.emptyArea}
+          onClick={picker.chooseFromLibrary}
+        >
+          {picker.inputs}
+          <span className={classes.emptyIcon}>
+            <Images size={28} />
+          </span>
+          <div className={classes.emptyTitle}>Drop photos here</div>
+          <div className={classes.emptyBody}>
+            Photos for the whole split, like the group shot or a shared bill. Receipts for one item
+            are added on that item and show here too.
+          </div>
+          <Button
+            variant="default"
+            leftSection={<FolderOpen size={16} />}
+            onClick={(e) => {
+              e.stopPropagation();
+              picker.chooseFromLibrary();
+            }}
+          >
+            Choose photos
+          </Button>
+          <div className={classes.emptyHint}>JPEG, PNG, HEIC or WebP</div>
+        </div>
+      )}
+
+      {!empty && shown.length === 0 && queued.length === 0 && dragging === 0 && (
+        <div className={classes.noneShown}>
+          <span className={classes.noneIcon}>
+            {view.filter === 'receipts' ? <Receipt size={22} /> : <Images size={22} />}
+          </span>
+          <div className={classes.emptyTitle}>
+            {view.filter === 'receipts' ? 'No receipts yet' : 'No split photos yet'}
+          </div>
+          <div className={classes.emptyBody}>
+            {view.filter === 'receipts'
+              ? 'Add one on its item and it shows here.'
+              : 'Drop some here or use Add photos.'}
+          </div>
+          <Button
+            variant="subtle"
+            onClick={() => setView((v) => ({ ...v, filter: 'all' }))}
+          >
+            Show all photos
+          </Button>
+        </div>
       )}
 
       {days.map((day) => {

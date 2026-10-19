@@ -406,6 +406,8 @@ method through a profile change.
 - Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) (the
   orders and kinds shown, the same on phones and computers) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
+- Choosing photos to add: [usePhotoPicker](../web/src/components/split/photos/usePhotoPicker.tsx)
+  (the camera or the library), for an empty Photos tab and the phone's Add photos sheet.
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)

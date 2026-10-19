@@ -236,3 +236,69 @@
 .adding {
   height: 150px;
 }
+
+/* No photos yet: a dashed area filling the tab, a place to drop or choose the first */
+.emptyArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 360px;
+  padding: 32px 24px;
+  border: 1.5px dashed color-mix(in srgb, var(--sf-text) 22%, transparent);
+  border-radius: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.emptyArea:hover {
+  background: var(--sf-hover);
+}
+
+.emptyIcon,
+.noneIcon {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sf-accent-tint);
+  color: var(--sf-accent);
+}
+
+.emptyIcon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+}
+
+.noneIcon {
+  width: 48px;
+  height: 48px;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.emptyBody {
+  max-width: 420px;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.emptyHint {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+}
+
+/* Photos, but none of the kind chosen */
+.noneShown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 56px 16px;
+  text-align: center;
+}

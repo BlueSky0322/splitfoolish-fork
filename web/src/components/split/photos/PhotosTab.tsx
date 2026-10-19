@@ -1,15 +1,18 @@
 import { ActionIcon, Button, Portal, UnstyledButton } from '@mantine/core';
 import {
+  Camera,
+  CameraPlus,
   Check,
   DownloadSimple,
   FunnelSimple,
+  Images,
   SortAscending,
   SortDescending,
   Trash,
   X,
 } from '@phosphor-icons/react';
 import type { Attachment } from '@shared/api';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { attachmentUrl } from '../../../api';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
 import {
@@ -25,6 +28,7 @@ import { photoFileName, usePhotoDownload } from '../../../split/photo-download';
 import { useSplitState } from '../../../split/SplitStateContext';
 import Fab from '../../ui/Fab';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
+import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import { useLongPress } from '../items/useItemSelection';
 import bar from '../items/ItemSelection.module.css';
 import PillMenu from '../PillMenu';
@@ -33,6 +37,7 @@ import classes from './PhotosTab.module.css';
 import QueuedPhotoTile from './QueuedPhotoTile';
 import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 import type { PhotoSelection } from './usePhotoSelection';
+import { usePhotoPicker } from './usePhotoPicker';
 
 /** One photo: a tap opens it, or picks it while picking; a long press starts picking */
 function PhotoTile({
@@ -90,6 +95,7 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
   const [open, setOpen] = useState<number | null>(null);
   const [view, setView] = useState<PhotoView>(DEFAULT_PHOTO_VIEW);
   const queued = photos.queuedOf(null);
+  const picker = usePhotoPicker();
 
   const all = useMemo(() => meta?.attachments ?? [], [meta?.attachments]);
   const days = useMemo(
@@ -223,13 +229,40 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
           ))}
         </div>
       )}
-      {shown.length === 0 && queued.length === 0 && (
+      {all.length === 0 && queued.length === 0 && (
+        <div className={classes.empty}>
+          {picker.inputs}
+          <span className={classes.emptyIcon}>
+            <CameraPlus size={30} />
+          </span>
+          <div className={classes.emptyTitle}>Add photos</div>
+          <div className={classes.emptyBody}>
+            Photos for the whole split. Receipts for one item go on that item.
+          </div>
+          <div className={classes.emptyActions}>
+            <Button
+              size="lg"
+              leftSection={<Camera size={18} />}
+              onClick={picker.takePhoto}
+            >
+              Take photo
+            </Button>
+            <Button
+              size="lg"
+              variant="default"
+              leftSection={<Images size={18} />}
+              onClick={picker.chooseFromLibrary}
+            >
+              Choose from library
+            </Button>
+          </div>
+        </div>
+      )}
+      {all.length > 0 && shown.length === 0 && queued.length === 0 && (
         <p className="sf-muted text-sm text-center py-10">
-          {all.length === 0
-            ? 'No photos yet. Add some of the trip here, or a receipt on its item.'
-            : view.filter === 'receipts'
-              ? 'No receipts yet. Add one on its item.'
-              : 'No photos of the split yet. Add some here.'}
+          {view.filter === 'receipts'
+            ? 'No receipts yet. Add one on its item.'
+            : 'No photos of the split yet. Add some here.'}
         </p>
       )}
       {days.map((day) => (
@@ -263,30 +296,60 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
 export default PhotosTab;
 
 /**
- * The Photos tab's Add photos button. Kept outside the tab itself, which slides as tabs
- * change: a fixed button inside it would slide too, then jump to its corner.
+ * The Photos tab's Add photos button, once the split has photos (before, the tab offers
+ * the same choices itself). It opens a sheet: take a photo, or choose from the library.
+ * Kept outside the tab itself, which slides as tabs change: a fixed button inside it
+ * would slide too, then jump to its corner.
  */
 export function AddPhotosFab() {
-  const { photos } = useSplitPage();
-  const picker = useRef<HTMLInputElement>(null);
+  const { meta, photos } = useSplitPage();
+  const picker = usePhotoPicker();
+  const [open, setOpen] = useState(false);
+  if ((meta?.attachments.length ?? 0) === 0 && photos.queuedOf(null).length === 0) return null;
+  const choose = (pick: () => void) => {
+    setOpen(false);
+    pick();
+  };
   return (
     <>
-      <input
-        ref={picker}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          e.target.value = '';
-          if (files.length > 0) void photos.upload(files, null);
-        }}
-      />
+      {picker.inputs}
       <Fab
         label="Add photos"
-        onClick={() => picker.current?.click()}
+        onClick={() => setOpen(true)}
       />
+      <ResponsiveDialog
+        opened={open}
+        onClose={() => setOpen(false)}
+        title="Add photos"
+        width={400}
+      >
+        <div className={classes.choices}>
+          <UnstyledButton
+            className={classes.choice}
+            onClick={() => choose(picker.takePhoto)}
+          >
+            <span className={classes.choiceIcon}>
+              <Camera size={20} />
+            </span>
+            <span>
+              <span className={classes.choiceTitle}>Take photo</span>
+              <span className={classes.choiceHint}>Opens the camera</span>
+            </span>
+          </UnstyledButton>
+          <UnstyledButton
+            className={classes.choice}
+            onClick={() => choose(picker.chooseFromLibrary)}
+          >
+            <span className={classes.choiceIcon}>
+              <Images size={20} />
+            </span>
+            <span>
+              <span className={classes.choiceTitle}>Choose from library</span>
+              <span className={classes.choiceHint}>Pick one or several</span>
+            </span>
+          </UnstyledButton>
+        </div>
+      </ResponsiveDialog>
     </>
   );
 }
