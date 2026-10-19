@@ -219,8 +219,11 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
 
   const filterChip = filterPerson && (
     <div className={classes.filterChip}>
-      Showing <PersonName person={filterPerson} />
-      's items
+      {/* One run of text: as separate items, the chip's gap would split "simpson's" */}
+      <span>
+        Showing <PersonName person={filterPerson} />
+        &apos;s items
+      </span>
       <ActionIcon
         variant="subtle"
         size={22}
