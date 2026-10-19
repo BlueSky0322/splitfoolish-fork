@@ -10,7 +10,7 @@ import {
   UserPlus,
   UsersThree,
 } from '@phosphor-icons/react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { Person } from '@shared/types';
 import { otherCurrencyCount } from '../../../split/derive';
 import { useSplitState } from '../../../split/SplitStateContext';
@@ -61,6 +61,7 @@ export function AvatarStack({
     <div
       className={classes.avatarStack}
       data-size={size >= 30 ? 'lg' : undefined}
+      style={{ '--stack-size': `${size}px` } as CSSProperties}
     >
       {shown.map((p) => (
         <PersonAvatar
