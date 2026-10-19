@@ -46,15 +46,25 @@ const TransferRow = ({
         person={to}
         size={avatar}
       />
-      <span className={classes.transferText}>
+      {/* Wraps between words only, never inside a name; a name too long for a line
+          of its own ends in "…" */}
+      <span
+        className={classes.transferText}
+        title={fromMe ? `You pay ${to.name}` : `${from.name} pays ${to.name}`}
+      >
         {fromMe ? (
-          'You pay '
+          'You pay'
         ) : (
           <>
-            <PersonName person={from} /> pays{' '}
+            <span className={classes.transferName}>
+              <PersonName person={from} />
+            </span>{' '}
+            pays
           </>
-        )}
-        <PersonName person={to} />
+        )}{' '}
+        <span className={classes.transferName}>
+          <PersonName person={to} />
+        </span>
       </span>
       <span className={classes.transferAmount}>{formatMoney(amountCents, currency)}</span>
     </div>

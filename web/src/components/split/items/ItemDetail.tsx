@@ -63,6 +63,12 @@ const ItemDetail = ({
         <span className="sf-tag">{shortDate(item.createdAt)}</span>
         <span className="sf-tag">
           <PersonName person={item.payer} /> paid
+          {item.participants.length === 1 && (
+            <>
+              {' for '}
+              <PersonName person={item.participants[0]} />
+            </>
+          )}
         </span>
       </div>
       <ul

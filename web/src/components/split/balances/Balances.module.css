@@ -81,8 +81,17 @@
   min-width: 0;
   font-size: 13px;
   line-height: 1.3;
-  /* Wrap long names onto a second line rather than cutting them off */
-  overflow-wrap: anywhere;
+}
+
+/* A name in a transfer: kept whole when the line wraps, ending in "…" only when it's
+   too long for a line of its own */
+.transferName {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
 }
 
 .transferAmount {
