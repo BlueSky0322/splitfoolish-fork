@@ -165,10 +165,13 @@ const who = (item: SplitItem, people: Person[]) =>
     <PersonNames people={item.participants} />
   );
 
+/** Your part of an item; null when you're not on it, so no "yours 0.00" is shown */
 function useMyShare() {
   const { totals, me } = useSplitPage();
   return (item: SplitItem) =>
-    me == null ? null : totals.sharesByItem.get(item.id)?.get(me.id) ?? 0;
+    me == null || !item.participants.some((p) => p.id === me.id)
+      ? null
+      : totals.sharesByItem.get(item.id)?.get(me.id) ?? 0;
 }
 
 function RowActions({
@@ -454,7 +457,7 @@ export function ItemTable({
           )}
           {group.items.map((item) => {
             const share = myShare(item);
-            const shareText = share == null ? '—' : formatMoney(share, currency);
+            const shareText = share == null ? '' : formatMoney(share, currency);
             if (mobile) {
               return (
                 <ItemButton
@@ -491,7 +494,7 @@ export function ItemTable({
                     </span>
                   </span>
                   <span className={`${classes.num} sf-muted text-[13px]`}>
-                    {share == null ? '—' : (share / 100).toFixed(2)}
+                    {share == null ? '' : (share / 100).toFixed(2)}
                   </span>
                   <span className={classes.num}>
                     {item.cost.toFixed(2)}
