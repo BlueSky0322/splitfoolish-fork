@@ -8,7 +8,8 @@ import type { SplitItem } from '../../../split/state';
 import { formatAmount, formatMoney } from '../../../utils/money';
 import { SOURCE_LABELS } from '../../../utils/rate-labels';
 import PhotoViewer from '../../ui/PhotoViewer';
-import PersonAvatar, { PersonName } from '../PersonAvatar';
+import PersonAvatar from '../PersonAvatar';
+import { PaidBy } from './PaidBy';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './ItemDetail.module.css';
 
@@ -62,13 +63,7 @@ const ItemDetail = ({
         )}
         <span className="sf-tag">{shortDate(item.createdAt)}</span>
         <span className="sf-tag">
-          <PersonName person={item.payer} /> paid
-          {item.participants.length === 1 && (
-            <>
-              {' for '}
-              <PersonName person={item.participants[0]} />
-            </>
-          )}
+          <PaidBy item={item} />
         </span>
       </div>
       <ul
