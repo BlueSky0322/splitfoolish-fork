@@ -127,6 +127,9 @@
 
 .avatarStack {
   display: flex;
+  /* Each at its own size: stretched, a picture's tappable box (and its ring) would be
+     taller than the picture */
+  align-items: center;
   flex-shrink: 0;
 }
 
@@ -146,8 +149,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 30px;
+  /* As big as the avatars beside it (set from their size) */
+  min-width: var(--stack-size, 30px);
+  height: var(--stack-size, 30px);
   padding: 0 6px;
   border-radius: 999px;
   background: var(--sf-tag);

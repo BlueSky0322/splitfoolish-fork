@@ -41,17 +41,21 @@ const ViewablePicture = ({
     e.preventDefault();
     setOpen(true);
   };
+  // One element the picture's size, so a row or a stack of avatars around it lays it
+  // out (and rings it) like the picture alone
   return (
-    <>
+    <span
+      className={`${classes.root} ${className ?? ''}`}
+      data-round={round || undefined}
+      data-fill={fill || undefined}
+    >
       <UnstyledButton
         // A span, so it can sit inside a button without nesting one button in another
         component="span"
         role="button"
         tabIndex={0}
         aria-label={label}
-        className={`${classes.trigger} ${className ?? ''}`}
-        data-round={round || undefined}
-        data-fill={fill || undefined}
+        className={classes.trigger}
         onClick={show}
         onKeyDown={(e: KeyboardEvent) => {
           if (e.key === 'Enter' || e.key === ' ') show(e);
@@ -71,7 +75,7 @@ const ViewablePicture = ({
           onIndexChange={(ix) => setOpen(ix != null)}
         />
       </span>
-    </>
+    </span>
   );
 };
 

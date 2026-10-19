@@ -1,18 +1,25 @@
-.trigger {
+.root {
   /* Exactly the picture's size: inline, it gained a line's spacing below */
   display: block;
   line-height: 0;
   flex-shrink: 0;
-  cursor: zoom-in;
 }
 
-.trigger[data-fill] {
+.root[data-fill] {
   width: 100%;
   height: 100%;
 }
 
-.trigger[data-round] {
+.root[data-round] {
   border-radius: 999px;
+}
+
+.trigger {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  cursor: zoom-in;
 }
 
 .trigger:hover {
