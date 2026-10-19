@@ -4,7 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { Attachment } from '@shared/api';
 import { photoFileName } from '../../split/photo-download';
-import { fakeServer, item, renderApp, setupAppTests, splitDetail } from '../../testing/app';
+import {
+  fakeServer,
+  item,
+  readsAs,
+  renderApp,
+  setupAppTests,
+  splitDetail,
+} from '../../testing/app';
 
 // The Photos tab on a computer: the split's photos and item receipts by day, which to
 // show, details beside the open photo, removing several at once, and dropping files
@@ -124,7 +131,7 @@ describe('the Photos tab on a computer', () => {
     expect(viewer.getByText('RM 248.00')).toBeTruthy();
     // Ryan and Ann share it equally
     expect(viewer.getByText('RM 124.00')).toBeTruthy();
-    expect(viewer.getByText(/^Aisha, /)).toBeTruthy();
+    expect(viewer.getByText(readsAs(/^Aisha, /))).toBeTruthy();
 
     await user.click(viewer.getByRole('button', { name: 'Open item' }));
     expect(await screen.findByText('Edit item')).toBeTruthy();
@@ -134,7 +141,7 @@ describe('the Photos tab on a computer', () => {
     const { user } = await openPhotos();
     await user.click(screen.getAllByRole('button', { name: 'Photo of the split' })[0]);
     const viewer = within(await screen.findByRole('dialog'));
-    expect(viewer.getByText('Added by Aisha')).toBeTruthy();
+    expect(viewer.getByText(readsAs('Added by Aisha'))).toBeTruthy();
     expect(viewer.getByText('JPEG, 2.4 MB')).toBeTruthy();
     expect(viewer.getByText('Trip')).toBeTruthy();
     // After the receipt shown before it

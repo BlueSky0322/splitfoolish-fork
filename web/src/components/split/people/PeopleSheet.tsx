@@ -5,7 +5,7 @@ import { useSplitActions } from '../../../split/useSplit';
 import type { Person } from '@shared/types';
 import { nameFor } from '../../../profile/ProfileContext';
 import { formatMoney } from '../../../utils/money';
-import PersonAvatar from '../PersonAvatar';
+import PersonAvatar, { PersonName } from '../PersonAvatar';
 import TransferRow from '../balances/TransferRow';
 import classes from './PeopleSheet.module.css';
 import { MAX_NAME_LENGTH } from '@shared/types';
@@ -114,7 +114,7 @@ function PersonPage({
         />
         <div className="min-w-0 flex-1">
           <div className={classes.heroName}>
-            {person.name}
+            <PersonName person={person} />
             {isMe && <span className="sf-tag">You</span>}
           </div>
           <div className={classes.heroSub}>
@@ -350,7 +350,7 @@ const PeopleSheet = ({ initialPersonId, onShowItems }: PeopleSheetProps) => {
                 />
                 <div className="min-w-0 flex-1">
                   <div className={classes.name}>
-                    {p.name}
+                    <PersonName person={p} />
                     {p.id === meId && <span className="sf-tag">You</span>}
                   </div>
                   <div className={classes.sub}>{p.memberEmail ?? 'Guest'}</div>

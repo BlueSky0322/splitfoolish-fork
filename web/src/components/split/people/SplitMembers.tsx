@@ -218,13 +218,15 @@ const SplitMembers = ({ meta, myEmail, onChange, changeMeta, splitId }: SplitMem
                 name={nameFor(m.email, m.displayName)}
                 email={m.email}
                 avatarVersion={m.avatarVersion}
-                color={colorOf({ email: m.email })}
+                color={colorOf({ email: m.email })?.fill}
                 size={isMobile ? 36 : 32}
                 preview
               />
               <div className="min-w-0 flex-1">
                 <div className={classes.name}>
-                  {nameFor(m.email, m.displayName)}
+                  <span style={{ color: colorOf({ email: m.email })?.text }}>
+                    {nameFor(m.email, m.displayName)}
+                  </span>
                   {m.email === myEmail && ' (you)'}
                 </div>
                 <div className={classes.email}>{m.email}</div>

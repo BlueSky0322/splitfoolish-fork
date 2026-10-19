@@ -4,7 +4,7 @@ import type { SplitMode } from '@shared/settle';
 import { MAX_SHARES } from '@shared/settle';
 import type { Person } from '@shared/types';
 import { currencySymbol, formatAmount, formatMoney } from '../../../utils/money';
-import PersonAvatar from '../PersonAvatar';
+import PersonAvatar, { PersonName } from '../PersonAvatar';
 import classes from './SplitBetween.module.css';
 
 const MODES: { value: SplitMode; label: string }[] = [
@@ -176,7 +176,9 @@ function PersonRow({
             </span>
           )}
         </span>
-        <span className={classes.name}>{person.name}</span>
+        <span className={classes.name}>
+          <PersonName person={person} />
+        </span>
         {plain && (
           <span className={on ? classes.part : classes.notIn}>
             {on ? (part == null ? '' : formatAmount(part, currency)) : 'Not in'}

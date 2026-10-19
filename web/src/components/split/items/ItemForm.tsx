@@ -30,7 +30,7 @@ import { useIsDesktop, useIsMobile } from '../../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../../ui/CurrencySelect';
 import { DialogHeaderSlot } from '../../ui/dialog-header';
-import PersonAvatar from '../PersonAvatar';
+import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
 import { SOURCE_LABELS, describeRate } from '../../../utils/rate-labels';
@@ -412,7 +412,7 @@ const ItemForm = ({
                 person={p}
                 size={22}
               />
-              {p.name}
+              <PersonName person={p} />
             </UnstyledButton>
           ))}
         </div>

@@ -9,6 +9,7 @@ import { fileLabel } from '../../../split/photo-days';
 import type { SplitItem } from '../../../split/state';
 import { formatMoney } from '../../../utils/money';
 import UserAvatar from '../../common/UserAvatar';
+import { PersonName } from '../PersonAvatar';
 import { useSplitPage } from '../SplitPageContext';
 import { timeLabel, useAddedBy } from './added-by';
 import classes from './PhotoDetails.module.css';
@@ -37,7 +38,7 @@ const PhotoDetails = ({
       name={addedBy.name}
       email={addedBy.email}
       avatarVersion={addedBy.avatarVersion}
-      color={addedBy.color}
+      color={addedBy.colors?.fill}
       size={size}
       preview={false}
     />
@@ -54,7 +55,7 @@ const PhotoDetails = ({
           <div>
             <h3 className={classes.heading}>{item.name}</h3>
             <div className={classes.sub}>
-              {dayLabel(item.createdAt)}, {item.payer.name} paid
+              {dayLabel(item.createdAt)}, <PersonName person={item.payer} /> paid
             </div>
           </div>
           <dl className={classes.rows}>
@@ -72,7 +73,10 @@ const PhotoDetails = ({
               <dt>Added by</dt>
               <dd className={classes.who}>
                 {avatar(20)}
-                {addedBy.name}, {timeLabel(photo.createdAt)}
+                <span>
+                  <span style={{ color: addedBy.colors?.text }}>{addedBy.name}</span>,{' '}
+                  {timeLabel(photo.createdAt)}
+                </span>
               </dd>
             </div>
           </dl>
@@ -94,7 +98,9 @@ const PhotoDetails = ({
           <div className={classes.addedBy}>
             {avatar(40)}
             <div>
-              <div className={classes.name}>Added by {addedBy.name}</div>
+              <div className={classes.name}>
+                Added by <span style={{ color: addedBy.colors?.text }}>{addedBy.name}</span>
+              </div>
               <div className={classes.sub}>{added}</div>
             </div>
           </div>

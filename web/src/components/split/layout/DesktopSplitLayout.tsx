@@ -31,6 +31,7 @@ import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
 import Skeleton from '../../ui/Skeleton';
 import { TitleSkeleton, ToolbarSkeleton } from './SplitSkeletons';
 import classes from '../Split.module.css';
+import { PersonNames } from '../PersonAvatar';
 import { canChangePeople } from '@shared/rules';
 import DesktopPhotos, { AddPhotosButton } from '../photos/DesktopPhotos';
 
@@ -180,7 +181,7 @@ const DesktopSplitLayout = ({
                 max={6}
               />
               <span className={classes.peopleNames}>
-                {state.people.map((p) => p.name).join(', ')}
+                <PersonNames people={state.people} />
               </span>
               <button
                 type="button"

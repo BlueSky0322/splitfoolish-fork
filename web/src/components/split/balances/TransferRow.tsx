@@ -2,7 +2,7 @@ import { ArrowRight } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import type { Person } from '@shared/types';
 import { formatMoney } from '../../../utils/money';
-import PersonAvatar from '../PersonAvatar';
+import PersonAvatar, { PersonName } from '../PersonAvatar';
 import classes from './Balances.module.css';
 
 interface TransferRowProps {
@@ -47,7 +47,14 @@ const TransferRow = ({
         size={avatar}
       />
       <span className={classes.transferText}>
-        {fromMe ? `You pay ${to.name}` : `${from.name} pays ${to.name}`}
+        {fromMe ? (
+          'You pay '
+        ) : (
+          <>
+            <PersonName person={from} /> pays{' '}
+          </>
+        )}
+        <PersonName person={to} />
       </span>
       <span className={classes.transferAmount}>{formatMoney(amountCents, currency)}</span>
     </div>

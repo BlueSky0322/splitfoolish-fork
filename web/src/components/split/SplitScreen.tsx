@@ -22,7 +22,7 @@ import DesktopSplitLayout from './layout/DesktopSplitLayout';
 import { MoveDateDialog } from './items/ItemSelection';
 import { ItemCards, ItemTable } from './items/ItemViews';
 import MobileSplitLayout from './layout/MobileSplitLayout';
-import { AvatarVersionsContext } from './PersonAvatar';
+import { AvatarVersionsContext, PersonName } from './PersonAvatar';
 import { PersonColorsContext } from './person-colors-context';
 import { personColors } from '../../split/person-colors';
 import SplitDialogs from './dialogs/SplitDialogs';
@@ -216,7 +216,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
 
   const filterChip = filterPerson && (
     <div className={classes.filterChip}>
-      Showing {filterPerson.name}'s items
+      Showing <PersonName person={filterPerson} />
+      's items
       <ActionIcon
         variant="subtle"
         size={22}

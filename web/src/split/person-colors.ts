@@ -1,5 +1,6 @@
-// A colour for each person in a split, on their avatar and beside their name, so people
-// are easier to tell apart at a glance. The name is always shown too: colour only helps.
+// A colour for each person in a split, filling their avatar and colouring their name, so
+// people are easier to tell apart at a glance. The name is always shown too: colour only
+// helps.
 //
 // The first four people get the four hues that stay clearly apart side by side (blue,
 // amber, aqua, pink), in an order picked by the split's id, so each split looks
@@ -37,5 +38,8 @@ export function personColors(splitId: string, people: readonly { id: string }[])
   return new Map(people.map((p, i) => [p.id, order[i % PERSON_COLORS]]));
 }
 
-/** The CSS colour for one */
+/** The CSS colour for one, as an avatar's fill */
 export const personColor = (color: number) => `var(--sf-person-${color % PERSON_COLORS})`;
+
+/** The same colour in a shade that reads as text in the theme shown */
+export const personTextColor = (color: number) => `var(--sf-person-${color % PERSON_COLORS}-text)`;

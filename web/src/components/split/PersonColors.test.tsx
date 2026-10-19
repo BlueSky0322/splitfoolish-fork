@@ -3,10 +3,10 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
 import { fakeServer, item, renderApp, setupAppTests, splitDetail } from '../../testing/app';
-import { personColor, personColors } from '../../split/person-colors';
+import { personColor, personColors, personTextColor } from '../../split/person-colors';
 
-// Each person in a split has a colour of their own, on their avatar and beside their
-// name, so people are easier to tell apart
+// Each person in a split has a colour of their own, filling their avatar and colouring
+// their name, so people are easier to tell apart
 
 setupAppTests();
 
@@ -44,6 +44,17 @@ describe("people's colours", () => {
       .map((el) => el.closest<HTMLElement>('.mantine-Avatar-placeholder')?.style.background);
     expect(yours.length).toBeGreaterThan(0);
     expect(yours.every((fill) => fill === 'var(--sf-avatar)')).toBe(true);
+  });
+
+  test("a person's name is in their colour, wherever it is written", async () => {
+    renderApp(fakeServer(trip()), '/?s=trip');
+    await screen.findByText('Taxi');
+    const colors = personColors('trip', trip().people);
+    const ann = personTextColor(colors.get('ann')!);
+    const named = within(screen.getByRole('main')).getAllByText('Ann', { exact: true });
+    // The people in the header, the payer of Taxi, and the balances at least
+    expect(named.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(named.map((el) => el.style.color))).toEqual(new Set([ann]));
   });
 
   test('an account in the sharing list shows in the colour of the person it is', async () => {

@@ -124,7 +124,7 @@ it current.
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
-  `PersonAvatar`, `PersonDot` and account avatars in the split read them.
+  `PersonAvatar`, `PersonName` and account avatars and names in the split read them.
 - API: [worker/bill/changes.ts](../worker/bill/changes.ts) applies a batch of changes
   (all or none, `saveChanges`, which the MCP tools use too), checking each against the
   bill as it stands
