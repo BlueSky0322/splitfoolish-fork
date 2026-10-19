@@ -208,16 +208,6 @@
   z-index: 1;
 }
 
-/* In an item card they sit just before the amount (96px wide, after the row's 16px
-   padding and 12px gap), over "Your share", so the amount stays in view */
-.itemRow .rowActions {
-  right: 124px;
-}
-
-.mobile .itemRow .rowActions {
-  right: 8px;
-}
-
 /* Keyboard focus only: a dialog closed with the mouse hands focus back to the Edit
    button, which shouldn't keep the actions showing */
 .itemRow:hover .rowActions,
