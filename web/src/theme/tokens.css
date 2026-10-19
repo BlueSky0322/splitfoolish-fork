@@ -94,6 +94,12 @@ h3,
   box-shadow: var(--sf-shadow-lg);
 }
 
+/* A segmented control's highlight and labels stay layered inside it, so sticky footers
+   (the item form's Add item and Save) pass over it when the form scrolls */
+.mantine-SegmentedControl-root {
+  isolation: isolate;
+}
+
 :focus-visible {
   outline: 2px solid var(--sf-accent);
   outline-offset: 2px;
