@@ -46,6 +46,21 @@ describe('the split page', () => {
     expect(within(transfer.parentElement!).getByText(/^RM\s?30\.00$/)).toBeTruthy();
   });
 
+  test('an item for one person says who paid for whom', async () => {
+    const server = fakeServer(
+      splitDetail('trip', [
+        item({ id: 'gift', name: 'Gift', cost: 40, participantIds: ['ann'] }),
+        item({ id: 'taxi', name: 'Taxi', cost: 30 }),
+      ]),
+    );
+    renderApp(server, '/?s=trip');
+    const gift = (await screen.findByText('Gift')).closest('button')!;
+    expect(within(gift).getByText(readsAs('Ryan paid for Ann'))).toBeTruthy();
+    // Shared ones say how
+    const taxi = screen.getByText('Taxi').closest('button')!;
+    expect(within(taxi).queryByText(readsAs(/paid for/))).toBeNull();
+  });
+
   test('adds an item typed as a sum, and sends it to the server', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
