@@ -1,6 +1,5 @@
 import { FALLBACK_CURRENCY } from '../../utils/money';
 import { ActionIcon, Button, SegmentedControl } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { LockSimple, Rows, Table, UsersThree, X } from '@phosphor-icons/react';
 import { useCallback, useMemo, useState } from 'react';
 import type { Attachment } from '@shared/api';
@@ -17,6 +16,7 @@ import { plural } from '../../utils/text';
 import { usePhotos } from '../../split/usePhotos';
 import { ItemsSkeleton } from './layout/SplitSkeletons';
 import StateCard from '../ui/StateCard';
+import { showUndo } from '../common/undo-toast';
 import BalancePanel from './balances/BalancePanel';
 import DesktopSplitLayout from './layout/DesktopSplitLayout';
 import { MoveDateDialog } from './items/ItemSelection';
@@ -145,18 +145,21 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     );
   }
 
+  /** Moves the picked items to a day, with Undo to put each back on its own date */
   const moveSelected = (day: Date) => {
     const count = selection.count;
+    const before = state.items
+      .filter((i) => selection.selected.has(i.id))
+      .map(({ id, createdAt }) => ({ id, createdAt }));
     actions.moveItemsToDay([...selection.selected], day);
     setMoving(false);
     selection.clear();
-    notifications.show({
-      message: `Moved ${plural(count, 'item')} to ${day.toLocaleDateString(undefined, {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-      })}`,
+    const shown = day.toLocaleDateString(undefined, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
     });
+    showUndo(`Moved ${plural(count, 'item')} to ${shown}`, () => actions.restoreItemDates(before));
   };
 
   const selectionUi: SelectionUi = {

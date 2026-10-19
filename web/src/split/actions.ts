@@ -35,6 +35,8 @@ export interface SplitActions {
    * the rate it was recorded with
    */
   moveItemsToDay: (itemIds: string[], day: Date) => boolean;
+  /** Puts items back on the dates they had (Undo after moving them) */
+  restoreItemDates: (dates: { id: string; createdAt: number }[]) => boolean;
   /** Who everyone settles up through, or null for the fewest transfers */
   setDistributor: (personId: string | null) => boolean;
   /** Puts back an item that was just removed (Undo) */
@@ -178,6 +180,18 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
         moved = true;
       }
       return moved;
+    },
+    restoreItemDates: (dates) => {
+      let restored = false;
+      for (const { id, createdAt } of dates) {
+        const item = d.current().items.find((i) => i.id === id);
+        // Removed meanwhile, or already there
+        if (item == null || item.createdAt === createdAt) continue;
+        d.dispatch({ type: 'PATCH_ITEM', payload: { id, createdAt } });
+        d.queue({ op: 'setItemDate', id, createdAt });
+        restored = true;
+      }
+      return restored;
     },
     setDistributor: (personId) => {
       d.metaChanges.setDistributor(personId);
