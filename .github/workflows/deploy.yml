@@ -25,7 +25,8 @@ jobs:
       - run: yarn typecheck
       - run: yarn lint
       - run: yarn vitest run
-      - run: yarn build
+      # yarn build is tsc -p web then vite build; yarn typecheck above has done the tsc
+      - run: yarn vite build web
 
       - uses: actions/upload-artifact@v4
         with:

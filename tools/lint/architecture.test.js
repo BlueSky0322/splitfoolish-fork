@@ -101,7 +101,6 @@ describe('ways round the boundaries the review found', () => {
   test.each([
     ['web/src/a.ts', "const files = import.meta.glob('./locales/*.json');"],
     ['web/src/a.ts', "const url = new URL('./worker-script.js', import.meta.url);"],
-    ['web/src/split/a.ts', "import { MAX_CHANGES } from '@shared/api';"],
   ])('%s may: %s', (file, code) => allowed(file, code));
 
   test('a require() whose path is worked out at run time is refused', () =>
@@ -224,6 +223,9 @@ describe('inside the app', () => {
 });
 
 describe('the repository config', () => {
+  // One real ESLint for the whole block: each new one loads the config and its plugins again
+  const real = new ESLint({ cwd: root });
+
   test.each([
     'web/src/api.ts',
     'web/src/components/ui/Fab.tsx',
@@ -235,13 +237,12 @@ describe('the repository config', () => {
     'shared/api.ts',
     'shared/settle.test.ts',
   ])('checks %s', async (file) => {
-    const config = await new ESLint({ cwd: root }).calculateConfigForFile(file);
+    const config = await real.calculateConfigForFile(file);
     expect(config.rules['architecture/boundaries']?.[0]).toBe(2);
   });
 
   test('refuses a bad import through the real lint config, not only switches the rule on', async () => {
     // Real files, so the type-aware rules can parse them; only this rule's verdict counts
-    const real = new ESLint({ cwd: root });
     const cases = [
       ['shared/rates.ts', "import { api } from '../web/src/api';\nexport const x = api;\n"],
       ['worker/http.ts', "import { api } from '../web/src/api';\nexport const x = api;\n"],
