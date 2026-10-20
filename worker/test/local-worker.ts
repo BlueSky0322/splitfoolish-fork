@@ -282,10 +282,12 @@ export async function startLocalWorker(): Promise<LocalWorker> {
       env,
     );
     cleanups.push(() => stopGroup(migrate.child));
+    // The deadline is cleared once migrations finish, so it doesn't keep the run going
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     const migrated = await Promise.race([
       migrate.exited,
-      sleep(MIGRATE_TIMEOUT_MS).then(() => 'late'),
-    ]);
+      new Promise<'late'>((r) => (deadline = setTimeout(() => r('late'), MIGRATE_TIMEOUT_MS))),
+    ]).finally(() => clearTimeout(deadline));
     if (migrated !== 0) {
       throw new Error(
         migrated === 'late'

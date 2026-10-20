@@ -170,7 +170,8 @@ describe("the team's signing keys", () => {
   });
 
   test('stops accepting a retired key once the key set is next fetched', async () => {
-    vi.mocked(fetch).mockImplementation(() => publishedKeys([otherKey, 'next-key']));
+    // Its own key id: the rotation case's 'next-key' may already be kept from before
+    vi.mocked(fetch).mockImplementation(() => publishedKeys([otherKey, 'retirement-key']));
     try {
       // A token naming a key not kept yet makes the key set be fetched again
       await getUserEmail(requestWith(await sign(validClaims(), otherKey, 'unseen-key')), env);

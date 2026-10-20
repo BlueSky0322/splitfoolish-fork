@@ -22,10 +22,13 @@ const namesByCode = () => new Map(listCurrencies().map((c) => [c.value, c.name])
 // is upper case and letters only, and a search also matches names ("YEN" finds JPY)
 const CurrencySelect = ({ value, onChange, first = [], ...props }: CurrencySelectProps) => {
   const names = useMemo(namesByCode, []);
-  // About 170 codes: cheap enough to list afresh each time
-  const data = [...new Set([...first, value, ...COMMON_CURRENCIES, ...names.keys()])].map(
-    (code) => ({ value: code, label: code }),
-  );
+  // About 170 codes, listed only while the list is open: closed, the select would still
+  // draw every one, each time the form around it changes
+  const [open, setOpen] = useState(false);
+  const codes = open
+    ? [...new Set([...first, value, ...COMMON_CURRENCIES, ...names.keys()])]
+    : [value];
+  const data = codes.map((code) => ({ value: code, label: code }));
   const [search, setSearch] = useState(value);
   useEffect(() => setSearch(value), [value]);
 
@@ -47,6 +50,14 @@ const CurrencySelect = ({ value, onChange, first = [], ...props }: CurrencySelec
       data={data}
       value={value}
       onChange={(v) => v && onChange(v)}
+      onDropdownOpen={() => {
+        setOpen(true);
+        props.onDropdownOpen?.();
+      }}
+      onDropdownClose={() => {
+        setOpen(false);
+        props.onDropdownClose?.();
+      }}
       allowDeselect={false}
       searchable
       searchValue={search}

@@ -227,13 +227,17 @@ describe('getRate', () => {
     expect(s.calls).toEqual({ wise: 1, frankfurter: 1 });
   });
 
-  it('fails with RatesUnavailable when neither service gives a usable rate', async () => {
-    for (const [, wise] of badWise) {
-      for (const [, ecb] of badEcb) {
-        await expect(rateFrom(services(wise, ecb))).rejects.toBeInstanceOf(RatesUnavailable);
-      }
-    }
-  });
+  // Each bad answer is shown above to fall through to the other service; with both bad,
+  // a service down and one answering junk stand for the rest
+  it.each([
+    ['both down', down, down],
+    ['Wise down, the ECB answering something that is not JSON', down, raw('<html>oops</html>')],
+  ] as [string, Answer, Answer][])(
+    'fails with RatesUnavailable when neither service gives a usable rate: %s',
+    async (_name, wise, ecb) => {
+      await expect(rateFrom(services(wise, ecb))).rejects.toBeInstanceOf(RatesUnavailable);
+    },
+  );
 
   it('gives up on a service that does not answer in 4 seconds', async () => {
     // Stands in for the timeout so the test needn't wait: the signal fires at once

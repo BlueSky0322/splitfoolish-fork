@@ -54,6 +54,15 @@ const slow = (server: FakeServer) => [
   holdNext(server, 'GET', '/api/invites'),
 ];
 
+/**
+ * Lets held answers go and takes the device-start marker away once the test is done,
+ * before the shared clean-up waits for every request to be answered
+ */
+function finish(held: { release: () => void }[], done = () => {}) {
+  held.forEach((h) => h.release());
+  done();
+}
+
 const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
 
 describe('starting with the server out of reach', () => {
@@ -61,24 +70,28 @@ describe('starting with the server out of reach', () => {
     const server = fakeServer();
     await keptFromLastTime(server);
     const done = openedFromDevice();
-    slow(server);
-    renderApp(server);
-
-    expect((await screen.findAllByText('Kept trip', {}, { timeout: 4000 })).length).toBeGreaterThan(
-      0,
-    );
-    done();
+    const held = slow(server);
+    try {
+      renderApp(server);
+      expect(
+        (await screen.findAllByText('Kept trip', {}, { timeout: 4000 })).length,
+      ).toBeGreaterThan(0);
+    } finally {
+      finish(held, done);
+    }
   });
 
   test('opened from the network, nothing kept shows until the server says who is signed in', async () => {
     const server = fakeServer();
     await keptFromLastTime(server);
     const held = slow(server);
-    renderApp(server);
-
-    await wait(2500);
-    expect(screen.queryByText('Kept trip')).toBeNull();
-    held.forEach((h) => h.release());
+    try {
+      renderApp(server);
+      await wait(2500);
+      expect(screen.queryByText('Kept trip')).toBeNull();
+    } finally {
+      finish(held);
+    }
     // Signed in as the server says, and its list shown
     expect(await screen.findByText(RYAN)).toBeTruthy();
     expect(await screen.findByText('No splits yet. Start one with New split.')).toBeTruthy();
@@ -91,13 +104,15 @@ describe('starting with the server out of reach', () => {
     await keptFromLastTime(server);
     server.health = 'down';
     const done = openedFromDevice();
-    renderApp(server);
-
-    expect((await screen.findAllByText('Kept trip')).length).toBeGreaterThan(0);
-    // Signed in as Ryan, from his saved profile
-    expect(await screen.findByText(RYAN)).toBeTruthy();
-    expect(screen.queryByText("Couldn't reach Splitfoolish")).toBeNull();
-    done();
+    try {
+      renderApp(server);
+      expect((await screen.findAllByText('Kept trip')).length).toBeGreaterThan(0);
+      // Signed in as Ryan, from his saved profile
+      expect(await screen.findByText(RYAN)).toBeTruthy();
+      expect(screen.queryByText("Couldn't reach Splitfoolish")).toBeNull();
+    } finally {
+      done();
+    }
   });
 
   test('someone else signed in meanwhile: what Ryan kept goes, and the app starts afresh', async () => {
@@ -106,7 +121,8 @@ describe('starting with the server out of reach', () => {
     // Ann signed in on Ryan's device; the server says so once it answers
     server.me = { ...server.me, email: 'ann@example.com', displayName: 'Ann' } satisfies Profile;
     const done = openedFromDevice();
-    const [me] = slow(server);
+    const held = slow(server);
+    const [me] = held;
     const reload = vi.fn();
     // The page's address as it is, but reloading is only noted: jsdom can't
     const real = window.location;
@@ -114,13 +130,16 @@ describe('starting with the server out of reach', () => {
       'location',
       new Proxy({}, { get: (_, key) => (key === 'reload' ? reload : Reflect.get(real, key)) }),
     );
-    renderApp(server);
-    await screen.findAllByText('Kept trip', {}, { timeout: 4000 });
+    try {
+      renderApp(server);
+      await screen.findAllByText('Kept trip', {}, { timeout: 4000 });
 
-    me.release();
-    await vi.waitFor(() => expect(reload).toHaveBeenCalled());
-    expect(await get('home-v2')).toBeUndefined();
-    expect(localStorage.getItem(LAST_EMAIL_KEY)).toBe('ann@example.com');
-    done();
+      me.release();
+      await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+      expect(await get('home-v2')).toBeUndefined();
+      expect(localStorage.getItem(LAST_EMAIL_KEY)).toBe('ann@example.com');
+    } finally {
+      finish(held, done);
+    }
   });
 });
