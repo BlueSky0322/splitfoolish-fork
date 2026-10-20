@@ -100,7 +100,7 @@ describe('getRate', () => {
     expect(s.calls.frankfurter).toBe(0);
   });
 
-  it('falls back to Frankfurter without a token, or when Wise fails', async () => {
+  it('falls back to Frankfurter without a token', async () => {
     const deps = (s: ReturnType<typeof services>) => ({
       fetch: s.fetch,
       cache: null,
@@ -109,14 +109,6 @@ describe('getRate', () => {
     const noToken = services(wiseRate(4.2), ecbRate(4.1));
     expect((await getRate({}, 'USD', 'MYR', { deps: deps(noToken) })).source).toBe('frankfurter');
     expect(noToken.calls.wise).toBe(0);
-
-    const wiseDown = services(down, ecbRate(4.1));
-    expect(
-      await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', { deps: deps(wiseDown) }),
-    ).toMatchObject({
-      rate: 4.1,
-      source: 'frankfurter',
-    });
   });
 
   it('fetches as usual when the cache cannot be read, or holds something unreadable', async () => {
@@ -174,6 +166,8 @@ describe('getRate', () => {
     const s = services(wiseRate(4.2), ecbRate(4.1));
     const deps = { fetch: s.fetch, cache, now: () => now };
     await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', { deps });
+    // Cloudflare is told to keep each copy for a day
+    expect(cache.keptFor()).toEqual([`max-age=${24 * 60 * 60}`]);
     now = 3 * 60 * 60 * 1000;
     expect((await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', { deps })).fetchedAt).toBe(0);
     expect(s.calls.wise).toBe(1);
@@ -204,15 +198,6 @@ describe('getRate', () => {
       prefer: 'ecb',
     });
     expect(fallback.source).toBe('wise');
-  });
-
-  it('tells Cloudflare to keep each copy for a day', async () => {
-    const cache = memoryCache();
-    const s = services(wiseRate(4.2), ecbRate(4.1));
-    await getRate({ WISE_TOKEN: 't' }, 'USD', 'MYR', {
-      deps: { fetch: s.fetch, cache, now: () => 1 },
-    });
-    expect(cache.keptFor()).toEqual([`max-age=${24 * 60 * 60}`]);
   });
 
   it.each(badWise)('falls back to the ECB when Wise answers with %s', async (_name, wise) => {

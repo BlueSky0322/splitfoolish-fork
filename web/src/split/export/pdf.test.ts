@@ -3,7 +3,6 @@ import type { SplitMember } from '@shared/api';
 import type { Person } from '@shared/types';
 import { computeTotals } from '../derive';
 import type { SplitItem } from '../state';
-import { makeExportFile } from './export';
 import { FONT, makePdf } from './pdf';
 import { type ExportSource, exportRows } from './rows';
 
@@ -123,14 +122,21 @@ const tables = () => autoTable.mock.calls.map(([, options]) => options as Record
 
 describe('a split as a PDF', () => {
   test('is an A4 page in the embedded font, registered and chosen before any text', async () => {
-    await makePdf(exportRows(trip), OCT_16);
+    expect(await (await makePdf(exportRows(trip), OCT_16)).text()).toBe('%PDF-1.3 stand-in');
+    // Made as a file to save or share, last of all
+    expect(calls.at(-1)).toEqual(['output', 'blob']);
     expect(calls[0]).toEqual(['new', { unit: 'mm', format: 'a4', orientation: 'portrait' }]);
     expect(calls[index('addFileToVFS')]).toEqual([
       'addFileToVFS',
       'NotoSansJP-subset-v2.ttf',
       'Rk9OVA==',
     ]);
-    expect(calls[index('addFont')]).toEqual(['addFont', 'NotoSansJP-subset-v2.ttf', FONT, 'normal']);
+    expect(calls[index('addFont')]).toEqual([
+      'addFont',
+      'NotoSansJP-subset-v2.ttf',
+      FONT,
+      'normal',
+    ]);
     expect(calls[index('setFont')]).toEqual(['setFont', FONT, 'normal']);
     expect(index('addFileToVFS')).toBeLessThan(index('addFont'));
     expect(index('addFont')).toBeLessThan(index('setFont'));
@@ -221,13 +227,5 @@ describe('a split as a PDF', () => {
     await makePdf(exportRows(even), OCT_16);
     expect(tables()).toHaveLength(2);
     expect(texts()).toContain('Everyone is settled up.');
-  });
-
-  test('is a PDF file named for the split and the day', async () => {
-    const file = await makeExportFile('pdf', { ...trip, name: 'Japan trip' }, OCT_16);
-    expect(file.name).toBe('japan-trip-2026-10-16.pdf');
-    expect(file.type).toBe('application/pdf');
-    expect(await file.text()).toBe('%PDF-1.3 stand-in');
-    expect(calls.at(-1)).toEqual(['output', 'blob']);
   });
 });

@@ -107,15 +107,11 @@ describe('retrying a conversion', () => {
 });
 
 describe('how long retries wait', () => {
+  // 30s, then these 8, come to under the day a queued message is kept
   test('doubles from a minute, up to an hour', () => {
     expect([1, 2, 3, 4, 5, 6, 7, 8, 9].map(retryDelaySeconds)).toEqual([
       60, 120, 240, 480, 960, 1920, 3600, 3600, 3600,
     ]);
-  });
-
-  test('all 8 retries fit in the day a queued message is kept', () => {
-    const total = [1, 2, 3, 4, 5, 6, 7, 8].reduce((sum, n) => sum + retryDelaySeconds(n), 30);
-    expect(total).toBeLessThan(24 * 60 * 60);
   });
 
   test('the first retry waits half a minute; tests can set every wait', () => {
