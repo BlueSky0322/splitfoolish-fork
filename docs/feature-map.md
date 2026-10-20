@@ -120,9 +120,12 @@ it current.
   [SplitPageContext](../web/src/components/split/SplitPageContext.tsx) and the bill from
   [SplitStateContext](../web/src/split/SplitStateContext.tsx).
 - Form logic: [split/item-input.ts](../web/src/split/item-input.ts) and
-  [split/bill-rules.ts](../web/src/split/bill-rules.ts). An item added from a day's
-  heading opens the form with that day (`openDialog({ kind: 'add', day })`), and is added
-  on it at the time it is now ([utils/date-input.ts](../web/src/utils/date-input.ts)).
+  [split/bill-rules.ts](../web/src/split/bill-rules.ts). The form's date uses
+  [DayField](../web/src/components/split/items/DayField.tsx), as Move to a day does: a new
+  item goes on the day picked at the time it is now (from a day's heading, that day:
+  `openDialog({ kind: 'add', day })`), and an edit to another day keeps its time of day
+  (`updateItem(id, input, { day })` queues the date before the edit, so the server
+  converts on the new day) ([utils/date-input.ts](../web/src/utils/date-input.ts)).
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and

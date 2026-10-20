@@ -323,7 +323,10 @@ function apply(server: FakeServer, split: SplitDetail, change: Change) {
       split.items.push(change.item);
       break;
     case 'updateItem':
-      split.items = split.items.map((i) => (i.id === change.item.id ? change.item : i));
+      // Keeps the date it has, as the server does: a new date comes with setItemDate
+      split.items = split.items.map((i) =>
+        i.id === change.item.id ? { ...change.item, createdAt: i.createdAt } : i,
+      );
       break;
     case 'removeItem':
       split.items = split.items.filter((i) => i.id !== change.id);
