@@ -88,10 +88,7 @@ describe('grouping items', () => {
     ]);
     expect(groups.map((g) => g.subtotalCents)).toEqual([33800, 13575]);
     // Each day knows where it starts, so an item can be added to it
-    for (const g of groups) {
-      const d = new Date(g.items[0].createdAt);
-      expect(g.day).toBe(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime());
-    }
+    expect(groups.map((g) => g.day)).toEqual([day(10, 0), day(11, 0)]);
     expect(groupItems(items, 'payer', 'date', 'asc').every((g) => g.day == null)).toBe(true);
   });
 

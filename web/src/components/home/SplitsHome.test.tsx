@@ -31,15 +31,7 @@ describe('My splits', () => {
     expect(screen.queryAllByText('Loading your splits')).toHaveLength(0);
   });
 
-  test('lists your splits, and opens one', async () => {
-    renderApp(fakeServer(splitDetail('trip', [item({ id: 'dinner', name: 'Dinner', cost: 90 })])));
-    const user = userEvent.setup();
-    await user.click(await screen.findByText('Trip'));
-    expect(await screen.findByText('Dinner')).toBeTruthy();
-    expect(window.location.search).toBe('?s=trip');
-  });
-
-  test('shows where you stand in each split', async () => {
+  test('lists your splits with where you stand in each, and opens one', async () => {
     renderApp(
       fakeServer(
         splitDetail('trip', [
@@ -51,6 +43,10 @@ describe('My splits', () => {
     // Ryan paid 90 and Ann 30, split evenly: Ryan is owed 30
     expect(await screen.findByText("You're owed")).toBeTruthy();
     expect((await screen.findAllByText(/RM\s?30\.00/)).length).toBeGreaterThan(0);
+
+    await userEvent.setup().click(screen.getByText('Trip'));
+    expect(await screen.findByText('Dinner')).toBeTruthy();
+    expect(window.location.search).toBe('?s=trip');
   });
 
   test('makes a new split, and goes to it', async () => {
@@ -78,10 +74,11 @@ describe('My splits', () => {
     // Ann owes Ryan 45 of the 90
     expect(within(row).getByText('45.00')).toBeTruthy();
 
+    // A quick swipe shows Archive; only a tap and hold drags (below)
     fireEvent.touchStart(row, { touches: [{ clientX: 300, clientY: 100 }] });
     fireEvent.touchMove(row, { touches: [{ clientX: 120, clientY: 104 }] });
     fireEvent.touchEnd(row);
-    await user.click(screen.getByRole('button', { name: 'Archive' }));
+    await user.click(await screen.findByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(screen.queryByText('Trip')).toBeNull());
     await waitFor(() => expect(server.archived.has('trip')).toBe(true), { timeout: 3000 });
 
@@ -120,15 +117,6 @@ describe('My splits', () => {
     await waitFor(() => expect([...server.splits.keys()]).toEqual(['alps', 'zurich', 'trip']));
     // Still on My splits: the drop didn't open the split
     expect(window.location.search).toBe('');
-  });
-
-  test('on a phone, a quick swipe still shows Archive rather than dragging', async () => {
-    renderApp(fakeServer(splitDetail('trip')), '/', { size: 'phone' });
-    const row = (await screen.findByText('Trip', {}, { timeout: 3000 })).closest('button')!;
-    fireEvent.touchStart(row, { touches: [{ clientX: 300, clientY: 34 }] });
-    fireEvent.touchMove(row, { touches: [{ clientX: 120, clientY: 38 }] });
-    fireEvent.touchEnd(row);
-    expect(await screen.findByRole('button', { name: 'Archive' })).toBeTruthy();
   });
 
   test('on a phone, search finds items and splits by name, and opens what you tap', async () => {

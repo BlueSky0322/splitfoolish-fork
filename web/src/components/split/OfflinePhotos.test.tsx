@@ -211,26 +211,6 @@ describe('photos picked online', () => {
     return user;
   };
 
-  test('go straight up, in the order picked', async () => {
-    const server = fakeServer(trip());
-    const user = await openPhotos(server);
-    await pickPhotos(user, screen.getByRole('button', { name: 'Add photos' }), [
-      file('beach.jpg'),
-      file('sunset.jpg'),
-      file('pool.jpg'),
-    ]);
-
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(3),
-    );
-    expect(screen.queryByText('Waiting to upload')).toBeNull();
-    expect((await uploaded(server)).map((u) => u.photo)).toEqual([
-      'small beach.jpg',
-      'small sunset.jpg',
-      'small pool.jpg',
-    ]);
-  });
-
   test('one the server refuses is explained and not kept', async () => {
     const server = fakeServer(trip());
     server.failNext.photo = 409;
@@ -272,9 +252,19 @@ describe('adding the first photos', () => {
     );
     expect(screen.queryByText('Drop photos here')).toBeNull();
     expect(screen.getByRole('button', { name: /^Sort photos/ })).toBeTruthy();
+
+    // Then more from the page's Add photos: each goes straight up, in the order picked
+    await pickPhotos(user, screen.getByRole('button', { name: 'Add photos' }), [
+      file('sunset.jpg'),
+    ]);
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(3),
+    );
+    expect(screen.queryByText('Waiting to upload')).toBeNull();
     expect((await uploaded(server)).map((u) => u.photo)).toEqual([
       'small beach.jpg',
       'small pool.jpg',
+      'small sunset.jpg',
     ]);
   });
 

@@ -1876,32 +1876,8 @@ describe('changing a split currency', () => {
     expect(split.items[0]).toMatchObject({ cost: 5, original: { currency: 'MYR', amount: 10 } });
   }, 60_000);
 
-  it('a retry queued for an older currency change leaves the newer one as it is', async () => {
-    const { owner, id } = await splitToConvert();
-    const [older, newer] = [api.rates.newCurrency(), api.rates.newCurrency()];
-
-    // The first change fails, so a retry for it is queued
-    api.rates.down('wise', true);
-    api.rates.down('frankfurter', true);
-    await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: older });
-    await until(() => api.rates.asked('MYR', older) >= 2, 20, 'the first attempt');
-
-    // Changed again, and this one works straight away
-    api.rates.down('wise', false);
-    api.rates.down('frankfurter', false);
-    api.rates.set('MYR', newer, 0.25);
-    await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: newer });
-    await until(async () => (await listedTotal(owner, id)) === 250, 20, 'the newer change');
-
-    // The older change's retry now gets its rate too, and runs: it changes nothing
-    api.rates.set('MYR', older, 4);
-    await new Promise((r) => setTimeout(r, 8000));
-    expect(await listedTotal(owner, id)).toBe(250);
-    const split = (await api.call(owner, 'GET', `/api/splits/${id}`)).data;
-    expect(split).toMatchObject({ currency: newer, converting: false });
-    expect(split.items[0]).toMatchObject({ cost: 2.5, original: { currency: 'MYR', amount: 10 } });
-  }, 60_000);
-
+  // A retry for an older change leaving a newer one alone: reconvert.test.ts, on the real
+  // converter, without waiting here for a retry that would do nothing
   it('holds item changes until converted, and finishes once rates are back', async () => {
     const { owner, id, a } = await splitToConvert();
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import 'fake-indexeddb/auto';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
@@ -14,6 +14,7 @@ import {
   splitDetail,
 } from '../../testing/app';
 import { LIVE_REMOVED_CODE } from '@shared/api';
+import { CONVERT_POLL_MS } from '../../split/useSplit';
 
 setupAppTests();
 
@@ -271,6 +272,11 @@ describe('the split page', () => {
   });
 
   test('while the items are being converted, checks on them only while the app is on screen', async () => {
+    // Intervals only, set before the page starts checking; timeouts stay real, for waitFor
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const split = trip();
     split.converting = true;
     renderApp(fakeServer(split), '/?s=trip');
@@ -280,22 +286,35 @@ describe('the split page', () => {
         .mocked(fetch)
         .mock.calls.filter(([url, init]) => url === '/api/splits/trip' && init?.method === 'GET')
         .length;
-    const show = (state: 'visible' | 'hidden') => {
+    const show = async (state: 'visible' | 'hidden') => {
       Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
-      document.dispatchEvent(new Event('visibilitychange'));
+      // Async, so the check it starts is under way before looking for it
+      await act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+        return Promise.resolve();
+      });
     };
-    onTestFinished(() => show('visible'));
+    onTestFinished(() => {
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    });
+    const tick = () => act(() => vi.advanceTimersByTime(CONVERT_POLL_MS));
 
-    // In the background for longer than it waits between checks
-    show('hidden');
+    // On screen, it checks every few seconds
+    const start = loads();
+    await tick();
+    await waitFor(() => expect(loads()).toBeGreaterThan(start));
+
+    // In the background, it doesn't
+    await show('hidden');
     const before = loads();
-    await new Promise((resolve) => setTimeout(resolve, 3500));
+    await tick();
+    await tick();
     expect(loads()).toBe(before);
 
     // Back: checks straight away
-    show('visible');
+    await show('visible');
     await waitFor(() => expect(loads()).toBeGreaterThan(before));
-  }, 10_000);
+  });
 
   test('a dropped live connection reconnects and catches up', async () => {
     const server = fakeServer(trip());
