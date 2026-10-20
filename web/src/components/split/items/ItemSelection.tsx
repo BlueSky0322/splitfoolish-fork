@@ -1,4 +1,4 @@
-import { ActionIcon, Button, TextInput, Tooltip, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Button, Tooltip, UnstyledButton } from '@mantine/core';
 import { CalendarBlank, Check, Trash, X } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import type { RowSelection } from './useItemSelection';
@@ -6,6 +6,7 @@ import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import classes from './ItemSelection.module.css';
 import { plural } from '../../../utils/text';
 import { fromDateInput, isPastDay, toDateInput } from '../../../utils/date-input';
+import { DayField } from './DayField';
 
 // Picking several items at once to delete them or move them to another day. Phones
 // start with a long press on an item; computers with the checkbox that shows on hover.
@@ -183,9 +184,7 @@ export function MoveDateDialog({
   onMove: (day: Date) => void;
   onClose: () => void;
 }) {
-  const today = new Date();
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  const [value, setValue] = useState(toDateInput(today));
+  const [value, setValue] = useState(toDateInput(new Date()));
   useEffect(() => {
     if (opened) setValue(toDateInput(new Date()));
   }, [opened]);
@@ -206,31 +205,9 @@ export function MoveDateDialog({
           if (valid) onMove(day);
         }}
       >
-        <div className="flex gap-2">
-          {(
-            [
-              ['Today', today],
-              ['Yesterday', yesterday],
-            ] as const
-          ).map(([label, d]) => (
-            <UnstyledButton
-              key={label}
-              className={classes.chip}
-              data-selected={value === toDateInput(d) || undefined}
-              onClick={() => setValue(toDateInput(d))}
-            >
-              {label}
-            </UnstyledButton>
-          ))}
-        </div>
-        <TextInput
-          type="date"
-          label="Date"
+        <DayField
           value={value}
-          max={toDateInput(today)}
-          min="2000-01-01"
-          onChange={(e) => setValue(e.target.value)}
-          error={value && !valid ? 'Pick a day that has already come' : undefined}
+          onChange={setValue}
         />
         <p className="sf-muted text-xs">Each item keeps its time of day.</p>
         <div className="flex justify-end gap-2">

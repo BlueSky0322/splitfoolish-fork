@@ -66,10 +66,11 @@ describe('adding to a day', () => {
     await addSnacks(user, form);
     expect(dayKey((await savedSnacks(server)).createdAt)).toBe(dayKey(OCT_8));
 
-    // From the page's Add item button there's no date to pick: it's today
+    // From the page's Add item button the date is today, without the tag
     await user.click(screen.getByRole('button', { name: /^Add item$/ }));
     const plain = await screen.findByRole('dialog', { name: 'Add item' });
-    expect(within(plain).queryByLabelText(/^Date/)).toBeNull();
+    expect(within(plain).getByLabelText(/^Date/)).toHaveProperty('value', dayKey(Date.now()));
+    expect(within(plain).queryByText('From the day you picked')).toBeNull();
   });
 
   test('a day that has not come yet is refused', async () => {
@@ -107,5 +108,43 @@ describe('adding to a day', () => {
     const form = await screen.findByRole('dialog', { name: /Add item/ });
     await addSnacks(user, form);
     expect(dayKey((await savedSnacks(server)).createdAt)).toBe(dayKey(OCT_8));
+  });
+});
+
+describe('the date in the item form', () => {
+  test('a new item can go on yesterday with a tap', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Taxi');
+    await user.click(screen.getByRole('button', { name: /^Add item$/ }));
+    const form = await screen.findByRole('dialog', { name: 'Add item' });
+    await user.click(within(form).getByRole('button', { name: 'Yesterday' }));
+    const now = new Date();
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+    expect(within(form).getByLabelText(/^Date/)).toHaveProperty('value', dayKey(yesterday));
+    await addSnacks(user, form);
+    expect(dayKey((await savedSnacks(server)).createdAt)).toBe(dayKey(yesterday));
+  });
+
+  test('editing an item moves it to another day, keeping its time of day', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Taxi'));
+    const form = await screen.findByRole('dialog', { name: 'Edit item' });
+    expect(within(form).getByLabelText(/^Date/)).toHaveProperty('value', dayKey(OCT_8));
+    expect(within(form).queryByText('It keeps its time of day.')).toBeNull();
+    fireEvent.change(within(form).getByLabelText(/^Date/), { target: { value: dayKey(OCT_10) } });
+    expect(within(form).getByText('It keeps its time of day.')).toBeTruthy();
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      const taxi = server.splits.get('trip')!.items.find((i) => i.id === 'taxi')!;
+      expect(dayKey(taxi.createdAt)).toBe(dayKey(OCT_10));
+    });
+    const taxi = server.splits.get('trip')!.items.find((i) => i.id === 'taxi')!;
+    expect(new Date(taxi.createdAt).getHours()).toBe(new Date(OCT_8).getHours());
+    expect(new Date(taxi.createdAt).getMinutes()).toBe(new Date(OCT_8).getMinutes());
   });
 });

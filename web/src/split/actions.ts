@@ -6,6 +6,7 @@ import { newId } from '../utils/id';
 import { atRate, removalMessage } from './bill-rules';
 import { type SplitMeta } from './state';
 import type { MetaChanges, SplitAction, SplitState } from './state';
+import { keepTimeOf } from '../utils/date-input';
 
 // What can be done to an open split: each checks the change, shows it straight away
 // and queues it to be saved (see useSplit, which does the saving)
@@ -28,7 +29,11 @@ export interface SplitActions {
    * createdAt dates it in the past (a duplicate keeping its date); now when absent.
    */
   addItem: (item: ItemInput, options?: { id?: string; createdAt?: number }) => boolean;
-  updateItem: (itemId: string, item: ItemInput) => boolean;
+  /**
+   * day moves it to another day as well, keeping its time of day; the date goes first, so
+   * the server converts a new currency at that day's rate
+   */
+  updateItem: (itemId: string, item: ItemInput, options?: { day?: Date }) => boolean;
   removeItem: (itemId: string) => boolean;
   /**
    * Moves items to another day, each keeping its time of day (never later than now) and
@@ -148,11 +153,15 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
       d.queue({ op: 'addItem', item });
       return true;
     },
-    updateItem: (itemId, input) => {
+    updateItem: (itemId, input, { day } = {}) => {
       const existing = d.current().items.find((i) => i.id === itemId);
       // Removed meanwhile, say by someone else
       if (existing == null) return refuse('That item has been removed');
-      const item = { id: itemId, createdAt: existing.createdAt, ...input };
+      const createdAt = day
+        ? keepTimeOf(day, existing.createdAt || Date.now())
+        : existing.createdAt;
+      if (createdAt !== existing.createdAt) d.queue({ op: 'setItemDate', id: itemId, createdAt });
+      const item = { id: itemId, createdAt, ...input };
       d.dispatch({ type: 'UPDATE_ITEM', payload: item });
       if (input.original || existing.original) d.reloadAfterSave();
       d.queue({ op: 'updateItem', item });
@@ -170,10 +179,7 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
       let moved = false;
       for (const item of d.current().items) {
         if (!ids.has(item.id)) continue;
-        const at = new Date(day);
-        const was = new Date(item.createdAt || now);
-        at.setHours(was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds());
-        const createdAt = Math.min(at.getTime(), now);
+        const createdAt = keepTimeOf(day, item.createdAt || now);
         if (createdAt === item.createdAt) continue;
         d.dispatch({ type: 'PATCH_ITEM', payload: { id: item.id, createdAt } });
         d.queue({ op: 'setItemDate', id: item.id, createdAt });

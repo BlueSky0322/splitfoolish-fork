@@ -1,0 +1,28 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+}
+
+.chip {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--sf-divider);
+  font-size: 14px;
+}
+
+.chip[data-selected] {
+  border-color: var(--sf-accent);
+  color: var(--sf-accent);
+}
+
+.highlighted {
+  border-color: var(--sf-accent);
+  box-shadow: 0 0 0 1px var(--sf-accent);
+}

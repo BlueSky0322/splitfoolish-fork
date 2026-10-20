@@ -25,3 +25,11 @@ export function atTimeNow(day: Date) {
   at.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
   return Math.min(at.getTime(), now.getTime());
 }
+
+/** That day at the time of day `at` has, never later than now (moving an item to a day) */
+export function keepTimeOf(day: Date, at: number) {
+  const was = new Date(at);
+  const moved = new Date(day);
+  moved.setHours(was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds());
+  return Math.min(moved.getTime(), Date.now());
+}

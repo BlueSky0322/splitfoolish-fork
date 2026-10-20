@@ -138,6 +138,23 @@ describe('split actions', () => {
     });
   });
 
+  test('an edit to another day moves it first, keeping its time, then saves the edit', () => {
+    const { actions, queued, state } = setup();
+    const { id: _, createdAt: __, ...input } = item({ name: 'Late dinner' });
+    expect(actions.updateItem('i1', input, { day: new Date(2026, 9, 12) })).toBe(true);
+    const moved = new Date(2026, 9, 12, 19, 30).getTime();
+    // The date goes first, so the server converts the edit on its new day
+    expect(queued.map((c) => c.op)).toEqual(['setItemDate', 'updateItem']);
+    expect(queued[0]).toEqual({ op: 'setItemDate', id: 'i1', createdAt: moved });
+    expect(queued[1]).toMatchObject({ item: { id: 'i1', createdAt: moved } });
+    expect(state().items[0]).toMatchObject({ name: 'Late dinner', createdAt: moved });
+
+    // Its own day again: no date change is queued
+    queued.length = 0;
+    actions.updateItem('i1', input, { day: new Date(2026, 9, 12) });
+    expect(queued.map((c) => c.op)).toEqual(['updateItem']);
+  });
+
   test('a removed item is gone from the bill and its removal is queued', () => {
     const { actions, queued, state } = setup([item(), item({ id: 'i2' })]);
     expect(actions.removeItem('i1')).toBe(true);
