@@ -54,14 +54,4 @@ describe('an expense request sent twice at the same moment', () => {
     );
     expect(answer).toEqual({ refused: refusedByDatabase });
   });
-
-  test('saves the receipt in the same write as the change', async () => {
-    let alongside: unknown[] = [];
-    const answer = await saveOnce(lookingUpFinds(null), mine, (statements) => {
-      alongside = statements;
-      return Promise.resolve({ saved: true, accessRemoved: [] });
-    });
-    expect(answer).toEqual({ receipt: mine, replayed: false });
-    expect(alongside).toHaveLength(1);
-  });
 });

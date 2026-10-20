@@ -164,12 +164,20 @@ describe('saving while the app is in the background or closing', () => {
 });
 
 describe('the page coming back to the foreground', () => {
-  test('sends what was kept for splits not open, and refreshes what is shown', async () => {
+  test('sends nothing while in the background, then what was kept once back', async () => {
     const { sent } = server();
     const refresh = vi.fn();
     onTestFinished(syncWhenOnline(refresh));
-    showPage('hidden');
     await writeOutbox('trip', queued(2));
+
+    // Going to the background sends nothing: a send would have reached the server and
+    // emptied the outbox by now
+    showPage('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sent).toEqual([]);
+    expect(await readOutbox('trip')).toHaveLength(2);
+    expect(refresh).not.toHaveBeenCalled();
 
     showPage('visible');
     document.dispatchEvent(new Event('visibilitychange'));
@@ -184,20 +192,6 @@ describe('the page coming back to the foreground', () => {
     await writeOutbox('trip', queued(1));
     window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
     await vi.waitFor(() => expect(sent).toEqual([[change(1)]]));
-  });
-
-  test('sends nothing while it stays in the background', async () => {
-    const { sent } = server();
-    onTestFinished(syncWhenOnline(() => {}));
-    await writeOutbox('trip', queued(1));
-    showPage('hidden');
-    document.dispatchEvent(new Event('visibilitychange'));
-    await flushOfflineChanges().then(
-      () => undefined,
-      () => undefined,
-    );
-    // Only the call above sent it, not the page going to the background
-    expect(sent).toEqual([[change(1)]]);
   });
 });
 

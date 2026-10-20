@@ -31,7 +31,7 @@ export function useSplitActions(): SplitActions {
   return value;
 }
 
-const CONVERT_POLL_MS = 3000;
+export const CONVERT_POLL_MS = 3000;
 
 // Loads a split and keeps it current: a copy saved on the device shows first, other
 // people's changes arrive live, and this device's changes show straight away and are

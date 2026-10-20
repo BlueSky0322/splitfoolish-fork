@@ -109,11 +109,18 @@ async function openExportOnPhone(server = fakeServer(trip())) {
 
 describe('exporting a split on a computer', () => {
   test.each([
-    { kind: 'CSV', extension: 'csv', type: 'text/csv' },
-    { kind: 'PDF', extension: 'pdf', type: 'application/pdf' },
+    { kind: 'CSV', extension: 'csv', type: 'text/csv', starts: '\uFEFFDate,Item', has: 'Ann,Ryan' },
+    // A real PDF, with the font from /fonts embedded, cut down to the characters used
+    {
+      kind: 'PDF',
+      extension: 'pdf',
+      type: 'application/pdf',
+      starts: '%PDF-',
+      has: '/BaseFont /NotoSansJP',
+    },
   ])(
     '$kind downloads, even where the browser has a share sheet for files',
-    async ({ kind, extension, type }) => {
+    async ({ kind, extension, type, starts, has }) => {
       // Windows and macOS browsers can share files, but their sheet only offers to copy
       const { saved, shared } = watchFiles(() => Promise.resolve());
       const { user, dialog } = await openExport();
@@ -122,25 +129,14 @@ describe('exporting a split on a computer', () => {
       await waitFor(() => expect(saved).toHaveLength(1), { timeout: 10_000 });
       expect(saved[0].name).toBe(`trip-${isoDate(Date.now())}.${extension}`);
       expect(saved[0].type).toBe(type);
+      const contents = await readFile(saved[0]);
+      expect(contents.startsWith(starts)).toBe(true);
+      expect(contents).toContain(has);
       expect(shared).toEqual([]);
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Export' })).toBeNull());
     },
     20_000,
   );
-
-  test('PDF downloads a PDF written in the font from /fonts', async () => {
-    const { saved } = watchFiles();
-    const { user, dialog } = await openExport();
-    await user.click(dialog.getByRole('button', { name: 'PDF' }));
-
-    await waitFor(() => expect(saved).toHaveLength(1), { timeout: 15_000 });
-    expect(saved[0].name).toBe(`trip-${isoDate(Date.now())}.pdf`);
-    expect(saved[0].type).toBe('application/pdf');
-    const pdf = await readFile(saved[0]);
-    expect(pdf.startsWith('%PDF-')).toBe(true);
-    // The font is embedded, cut down to the characters used
-    expect(pdf).toContain('/BaseFont /NotoSansJP');
-  }, 20_000);
 });
 
 describe('exporting a split on a phone', () => {
