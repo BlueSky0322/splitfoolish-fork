@@ -101,7 +101,7 @@ describe('the service worker, sending changes too big to go all at once', () => 
       change: { op: 'renamePerson', id: `p${i}`, name: '漢'.repeat(MAX_NOTES_LENGTH) },
     }));
 
-  test('keeps each request under the size the server takes, and sends them all in order', async () => {
+  test('keeps each request under the size the server takes, splitting where the app would', async () => {
     const all = bulky(30);
     await keep('ryan@example.com', all);
     const { outcome, fetch, batches } = await backgroundSync(ok);
@@ -110,19 +110,14 @@ describe('the service worker, sending changes too big to go all at once', () => 
     for (const [, init] of fetch.mock.calls) {
       expect(new Blob([init.body as string]).size).toBeLessThanOrEqual(MAX_CHANGES_BYTES);
     }
-    expect(batches.flat()).toEqual(all.map((q) => q.change));
-    expect(await kept()).toBeUndefined();
-  });
-
-  test('splits a queue where the app would', async () => {
-    const all = bulky(30);
-    await keep('ryan@example.com', all);
-    const { batches } = await backgroundSync(ok);
+    // The same requests the app makes, every change sent once and in order
     const app: number[] = [];
     for (let left = all; left.length > 0; left = left.slice(app[app.length - 1])) {
       app.push(nextBatch(left).length);
     }
     expect(batches.map((b) => b.length)).toEqual(app);
+    expect(batches.flat()).toEqual(all.map((q) => q.change));
+    expect(await kept()).toBeUndefined();
   });
 
   test('still sends a change bigger than that on its own', async () => {

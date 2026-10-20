@@ -38,19 +38,10 @@ describe('stillToSend', () => {
 });
 
 describe('what a failed send means', () => {
-  test.each([
-    [new NetworkError('No connection'), 'retry'],
-    [new ApiError(503, 'Converting'), 'retry'],
-    [new ApiError(500, 'Something went wrong'), 'retry'],
-    [new ApiError(429, 'Too many changes'), 'retry'],
-    [new ApiError(401, 'Not signed in'), 'retry'],
-    [new ApiError(404, 'Not found'), 'gone'],
-    [new ApiError(409, 'Invalid item'), 'refused'],
-    [new ApiError(400, 'Send 1-50 changes'), 'refused'],
-    // Anything else (storage failing, say) isn't the change's fault either
-    [new Error('IndexedDB is closed'), 'retry'],
-  ])('%s: %s', (err, kind) => {
-    expect(classifySaveFailure(err)).toBe(kind);
+  // Each answer from the server is read through the real app and service worker in
+  // sw.test.ts; this is what no answer covers
+  test("anything else (storage failing, say) is not the change's fault, so is tried again", () => {
+    expect(classifySaveFailure(new Error('IndexedDB is closed'))).toBe('retry');
   });
 
   test('the service worker and pending creates retry the same answers from the server', () => {

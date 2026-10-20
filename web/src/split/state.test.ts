@@ -2,7 +2,7 @@ import { produce } from 'immer';
 import { describe, expect, test } from 'vitest';
 import type { Item, Person } from '@shared/types';
 import type { SplitAction, SplitState } from './state';
-import { splitReducer, toApiItem, toClientItem } from './state';
+import { splitReducer, toApiItem } from './state';
 
 const ann: Person = { id: 'a', name: 'Ann', memberEmail: null };
 const ben: Person = { id: 'b', name: 'Ben', memberEmail: null };
@@ -82,32 +82,26 @@ describe('splitReducer', () => {
         },
       }),
     ],
-  ])('an item %s comes back from the app unchanged', (_, item) => {
-    const client = toClientItem(item, [ann, ben, cat]);
-    expect(client).not.toBeNull();
-    expect(client!.payer).toEqual(item.payerId === 'c' ? cat : ben);
-    expect(client!.participants.map((p) => p.id)).toEqual(item.participantIds);
-    expect(toApiItem(client!)).toEqual(item);
-  });
-
-  test('loading and saving keeps shares and exact amounts', () => {
-    const items = [
-      apiItem({ id: 's', splitMode: 'shares', shares: { a: 2, b: 5 } }),
+    [
+      // Saved before rates kept where they came from and when
+      'in another currency from before rate sources',
       apiItem({
-        id: 'e',
+        id: 'i9',
+        payerId: 'b',
         splitMode: 'exact',
         exact: { a: 10.5, b: 19.5 },
         original: { currency: 'SGD', amount: 9, exact: { a: 3.15, b: 5.85 }, rate: 3.3333 },
       }),
-    ];
+    ],
+  ])('an item %s loads and comes back unchanged', (_, item) => {
     const state = run(
       { people: [], items: [] },
-      { type: 'LOAD_STATE', payload: { people: [ann, ben], items } },
+      { type: 'LOAD_STATE', payload: { people: [ann, ben, cat], items: [item] } },
     );
-    expect(state.items.map(toApiItem)).toEqual(items);
-    expect(state.items[0].shares).toEqual({ a: 2, b: 5 });
-    expect(state.items[1].exact).toEqual({ a: 10.5, b: 19.5 });
-    expect(state.items[1].original?.exact).toEqual({ a: 3.15, b: 5.85 });
+    const [client] = state.items;
+    expect(client.payer).toEqual(item.payerId === 'c' ? cat : ben);
+    expect(client.participants.map((p) => p.id)).toEqual(item.participantIds);
+    expect(toApiItem(client)).toEqual(item);
   });
 
   test('renaming a person renames them on the items that refer to them', () => {

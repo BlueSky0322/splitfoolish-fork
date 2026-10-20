@@ -53,24 +53,33 @@ async function tokenRequest(fields: Record<string, string>) {
 }
 
 /**
- * Connects an agent as `email`, the way a person would: the client registers, the person
- * (signed in as `email`) allows `scope` on the consent page, and the code is exchanged
- * with its PKCE verifier
+ * Connects an agent as `email`, the way a person would: with the client registered, the
+ * person (signed in as `email`) allows `scope` on the consent page, and the code is
+ * exchanged with its PKCE verifier
  */
+/** The agent's app, registered once for the file as a client would: each grant is its own */
+let registering: Promise<string> | null = null;
+function registeredClient() {
+  registering ??= (async () => {
+    const registered = await fetch(`${api.base}/oauth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Test agent',
+        redirect_uris: [REDIRECT],
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+      }),
+    });
+    expect(registered.status).toBe(201);
+    return ((await registered.json()) as { client_id: string }).client_id;
+  })();
+  return registering;
+}
+
 async function grant(email: string, scope: string[], requested = scope) {
-  const registered = await fetch(`${api.base}/oauth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_name: 'Test agent',
-      redirect_uris: [REDIRECT],
-      token_endpoint_auth_method: 'none',
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-    }),
-  });
-  expect(registered.status).toBe(201);
-  const clientId = ((await registered.json()) as { client_id: string }).client_id;
+  const clientId = await registeredClient();
 
   const verifier = b64url(randomBytes(32));
   const query = new URLSearchParams({

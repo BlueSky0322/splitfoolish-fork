@@ -922,10 +922,14 @@ describe('safeguards', () => {
     const { id } = await splitWith(owner);
     // Write until refused. The limit counts per minute window, and a run can straddle
     // two windows, so up to 130 writes: at least one window then sees more than 60.
+    // Archiving is a write that stays the same size, unlike a bill that grows each time.
     let accepted = 0;
     let refused = false;
     for (let i = 0; i < 130 && !refused; i++) {
-      const { status } = await change(owner, id, { op: 'addPerson', id: hex(), name: `P${i}` });
+      const { status } = await api.call(owner, 'PUT', '/api/archived', {
+        id,
+        archived: i % 2 === 0,
+      });
       if (status === 429) refused = true;
       else if (status === 200) accepted++;
     }

@@ -100,7 +100,7 @@ const ME_CACHE_KEY = 'me-v2';
  * How long an app opened from the device's copy waits on the server before showing the
  * last account's saved profile and splits
  */
-const DEVICE_START_WAIT_MS = 2000;
+export const DEVICE_START_WAIT_MS = 2000;
 
 export const useProfile = () => {
   const value = useContext(ProfileContext);

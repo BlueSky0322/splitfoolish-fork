@@ -76,15 +76,7 @@ describe('itemShares', () => {
   });
 
   test('by shares is proportional and adds up to the cost', () => {
-    const shares = itemShares({
-      costCents: 1000,
-      payerId: 'a',
-      splitMode: 'shares',
-      participants: [
-        { personId: 'a', shares: 2, exactCents: null },
-        { personId: 'b', shares: 1, exactCents: null },
-      ],
-    });
+    const shares = itemShares(byShares(1000, { a: 2, b: 1 }));
     expect(shares.get('a')).toBe(667);
     expect(shares.get('b')).toBe(333);
   });

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { act, screen } from '@testing-library/react';
 import { get, set } from 'idb-keyval';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import type { Profile, SplitSummary } from '@shared/api';
+import { DEVICE_START_WAIT_MS } from '../profile/ProfileContext';
 import { LAST_EMAIL_KEY, OPENED_FROM_DEVICE } from './cache';
 import { type FakeServer, fakeServer, holdNext, renderApp, setupAppTests } from '../testing/app';
 
@@ -65,17 +66,38 @@ function finish(held: { release: () => void }[], done = () => {}) {
 
 const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
 
+/**
+ * The app's timeouts on a clock the test moves on, which still runs with real time so the
+ * page and the device's storage carry on as usual. Moved on once the app has asked the
+ * server who's signed in, which is when it starts waiting.
+ */
+function controlTimers() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+}
+const askedWhoIsSignedIn = () =>
+  vi.waitFor(() =>
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => url === '/api/me')).toBe(true),
+  );
+const moveOn = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
 describe('starting with the server out of reach', () => {
   test('opened from the device, the last account’s saved splits show after a moment', async () => {
     const server = fakeServer();
     await keptFromLastTime(server);
     const done = openedFromDevice();
     const held = slow(server);
+    controlTimers();
     try {
       renderApp(server);
-      expect(
-        (await screen.findAllByText('Kept trip', {}, { timeout: 4000 })).length,
-      ).toBeGreaterThan(0);
+      await askedWhoIsSignedIn();
+      // Not before the moment is up
+      await moveOn(DEVICE_START_WAIT_MS - 500);
+      expect(screen.queryByText('Kept trip')).toBeNull();
+      await moveOn(500);
+      expect((await screen.findAllByText('Kept trip')).length).toBeGreaterThan(0);
     } finally {
       finish(held, done);
     }
@@ -85,9 +107,12 @@ describe('starting with the server out of reach', () => {
     const server = fakeServer();
     await keptFromLastTime(server);
     const held = slow(server);
+    controlTimers();
     try {
       renderApp(server);
-      await wait(2500);
+      await askedWhoIsSignedIn();
+      // Well past the moment a start from the device would wait
+      await moveOn(DEVICE_START_WAIT_MS * 2);
       expect(screen.queryByText('Kept trip')).toBeNull();
     } finally {
       finish(held);
@@ -130,9 +155,12 @@ describe('starting with the server out of reach', () => {
       'location',
       new Proxy({}, { get: (_, key) => (key === 'reload' ? reload : Reflect.get(real, key)) }),
     );
+    controlTimers();
     try {
       renderApp(server);
-      await screen.findAllByText('Kept trip', {}, { timeout: 4000 });
+      await askedWhoIsSignedIn();
+      await moveOn(DEVICE_START_WAIT_MS);
+      await screen.findAllByText('Kept trip');
 
       me.release();
       await vi.waitFor(() => expect(reload).toHaveBeenCalled());
