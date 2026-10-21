@@ -185,6 +185,78 @@ const oauthPages: ExportedHandler<Env & { OAUTH_PROVIDER: OAuthHelpers }> = {
   },
 };
 
+const REGISTER_PATH = '/oauth/register';
+/** What an agent app may send when it registers: real ones send well under 2 KiB */
+const MAX_REGISTRATION_BYTES = 16 * 1024;
+const MAX_CLIENT_NAME = 100;
+const MAX_URI_LENGTH = 512;
+const MAX_REDIRECT_URIS = 5;
+/** How long a registered app is kept; signing in again within it keeps using it */
+const REGISTRATION_TTL_S = 90 * 24 * 60 * 60;
+
+const URI_FIELDS = ['client_uri', 'logo_uri', 'policy_uri', 'tos_uri', 'jwks_uri'];
+
+/**
+ * Why an app's registration is refused before anything of it is kept, or nothing: a
+ * name, addresses and contacts of a sensible size. The provider checks the rest
+ * (redirect addresses, grant types) as OAuth says.
+ */
+export function registrationRefusal(metadata: Record<string, unknown>): string | null {
+  const name = metadata.client_name;
+  if (name != null && (typeof name !== 'string' || name.length > MAX_CLIENT_NAME)) {
+    return `client_name must be at most ${MAX_CLIENT_NAME} characters`;
+  }
+  const redirects = metadata.redirect_uris;
+  if (Array.isArray(redirects)) {
+    if (redirects.length > MAX_REDIRECT_URIS) {
+      return `At most ${MAX_REDIRECT_URIS} redirect_uris`;
+    }
+    if (redirects.some((u) => typeof u !== 'string' || u.length > MAX_URI_LENGTH)) {
+      return `Each redirect_uri must be at most ${MAX_URI_LENGTH} characters`;
+    }
+  }
+  for (const field of URI_FIELDS) {
+    const value = metadata[field];
+    if (value != null && (typeof value !== 'string' || value.length > MAX_URI_LENGTH)) {
+      return `${field} must be at most ${MAX_URI_LENGTH} characters`;
+    }
+  }
+  const contacts = metadata.contacts;
+  if (contacts != null && (!Array.isArray(contacts) || contacts.length > 5)) {
+    return 'At most 5 contacts';
+  }
+  return null;
+}
+
+const oauthError = (status: number, error: string, description: string) =>
+  Response.json(
+    { error, error_description: description },
+    { status, headers: { 'Cache-Control': 'no-store' } },
+  );
+
+/**
+ * Registering is open to anyone, as MCP clients register themselves: so it's budgeted
+ * before the provider reads or keeps anything, per address as Cloudflare sees it (its
+ * own CF-Connecting-IP, which a client can't set) and from everywhere, and its body is
+ * read only so far
+ */
+async function admitRegistration(req: Request, env: Env): Promise<Request | Response> {
+  const address = req.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const [mine, everyone] = await Promise.all([
+    env.REGISTER_LIMITER.limit({ key: address }),
+    env.REGISTER_ALL_LIMITER.limit({ key: 'all' }),
+  ]);
+  if (!mine.success || !everyone.success) {
+    return oauthError(429, 'temporarily_unavailable', 'Too many apps registering; try again soon');
+  }
+  const body = await readBody(req, MAX_REGISTRATION_BYTES);
+  if (body === 'too large') {
+    return oauthError(413, 'invalid_client_metadata', 'Registration is too large');
+  }
+  if (body === 'too slow') return bodyRefused(body);
+  return new Request(req.url, { method: req.method, headers: req.headers, body });
+}
+
 const providers = new Map<string, OAuthProvider<Env>>();
 
 /** The provider for this deployment's address, made once per Worker instance */
@@ -199,7 +271,13 @@ function providerFor(origin: string) {
       tokenEndpoint: '/oauth/token',
       // MCP clients such as Hermes, Claude and MCP Inspector register themselves here;
       // a registered app still gets nothing until someone allows it on the page above
-      clientRegistrationEndpoint: '/oauth/register',
+      clientRegistrationEndpoint: REGISTER_PATH,
+      clientRegistrationTTL: REGISTRATION_TTL_S,
+      // Refused before anything is kept
+      clientRegistrationCallback: ({ clientMetadata }) => {
+        const refusal = registrationRefusal(clientMetadata);
+        return refusal == null ? undefined : { description: refusal };
+      },
       scopesSupported: [...SCOPES, 'offline_access'],
       resourceMetadata: {
         resource: `${origin}/mcp`,
@@ -219,9 +297,15 @@ function providerFor(origin: string) {
  * Answers /mcp, /oauth/* and /.well-known/*. Off (404) until the deployment says where
  * it lives (MCP_ORIGIN) and has somewhere to keep grants (OAUTH_KV).
  */
-export function handleOAuthRoute(req: Request, env: Env, ctx: ExecutionContext) {
+export async function handleOAuthRoute(req: Request, env: Env, ctx: ExecutionContext) {
   if (!env.MCP_ORIGIN || env.OAUTH_KV == null) {
     return Response.json({ error: 'Not found' }, { status: 404 });
   }
-  return providerFor(new URL(env.MCP_ORIGIN).origin).fetch(req, env, ctx);
+  const provider = providerFor(new URL(env.MCP_ORIGIN).origin);
+  if (req.method === 'POST' && new URL(req.url).pathname === REGISTER_PATH) {
+    const admitted = await admitRegistration(req, env);
+    if (admitted instanceof Response) return admitted;
+    return provider.fetch(admitted, env, ctx);
+  }
+  return provider.fetch(req, env, ctx);
 }

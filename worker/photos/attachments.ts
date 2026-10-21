@@ -9,6 +9,12 @@ import { type Image, imageResponse, readImage } from './images';
 
 const MAX_PHOTOS_PER_SPLIT = 300;
 
+/** How many photos a split may hold: fewer when a test's Worker says so */
+export const photosPerSplit = (env: { PHOTOS_PER_SPLIT?: string }) =>
+  Math.min(Number(env.PHOTOS_PER_SPLIT) || MAX_PHOTOS_PER_SPLIT, MAX_PHOTOS_PER_SPLIT);
+
+const full = (limit: number) => fail(`A split can have up to ${limit} photos`, 409);
+
 export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
   db
     .prepare(
@@ -47,13 +53,26 @@ function alreadyUploaded(
   return json<Attachment>(attachment);
 }
 
-export function uploadAttachment(db: D1Database, splitId: string, email: string, req: Request) {
+export function uploadAttachment(
+  db: D1Database,
+  splitId: string,
+  email: string,
+  req: Request,
+  limit = MAX_PHOTOS_PER_SPLIT,
+) {
   const params = new URL(req.url).searchParams;
   // Chosen by the app, so sending a photo again never adds it twice
   const id = params.get(PHOTO_ID_PARAM);
   if (id != null && !isRowId(id)) return fail('That photo id is not valid', 400);
-  return addAttachment(db, splitId, email, params.get('itemId'), id, () =>
-    readImage(req, MAX_PHOTO_BYTES),
+  return addAttachment(
+    db,
+    splitId,
+    email,
+    params.get('itemId'),
+    id,
+    () => readImage(req, MAX_PHOTO_BYTES),
+    [],
+    limit,
   );
 }
 
@@ -62,7 +81,8 @@ export function uploadAttachment(db: D1Database, splitId: string, email: string,
  * (mcp/tools.ts). `read` gives the checked image, and is only called once the split has
  * room and the item is there. `alongside` is saved in the same batch, so it exists
  * exactly when the photo does. A photo sent again under its first id answers with the
- * one saved then.
+ * one saved then. A split holds at most `limit`, counted as the photo is saved, so
+ * photos sent at the same moment can't take it past.
  */
 export async function addAttachment(
   db: D1Database,
@@ -72,6 +92,7 @@ export async function addAttachment(
   id: string | null,
   read: () => Promise<Image | Response>,
   alongside: D1PreparedStatement[] = [],
+  limit = MAX_PHOTOS_PER_SPLIT,
 ) {
   const [count, item, existing] = await db.batch<{ n?: number; id?: string }>([
     db.prepare('SELECT count(*) AS n FROM attachments WHERE split_id = ?').bind(splitId),
@@ -85,9 +106,7 @@ export async function addAttachment(
     email,
   );
   if (again) return again;
-  if ((count.results[0]?.n ?? 0) >= MAX_PHOTOS_PER_SPLIT) {
-    return fail(`A split can have up to ${MAX_PHOTOS_PER_SPLIT} photos`, 409);
-  }
+  if ((count.results[0]?.n ?? 0) >= limit) return full(limit);
   if (itemId != null && item.results.length === 0) {
     return fail('That item no longer exists', 404);
   }
@@ -108,8 +127,11 @@ export async function addAttachment(
     await db.batch([
       db
         .prepare(
+          // Only while the split has room: when it's full nothing is added here, and the
+          // bytes below then have no photo to belong to, so the whole batch is refused
           `INSERT INTO attachments (id, split_id, item_id, content_type, size, uploaded_by, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           SELECT ?, ?, ?, ?, ?, ?, ?
+           WHERE (SELECT count(*) FROM attachments WHERE split_id = ?) < ?`,
         )
         .bind(
           attachment.id,
@@ -119,6 +141,8 @@ export async function addAttachment(
           attachment.size,
           email,
           attachment.createdAt,
+          splitId,
+          limit,
         ),
       db
         .prepare('INSERT INTO attachment_data (id, data) VALUES (?, ?)')
@@ -135,6 +159,12 @@ export async function addAttachment(
         const again = alreadyUploaded(saved ?? undefined, splitId, itemId, email);
         if (again) return again;
       }
+      // Others' photos filled the split between the check above and now
+      const now = await db
+        .prepare('SELECT count(*) AS n FROM attachments WHERE split_id = ?')
+        .bind(splitId)
+        .first<{ n: number }>();
+      if ((now?.n ?? 0) >= limit) return full(limit);
       // The item was removed between the check above and now
       return fail('That item no longer exists', 404);
     }

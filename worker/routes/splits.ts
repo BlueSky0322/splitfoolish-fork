@@ -50,7 +50,12 @@ import {
   isCrossSite,
   readJson,
 } from '../http';
-import { deleteAttachments, serveAttachment, uploadAttachment } from '../photos/attachments';
+import {
+  deleteAttachments,
+  photosPerSplit,
+  serveAttachment,
+  uploadAttachment,
+} from '../photos/attachments';
 import { deleteSplitPicture, putSplitPicture, serveSplitPicture } from '../photos/pictures';
 import { getRatePreference } from '../accounts/profiles';
 import { getRateOn } from '../currency/exchange-rates';
@@ -253,7 +258,7 @@ splits.delete(`${SPLIT_PATH}/picture`, membersOnly, changePicture, (c) =>
 
 // Photos can be added by any member, and removed by whoever added them or the owner
 splits.post(`${SPLIT_PATH}/attachments`, membersOnly, (c) =>
-  uploadAttachment(c.env.DB, c.req.param('id'), c.var.email, c.req.raw),
+  uploadAttachment(c.env.DB, c.req.param('id'), c.var.email, c.req.raw, photosPerSplit(c.env)),
 );
 splits.get(`${SPLIT_PATH}/attachments/:attachmentId${ID_PARAM}`, membersOnly, (c) =>
   serveAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId')),

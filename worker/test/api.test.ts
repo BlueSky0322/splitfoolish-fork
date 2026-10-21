@@ -360,6 +360,21 @@ describe('changing a split', () => {
     expect((await change(owner, id, { op: 'setDistributor', personId: p })).status).toBe(200);
   });
 
+  it('holds only so many photos, however many are sent at once', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const add = () => upload(owner, 'POST', `/api/splits/${id}/attachments`);
+    // The test Worker's split holds 12 (PHOTOS_PER_SPLIT): 10 first, then 6 at once
+    for (let i = 0; i < 10; i++) expect((await add()).status).toBe(201);
+    const statuses = (await Promise.all(Array.from({ length: 6 }, add))).map((r) => r.status);
+    expect(statuses.filter((s) => s === 201)).toHaveLength(2);
+    expect(statuses.filter((s) => s === 409)).toHaveLength(4);
+    const split = (await api.call(owner, 'GET', `/api/splits/${id}`)).data;
+    expect(split.attachments).toHaveLength(12);
+    const last = await add();
+    expect(last.data.error).toBe('A split can have up to 12 photos');
+  });
+
   it("removes an item's photos with it", async () => {
     const owner = person('owner');
     const { id } = await splitWith(owner);

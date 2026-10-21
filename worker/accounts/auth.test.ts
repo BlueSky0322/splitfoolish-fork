@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { getUserEmail } from './auth';
 import worker from '../index';
 import type { Env } from '../app';
@@ -161,7 +161,10 @@ describe("the team's signing keys", () => {
     );
     const token = await sign(validClaims(), otherKey, 'next-key');
     expect(await getUserEmail(requestWith(token), env)).toBe('ryan@example.com');
-    expect(fetch).toHaveBeenCalledWith(CERTS_URL);
+    expect(fetch).toHaveBeenCalledWith(
+      CERTS_URL,
+      expect.objectContaining({ signal: expect.anything() }),
+    );
 
     // The new key is now known, so it is not fetched again
     vi.mocked(fetch).mockClear();
@@ -179,6 +182,28 @@ describe("the team's signing keys", () => {
     } finally {
       vi.mocked(fetch).mockReset().mockImplementation(defaultFetch);
     }
+  });
+
+  test('made-up key ids make it fetch the key set only so often', async () => {
+    vi.mocked(fetch).mockClear();
+    // Two minutes ago, so the fetches it uses up are over by the next test
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() - 2 * 60 * 1000);
+    onTestFinished(() => clock.mockRestore());
+    const madeUp = (kid: string) =>
+      sign(validClaims(), otherKey, kid).then((t) => getUserEmail(requestWith(t), env));
+    // Several at once wait for the same fetch
+    expect(await Promise.all([madeUp('fake-1'), madeUp('fake-2'), madeUp('fake-3')])).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // One found missing isn't fetched for again
+    await madeUp('fake-1');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // New ones only so many times a minute, however many there are
+    for (let i = 0; i < 20; i++) await madeUp(`flood-${i}`);
+    expect(vi.mocked(fetch).mock.calls.length).toBeLessThanOrEqual(6);
   });
 
   test('keeps the key set for an hour, then fetches it again', async () => {
@@ -294,7 +319,7 @@ describe('signing in to the API', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(fetch).mockResolvedValueOnce(new Response('down', { status: 503 }));
     const res = await callApi({
-      'Cf-Access-Jwt-Assertion': await sign(validClaims(), otherKey, 'unseen-key'),
+      'Cf-Access-Jwt-Assertion': await sign(validClaims(), otherKey, 'failing-key'),
     });
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'Something went wrong. Try again in a moment.' });
