@@ -140,14 +140,27 @@ it current.
 - Shared: `Item` and `Change` in [shared/types.ts](../shared/types.ts), who may do what
   in [shared/rules.ts](../shared/rules.ts), `MAX_CHANGES` in [shared/api.ts](../shared/api.ts).
 
-**Flow.** Action → state shows it → change queued and written to the outbox → sent in
-order, at most `MAX_CHANGES` at a time → the server checks each batch against the
-split as it is now. A refused batch drops what was queued after it and reloads the split.
+**Flow.** Action → state shows it → change queued (with the split's currency) and written
+to the outbox → sent in order, at most `MAX_CHANGES` at a time, each with its id → the
+server skips ones it has receipts for, checks the rest against the split as it is now,
+and saves them with their receipts and its checks
+([bill/commit.ts](../worker/bill/commit.ts)) in one batch. A refused batch drops what was
+queued after it and reloads the split.
 
 **Invariants.**
 
 - Changes are applied in the order they were made, and a refused batch never applies
   part of itself (`bill/changes.ts`).
+- What a write read before it saves is checked again as it saves, in the same batch
+  (`guardStatements`): the writer still in the split with the same role, and, for
+  amounts, the split still in the currency they were worked out in. A check that fails
+  undoes the batch (`write_guards`, migration 0020): a removed writer gets 404, a changed
+  currency 503, after which the app sends the change again. Photos check membership the
+  same way.
+- A change sent with an id counts once: its receipt (`change_receipts`) is saved with it,
+  and the same id with a different change is refused. Plain amounts sent with an older
+  currency than the split's are items paid in that currency, never amounts in the new
+  one. Apps from before ids get the old behaviour.
 - An item comes to at most `MAX_ITEM_CENTS` once converted (`fitsItemCents`), and a split
   holds at most `MAX_ITEMS`, so totals and shares stay exact. A currency change an item
   is too large for puts the split back in its old currency (`currency/reconvert.ts`).

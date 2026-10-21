@@ -59,14 +59,27 @@ const utf8 = new TextEncoder();
 
 /** The next request's changes, as nextBatch in web/src/offline/outbox.ts picks them */
 function nextBatch(queued) {
-  let bytes = utf8.encode('{"changes":[]}').length;
+  let bytes = utf8.encode('{"changes":[],"ids":[],"currencies":[]}').length;
   let count = 0;
   for (const q of queued.slice(0, MAX_CHANGES)) {
-    bytes += utf8.encode(JSON.stringify(q.change)).length + (count > 0 ? 1 : 0);
+    bytes +=
+      utf8.encode(JSON.stringify([q.change, q.cid, q.currency ?? null])).length -
+      2 +
+      (count > 0 ? 3 : 0);
     if (count > 0 && bytes > MAX_CHANGES_BYTES) break;
     count++;
   }
   return queued.slice(0, count);
+}
+
+/** What's sent for these changes, as changesBody in web/src/offline/outbox.ts makes it */
+function changesBody(batch) {
+  const currencies = batch.map((q) => q.currency);
+  return {
+    changes: batch.map((q) => q.change),
+    ids: batch.map((q) => q.cid),
+    ...(currencies.every((c) => c != null) && { currencies }),
+  };
 }
 
 // Profile pictures and payment QR codes (always with ?v=), and photos of splits and receipts
@@ -390,9 +403,10 @@ async function flushOfflineChanges() {
         let left = entry.value;
         while (left.length > 0) {
           const batch = nextBatch(left);
-          const res = await post(`/api/splits/${encodeURIComponent(id)}/changes`, {
-            changes: batch.map((q) => q.change),
-          });
+          const res = await post(
+            `/api/splits/${encodeURIComponent(id)}/changes`,
+            changesBody(batch),
+          );
           // Refused: the rest was built on top of it, so it goes too
           left = res.ok ? left.slice(batch.length) : [];
           if (left.length > 0) {

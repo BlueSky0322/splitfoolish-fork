@@ -9,7 +9,11 @@
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { createServer as createHttpServer } from 'node:http';
+import {
+  type IncomingMessage,
+  type ServerResponse,
+  createServer as createHttpServer,
+} from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -139,6 +143,11 @@ export interface FakeRates {
   newCurrency: () => string;
   /** How many times either service has been asked for this pair, answered or not */
   asked: (from: string, to: string) => number;
+  /**
+   * Holds back every answer for this pair until released: `reached` settles once the
+   * first request for it has come, so a test can change something while a write waits
+   */
+  hold: (from: string, to: string) => { reached: Promise<void>; release: () => void };
 }
 
 /**
@@ -155,7 +164,8 @@ async function startFakeRates(): Promise<
   let probed = false;
   let codes = 0;
   const askedFor = new Map<string, number>();
-  const server = createHttpServer((req, res) => {
+  const holds = new Map<string, { arrived: () => void; released: Promise<void> }>();
+  const answer = (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://x');
     const send = (status: number, body: unknown) => {
       res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -198,6 +208,17 @@ async function startFakeRates(): Promise<
           });
     }
     send(404, {});
+  };
+  const server = createHttpServer((req, res) => {
+    // A held pair waits for its release
+    const url = new URL(req.url ?? '/', 'http://x');
+    const pair = `${url.searchParams.get('source') ?? url.searchParams.get('base')}${
+      url.searchParams.get('target') ?? url.searchParams.get('symbols')
+    }`;
+    const held = holds.get(pair);
+    if (held == null) return answer(req, res);
+    held.arrived();
+    void held.released.then(() => answer(req, res));
   });
   await new Promise<void>((done, fail) => {
     server.once('error', fail);
@@ -239,6 +260,20 @@ async function startFakeRates(): Promise<
       return `Q${letter(Math.floor(n / 26))}${letter(n % 26)}`;
     },
     asked: (from, to) => askedFor.get(`${from}${to}`) ?? 0,
+    hold: (from, to) => {
+      let arrived = () => {};
+      let release = () => {};
+      const reached = new Promise<void>((r) => (arrived = r));
+      const released = new Promise<void>((r) => (release = r));
+      holds.set(`${from}${to}`, { arrived, released });
+      return {
+        reached,
+        release: () => {
+          holds.delete(`${from}${to}`);
+          release();
+        },
+      };
+    },
     heardProbe: () => probed,
     close: () => server.close(),
   };

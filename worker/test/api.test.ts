@@ -1961,3 +1961,129 @@ describe('changing a split currency', () => {
     expect(split.items[0]).toMatchObject({ cost: 1.7, original: { currency: 'MYR', amount: 10 } });
   });
 });
+
+describe('saving changes safely', () => {
+  /** A split owned by `owner`, with `members` in it, and guest Amy in its bill */
+  async function billWithAmy(owner: string, ...members: string[]) {
+    const { id } = await splitWith(owner, ...members);
+    const amy = hex();
+    await change(owner, id, { op: 'addPerson', id: amy, name: 'Amy' });
+    const item = (name: string, extra: Record<string, unknown> = {}) => ({
+      op: 'addItem',
+      item: { id: hex(), name, cost: 10, payerId: amy, participantIds: [amy], ...extra },
+    });
+    const items = async () =>
+      (
+        (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items as Record<string, unknown>[]
+      ).map((i) => ({ name: i.name, cost: i.cost, original: i.original ?? null }));
+    return { id, item, items };
+  }
+
+  /** Changes as the app sends them: each with its id and the currency it was made in */
+  const send = (who: string, id: string, changes: unknown[], ids: string[], currency = 'MYR') =>
+    api.call(who, 'POST', `/api/splits/${id}/changes`, {
+      changes,
+      ids,
+      currencies: changes.map(() => currency),
+    });
+
+  it('counts a change sent again once, its answer lost, and saves what came after it', async () => {
+    const owner = person('owner');
+    const { id, item, items } = await billWithAmy(owner);
+    const [a, b] = [item('A'), item('B')];
+    const [idA, idB] = [hex(), hex()];
+    expect((await send(owner, id, [a], [idA])).status).toBe(200);
+    // Its answer never came, so the app sends it again with what it queued since
+    expect((await send(owner, id, [a, b], [idA, idB])).status).toBe(200);
+    expect((await items()).map((i) => i.name)).toEqual(['A', 'B']);
+
+    // The same id with a different change is refused, and nothing in it is saved
+    const refused = await send(owner, id, [item('C'), item('D')], [idA, hex()]);
+    expect(refused.status).toBe(409);
+    expect((await items()).map((i) => i.name)).toEqual(['A', 'B']);
+    // Without ids, as apps from before them send, a change sent again is refused as ever
+    expect((await change(owner, id, a)).status).toBe(409);
+  });
+
+  it('saves the same changes sent twice at once only once', async () => {
+    const owner = person('owner');
+    const { id, item, items } = await billWithAmy(owner);
+    const tea = item('Tea');
+    const ids = [hex()];
+    const both = await Promise.all([send(owner, id, [tea], ids), send(owner, id, [tea], ids)]);
+    expect(both.map((r) => r.status)).toEqual([200, 200]);
+    expect((await items()).map((i) => i.name)).toEqual(['Tea']);
+  });
+
+  it('refuses a write that waited on a rate while its writer was taken out of the split', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const { id, item, items } = await billWithAmy(owner, editor);
+    const from = api.rates.newCurrency();
+    api.rates.set(from, 'MYR', 2);
+    const rate = api.rates.hold(from, 'MYR');
+    const writing = change(editor, id, item('Taxi', { original: { currency: from, amount: 10 } }));
+    await rate.reached;
+    expect((await api.call(owner, 'DELETE', `/api/splits/${id}/members/${editor}`)).status).toBe(
+      200,
+    );
+    rate.release();
+    // As for anyone not in it, and nothing of it saved
+    expect((await writing).status).toBe(404);
+    expect(await items()).toEqual([]);
+  });
+
+  it("refuses an amount worked out in the split's old currency once it has changed", async () => {
+    const owner = person('owner');
+    const { id, item, items } = await billWithAmy(owner);
+    const [from, to] = [api.rates.newCurrency(), api.rates.newCurrency()];
+    api.rates.set(from, 'MYR', 2);
+    api.rates.set('MYR', to, 4);
+    api.rates.set(from, to, 8);
+    const rate = api.rates.hold(from, 'MYR');
+    const taxi = item('Taxi', { original: { currency: from, amount: 10 } });
+    const ids = [hex()];
+    const writing = send(owner, id, [taxi], ids);
+    await rate.reached;
+    // The empty split changes currency, and is done converting, while the write waits
+    expect((await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: to })).status).toBe(
+      200,
+    );
+    for (let i = 0; (await api.call(owner, 'GET', `/api/splits/${id}`)).data.converting; i++) {
+      if (i > 40) throw new Error('Never finished converting');
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    rate.release();
+    // Not saved at the old currency's rate: the app keeps it and sends it again
+    expect((await writing).status).toBe(503);
+    expect(await items()).toEqual([]);
+    // Sent again, it's converted into the new currency
+    expect((await send(owner, id, [taxi], ids)).status).toBe(200);
+    expect(await items()).toEqual([
+      { name: 'Taxi', cost: 80, original: expect.objectContaining({ currency: from, amount: 10 }) },
+    ]);
+  });
+
+  it('converts an amount typed in the currency the split had then, rather than reading it as the new one', async () => {
+    const owner = person('owner');
+    const { id, item, items } = await billWithAmy(owner);
+    const to = api.rates.newCurrency();
+    api.rates.set('MYR', to, 4);
+    expect((await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: to })).status).toBe(
+      200,
+    );
+    for (let i = 0; (await api.call(owner, 'GET', `/api/splits/${id}`)).data.converting; i++) {
+      if (i > 40) throw new Error('Never finished converting');
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    // Made offline while the split was in MYR: 10 MYR, not 10 of the new currency
+    expect((await send(owner, id, [item('Snacks')], [hex()], 'MYR')).status).toBe(200);
+    expect(await items()).toEqual([
+      {
+        name: 'Snacks',
+        cost: 40,
+        original: expect.objectContaining({ currency: 'MYR', amount: 10 }),
+      },
+    ]);
+  });
+});

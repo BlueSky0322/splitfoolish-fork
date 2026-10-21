@@ -1,6 +1,6 @@
 import { listCacheIds, readCache, removeCacheEntry, writeCache } from './cache';
 import { reportKept } from './storage-health';
-import { MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
+import { type ChangesBody, MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
 import type { Change } from '@shared/types';
 import { ApiError, NetworkError, api } from '../api';
 
@@ -9,10 +9,15 @@ import { ApiError, NetworkError, api } from '../api';
 // service worker's background sync (sw.js) sends them when the connection is back.
 // Both take the same lock per split, so a change is never sent twice.
 
-/** A change waiting to be sent; cid tells the app which ones the service worker sent */
+/**
+ * A change waiting to be sent. cid tells the app which ones the service worker sent, and
+ * the server which it has saved already. currency is the split's when it was made, which
+ * its plain amounts are in (missing on ones kept before it was noted).
+ */
 export interface Queued {
   cid: string;
   change: Change;
+  currency?: string;
 }
 
 // The keys and lock below are also used by public/sw.js, which can't import them: a
@@ -40,8 +45,21 @@ export function withOutbox<T>(splitId: string, fn: () => Promise<T>): Promise<T>
 }
 
 const utf8 = new TextEncoder();
-/** The request body's size around its changes: {"changes":[ and ]} */
-const WRAPPER_BYTES = utf8.encode('{"changes":[]}').length;
+/** The request body's size around its changes, ids and currencies */
+const WRAPPER_BYTES = utf8.encode('{"changes":[],"ids":[],"currencies":[]}').length;
+
+/**
+ * What's sent for these changes: each with its id, and the currency each was made in
+ * when every one of them says (sw.js sends the same)
+ */
+export function changesBody(batch: Queued[]): ChangesBody {
+  const currencies = batch.map((q) => q.currency);
+  return {
+    changes: batch.map((q) => q.change),
+    ids: batch.map((q) => q.cid),
+    ...(currencies.every((c) => c != null) && { currencies: currencies as string[] }),
+  };
+}
 
 /**
  * The changes that go in the next request, in order: at most MAX_CHANGES, and no more
@@ -51,8 +69,11 @@ export function nextBatch(queued: Queued[]): Queued[] {
   let bytes = WRAPPER_BYTES;
   let count = 0;
   for (const q of queued.slice(0, MAX_CHANGES)) {
-    // Each change after the first also takes a comma
-    bytes += utf8.encode(JSON.stringify(q.change)).length + (count > 0 ? 1 : 0);
+    // Each change after the first also takes a comma, in each of the three lists
+    bytes +=
+      utf8.encode(JSON.stringify([q.change, q.cid, q.currency ?? null])).length -
+      2 +
+      (count > 0 ? 3 : 0);
     if (count > 0 && bytes > MAX_CHANGES_BYTES) break;
     count++;
   }
@@ -71,10 +92,7 @@ export async function sendQueued(
 ) {
   for (let left = queued; left.length > 0; ) {
     const batch = nextBatch(left);
-    await api.applyChanges(
-      splitId,
-      batch.map((q) => q.change),
-    );
+    await api.applyChanges(splitId, changesBody(batch));
     left = left.slice(batch.length);
     await onSaved(batch);
   }

@@ -236,7 +236,8 @@ export function useSplit(splitId: string) {
         current: () => current.current,
         meta: () => metaRef.current,
         dispatch,
-        queue: saves.queue,
+        // Each change notes the currency its amounts are in, should the split's change
+        queue: (change) => saves.queue(change, metaRef.current?.currency),
         metaChanges,
         reloadAfterSave: saves.reloadAfterSave,
       }),

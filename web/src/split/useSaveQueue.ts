@@ -192,9 +192,10 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
   }, [splitId, syncOutbox, notifySavedWaiters, recoverFromFailure]);
 
   const queue = useCallback(
-    (change: Change) => {
+    /** currency: the split's now, which the change's plain amounts are in */
+    (change: Change, currency?: string) => {
       const { setStatus } = latest.current;
-      pending.current.push({ cid: newId(), change });
+      pending.current.push({ cid: newId(), change, ...(currency != null && { currency }) });
       setWaiting(pending.current.length);
       // Kept on the device straight away, in case the app closes before it's sent
       void withOutbox(splitId, syncOutbox);

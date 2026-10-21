@@ -5,6 +5,7 @@ import { type Attachment, isRowId, MAX_PHOTO_BYTES, PHOTO_ID_PARAM } from '../..
 import type { Actor } from '../../shared/rules';
 import { canRemovePhoto } from '../../shared/rules';
 import { json, newId, fail, notFound, ok, isConstraintError } from '../http';
+import { memberGuardStatement, guardThatFailed } from '../bill/commit';
 import { type Image, imageResponse, readImage } from './images';
 
 const MAX_PHOTOS_PER_SPLIT = 300;
@@ -123,8 +124,10 @@ export async function addAttachment(
     createdAt: Date.now(),
   };
   try {
-    // Details and bytes are saved together or not at all
+    // Details and bytes are saved together or not at all, and only while the sender is
+    // still in the split: the bytes may have taken a while to arrive
     await db.batch([
+      memberGuardStatement(db, splitId, email),
       db
         .prepare(
           // Only while the split has room: when it's full nothing is added here, and the
@@ -150,6 +153,8 @@ export async function addAttachment(
       ...alongside,
     ]);
   } catch (err) {
+    // Taken out of the split meanwhile: as for anyone not in it
+    if (guardThatFailed(err) === 'member') return notFound();
     if (isConstraintError(err)) {
       // The same photo, sent twice at once: the other request saved it
       if (id != null) {

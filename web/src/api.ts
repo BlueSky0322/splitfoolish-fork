@@ -30,7 +30,7 @@ import type {
   RemovePhotosBody,
 } from '@shared/api';
 import type { PaymentMethod } from '@shared/payments';
-import type { Change, Item as ApiItem } from '@shared/types';
+import type { Item as ApiItem } from '@shared/types';
 import { newId } from './utils/id';
 
 /** The signed-in account, as this device holds it */
@@ -146,8 +146,8 @@ export const api = {
    * each one small enough), so it's not used otherwise. A send that still can't go is
    * kept on the device and sent later.
    */
-  applyChanges: (id: string, changes: Change[]) =>
-    request<Ok>('POST', `${splitPath(id)}/changes`, { changes } satisfies ChangesBody, {
+  applyChanges: (id: string, body: ChangesBody) =>
+    request<Ok>('POST', `${splitPath(id)}/changes`, body, {
       keepalive: typeof document !== 'undefined' && document.visibilityState === 'hidden',
     }),
   updateSplit: (id: string, patch: SplitPatch) =>

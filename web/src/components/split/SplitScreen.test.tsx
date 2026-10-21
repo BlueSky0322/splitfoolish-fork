@@ -95,6 +95,36 @@ describe('the split page', () => {
     expect(socksCells.textContent).toMatch(/15\.00.*15\.00/);
   });
 
+  test('saves a change once when its answer was lost, and what was added after it', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+    // Saved, but the answer never comes back, so the app still has it to send
+    server.loseNext.changes = true;
+    await addSnacks(user);
+    await waitFor(() => expect(server.sent).toHaveLength(1));
+    // Something else is added; both go again, with the ids they were sent with
+    await user.click(screen.getByText('Taxi'));
+    const form = await screen.findByRole('dialog', { name: 'Edit item' });
+    const name = within(form).getByRole('textbox', { name: 'What it was for' });
+    await user.clear(name);
+    await user.type(name, 'Cab');
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(
+        server.splits
+          .get('trip')!
+          .items.map((i) => i.name)
+          .sort(),
+      ).toEqual(['Cab', 'Dinner', 'Snacks']),
+    );
+    const [first, again] = server.sent;
+    expect(again.changes[0]).toEqual(first.changes[0]);
+    expect(screen.queryByText(/couldn't be saved|Refused/i)).toBeNull();
+  }, 15_000);
+
   test('adds an item typed as a sum, and sends it to the server', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');

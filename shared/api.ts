@@ -326,6 +326,16 @@ export interface SplitPatch {
 /** POST /splits/:id/changes */
 export interface ChangesBody {
   changes: Change[];
+  /**
+   * The id the app gave each change, one each in order: a change sent again (its
+   * answer lost) is then counted once, and an id sent with a different change refused
+   */
+  ids?: string[];
+  /**
+   * The split's currency when each change was made, one each: plain amounts typed then
+   * are in it, so are converted if the split has changed currency since
+   */
+  currencies?: string[];
 }
 
 /** PUT /me/payment-methods: all of them, and which is preferred */

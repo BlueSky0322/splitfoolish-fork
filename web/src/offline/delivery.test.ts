@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { act, renderHook } from '@testing-library/react';
 import { get } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest';
-import { MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
+import { type ChangesBody, MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
 import { type Change, MAX_NOTES_LENGTH } from '@shared/types';
 import { ApiError, api } from '../api';
 import { useSaveQueue } from '../split/useSaveQueue';
@@ -26,13 +26,14 @@ const queued = (count: number, from = 1): Queued[] =>
 /** Stands in for the server: answers each request in turn, recording what was sent */
 function server(answers: ('ok' | ApiError)[] = ['ok']) {
   const sent: Change[][] = [];
-  const spy = vi.spyOn(api, 'applyChanges').mockImplementation((_id, changes) => {
+  const spy = vi.spyOn(api, 'applyChanges').mockImplementation((_id, body) => {
     const answer = answers[Math.min(sent.length, answers.length - 1)];
+    const { changes } = body;
     sent.push(changes);
     if (changes.length > MAX_CHANGES) {
       return Promise.reject(new ApiError(400, `Send 1-${MAX_CHANGES} changes`));
     }
-    if (bytes(changes) > MAX_CHANGES_BYTES) {
+    if (bytes(body) > MAX_CHANGES_BYTES) {
       return Promise.reject(new ApiError(413, 'Too large'));
     }
     return answer === 'ok' ? Promise.resolve({ ok: true }) : Promise.reject(answer);
@@ -40,7 +41,7 @@ function server(answers: ('ok' | ApiError)[] = ['ok']) {
   return { sent, spy };
 }
 
-const bytes = (changes: Change[]) => new Blob([JSON.stringify({ changes })]).size;
+const bytes = (body: ChangesBody) => new Blob([JSON.stringify(body)]).size;
 
 // Long names in a script that takes three bytes a letter: a few kilobytes each
 const bulky = (count: number): Queued[] =>
