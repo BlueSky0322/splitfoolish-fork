@@ -2087,3 +2087,56 @@ describe('saving changes safely', () => {
     ]);
   });
 });
+
+describe('saying whose a write is', () => {
+  it('refuses a write made as another account before changing anything', async () => {
+    const owner = person('owner');
+    const other = person('other');
+    const { id } = await splitWith(owner);
+    const amy = { op: 'addPerson', id: hex(), name: 'Amy' };
+    const sendAs = (expected: string) =>
+      api.call(
+        owner,
+        'POST',
+        `/api/splits/${id}/changes`,
+        { changes: [amy] },
+        {
+          'X-Expected-Account': expected,
+        },
+      );
+    const people = async () =>
+      ((await api.call(owner, 'GET', `/api/splits/${id}`)).data.people as { name: string }[]).map(
+        (p) => p.name,
+      );
+    const before = await people();
+
+    const refused = await sendAs(other);
+    expect(refused).toEqual({
+      status: 409,
+      data: { error: 'Signed in as someone else.', code: 'account_mismatch' },
+    });
+    expect(await people()).toEqual(before);
+    // Nor a rename, or anything else that writes
+    const rename = await api.call(
+      owner,
+      'PATCH',
+      `/api/splits/${id}`,
+      { name: 'Taken' },
+      {
+        'X-Expected-Account': other,
+      },
+    );
+    expect(rename.status).toBe(409);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.name).not.toBe('Taken');
+
+    // The account signed in, however it's written, is saved
+    expect((await sendAs(` ${owner.toUpperCase()} `)).status).toBe(200);
+    expect(await people()).toEqual([...before, 'Amy']);
+  });
+
+  it('still saves a write that says nothing, from apps from before it, while that is allowed', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    expect((await change(owner, id, { op: 'addPerson', id: hex(), name: 'Amy' })).status).toBe(200);
+  });
+});

@@ -77,7 +77,7 @@ afterEach(async () => {
   showPage('visible');
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  await forgetOfflineWork();
+  await forgetOfflineWork({ everyone: true });
 });
 
 describe('the page catching up on changes kept for splits not open', () => {
@@ -289,9 +289,29 @@ describe('handing changes between the page and the service worker', () => {
     await setCacheUser('bob@example.com');
     await writeOutbox('bobs', queued(1, 50));
     expect(await get(`${OUTBOX_PREFIX}bobs`)).toMatchObject({ email: 'bob@example.com' });
-    expect(await get(`${OUTBOX_PREFIX}alices`)).toBeUndefined();
+    // Alice's is kept for her, as it was: Bob can't read it, and nothing sends it as him
+    expect(await get(`${OUTBOX_PREFIX}alices`)).toEqual({
+      email: 'alice@example.com',
+      value: queued(1),
+    });
+    expect(await readOutbox('alices')).toEqual([]);
 
     const sw = await backgroundSync(ok);
     expect(sw.fetch.mock.calls.map(([path]) => path)).toEqual(['/api/splits/bobs/changes']);
+    // As him: the server refuses anything sent for someone else
+    expect(sw.fetch.mock.calls[0][1].headers).toMatchObject({
+      'X-Expected-Account': 'bob@example.com',
+    });
+
+    // Bob makes another change, then Alice is back: hers are hers again, Bob's kept for him
+    await writeOutbox('bobs', queued(1, 60));
+    await setCacheUser('alice@example.com');
+    expect(await readOutbox('alices')).toEqual(queued(1));
+    expect(await readOutbox('bobs')).toEqual([]);
+
+    // Signing out lets go of hers, and leaves Bob's for him
+    await forgetOfflineWork();
+    expect(await get(`${OUTBOX_PREFIX}alices`)).toBeUndefined();
+    expect(await get(`${OUTBOX_PREFIX}bobs`)).toMatchObject({ email: 'bob@example.com' });
   });
 });

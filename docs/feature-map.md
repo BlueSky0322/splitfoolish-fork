@@ -374,7 +374,14 @@ with a 5xx), then shows the last account's saved copies
 - Nothing kept on the device is shown before the signed-in account is known, and one
   account never sees another's. The last account is only assumed offline, or when the
   page was opened from the device; if the server then names someone else, their copies
-  are dropped and the app reloads.
+  are dropped and the app reloads. Their unsent changes, splits and photos are kept,
+  unseen, and sent once they sign in again; signing out keeps them too.
+- Every write names the account it was made as (`X-Expected-Account`, from
+  `writeAs` in [api.ts](../web/src/api.ts), and each entry's own account in `sw.js`).
+  The server refuses one for another account (409 `account_mismatch`) before it changes
+  anything, and the entry stays queued without retrying on a timer. With
+  `REQUIRE_EXPECTED_ACCOUNT=true` a write that names no account is refused (503
+  `client_update_required`) and kept; off until installed apps send the header.
 - The kept page is only replaced once every file it and `precache.json` name is kept,
   so a stopped update leaves the old page whole. Built files of the newest two pages
   are kept, for a tab still open on the older one; others go when a new page is kept.
@@ -461,8 +468,8 @@ sends them, one at a time and oldest first, after the changes kept with them.
   again after its answer was lost (or by the app and the service worker both) is added
   once: the server answers with the photo it saved. An id already used for another
   photo is refused.
-- One account never sees or sends another's; they're forgotten with the cache
-  (`onCacheCleared`). Where the browser has Web Locks, each upload takes a lock per
+- One account never sees or sends another's; another account's stay on the device,
+  unseen, for when it signs in again, and uploads under way stop (`onCacheCleared`). Where the browser has Web Locks, each upload takes a lock per
   photo and checks it's still kept, so two tabs (or a tab and the service worker) don't
   both send it.
 - The file type comes from the bytes, not what the upload says.

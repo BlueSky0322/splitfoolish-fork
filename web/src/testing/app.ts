@@ -731,7 +731,7 @@ export function setupAppTests() {
     await settle();
     queryClient.clear();
     // The device's cache, and whose it is, start empty for the next test
-    await forgetOfflineWork();
+    await forgetOfflineWork({ everyone: true });
     vi.unstubAllGlobals();
   });
 }

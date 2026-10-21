@@ -49,6 +49,8 @@ const PHOTO_PREFIX = 'photo:';
 const PHOTO_LOCK_PREFIX = 'sf-photo:';
 /** CLIENT_ID_HEADER in shared/api.ts */
 const CLIENT_ID_HEADER = 'X-Client-Id';
+// Whose a write is (EXPECTED_ACCOUNT_HEADER in shared/api.ts): the account it was kept for
+const EXPECTED_ACCOUNT_HEADER = 'X-Expected-Account';
 /** PHOTO_ID_PARAM in shared/api.ts: a photo sent again with its id isn't added twice */
 const PHOTO_ID_PARAM = 'id';
 /** MAX_CHANGES and MAX_CHANGES_BYTES in shared/api.ts: how much one request may carry */
@@ -340,7 +342,8 @@ const withLock = (id, fn, prefix = LOCK_PREFIX) =>
 class TryLater extends Error {}
 
 /** Sends JSON, or a photo (a Blob, as its own type) */
-async function post(path, body) {
+/** Sends what `account` kept: the server refuses it if someone else is signed in now */
+async function post(path, body, account) {
   const photo = body instanceof Blob;
   let res;
   try {
@@ -349,6 +352,7 @@ async function post(path, body) {
       headers: {
         'Content-Type': photo ? body.type || 'image/jpeg' : 'application/json',
         [CLIENT_ID_HEADER]: 'background-sync',
+        [EXPECTED_ACCOUNT_HEADER]: account,
       },
       body: photo ? body : JSON.stringify(body),
     });
@@ -362,6 +366,15 @@ async function post(path, body) {
   }
   // Signed out (Cloudflare Access sends a sign-in page): the app sends it once signed in
   if (res.redirected || res.type === 'opaqueredirect') throw new TryLater('Signed out');
+  // Made as another account than the one signed in now: kept for that account, as
+  // isOtherAccount in web/src/offline/outbox.ts says
+  if (res.status === 409) {
+    const answer = await res
+      .clone()
+      .json()
+      .catch(() => null);
+    if (answer?.code === 'account_mismatch') throw new TryLater('Signed in as someone else');
+  }
   // Answered by something other than the API (a proxy, say), as the app sees it too:
   // anything that isn't JSON, or is JSON null
   if (res.ok && (await res.json().catch(() => null)) == null) {
@@ -388,7 +401,7 @@ async function flushOfflineChanges() {
         const entry = await read(key);
         if (!mine(entry)) return;
         const { name, currency } = entry.value;
-        await post('/api/splits', { id, name, currency });
+        await post('/api/splits', { id, name, currency }, entry.email);
         await drop(key);
       });
     }
@@ -406,6 +419,7 @@ async function flushOfflineChanges() {
           const res = await post(
             `/api/splits/${encodeURIComponent(id)}/changes`,
             changesBody(batch),
+            entry.email,
           );
           // Refused: the rest was built on top of it, so it goes too
           left = res.ok ? left.slice(batch.length) : [];
@@ -438,6 +452,7 @@ async function flushOfflineChanges() {
           await post(
             `/api/splits/${encodeURIComponent(splitId)}/attachments?${query}`,
             new Blob([bytes], { type }),
+            entry.email,
           );
           // Saved, or refused (its item gone, the split full): either way it's done
           await drop(key);

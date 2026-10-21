@@ -68,6 +68,20 @@ describe('the service worker, sending offline changes', () => {
     });
   });
 
+  test('keeps changes the server says were made as someone else, for when they are back', async () => {
+    await keep('ryan@example.com');
+    const mismatch = {
+      status: 409,
+      body: '{"error":"Signed in as someone else.","code":"account_mismatch"}',
+    };
+    const { outcome, fetch } = await backgroundSync(mismatch);
+    expect(fetch.mock.calls[0][1].headers).toMatchObject({
+      'X-Expected-Account': 'ryan@example.com',
+    });
+    expect(outcome).toBe('try later');
+    expect(await kept()).toEqual(queued(1));
+  });
+
   test('leaves another account’s changes alone', async () => {
     await keep('ann@example.com');
     const { fetch } = await backgroundSync(ok);

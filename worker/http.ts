@@ -1,6 +1,6 @@
 // Small helpers every part of the API uses to answer and to read what it was sent
 
-import { type ApiErrorBody, CLIENT_ID_HEADER, type Ok } from '../shared/api';
+import { type ApiErrorBody, CLIENT_ID_HEADER, type ErrorCode, type Ok } from '../shared/api';
 import { MAX_NAME_LENGTH } from '../shared/types';
 
 /**
@@ -16,7 +16,8 @@ export const json = <T = never>(body: NoInfer<T>, status = 200) =>
 
 export const ok = () => json<Ok>({ ok: true });
 
-export const fail = (error: string, status: number) => json<ApiErrorBody>({ error }, status);
+export const fail = (error: string, status: number, code?: ErrorCode) =>
+  json<ApiErrorBody>(code == null ? { error } : { error, code }, status);
 
 export const notFound = () => fail('Not found', 404);
 

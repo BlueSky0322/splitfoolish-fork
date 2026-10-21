@@ -175,4 +175,12 @@ export function classifySaveFailure(err: unknown): 'gone' | 'refused' | 'retry' 
  */
 export const isRetryable = (err: unknown) =>
   isOfflineFailure(err) ||
+  isOtherAccount(err) ||
   (err instanceof ApiError && (err.status === 401 || err.status === 429 || err.status >= 500));
+
+/**
+ * Made as another account than the one signed in now: kept for that account, and not
+ * sent again until it's back (public/sw.js keeps it too)
+ */
+export const isOtherAccount = (err: unknown) =>
+  err instanceof ApiError && err.code === 'account_mismatch';

@@ -93,7 +93,10 @@ Not checked by lint, so kept by review: `shared/` uses no browser or Worker glob
   (`changesBody`). The server keeps a receipt per id, so a change sent again after its
   answer was lost counts once. A batch leaves the outbox once the server accepts it with
   a JSON answer; one the server refuses is dropped with everything queued after it, and
-  the split reloads.
+  the split reloads. Every write names the account it was made as
+  (`EXPECTED_ACCOUNT_HEADER`); the server refuses one for another account with
+  `account_mismatch` and changes nothing, and the device keeps it, unseen, for that
+  account. Switching accounts keeps each account's unsent work.
   Where the browser has Web Locks, the page and the service worker take the same lock
   per split. `web/public/sw.js` can't import app code, so it keeps copies of the keys,
   locks and limits it shares: change both together (`offline/outbox.test.ts` and
