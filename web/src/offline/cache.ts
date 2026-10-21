@@ -1,4 +1,5 @@
-import { clear, del, delMany, get, keys, set } from 'idb-keyval';
+import { clear, del, delMany, get, getMany, keys, set } from 'idb-keyval';
+import { writeAs } from '../api';
 import { quietly } from '../utils/quietly';
 
 // Last-seen copies of API responses (My splits, the profile, each split, and the
@@ -20,6 +21,12 @@ export const SW_USER_KEY = 'sf-user';
 export const OPENED_FROM_DEVICE = 'sf-opened-from-device';
 /** Pictures the service worker keeps (IMAGE_CACHE in public/sw.js) */
 export const IMAGE_CACHE = 'splitfoolish-images-v1';
+/**
+ * Keys of work not yet on the server: changes (OUTBOX_PREFIX), new splits (CREATE_PREFIX)
+ * and photos (PHOTO_PREFIX). Kept for their own account when someone else signs in,
+ * readable and sendable by nobody else (cache.test.ts checks these match)
+ */
+export const UNSENT_PREFIXES = ['outbox:', 'create:', 'photo:'];
 
 /** An entry as stored; public/sw.js reads the same shape */
 interface Entry<T> {
@@ -39,11 +46,16 @@ const lastEmail = () => quietly(() => localStorage.getItem(LAST_EMAIL_KEY)) ?? n
 let user: string | null = null;
 let waiting: ((email: string) => void)[] = [];
 
+/** Whose the cache is now, or null while that isn't known */
+export const cacheUser = () => user;
+
 const whenCacheUserKnown = (): Promise<string> =>
   user != null ? Promise.resolve(user) : new Promise((resolve) => waiting.push(resolve));
 
 function confirmCacheUser(email: string) {
   user = email;
+  // The page's writes are made as this account, and refused once it's anyone else's
+  writeAs(email);
   for (const resolve of waiting) resolve(email);
   waiting = [];
 }
@@ -104,7 +116,8 @@ export async function setCacheUser(email: string): Promise<void> {
   if (lastEmail() !== email) {
     // The page open now is this person's own: keep it when nobody was signed in before
     const page = lastEmail() == null ? quietly(() => localStorage.getItem(LAST_PAGE_KEY)) : null;
-    await clearCache();
+    // What the last account hasn't sent yet stays, theirs alone, for when they're back
+    await clearCache(() => true);
     quietly(() => {
       if (page != null) localStorage.setItem(LAST_PAGE_KEY, page);
       localStorage.setItem(LAST_EMAIL_KEY, email);
@@ -140,16 +153,36 @@ const forgetters = new Set<() => void>();
 /** Runs `forget` whenever this device's cache is emptied: on signing out, or someone else signing in */
 export const onCacheCleared = (forget: () => void) => void forgetters.add(forget);
 
-/** Empties this device's cache, which is then nobody's until setCacheUser */
-export async function clearCache(): Promise<void> {
+/**
+ * Empties this device's cache, which is then nobody's until setCacheUser. Work not yet
+ * sent is kept for the accounts `keepUnsentOf` names: tagged with their email, it's
+ * nobody else's to see or send.
+ */
+export async function clearCache(
+  keepUnsentOf: (email: string) => boolean = () => false,
+): Promise<void> {
   user = null;
+  writeAs(null);
   forgetters.forEach((forget) => forget());
   quietly(() => {
     localStorage.removeItem(LAST_EMAIL_KEY);
     // The page they had open is theirs too
     localStorage.removeItem(LAST_PAGE_KEY);
   });
-  await quietlyAsync(() => clear());
+  await quietlyAsync(() => clearExceptUnsent(keepUnsentOf));
   // Pictures and photos the service worker kept, so the next person can't see them
   if ('caches' in window) await quietlyAsync(() => caches.delete(IMAGE_CACHE));
+}
+
+async function clearExceptUnsent(keepUnsentOf: (email: string) => boolean) {
+  const all = await keys();
+  const unsent = all.filter(
+    (k): k is string => typeof k === 'string' && UNSENT_PREFIXES.some((p) => k.startsWith(p)),
+  );
+  const entries = await getMany<Entry<unknown> | undefined>(unsent);
+  const kept = new Set(
+    unsent.filter((_, i) => entries[i] != null && keepUnsentOf(entries[i]!.email)),
+  );
+  if (kept.size === 0) return clear();
+  await delMany(all.filter((k) => !kept.has(k as string)));
 }

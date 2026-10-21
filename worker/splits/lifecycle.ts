@@ -97,6 +97,7 @@ export async function planSplitSettings(
 export const deleteSplitStatements = (db: D1Database, splitId: string) => [
   // Retry receipts for agents' expense writes (mcp/receipts.ts) last as long as the split
   db.prepare('DELETE FROM mcp_receipts WHERE split_id = ?').bind(splitId),
+  db.prepare('DELETE FROM change_receipts WHERE split_id = ?').bind(splitId),
   ...deleteContentStatements(db, splitId),
   ...deleteAllAccessStatements(db, splitId),
   db.prepare('DELETE FROM splits WHERE id = ?').bind(splitId),

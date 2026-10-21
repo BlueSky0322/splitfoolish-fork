@@ -46,6 +46,8 @@ export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   REGISTER_LIMITER: RateLimit;
   /** Agent apps registering per minute, from anywhere */
   REGISTER_ALL_LIMITER: RateLimit;
+  /** "true": writes must say whose they are (EXPECTED_ACCOUNT_HEADER); older apps are told to update */
+  REQUIRE_EXPECTED_ACCOUNT?: string;
   /** Photos a split may hold, fewer than the usual; for tests */
   PHOTOS_PER_SPLIT?: string;
   /** How long a currency change may take before opening the split retries it; for tests */

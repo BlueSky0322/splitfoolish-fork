@@ -1,4 +1,4 @@
-import { clearCache } from './cache';
+import { cacheUser, clearCache } from './cache';
 import {
   readOutbox,
   readOutboxIds,
@@ -79,11 +79,16 @@ export async function countUnsentSplits(): Promise<number> {
   return unsent.size;
 }
 
-/** Lets go of everything kept for this account: on signing out, and between tests */
-export async function forgetOfflineWork() {
+/**
+ * Lets go of everything kept for this account, on signing out. Other accounts' unsent
+ * work, kept from before someone else signed in, stays theirs; `everyone` lets go of
+ * that too (between tests).
+ */
+export async function forgetOfflineWork({ everyone = false } = {}) {
   sending = null;
   forgetOfflineCreates();
-  await clearCache();
+  const leaving = cacheUser();
+  await clearCache((owner) => !everyone && leaving != null && owner !== leaving);
   reportKept(true);
 }
 

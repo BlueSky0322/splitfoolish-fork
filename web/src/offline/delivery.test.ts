@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { act, renderHook } from '@testing-library/react';
 import { get } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest';
-import { MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
+import { type ChangesBody, MAX_CHANGES, MAX_CHANGES_BYTES } from '@shared/api';
 import { type Change, MAX_NOTES_LENGTH } from '@shared/types';
 import { ApiError, api } from '../api';
 import { useSaveQueue } from '../split/useSaveQueue';
@@ -26,13 +26,14 @@ const queued = (count: number, from = 1): Queued[] =>
 /** Stands in for the server: answers each request in turn, recording what was sent */
 function server(answers: ('ok' | ApiError)[] = ['ok']) {
   const sent: Change[][] = [];
-  const spy = vi.spyOn(api, 'applyChanges').mockImplementation((_id, changes) => {
+  const spy = vi.spyOn(api, 'applyChanges').mockImplementation((_id, body) => {
     const answer = answers[Math.min(sent.length, answers.length - 1)];
+    const { changes } = body;
     sent.push(changes);
     if (changes.length > MAX_CHANGES) {
       return Promise.reject(new ApiError(400, `Send 1-${MAX_CHANGES} changes`));
     }
-    if (bytes(changes) > MAX_CHANGES_BYTES) {
+    if (bytes(body) > MAX_CHANGES_BYTES) {
       return Promise.reject(new ApiError(413, 'Too large'));
     }
     return answer === 'ok' ? Promise.resolve({ ok: true }) : Promise.reject(answer);
@@ -40,7 +41,7 @@ function server(answers: ('ok' | ApiError)[] = ['ok']) {
   return { sent, spy };
 }
 
-const bytes = (changes: Change[]) => new Blob([JSON.stringify({ changes })]).size;
+const bytes = (body: ChangesBody) => new Blob([JSON.stringify(body)]).size;
 
 // Long names in a script that takes three bytes a letter: a few kilobytes each
 const bulky = (count: number): Queued[] =>
@@ -76,7 +77,7 @@ afterEach(async () => {
   showPage('visible');
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  await forgetOfflineWork();
+  await forgetOfflineWork({ everyone: true });
 });
 
 describe('the page catching up on changes kept for splits not open', () => {
@@ -288,9 +289,29 @@ describe('handing changes between the page and the service worker', () => {
     await setCacheUser('bob@example.com');
     await writeOutbox('bobs', queued(1, 50));
     expect(await get(`${OUTBOX_PREFIX}bobs`)).toMatchObject({ email: 'bob@example.com' });
-    expect(await get(`${OUTBOX_PREFIX}alices`)).toBeUndefined();
+    // Alice's is kept for her, as it was: Bob can't read it, and nothing sends it as him
+    expect(await get(`${OUTBOX_PREFIX}alices`)).toEqual({
+      email: 'alice@example.com',
+      value: queued(1),
+    });
+    expect(await readOutbox('alices')).toEqual([]);
 
     const sw = await backgroundSync(ok);
     expect(sw.fetch.mock.calls.map(([path]) => path)).toEqual(['/api/splits/bobs/changes']);
+    // As him: the server refuses anything sent for someone else
+    expect(sw.fetch.mock.calls[0][1].headers).toMatchObject({
+      'X-Expected-Account': 'bob@example.com',
+    });
+
+    // Bob makes another change, then Alice is back: hers are hers again, Bob's kept for him
+    await writeOutbox('bobs', queued(1, 60));
+    await setCacheUser('alice@example.com');
+    expect(await readOutbox('alices')).toEqual(queued(1));
+    expect(await readOutbox('bobs')).toEqual([]);
+
+    // Signing out lets go of hers, and leaves Bob's for him
+    await forgetOfflineWork();
+    expect(await get(`${OUTBOX_PREFIX}alices`)).toBeUndefined();
+    expect(await get(`${OUTBOX_PREFIX}bobs`)).toMatchObject({ email: 'bob@example.com' });
   });
 });

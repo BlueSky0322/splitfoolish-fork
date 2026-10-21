@@ -6,7 +6,7 @@ import { MAX_NOTES_LENGTH } from '@shared/types';
 import type { Change } from '@shared/types';
 import { SW_USER_KEY } from './cache';
 import { api } from '../api';
-import { OUTBOX_PREFIX, classifySaveFailure, nextBatch, type Queued } from './outbox';
+import { OUTBOX_PREFIX, changesBody, classifySaveFailure, nextBatch, type Queued } from './outbox';
 import { PHOTO_PREFIX } from './photo-queue';
 import {
   type Answer,
@@ -42,6 +42,44 @@ describe('the service worker, sending offline changes', () => {
     expect(fetch).toHaveBeenCalledWith('/api/splits/trip/changes', expect.anything());
     expect(batches).toEqual([[change(1)]]);
     expect(await kept()).toBeUndefined();
+  });
+
+  test('sends each change with its id, and the currency it was made in, as the app does', async () => {
+    const value = [
+      { ...queued(1)[0], currency: 'MYR' },
+      { ...queued(2)[1], currency: 'JPY' },
+    ];
+    await keep('ryan@example.com', value);
+    const { fetch } = await backgroundSync(ok);
+    const body = JSON.parse(fetch.mock.calls[0][1].body as string) as unknown;
+    expect(body).toEqual(changesBody(value));
+    expect(body).toEqual({
+      changes: [change(1), change(2)],
+      ids: value.map((q) => q.cid),
+      currencies: ['MYR', 'JPY'],
+    });
+
+    // Kept before currencies were noted: ids alone, so the server reads them as ever
+    await keep('ryan@example.com', queued(1));
+    const old = await backgroundSync(ok);
+    expect(JSON.parse(old.fetch.mock.calls[0][1].body as string)).toEqual({
+      changes: [change(1)],
+      ids: [queued(1)[0].cid],
+    });
+  });
+
+  test('keeps changes the server says were made as someone else, for when they are back', async () => {
+    await keep('ryan@example.com');
+    const mismatch = {
+      status: 409,
+      body: '{"error":"Signed in as someone else.","code":"account_mismatch"}',
+    };
+    const { outcome, fetch } = await backgroundSync(mismatch);
+    expect(fetch.mock.calls[0][1].headers).toMatchObject({
+      'X-Expected-Account': 'ryan@example.com',
+    });
+    expect(outcome).toBe('try later');
+    expect(await kept()).toEqual(queued(1));
   });
 
   test('leaves another account’s changes alone', async () => {
@@ -232,7 +270,7 @@ describe('reading the answer to sending changes', () => {
       'fetch',
       vi.fn(() => respond(answer)),
     );
-    const outcome = await api.applyChanges('trip', [change(1)]).then(
+    const outcome = await api.applyChanges('trip', { changes: [change(1)] }).then(
       () => 'sent',
       (err: unknown) => classifySaveFailure(err),
     );

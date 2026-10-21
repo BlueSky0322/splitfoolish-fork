@@ -103,7 +103,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   shrink.image.mockClear();
-  await forgetOfflineWork();
+  await forgetOfflineWork({ everyone: true });
   delete (navigator as { onLine?: boolean }).onLine;
 });
 
@@ -222,15 +222,17 @@ describe('keeping photos on the device', () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
-  test('someone else signing in forgets the photos waiting here', async () => {
+  test('someone else signing in keeps the photos waiting here for their owner, unsent', async () => {
     const upload = serverKeeps();
     online = false;
     await addPhotos('trip', null, [file('beach.jpg')]);
     expect(queuedPhotos()).toHaveLength(1);
+    const kept = await keptKeys();
 
     await setCacheUser('ann@example.com');
+    // Not Ann's to see or send, but still on the device for whoever picked them
     expect(queuedPhotos()).toEqual([]);
-    expect(await keptKeys()).toEqual([]);
+    expect(await keptKeys()).toEqual(kept);
 
     goOnline();
     await settle();

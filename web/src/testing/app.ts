@@ -8,7 +8,14 @@ import { URL as NodeURL, fileURLToPath } from 'node:url';
 import { cleanup, configure, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, vi } from 'vitest';
-import type { Attachment, MyInvite, Profile, SplitDetail, SplitSummary } from '@shared/api';
+import type {
+  Attachment,
+  ChangesBody,
+  MyInvite,
+  Profile,
+  SplitDetail,
+  SplitSummary,
+} from '@shared/api';
 import {
   DEFAULT_SETTINGS,
   MAX_CHANGES,
@@ -137,6 +144,10 @@ export interface FakeServer {
    * upload, answers with this status
    */
   failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join' | 'photo', number>>;
+  /** The next batch of changes is saved, but its answer never reaches the app */
+  loseNext: { changes?: boolean };
+  /** Changes saved under the id the app gave them, as the real API keeps them, by split */
+  receipts: Map<string, string>;
   /** Splits the signed-in account has archived */
   archived: Set<string>;
   /** Answers being held back until a test releases them (see holdNext) */
@@ -610,7 +621,7 @@ function answerNow(server: FakeServer) {
       if (splitMatch[2] && method === 'POST') {
         const failure = failing('changes');
         if (failure) return failure;
-        const { changes } = body as { changes: Change[] };
+        const { changes, ids, currencies } = body as ChangesBody;
         // The real API's limit, so a test can't pass by sending more than it takes
         if (changes.length === 0 || changes.length > MAX_CHANGES) {
           return json({ error: `Send 1-${MAX_CHANGES} changes` }, 400);
@@ -621,8 +632,26 @@ function answerNow(server: FakeServer) {
         );
         if (noRate)
           return json({ error: "Couldn't get an exchange rate. We'll keep trying." }, 503);
+        // Ones saved before under the same id count once; the same id with another change
+        // is refused, as the real API does
+        const print = (i: number) => JSON.stringify([changes[i], currencies?.[i] ?? null]);
+        const receipt = (i: number) => `${split.id}:${ids?.[i]}`;
+        const fresh = changes.filter((_, i) => ids == null || !server.receipts.has(receipt(i)));
+        if (
+          ids?.some(
+            (_, i) =>
+              server.receipts.has(receipt(i)) && server.receipts.get(receipt(i)) !== print(i),
+          )
+        ) {
+          return json({ error: 'That change was saved differently before' }, 409);
+        }
         server.sent.push({ splitId: split.id, changes });
-        for (const change of changes) apply(server, split, change);
+        for (const change of fresh) apply(server, split, change);
+        ids?.forEach((_, i) => server.receipts.set(receipt(i), print(i)));
+        if (server.loseNext.changes) {
+          server.loseNext.changes = false;
+          return Promise.reject(new TypeError('Failed to fetch'));
+        }
         return json({ ok: true });
       }
       if (method === 'GET') return json(structuredClone(split));
@@ -661,6 +690,8 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     invites: [],
     rates: new Map(),
     sent: [],
+    loseNext: {},
+    receipts: new Map(),
     uploads: [],
     failNext: {},
     archived: new Set(),
@@ -700,7 +731,7 @@ export function setupAppTests() {
     await settle();
     queryClient.clear();
     // The device's cache, and whose it is, start empty for the next test
-    await forgetOfflineWork();
+    await forgetOfflineWork({ everyone: true });
     vi.unstubAllGlobals();
   });
 }

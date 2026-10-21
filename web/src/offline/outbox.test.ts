@@ -2,12 +2,18 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
-import { CLIENT_ID_HEADER } from '@shared/api';
+import { CLIENT_ID_HEADER, EXPECTED_ACCOUNT_HEADER } from '@shared/api';
 import { backgroundSync, load, ok, photoOnDevice, respond } from '../testing/sw';
-import { clearCache, listCacheIds, setCacheUser, writeCache } from './cache';
-import { type PendingCreate, readPendingCreates, savePendingCreate } from './pending-creates';
+import { UNSENT_PREFIXES, clearCache, listCacheIds, setCacheUser, writeCache } from './cache';
+import {
+  CREATE_PREFIX,
+  type PendingCreate,
+  readPendingCreates,
+  savePendingCreate,
+} from './pending-creates';
 import type { Queued } from './outbox';
 import {
+  OUTBOX_PREFIX,
   SYNC_TAG,
   classifySaveFailure,
   isRetryable,
@@ -105,7 +111,7 @@ describe('the service worker and the app', () => {
   beforeEach(() => setCacheUser('ryan@example.com'));
   afterEach(async () => {
     vi.unstubAllGlobals();
-    await forgetOfflineWork();
+    await forgetOfflineWork({ everyone: true });
   });
 
   test('the service worker sends what the app kept, for whoever the app says is signed in', async () => {
@@ -127,7 +133,11 @@ describe('the service worker and the app', () => {
     });
     expect(batches).toEqual([[q('a').change, q('b').change]]);
     for (const [, init] of fetch.mock.calls) {
-      expect(init.headers).toMatchObject({ [CLIENT_ID_HEADER]: 'background-sync' });
+      // Each as the account the app kept it for, under the header the API reads
+      expect(init.headers).toMatchObject({
+        [CLIENT_ID_HEADER]: 'background-sync',
+        [EXPECTED_ACCOUNT_HEADER]: 'ryan@example.com',
+      });
     }
     // Crossed off where the app looks
     expect(await readPendingCreates()).toEqual([]);
@@ -199,3 +209,11 @@ function runServiceWorker(self: object, globals: object = {}) {
       ),
   };
 }
+
+describe('work not yet sent', () => {
+  test('is kept under the keys the app saves it under, for its own account', () => {
+    expect([...UNSENT_PREFIXES].sort()).toEqual(
+      [CREATE_PREFIX, OUTBOX_PREFIX, PHOTO_PREFIX].sort(),
+    );
+  });
+});

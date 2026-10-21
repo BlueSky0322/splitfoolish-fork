@@ -4,7 +4,7 @@
 // people editing the same split don't overwrite each other.
 
 import { type ChangesBody, MAX_CHANGES, isRowId } from '../../shared/api';
-import { convertCents, convertParts, fitsItemCents } from '../../shared/rates';
+import { convertCents, convertParts, fitsItemCents, isCurrency } from '../../shared/rates';
 import type { Actor } from '../../shared/rules';
 import { canChangePeople, canLinkPerson, removalBlocker } from '../../shared/rules';
 import type { Change } from '../../shared/types';
@@ -29,6 +29,13 @@ import {
   tooLarge,
 } from './input';
 import type { Batch, Model, ModelItem, UncheckedChange } from './model';
+import {
+  changeFingerprint,
+  guardStatements,
+  guardThatFailed,
+  receiptStatements,
+  savedReceipts,
+} from './commit';
 import { Forbidden, Refused, loadModel } from './model';
 
 const OWNER_ONLY_PEOPLE = 'Only the owner can change who is in this split';
@@ -372,6 +379,9 @@ function changeStatements(
 /** Changes that convert amounts, held back while the split changes currency */
 const CONVERTING_OPS = new Set<Change['op']>(['addItem', 'updateItem', 'setRate']);
 
+/** Whether a batch saves amounts, which are only right in the currency they were read in */
+const amountsIn = (batch: Batch) => batch.some((c) => c != null && CONVERTING_OPS.has(c.op));
+
 interface ApplyOptions {
   /**
    * Fetches the rate into the split's currency for an item paid at `at` (getRateOn);
@@ -389,13 +399,39 @@ interface ApplyOptions {
  */
 export type SaveResult =
   | { saved: true; accessRemoved: string[] }
-  | { saved: false; status: 400 | 403 | 409 | 503; error: string; constraint?: true };
+  | { saved: false; status: 400 | 403 | 404 | 409 | 503; error: string; constraint?: true };
 
-const refused = (status: 400 | 403 | 409 | 503, error: string) => ({
+const refused = (status: 400 | 403 | 404 | 409 | 503, error: string) => ({
   saved: false as const,
   status,
   error,
 });
+
+/** What the app sends with its changes, one of each per change, when it does */
+export interface SentWith {
+  /** The id the app gave each change, so one sent again counts once */
+  ids?: string[];
+  /** The currency each change's plain amounts were typed in: the split's, then */
+  currencies?: (string | null)[];
+}
+
+/**
+ * An item typed in the split's currency at the time, which has changed since: it's an
+ * item paid in that currency, converted like any other, rather than its amount being
+ * taken to be in the new one
+ */
+function typedIn(change: Change, currency: string | null | undefined, model: Model): Change {
+  if (currency == null || currency === model.currency) return change;
+  if (change?.op !== 'addItem' && change?.op !== 'updateItem') return change;
+  const item = change.item as unknown as Record<string, unknown> | null;
+  if (item == null || typeof item !== 'object' || item.original != null) return change;
+  const original = {
+    currency,
+    amount: item.cost,
+    ...(item.exact != null && { exact: item.exact }),
+  };
+  return { ...change, item: { ...item, original } } as Change;
+}
 
 /**
  * Checks a batch of changes against the split as it is now and saves it all-or-nothing.
@@ -409,18 +445,40 @@ export async function saveChanges(
   changes: unknown,
   fetchRate: ApplyOptions['fetchRate'],
   alongside: D1PreparedStatement[] = [],
+  sent: SentWith = {},
 ): Promise<SaveResult> {
   if (!Array.isArray(changes) || changes.length === 0 || changes.length > MAX_CHANGES) {
     return refused(400, `Send 1-${MAX_CHANGES} changes`);
   }
+  const { ids, currencies } = sent;
+  if (ids != null && ids.length !== changes.length) {
+    return refused(400, 'Send one id for each change');
+  }
+
+  // Changes saved before, their answer lost: counted once, and not applied again
+  const prints = ids
+    ? await Promise.all(
+        changes.map((c: unknown, i) => changeFingerprint(c, currencies?.[i] ?? null)),
+      )
+    : [];
+  const saved = ids
+    ? await savedReceipts(db, splitId, actor.email, ids)
+    : new Map<string, string>();
+  const fresh: number[] = [];
+  for (let i = 0; i < changes.length; i++) {
+    const before = ids ? saved.get(ids[i]) : undefined;
+    if (before == null) fresh.push(i);
+    else if (before !== prints[i]) return refused(409, 'That change was saved differently before');
+  }
+  if (fresh.length === 0) return { saved: true, accessRemoved: [] };
 
   const model = await loadModel(db, splitId);
   const membersBefore = new Set(model.members);
 
   // Items can't be added or edited while they're being converted into a new currency;
   // the app keeps the change and sends it again shortly
-  const batch = changes as Batch;
-  if (model.converting && batch.some((c) => c != null && CONVERTING_OPS.has(c.op))) {
+  const batch = fresh.map((i) => typedIn(changes[i] as Change, currencies?.[i], model)) as Batch;
+  if (model.converting && amountsIn(batch)) {
     return refused(503, 'Converting amounts to the new currency. Saving in a moment.');
   }
 
@@ -449,13 +507,41 @@ export async function saveChanges(
       throw err;
     }
   }
-  if (statements.length === 0 && alongside.length === 0) {
+  const receipts = ids
+    ? receiptStatements(
+        db,
+        splitId,
+        actor.email,
+        fresh.map((i) => ({ id: ids[i], fingerprint: prints[i] })),
+      )
+    : [];
+  if (statements.length === 0 && alongside.length === 0 && receipts.length === 0) {
     return { saved: true, accessRemoved: [] };
   }
 
   try {
-    await db.batch([...statements, ...alongside, touchSplitStatement(db, splitId)]);
+    await db.batch([
+      // Checked as it's saved: the writer still in the split, in the currency read above
+      ...guardStatements(db, splitId, actor, amountsIn(batch) ? model : null),
+      ...statements,
+      ...receipts,
+      ...alongside,
+      touchSplitStatement(db, splitId),
+    ]);
   } catch (err) {
+    const guard = guardThatFailed(err);
+    // Taken out of the split while this waited: as for anyone not in it
+    if (guard === 'member') return refused(404, 'Not found');
+    // Its currency changed while this waited on a rate: worked out again when sent again
+    if (guard === 'currency') {
+      return refused(503, 'The split changed currency. Saving in a moment.');
+    }
+    if (ids != null && isConstraintError(err)) {
+      // The same changes sent twice at once: the other request saved them
+      const now = await savedReceipts(db, splitId, actor.email, ids);
+      if (fresh.every((i) => now.get(ids[i]) === prints[i]))
+        return { saved: true, accessRemoved: [] };
+    }
     // Someone else's change landed between our read and write (e.g. a person we
     // referenced was just removed); the database's constraints caught it
     if (isConstraintError(err)) {
@@ -480,7 +566,20 @@ export async function applyChanges(
   body: Unchecked<ChangesBody>,
   { fetchRate, onAccessRemoved }: ApplyOptions,
 ) {
-  const result = await saveChanges(db, splitId, actor, body.changes, fetchRate);
+  const { ids, currencies } = body;
+  const count = Array.isArray(body.changes) ? body.changes.length : 0;
+  if (
+    (ids != null &&
+      (!Array.isArray(ids) || ids.length !== count || !ids.every((id) => isRowId(id)))) ||
+    (currencies != null &&
+      (!Array.isArray(currencies) || currencies.length !== count || !currencies.every(isCurrency)))
+  ) {
+    return fail('Send one id and one currency for each change', 400);
+  }
+  const result = await saveChanges(db, splitId, actor, body.changes, fetchRate, [], {
+    ids: ids as string[] | undefined,
+    currencies: currencies as string[] | undefined,
+  });
   if (!result.saved) return fail(result.error, result.status);
   onAccessRemoved?.(result.accessRemoved);
   return ok();

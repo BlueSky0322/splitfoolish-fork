@@ -7,6 +7,7 @@ import {
   classifySaveFailure,
   isOfflineFailure,
   isOffline,
+  isOtherAccount,
   nextBatch,
   readOutbox,
   sendQueued,
@@ -30,8 +31,12 @@ const MAX_RETRY_DELAY_MS = 60_000;
 /** How long whenSaved waits before giving up */
 const WHEN_SAVED_TIMEOUT_MS = 20_000;
 
-/** Signed out: trying again on a timer would only fail until they sign in */
-const isSignedOut = (err: unknown) => err instanceof ApiError && err.status === 401;
+/**
+ * Signed out, or signed in as someone else now: trying again on a timer would only fail
+ * until they sign in (as the account the changes were made as)
+ */
+const isSignedOut = (err: unknown) =>
+  (err instanceof ApiError && err.status === 401) || isOtherAccount(err);
 
 export interface SaveQueueEvents {
   setStatus: (status: SyncStatus) => void;
@@ -192,9 +197,10 @@ export function useSaveQueue(splitId: string, events: SaveQueueEvents) {
   }, [splitId, syncOutbox, notifySavedWaiters, recoverFromFailure]);
 
   const queue = useCallback(
-    (change: Change) => {
+    /** currency: the split's now, which the change's plain amounts are in */
+    (change: Change, currency?: string) => {
       const { setStatus } = latest.current;
-      pending.current.push({ cid: newId(), change });
+      pending.current.push({ cid: newId(), change, ...(currency != null && { currency }) });
       setWaiting(pending.current.length);
       // Kept on the device straight away, in case the app closes before it's sent
       void withOutbox(splitId, syncOutbox);

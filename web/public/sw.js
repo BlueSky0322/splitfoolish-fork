@@ -49,6 +49,8 @@ const PHOTO_PREFIX = 'photo:';
 const PHOTO_LOCK_PREFIX = 'sf-photo:';
 /** CLIENT_ID_HEADER in shared/api.ts */
 const CLIENT_ID_HEADER = 'X-Client-Id';
+// Whose a write is (EXPECTED_ACCOUNT_HEADER in shared/api.ts): the account it was kept for
+const EXPECTED_ACCOUNT_HEADER = 'X-Expected-Account';
 /** PHOTO_ID_PARAM in shared/api.ts: a photo sent again with its id isn't added twice */
 const PHOTO_ID_PARAM = 'id';
 /** MAX_CHANGES and MAX_CHANGES_BYTES in shared/api.ts: how much one request may carry */
@@ -59,14 +61,27 @@ const utf8 = new TextEncoder();
 
 /** The next request's changes, as nextBatch in web/src/offline/outbox.ts picks them */
 function nextBatch(queued) {
-  let bytes = utf8.encode('{"changes":[]}').length;
+  let bytes = utf8.encode('{"changes":[],"ids":[],"currencies":[]}').length;
   let count = 0;
   for (const q of queued.slice(0, MAX_CHANGES)) {
-    bytes += utf8.encode(JSON.stringify(q.change)).length + (count > 0 ? 1 : 0);
+    bytes +=
+      utf8.encode(JSON.stringify([q.change, q.cid, q.currency ?? null])).length -
+      2 +
+      (count > 0 ? 3 : 0);
     if (count > 0 && bytes > MAX_CHANGES_BYTES) break;
     count++;
   }
   return queued.slice(0, count);
+}
+
+/** What's sent for these changes, as changesBody in web/src/offline/outbox.ts makes it */
+function changesBody(batch) {
+  const currencies = batch.map((q) => q.currency);
+  return {
+    changes: batch.map((q) => q.change),
+    ids: batch.map((q) => q.cid),
+    ...(currencies.every((c) => c != null) && { currencies }),
+  };
 }
 
 // Profile pictures and payment QR codes (always with ?v=), and photos of splits and receipts
@@ -327,7 +342,8 @@ const withLock = (id, fn, prefix = LOCK_PREFIX) =>
 class TryLater extends Error {}
 
 /** Sends JSON, or a photo (a Blob, as its own type) */
-async function post(path, body) {
+/** Sends what `account` kept: the server refuses it if someone else is signed in now */
+async function post(path, body, account) {
   const photo = body instanceof Blob;
   let res;
   try {
@@ -336,6 +352,7 @@ async function post(path, body) {
       headers: {
         'Content-Type': photo ? body.type || 'image/jpeg' : 'application/json',
         [CLIENT_ID_HEADER]: 'background-sync',
+        [EXPECTED_ACCOUNT_HEADER]: account,
       },
       body: photo ? body : JSON.stringify(body),
     });
@@ -349,6 +366,15 @@ async function post(path, body) {
   }
   // Signed out (Cloudflare Access sends a sign-in page): the app sends it once signed in
   if (res.redirected || res.type === 'opaqueredirect') throw new TryLater('Signed out');
+  // Made as another account than the one signed in now: kept for that account, as
+  // isOtherAccount in web/src/offline/outbox.ts says
+  if (res.status === 409) {
+    const answer = await res
+      .clone()
+      .json()
+      .catch(() => null);
+    if (answer?.code === 'account_mismatch') throw new TryLater('Signed in as someone else');
+  }
   // Answered by something other than the API (a proxy, say), as the app sees it too:
   // anything that isn't JSON, or is JSON null
   if (res.ok && (await res.json().catch(() => null)) == null) {
@@ -375,7 +401,7 @@ async function flushOfflineChanges() {
         const entry = await read(key);
         if (!mine(entry)) return;
         const { name, currency } = entry.value;
-        await post('/api/splits', { id, name, currency });
+        await post('/api/splits', { id, name, currency }, entry.email);
         await drop(key);
       });
     }
@@ -390,9 +416,11 @@ async function flushOfflineChanges() {
         let left = entry.value;
         while (left.length > 0) {
           const batch = nextBatch(left);
-          const res = await post(`/api/splits/${encodeURIComponent(id)}/changes`, {
-            changes: batch.map((q) => q.change),
-          });
+          const res = await post(
+            `/api/splits/${encodeURIComponent(id)}/changes`,
+            changesBody(batch),
+            entry.email,
+          );
           // Refused: the rest was built on top of it, so it goes too
           left = res.ok ? left.slice(batch.length) : [];
           if (left.length > 0) {
@@ -424,6 +452,7 @@ async function flushOfflineChanges() {
           await post(
             `/api/splits/${encodeURIComponent(splitId)}/attachments?${query}`,
             new Blob([bytes], { type }),
+            entry.email,
           );
           // Saved, or refused (its item gone, the split full): either way it's done
           await drop(key);

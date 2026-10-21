@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { AppEnv, Env } from './app';
 import { clientId, fail, isCrossSiteWrite, notFound } from './http';
+import { EXPECTED_ACCOUNT_HEADER } from '../shared/api';
 import { getUserEmail } from './accounts/auth';
 import invites from './routes/invites';
 import me from './routes/me';
@@ -27,6 +28,26 @@ api.use('*', async (c, next) => {
   const email = await getUserEmail(c.req.raw, c.env);
   if (email == null) return fail('Not signed in', 401);
   c.set('email', email);
+  await next();
+});
+
+// A write says whose it is: one made as another account than the one signed in now (a
+// change kept on the device from before someone else signed in, or a tab left open) is
+// refused before it changes anything, and the app keeps it for that account. Apps too
+// old to say are refused once REQUIRE_EXPECTED_ACCOUNT is on, with a status they keep
+// their changes for, until they update.
+api.use('*', async (c, next) => {
+  if (c.req.method === 'GET' || c.req.method === 'HEAD') return next();
+  const expected = c.req.header(EXPECTED_ACCOUNT_HEADER);
+  if (expected == null) {
+    if (c.env.REQUIRE_EXPECTED_ACCOUNT === 'true') {
+      return fail('Update the app to save this.', 503, 'client_update_required');
+    }
+    return next();
+  }
+  if (expected.trim().toLowerCase() !== c.var.email.toLowerCase()) {
+    return fail('Signed in as someone else.', 409, 'account_mismatch');
+  }
   await next();
 });
 

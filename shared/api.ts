@@ -261,6 +261,12 @@ export const MAX_PHOTOS_REMOVED = 100;
 
 export const CLIENT_ID_HEADER = 'X-Client-Id';
 
+/**
+ * Whose a write is: the account it was made as, which the server checks against the one
+ * signed in now before changing anything. Never chooses who's signed in.
+ */
+export const EXPECTED_ACCOUNT_HEADER = 'X-Expected-Account';
+
 /** A row the app makes before it's saved (a person, item, payment method): 16 hex characters */
 export const ROW_ID_CHARS = '[0-9a-f]{16}';
 const ROW_ID_PATTERN = new RegExp(`^${ROW_ID_CHARS}$`);
@@ -288,7 +294,16 @@ export interface Ok {
 /** What every refused or failed request sends back */
 export interface ApiErrorBody {
   error: string;
+  /** What went wrong, for the app to act on, where the status alone doesn't say */
+  code?: ErrorCode;
 }
+
+/**
+ * account_mismatch: the write was made for another account than the one signed in now,
+ * so it's kept (not sent again) until that account is back. client_update_required: an
+ * app too old to say whose a write is; kept until it updates.
+ */
+export type ErrorCode = 'account_mismatch' | 'client_update_required';
 
 // ---------- Request bodies ----------
 // What the app sends. The server reads each field by these names and still checks its
@@ -326,6 +341,16 @@ export interface SplitPatch {
 /** POST /splits/:id/changes */
 export interface ChangesBody {
   changes: Change[];
+  /**
+   * The id the app gave each change, one each in order: a change sent again (its
+   * answer lost) is then counted once, and an id sent with a different change refused
+   */
+  ids?: string[];
+  /**
+   * The split's currency when each change was made, one each: plain amounts typed then
+   * are in it, so are converted if the split has changed currency since
+   */
+  currencies?: string[];
 }
 
 /** PUT /me/payment-methods: all of them, and which is preferred */
