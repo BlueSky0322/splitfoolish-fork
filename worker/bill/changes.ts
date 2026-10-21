@@ -4,11 +4,11 @@
 // people editing the same split don't overwrite each other.
 
 import { type ChangesBody, MAX_CHANGES, isRowId } from '../../shared/api';
-import { convertCents, convertParts } from '../../shared/rates';
+import { convertCents, convertParts, fitsItemCents } from '../../shared/rates';
 import type { Actor } from '../../shared/rules';
 import { canChangePeople, canLinkPerson, removalBlocker } from '../../shared/rules';
 import type { Change } from '../../shared/types';
-import { MAX_NAME_LENGTH } from '../../shared/types';
+import { MAX_ITEMS, MAX_NAME_LENGTH } from '../../shared/types';
 import { touchSplitStatement } from '../app';
 import { type Rate, RatesUnavailable } from '../currency/exchange-rates';
 import { type Unchecked, fail, ok, readName, isConstraintError } from '../http';
@@ -26,6 +26,7 @@ import {
   readMemberEmail,
   readRateChange,
   toModelItem,
+  tooLarge,
 } from './input';
 import type { Batch, Model, ModelItem, UncheckedChange } from './model';
 import { Forbidden, Refused, loadModel } from './model';
@@ -45,11 +46,14 @@ function convertAgainStatements(
   id: string,
   item: ModelItem,
   rate: ReturnType<typeof chooseRate>,
+  /** The split's currency, which the item is converted into */
+  currency: string,
 ): D1PreparedStatement[] {
   const c = item.converted!;
   const next = { ...c, ...rate };
-  item.converted = next;
   const costCents = convertCents(c.cents, next.rate);
+  if (!fitsItemCents(costCents)) throw new Refused(tooLarge(currency));
+  item.converted = next;
   const statements = [
     db
       .prepare(
@@ -90,6 +94,7 @@ function rateStatements(
           id,
           item,
           chooseRate(manualRate, rates.get(rateKey(currency, item.createdAt))),
+          model.currency,
         )
       : [],
   );
@@ -269,6 +274,9 @@ function changeStatements(
     }
 
     case 'addItem': {
+      if (model.items.size >= MAX_ITEMS) {
+        throw new Refused(`A split can have up to ${MAX_ITEMS.toLocaleString('en-US')} items`);
+      }
       const createdAt = paidAt(model, 'addItem', change.item);
       const item = readItem(model, change.item, rates, createdAt);
       if (model.items.has(item.id)) throw new Refused('Invalid item');

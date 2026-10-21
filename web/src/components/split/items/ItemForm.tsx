@@ -13,7 +13,15 @@ import {
 import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useEffect, useId, useMemo, useState } from 'react';
-import { type RateSource, convertCents, isValidRate, rateDay, toCents } from '@shared/rates';
+import {
+  MAX_ITEM_CENTS,
+  type RateSource,
+  convertCents,
+  fitsItemCents,
+  isValidRate,
+  rateDay,
+  toCents,
+} from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
 import { itemShares, MAX_SHARES } from '@shared/settle';
 import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH, type Person } from '@shared/types';
@@ -242,7 +250,9 @@ const ItemForm = ({
         ? 'Enter an amount, like 90 or 30*3'
         : enteredCents > toCents(MAX_COST)
           ? `Amounts go up to ${MAX_COST.toLocaleString()}`
-          : null,
+          : costCents != null && !fitsItemCents(costCents)
+            ? `That comes to more than ${(MAX_ITEM_CENTS / 100).toLocaleString()} ${currency}`
+            : null,
     rate: foreign && ownRateChosen && !isValidRate(ownRate) ? 'Enter the rate, like 0.03' : null,
     name: name.trim() ? null : 'Enter what it was for',
     payer: payerId ? null : 'Choose who paid',

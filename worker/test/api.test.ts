@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { LocalWorker } from './local-worker';
 import { startLocalWorker } from './local-worker';
 import { MAX_CHANGES } from '../../shared/api';
+import { MAX_ITEMS } from '../../shared/types';
 import { rateDay } from '../../shared/rates';
 
 let api: LocalWorker;
@@ -165,6 +166,27 @@ describe('changing a split', () => {
     // None of them applied
     expect((await people())[0].name).toBe(`Amy ${MAX_CHANGES}`);
   });
+
+  it(`holds up to ${MAX_ITEMS} items, so its totals stay exact, and refuses more`, async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const amy = hex();
+    await change(owner, id, { op: 'addPerson', id: amy, name: 'Amy' });
+    const tea = () => ({
+      op: 'addItem',
+      item: { id: hex(), name: 'Tea', cost: 1, payerId: amy, participantIds: [amy] },
+    });
+    for (let added = 0; added < MAX_ITEMS; added += MAX_CHANGES) {
+      const n = Math.min(MAX_CHANGES, MAX_ITEMS - added);
+      expect((await change(owner, id, ...Array.from({ length: n }, tea))).status).toBe(200);
+    }
+    const more = await change(owner, id, tea());
+    expect(more.status).toBe(409);
+    expect(more.data.error).toBe(
+      `A split can have up to ${MAX_ITEMS.toLocaleString('en-US')} items`,
+    );
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.items).toHaveLength(MAX_ITEMS);
+  }, 60_000);
 
   it('requires exact amounts to add up to the cost', async () => {
     const owner = person('owner');
@@ -1454,6 +1476,28 @@ describe('items in another currency', () => {
     });
     const bad = item({ original: { currency: 'THB', amount: 300, rate: 0, rateSource: 'manual' } });
     expect((await change(owner, id, { op: 'addItem', item: bad })).status).toBe(409);
+  });
+
+  it('refuses an amount too large to hold exactly once converted, or a rate making one', async () => {
+    const { owner, id, item, items } = await myrSplit();
+    // The largest amount at the largest rate: past what a number holds to the cent
+    const huge = item({
+      original: { currency: 'THB', amount: 999999999.99, rate: 1000000, rateSource: 'manual' },
+    });
+    const refused = await change(owner, id, { op: 'addItem', item: huge });
+    expect(refused.status).toBe(409);
+    expect(refused.data.error).toBe('That comes to more than 50,000,000,000 MYR');
+    expect(await items()).toEqual([]);
+
+    // Right at the limit it saves; a typed rate taking it over is refused, changing nothing
+    const big = item({
+      original: { currency: 'THB', amount: 50_000_000, rate: 1000, rateSource: 'manual' },
+    });
+    expect((await change(owner, id, { op: 'addItem', item: big })).status).toBe(200);
+    expect((await items())[0].cost).toBe(50_000_000_000);
+    const over = await change(owner, id, { op: 'setRate', currency: 'THB', rate: 1001 });
+    expect(over.status).toBe(409);
+    expect((await items())[0]).toMatchObject({ cost: 50_000_000_000, original: { rate: 1000 } });
   });
 
   it('splits exact amounts typed in the other currency so they still add up', async () => {

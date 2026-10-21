@@ -43,6 +43,18 @@ export const toCents = (amount: number) => Math.round(amount * 100);
 /** `cents` in one currency, at `rate` units of the other per unit, in the other's cents */
 export const convertCents = (cents: number, rate: number) => Math.round(cents * rate);
 
+/**
+ * The most an item can come to in the split's currency, in cents, once converted. A
+ * typed amount (MAX_COST) at a high rate could go past it, and past what a number holds
+ * exactly. With at most MAX_ITEMS items and MAX_SHARES shares each, every total and
+ * every share worked out from items this size stays a whole number held exactly.
+ */
+export const MAX_ITEM_CENTS = 5_000_000_000_000;
+
+/** Whether cents are a whole amount an item may come to in the split's currency */
+export const fitsItemCents = (cents: number) =>
+  Number.isSafeInteger(cents) && cents >= 0 && cents <= MAX_ITEM_CENTS;
+
 /** Rates people type in, or that services return, outside this range are refused */
 export const MIN_RATE = 1e-6;
 export const MAX_RATE = 1e6;

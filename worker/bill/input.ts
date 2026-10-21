@@ -5,6 +5,8 @@ import { isRowId } from '../../shared/api';
 import {
   convertCents,
   convertParts,
+  fitsItemCents,
+  MAX_ITEM_CENTS,
   isCurrency,
   isValidRate,
   keepsSavedConversion,
@@ -299,6 +301,10 @@ function readParticipants(
   return participants;
 }
 
+/** Refused when an item converted into the split's currency comes to more than an item may */
+export const tooLarge = (currency: string) =>
+  `That comes to more than ${(MAX_ITEM_CENTS / 100).toLocaleString('en-US')} ${currency}`;
+
 /** An item as sent, checked; one in another currency is converted at the rate for `paid` */
 export function readItem(model: Model, raw: unknown, rates: FetchedRates, paid: number) {
   const item = (raw ?? {}) as Record<string, unknown>;
@@ -320,6 +326,8 @@ export function readItem(model: Model, raw: unknown, rates: FetchedRates, paid: 
   } else {
     costCents = toCents(readCost(item.cost));
   }
+
+  if (!fitsItemCents(costCents)) throw new Refused(tooLarge(model.currency));
 
   const payerId = item.payerId;
   if (typeof payerId !== 'string' || !model.people.has(payerId)) {

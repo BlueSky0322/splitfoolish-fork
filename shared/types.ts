@@ -22,6 +22,9 @@ export const MAX_NOTES_LENGTH = 2000;
 /** The largest amount an item can cost, in currency units, whatever it was paid in */
 export const MAX_COST = 1_000_000_000;
 
+/** The most items a split can have: what keeps its totals exact (MAX_ITEM_CENTS) */
+export const MAX_ITEMS = 1000;
+
 export interface Item {
   id: string;
   name: string;

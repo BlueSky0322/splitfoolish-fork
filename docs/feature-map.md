@@ -148,6 +148,9 @@ split as it is now. A refused batch drops what was queued after it and reloads t
 
 - Changes are applied in the order they were made, and a refused batch never applies
   part of itself (`bill/changes.ts`).
+- An item comes to at most `MAX_ITEM_CENTS` once converted (`fitsItemCents`), and a split
+  holds at most `MAX_ITEMS`, so totals and shares stay exact. A currency change an item
+  is too large for puts the split back in its old currency (`currency/reconvert.ts`).
 - Only the newest load of a split is shown, and a device copy never replaces what the
   server said (`useSplit.ts`).
 - People's colours are worked out, not stored: by their order in the split, the first

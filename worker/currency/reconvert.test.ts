@@ -19,8 +19,19 @@ const MYR_TEA = {
 /** A database whose split reads as `split`, with one item paid in MYR */
 function database(split: { currency: string; fromCurrency: string | null; since: number | null }) {
   const batches: unknown[][] = [];
+  // Statements run on their own, outside a batch
+  const ran: { sql: string; args: unknown[] }[] = [];
   const db = {
-    prepare: (sql: string) => ({ bind: (...args: unknown[]) => ({ sql, args }) }),
+    prepare: (sql: string) => ({
+      bind: (...args: unknown[]) => ({
+        sql,
+        args,
+        run: () => {
+          ran.push({ sql, args });
+          return Promise.resolve({ meta: { changes: 1 } });
+        },
+      }),
+    }),
     batch: (statements: unknown[]) => {
       batches.push(statements);
       return Promise.resolve(
@@ -30,11 +41,11 @@ function database(split: { currency: string; fromCurrency: string | null; since:
       );
     },
   };
-  return { db: db as unknown as D1Database, batches };
+  return { db: db as unknown as D1Database, batches, ran };
 }
 
-const rate = () =>
-  vi.fn(() => Promise.resolve({ rate: 0.25, source: 'wise' as const, fetchedAt: 1 }));
+const rate = (value = 0.25) =>
+  vi.fn(() => Promise.resolve({ rate: value, source: 'wise' as const, fetchedAt: 1 }));
 
 describe('retrying a conversion', () => {
   test('does nothing once the conversion has finished', async () => {
@@ -59,5 +70,19 @@ describe('retrying a conversion', () => {
     expect(await reconvertSplit(newer.db, 's', fetchRate, 200)).toBe(true);
     expect(fetchRate).toHaveBeenCalledWith('MYR', 'GBP', MYR_TEA.createdAt);
     expect(newer.batches).toHaveLength(2);
+  });
+});
+
+describe('converting an item too large for the new currency', () => {
+  test('puts the split back in the old currency, its items untouched', async () => {
+    const { db, batches, ran } = database({ currency: 'IDR', fromCurrency: 'MYR', since: 200 });
+    // RM 10 at this rate is past the most an item may come to (MAX_ITEM_CENTS)
+    expect(await reconvertSplit(db, 's', rate(1e12), 200)).toBe(true);
+    // Only the first read: no item written
+    expect(batches).toHaveLength(1);
+    expect(ran).toHaveLength(1);
+    expect(ran[0].sql).toMatch(/SET currency = converting_from, converting_from = NULL/);
+    // Only while that conversion is still the one under way
+    expect(ran[0].args.slice(1)).toEqual(['s', 'IDR', 200]);
   });
 });
