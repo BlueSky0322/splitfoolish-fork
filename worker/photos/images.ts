@@ -3,7 +3,7 @@
 // with the same membership checks. They are shrunk in the browser before upload, to
 // the sizes in shared/api.ts.
 
-import { fail } from '../http';
+import { bodyRefused, fail, readBody } from '../http';
 
 /** The image type from the file's first bytes, so a mislabelled upload can't pass as an image */
 function detectImageType(bytes: Uint8Array): string | null {
@@ -23,9 +23,10 @@ export interface Image {
 
 /** The image sent with a request, checked; or the answer refusing it */
 export async function readImage(req: Request, maxBytes: number) {
-  const declared = Number(req.headers.get('Content-Length') ?? 0);
-  if (declared > maxBytes) return fail('That photo is too large', 413);
-  return checkImage(new Uint8Array(await req.arrayBuffer()), maxBytes);
+  const bytes = await readBody(req, maxBytes);
+  if (bytes === 'too large') return fail('That photo is too large', 413);
+  if (bytes === 'too slow') return bodyRefused(bytes);
+  return checkImage(bytes, maxBytes);
 }
 
 /** An image's bytes, checked; or the answer refusing them */

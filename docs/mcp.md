@@ -33,8 +33,11 @@ OAuth 2.1 authorization code with PKCE (S256), run by
 - **The consent page** sits behind Cloudflare Access like the rest of the app. The
   account the agent acts as is the one Access signed in there, verified again on the
   page; nothing the agent or the form sends can change it.
-- **Scopes:** `splits:read` (list and read splits) and `splits:write` (add and edit
-  expenses). Both are advertised to clients (resource metadata and the `401` challenge),
+- **Scopes:** `splits:read` (list and read splits, their people, expenses, balances and
+  photos) and `splits:write` (everything the account can change itself: make splits,
+  add, change and remove expenses and photos, add or rename people, route payments). The
+  consent page says so, removing included. Grants made before it did keep the same
+  scope; the agent can do no more than the account could. Both are advertised to clients (resource metadata and the `401` challenge),
   and the page always offers both, ticked, whatever the client asked for; the person
   can untick either. Each tool checks its own scope; a call the grant doesn't cover gets a `403`
   with `error="insufficient_scope"`, so the client can ask for more.
@@ -43,6 +46,10 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   grant. Revoke a token at `/oauth/token` (RFC 7009).
 - **Every call is checked now, not at sign-in:** someone removed from a split loses it
   through the agent at once, as in the app.
+- **Requests are read only so far:** up to 4 MiB (a photo for `add_photo` fits), and
+  only for so long. One past that is refused with `413` (or `408`) before any of it is
+  parsed, and the body is read once, then checked for scopes and handed to the
+  transport as it is.
 
 ## The tools
 

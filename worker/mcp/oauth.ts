@@ -12,7 +12,7 @@ import type { AuthRequest, OAuthHelpers } from '@cloudflare/workers-oauth-provid
 import OAuthProvider, { AuthorizationError } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../app';
 import { getUserEmail } from '../accounts/auth';
-import { isCrossSiteWrite } from '../http';
+import { bodyRefused, isCrossSiteWrite, readBody } from '../http';
 import { mcpHandler } from './server';
 import { READ_SCOPE, SCOPES, WRITE_SCOPE } from './scopes';
 
@@ -23,9 +23,16 @@ export interface GrantProps {
 
 const AUTHORIZE_PATH = '/oauth/authorize';
 
+/** The consent form is a handle, a decision and a few scopes: far less than this */
+const MAX_CONSENT_BYTES = 16 * 1024;
+
+// Everything each scope lets an agent do, removing things included: the tools in
+// tools.ts that check it (docs/mcp.md lists them)
 const SCOPE_LABELS: Record<string, string> = {
-  [READ_SCOPE]: 'See your splits, their expenses and balances',
-  [WRITE_SCOPE]: 'Add and edit expenses in your splits',
+  [READ_SCOPE]: 'See your splits: their people, expenses, balances and photos',
+  [WRITE_SCOPE]:
+    'Change your splits as you can yourself: make splits, add, change and remove ' +
+    'expenses and photos, add or rename people, and choose who payments go through',
 };
 
 const escape = (value: string) => value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -115,7 +122,10 @@ ${offered
 
 /** Saves the person's answer and sends the browser back to the app that asked */
 async function answerConsent(oauth: OAuthHelpers, req: Request, email: string) {
-  const form = await req.formData();
+  // The page's own small form: a handle, a decision and the scopes ticked
+  const body = await readBody(req, MAX_CONSENT_BYTES);
+  if (typeof body === 'string') return bodyRefused(body);
+  const form = new URLSearchParams(new TextDecoder().decode(body));
   const posted = form.get('handle');
   const handle = typeof posted === 'string' ? posted : '';
   if (form.get('decision') !== 'approve') {

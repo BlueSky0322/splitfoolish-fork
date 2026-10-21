@@ -103,6 +103,9 @@ async function grant(email: string, scope: string[], requested = scope) {
   for (const s of [READ, WRITE]) {
     expect(html).toContain(`name="scope" value="${s}" checked`);
   }
+  // Each says all it allows, removing and photos included
+  expect(html).toContain('See your splits: their people, expenses, balances and photos');
+  expect(html).toContain('add, change and remove expenses and photos');
   const handle = /name="handle" value="([^"]+)"/.exec(html)![1];
   const cookie = page.headers
     .getSetCookie()
@@ -227,6 +230,45 @@ describe('signing in', () => {
       expect([401, 404]).toContain(other.status);
       expect(other.headers.get('Content-Type') ?? '').not.toContain('text/html');
     }
+  });
+
+  it('reads a request only so far, and answers one that is not JSON as ever', async () => {
+    const { access } = await grant(person('alice'), [READ]);
+    const send = (body: BodyInit) =>
+      fetch(`${api.base}/mcp`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${access}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, text/event-stream',
+        },
+        body,
+        duplex: 'half',
+      } as RequestInit);
+    const notJson = await send('{"jsonrpc":');
+    expect(notJson.status).toBe(400);
+    expect(await notJson.json()).toMatchObject({ error: { code: -32700 } });
+    // A batch past the transport's own limit is still refused by it
+    const batch = Array.from({ length: 101 }, (_, i) => ({
+      jsonrpc: '2.0',
+      id: i,
+      method: 'ping',
+    }));
+    expect((await rawCall(access, batch)).status).toBe(400);
+
+    // Sent in pieces, without saying how much: refused once it's past the limit. Last, as
+    // an upload refused while it's still sending can take its connection with it
+    let sent = 0;
+    const big = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 5 * 1024 * 1024) return controller.close();
+        sent += 64 * 1024;
+        controller.enqueue(new Uint8Array(64 * 1024).fill(32));
+      },
+    });
+    const tooLarge = await send(big);
+    expect(tooLarge.status).toBe(413);
+    expect(await tooLarge.json()).toMatchObject({ error: { message: 'Request body too large' } });
   });
 
   it('refuses a missing, made-up or revoked token, and a refreshed one works', async () => {

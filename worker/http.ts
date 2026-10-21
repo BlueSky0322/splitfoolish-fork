@@ -56,18 +56,63 @@ export const clientId = (req: Request) => req.headers.get(CLIENT_ID_HEADER)?.sli
 
 const MAX_BODY_BYTES = 256 * 1024;
 
+/** How long a request may take to send its body before it's turned away */
+export const BODY_DEADLINE_MS = 30_000;
+
+/**
+ * A request body, read only as far as `limit` bytes: turned away at once when it says it's
+ * larger, and as soon as more than that arrives, whatever it said (the header can be
+ * missing or wrong), and when it takes longer than `deadline` to arrive. Nothing past
+ * the limit is kept or waited for.
+ */
+export async function readBody(
+  req: Request,
+  limit: number,
+  deadline = BODY_DEADLINE_MS,
+): Promise<Uint8Array | 'too large' | 'too slow'> {
+  if (Number(req.headers.get('Content-Length') ?? 0) > limit) return 'too large';
+  if (req.body == null) return new Uint8Array();
+  const reader = (req.body as ReadableStream<Uint8Array>).getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<'too slow'>((resolve) => {
+    timer = setTimeout(() => resolve('too slow'), deadline);
+  });
+  try {
+    for (;;) {
+      const next = await Promise.race([reader.read(), late]);
+      if (next === 'too slow' || size + (next.value?.byteLength ?? 0) > limit) {
+        void reader.cancel().catch(() => {});
+        return next === 'too slow' ? next : 'too large';
+      }
+      if (next.done) break;
+      chunks.push(next.value);
+      size += next.value.byteLength;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  const body = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return body;
+}
+
+/** The answer to a body readBody turned away */
+export const bodyRefused = (outcome: 'too large' | 'too slow') =>
+  outcome === 'too large' ? fail('Too large', 413) : fail('Took too long to send', 408);
+
 /** A request body as sent: the field names the contract gives, each value still to check */
 export type Unchecked<T> = { [K in keyof T]?: unknown };
 
 /** The JSON body of a request, as the fields of T (in shared/api.ts) still to be checked */
 export async function readJson<T>(req: Request): Promise<Unchecked<T> | Response> {
-  // Turned away before reading when it says it's too big; checked again after, as the
-  // header can be missing or wrong
-  if (Number(req.headers.get('Content-Length') ?? 0) > MAX_BODY_BYTES) {
-    return fail('Too large', 413);
-  }
-  const bytes = await req.arrayBuffer();
-  if (bytes.byteLength > MAX_BODY_BYTES) return fail('Too large', 413);
+  const bytes = await readBody(req, MAX_BODY_BYTES);
+  if (typeof bytes === 'string') return bodyRefused(bytes);
   try {
     const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
     if (body == null || typeof body !== 'object') throw new Error();
