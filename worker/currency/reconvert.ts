@@ -5,7 +5,7 @@
 // Each is converted at the rate on the day it was paid.
 
 import type { RateSource } from '../../shared/rates';
-import { convertCents, convertParts, rateDay } from '../../shared/rates';
+import { convertCents, convertParts, fitsItemCents, rateDay } from '../../shared/rates';
 import type { SplitMode } from '../../shared/settle';
 import type { Rate } from './exchange-rates';
 
@@ -56,8 +56,9 @@ interface PartRow {
  * Converts every item into the split's current currency, then marks the split done.
  * Does nothing if it isn't converting, or (given `onlySince`) if the conversion under
  * way is for a newer change than the one asked about. If the currency changes again
- * meanwhile, its writes are skipped and the next run starts over. True when this run
- * finished the conversion.
+ * meanwhile, its writes are skipped and the next run starts over. An item too large in
+ * the new currency puts the split back in the old one instead. True when this run
+ * finished the conversion, either way.
  */
 export async function reconvertSplit(
   db: D1Database,
@@ -155,6 +156,9 @@ export async function reconvertSplit(
 
     const rate = rates.get(keyOf(item))!;
     const costCents = convertCents(paidCents, rate.rate);
+    // Too much in the new currency to hold exactly: no rate will change that, so the
+    // split goes back to the currency its amounts are still in, rather than retrying
+    if (!fitsItemCents(costCents)) return undoCurrencyChange(db, splitId, to, since);
     statements.push(
       db
         .prepare(
@@ -200,4 +204,23 @@ export async function reconvertSplit(
   );
   const results = await db.batch(statements);
   return (results.at(-1)?.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Puts a split back in the currency its amounts are still in, its conversion over, when
+ * an item would come to more in the new one than an item may (MAX_ITEM_CENTS). Nothing
+ * was written to its items, so they stay as they were. Only while that conversion is
+ * still the one under way.
+ */
+async function undoCurrencyChange(db: D1Database, splitId: string, to: string, since: number) {
+  console.error('undid a currency change an item is too large for', { splitId, to });
+  const { meta } = await db
+    .prepare(
+      `UPDATE splits SET currency = converting_from, converting_from = NULL,
+         converting_since = NULL, updated_at = ?
+       WHERE id = ? AND currency = ? AND converting_since = ?`,
+    )
+    .bind(Date.now(), splitId, to, since)
+    .run();
+  return meta.changes > 0;
 }

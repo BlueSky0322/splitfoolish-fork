@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import type { Balance, SettleItem, Transfer } from './settle';
-import { balances, itemShares, transfers } from './settle';
+import { MAX_ITEM_CENTS, fitsItemCents } from './rates';
+import { MAX_SHARES, balances, itemShares, transfers } from './settle';
+import { MAX_ITEMS } from './types';
 
 const equal = (costCents: number, payerId: string, ids: string[]): SettleItem => ({
   costCents,
@@ -218,5 +220,25 @@ describe('balances and transfers', () => {
 
   test('a settled split needs no transfers', () => {
     expect(transfers(balances(['a', 'b'], [equal(1000, 'a', ['a'])]))).toEqual([]);
+  });
+});
+
+describe('the limits on amounts', () => {
+  test('keep every total and share of a full split a whole number held exactly', () => {
+    // A split full of the largest items
+    expect(Number.isSafeInteger(MAX_ITEMS * MAX_ITEM_CENTS)).toBe(true);
+    // An item's cost times the most shares anyone can have, as itemShares works it out
+    expect(Number.isSafeInteger(MAX_ITEM_CENTS * MAX_SHARES)).toBe(true);
+    const shares = itemShares(byShares(MAX_ITEM_CENTS, { a: MAX_SHARES, b: 1 }));
+    expect(sum(shares)).toBe(MAX_ITEM_CENTS);
+    expect([...shares.values()].every(Number.isSafeInteger)).toBe(true);
+  });
+
+  test('refuse what is past them', () => {
+    expect(fitsItemCents(MAX_ITEM_CENTS)).toBe(true);
+    expect(fitsItemCents(MAX_ITEM_CENTS + 1)).toBe(false);
+    expect(fitsItemCents(99_999_999_999_000_000)).toBe(false);
+    expect(fitsItemCents(-1)).toBe(false);
+    expect(fitsItemCents(0.5)).toBe(false);
   });
 });

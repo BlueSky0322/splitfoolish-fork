@@ -79,6 +79,9 @@ Not checked by lint, so kept by review: `shared/` uses no browser or Worker glob
   `split/derive.ts` in the app). New money arithmetic works in cents through these;
   never add or split floating currency units.
 - Show money with `formatMoney` / `formatAmount` (`web/src/utils/money.ts`), which take cents.
+- An item comes to at most `MAX_ITEM_CENTS` in its split's currency, once converted, and a
+  split holds at most `MAX_ITEMS` items, so every total and share stays exact. Anything
+  that converts amounts (an item, a typed rate, a currency change) checks it.
 
 ## Rules, offline and screens
 
