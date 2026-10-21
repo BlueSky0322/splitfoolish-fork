@@ -247,7 +247,7 @@ splits.post(`${SPLIT_PATH}/changes`, membersOnly, async (c) => {
 // The split's picture: anyone in it sees it, only the owner changes it
 const changePicture = allowedIf(canEditSplitSettings, 'Only the owner can change the picture');
 splits.get(`${SPLIT_PATH}/picture`, membersOnly, (c) =>
-  serveSplitPicture(c.env.DB, c.req.param('id')),
+  serveSplitPicture(c.env.DB, c.req.param('id'), { req: c.req.raw, viewer: c.var.email }),
 );
 splits.put(`${SPLIT_PATH}/picture`, membersOnly, changePicture, (c) =>
   putSplitPicture(c.env.DB, c.req.param('id'), c.req.raw),
@@ -261,7 +261,10 @@ splits.post(`${SPLIT_PATH}/attachments`, membersOnly, (c) =>
   uploadAttachment(c.env.DB, c.req.param('id'), c.var.email, c.req.raw, photosPerSplit(c.env)),
 );
 splits.get(`${SPLIT_PATH}/attachments/:attachmentId${ID_PARAM}`, membersOnly, (c) =>
-  serveAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId')),
+  serveAttachment(c.env.DB, c.req.param('id'), c.req.param('attachmentId'), {
+    req: c.req.raw,
+    viewer: c.var.email,
+  }),
 );
 splits.delete(`${SPLIT_PATH}/attachments/:attachmentId${ID_PARAM}`, membersOnly, (c) =>
   deleteAttachments(c.env.DB, c.req.param('id'), [c.req.param('attachmentId')], {

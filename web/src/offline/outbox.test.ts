@@ -2,9 +2,24 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ApiError, NetworkError } from '../api';
-import { CLIENT_ID_HEADER, EXPECTED_ACCOUNT_HEADER } from '@shared/api';
-import { backgroundSync, load, ok, photoOnDevice, respond } from '../testing/sw';
-import { UNSENT_PREFIXES, clearCache, listCacheIds, setCacheUser, writeCache } from './cache';
+import { CLIENT_ID_HEADER, EXPECTED_ACCOUNT_HEADER, IMAGE_VIEWER_HEADER } from '@shared/api';
+import {
+  backgroundSync,
+  fakeCaches,
+  fetchThroughWorker,
+  load,
+  ok,
+  photoOnDevice,
+  respond,
+} from '../testing/sw';
+import {
+  IMAGE_CACHE_PREFIX,
+  UNSENT_PREFIXES,
+  clearCache,
+  listCacheIds,
+  setCacheUser,
+  writeCache,
+} from './cache';
 import {
   CREATE_PREFIX,
   type PendingCreate,
@@ -168,25 +183,19 @@ describe('the service worker and the app', () => {
   });
 
   test('the pictures the service worker keeps are the ones the app clears on signing out', async () => {
-    const opened: string[] = [];
-    const deleted: string[] = [];
-    const caches = {
-      open: (name: string) => {
-        opened.push(name);
-        return Promise.resolve({ match: () => Promise.resolve(undefined), put: () => {} });
-      },
-      delete: (name: string) => {
-        deleted.push(name);
-        return Promise.resolve(true);
-      },
+    const caches = fakeCaches();
+    const picture = {
+      status: 200,
+      body: 'picture bytes',
+      contentType: 'image/jpeg',
+      headers: { [IMAGE_VIEWER_HEADER]: 'ryan@example.com' },
     };
-    const picture = runServiceWorker({ location: { origin: 'https://app.test' } }, { caches });
-    await picture.fetch('https://app.test/api/splits/bali/picture');
-    expect(opened).toHaveLength(1);
+    await fetchThroughWorker('/api/splits/bali/picture', picture, caches);
+    expect([...caches.stores.keys()]).toEqual([`${IMAGE_CACHE_PREFIX}ryan@example.com`]);
 
     vi.stubGlobal('caches', caches);
     await clearCache();
-    expect(deleted).toEqual(opened);
+    expect([...caches.stores.keys()]).toEqual([]);
   });
 });
 

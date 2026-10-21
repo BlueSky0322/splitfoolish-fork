@@ -8,19 +8,28 @@
 //   with what the app offers offline but loads later (sharing an image, exporting), as
 //   the build lists them in /precache.json. Built files of the newest two versions are
 //   kept, so a tab still open on the older one can load what it needs; older ones go.
-// - Built files, fonts and images never change once made (built files have content
-//   hashes in their names, a profile picture URL names its version, a photo never
-//   changes once added, and a changed font in /fonts gets a new name), so they're
-//   served from here once kept.
+// - Built files and fonts never change once made (built files have content hashes in
+//   their names, and a changed font in /fonts gets a new name), so they're served from
+//   here once kept.
+// - Pictures and photos are private: online they always come from the server, which
+//   checks the viewer may still see them (the browser's own copy answers when the
+//   server says it's unchanged). Each is kept for the account it was shown to, and
+//   shown from here only offline, or while the server is failing, and only to that
+//   account.
 // - The rest of /api always goes to the network, through Cloudflare Access.
 // - Changes and photos made offline are kept by the app (in IndexedDB); background sync
 //   sends them here when the connection is back, even if the app is closed.
 const SHELL = 'splitfoolish-shell-v1';
 const ASSETS = 'splitfoolish-assets-v1';
-/** IMAGE_CACHE in web/src/offline/cache.ts, which clears it on sign-out */
-const IMAGE_CACHE = 'splitfoolish-images-v1';
+/**
+ * IMAGE_CACHE_PREFIX in web/src/offline/cache.ts, which clears them on sign-out: one
+ * cache per account, named with its email
+ */
+const IMAGE_CACHE_PREFIX = 'splitfoolish-images-v2:';
+/** IMAGE_VIEWER_HEADER in shared/api.ts: whose a picture is, as the server sent it */
+const IMAGE_VIEWER_HEADER = 'X-Image-Viewer';
 const FONTS = 'splitfoolish-fonts-v1';
-const KEEP = [SHELL, ASSETS, IMAGE_CACHE, FONTS];
+const KEEP = [SHELL, ASSETS, FONTS];
 
 /** Every built file the app needs offline, written by the build (web/build/precache.ts) */
 const PRECACHE_LIST = '/precache.json';
@@ -222,7 +231,11 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => !KEEP.includes(k)).map((k) => caches.delete(k))),
+        Promise.all(
+          keys
+            .filter((k) => !KEEP.includes(k) && !k.startsWith(IMAGE_CACHE_PREFIX))
+            .map((k) => caches.delete(k)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -235,6 +248,66 @@ async function cacheFirst(cacheName, request, accept) {
   const response = await fetch(request);
   // Only real files: a sign-in redirect or an error must not be stored
   if (response.ok && accept(response)) cache.put(request, response.clone());
+  return response;
+}
+
+/** Who the app last said is signed in (USER_KEY), or null */
+async function signedInAccount() {
+  const db = await openDb();
+  try {
+    return (await idb(db, 'readonly', (s) => s.get(USER_KEY))) ?? null;
+  } finally {
+    db.close();
+  }
+}
+
+/** This account's copy of a picture, if it was shown one */
+async function keptImage(request) {
+  const account = await signedInAccount().catch(() => null);
+  const name = account == null ? null : `${IMAGE_CACHE_PREFIX}${account}`;
+  if (name == null || !(await caches.has(name))) return undefined;
+  return (await caches.open(name)).match(request);
+}
+
+/** Forgets every account's copy of a picture the server no longer shows */
+async function forgetImage(request) {
+  const names = (await caches.keys()).filter((k) => k.startsWith(IMAGE_CACHE_PREFIX));
+  await Promise.all(names.map(async (name) => (await caches.open(name)).delete(request)));
+}
+
+/**
+ * A picture or photo from the server, so access taken away, or another account signed
+ * in, is checked each time; the kept copy only when the server can't be reached or is
+ * failing, and only the signed-in account's. A sign-in page in its place shows nothing.
+ */
+async function image(event) {
+  const { request } = event;
+  let response;
+  try {
+    // Checked with the server even when the browser holds a copy older builds said to
+    // keep for a year
+    response = await fetch(request, { cache: 'no-cache' });
+  } catch (err) {
+    const kept = await keptImage(request);
+    if (kept) return kept;
+    throw err;
+  }
+  if (response.status >= 500) return (await keptImage(request)) ?? response;
+  const viewer = response.headers.get(IMAGE_VIEWER_HEADER);
+  if (
+    response.ok &&
+    response.type === 'basic' &&
+    viewer != null &&
+    (response.headers.get('Content-Type') ?? '').startsWith('image/')
+  ) {
+    const copy = response.clone();
+    event.waitUntil(
+      caches.open(`${IMAGE_CACHE_PREFIX}${viewer}`).then((c) => c.put(request, copy)),
+    );
+  } else if (response.status === 403 || response.status === 404) {
+    // Removed, or no longer this person's to see
+    event.waitUntil(forgetImage(request));
+  }
   return response;
 }
 
@@ -304,13 +377,7 @@ self.addEventListener('fetch', (event) => {
     // The PDF export's font, so a PDF can be made offline once one has been made
     event.respondWith(cacheFirst(FONTS, event.request, (r) => r.type === 'basic' && isFontFile(r)));
   } else if (isImage(url)) {
-    event.respondWith(
-      cacheFirst(
-        IMAGE_CACHE,
-        event.request,
-        (r) => r.type === 'basic' && (r.headers.get('Content-Type') ?? '').startsWith('image/'),
-      ),
-    );
+    event.respondWith(image(event));
   }
 });
 

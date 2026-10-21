@@ -252,13 +252,19 @@ describe('signing in', () => {
     const redirects = Array.from({ length: 6 }, (_, i) => `${REDIRECT}${i}`);
     expect((await register({ redirect_uris: redirects }, '203.0.113.3')).status).toBe(400);
 
-    // Ten a minute from one address, then the next waits; another address isn't held back
-    for (let i = 0; i < 10; i++) {
-      expect((await register({ client_name: `Agent ${i}` })).status).toBe(201);
+    // Ten a minute from one address, then the next waits; another address isn't held back.
+    // The limit counts per minute of the clock, and a run can straddle two, so register
+    // until refused, up to 21 times: at least one minute then sees more than ten.
+    let accepted = 0;
+    let refused: Response | null = null;
+    for (let i = 0; i < 21 && refused == null; i++) {
+      const res = await register({ client_name: `Agent ${i}` });
+      if (res.status === 201) accepted++;
+      else refused = res;
     }
-    const eleventh = await register({ client_name: 'Agent 10' });
-    expect(eleventh.status).toBe(429);
-    expect(await eleventh.json()).toMatchObject({ error: 'temporarily_unavailable' });
+    expect(refused?.status).toBe(429);
+    expect(await refused?.json()).toMatchObject({ error: 'temporarily_unavailable' });
+    expect(accepted).toBeGreaterThanOrEqual(10);
     expect((await register({ client_name: 'Elsewhere' }, '203.0.113.9')).status).toBe(201);
   });
 
