@@ -256,7 +256,8 @@ describe('the repository config', () => {
         file,
       ).toEqual(['crossArea']);
     }
-  });
+    // Starts TypeScript for the shared code, the Worker and the app in turn
+  }, 30_000);
 
   test('knows the same path aliases as the app', () => {
     const { config } = ts.readConfigFile(path.join(root, 'web/tsconfig.json'), ts.sys.readFile);

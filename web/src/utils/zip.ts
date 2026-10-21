@@ -4,7 +4,7 @@
 
 export interface ZipEntry {
   name: string;
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   /** When the file was made, shown by the zip tool */
   modified: Date;
 }
@@ -41,8 +41,8 @@ const VERSION = 20;
 
 export function makeZip(entries: ZipEntry[]): Blob {
   const encoder = new TextEncoder();
-  const parts: Uint8Array[] = [];
-  const directory: Uint8Array[] = [];
+  const parts: Uint8Array<ArrayBuffer>[] = [];
+  const directory: Uint8Array<ArrayBuffer>[] = [];
   let offset = 0;
 
   for (const entry of entries) {

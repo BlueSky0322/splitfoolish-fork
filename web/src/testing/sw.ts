@@ -80,7 +80,7 @@ export async function backgroundSync(answers: Answer | Answer[]) {
   const list = Array.isArray(answers) ? answers : [answers];
   let answered = 0;
   // Called with (path, init), which the tests read back from fetch.mock.calls
-  const fetch = vi.fn<[string, RequestInit], Promise<Response>>(() =>
+  const fetch = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(() =>
     respond(list[Math.min(answered++, list.length - 1)]),
   );
   const handlers = load({ fetch });
@@ -224,7 +224,7 @@ export async function fetchThroughWorker(
   answer: Answer,
   caches: ReturnType<typeof fakeCaches>,
 ) {
-  const fetch = vi.fn<[Request, RequestInit?], Promise<Response>>(async () => {
+  const fetch = vi.fn<(request: Request, init?: RequestInit) => Promise<Response>>(async () => {
     const res = await respond(answer);
     // From the app's own address, as the browser marks it
     Object.defineProperty(res, 'type', { value: 'basic' });

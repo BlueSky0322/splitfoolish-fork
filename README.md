@@ -63,6 +63,8 @@ Routes only decide who gets in; the work is in the feature folders (see the top 
 
 ## Running it
 
+Needs Node 22.12 or later (Vite 8 and Vitest 5); CI uses Node 22.
+
 ```sh
 yarn install
 cp .dev.vars.example .dev.vars

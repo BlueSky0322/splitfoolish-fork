@@ -2,12 +2,20 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { keys } from 'idb-keyval';
-import { describe, expect, onTestFinished, test, vi } from 'vitest';
+import { describe, expect, onTestFinished, test } from 'vitest';
 import { writeCache } from '../../offline/cache';
 import { writeOutbox } from '../../offline/outbox';
 import { PHOTO_PREFIX } from '../../offline/photo-queue';
 import { flushOfflineChanges } from '../../offline/sync';
 import { fakeServer, holdNext, renderApp, setupAppTests } from '../../testing/app';
+
+/** The test browser vitest runs, with the console it reports what it can't do to */
+interface TestBrowser {
+  virtualConsole: {
+    on(event: 'jsdomError', listener: (error: { type?: string; message: string }) => void): void;
+    off(event: 'jsdomError', listener: (error: { type?: string; message: string }) => void): void;
+  };
+}
 
 setupAppTests();
 
@@ -67,12 +75,19 @@ describe('Settings', () => {
 
   /**
    * Watches for going to Cloudflare's sign-out page, which the test browser can't do and
-   * reports as an error
+   * reports to its console as not implemented
    */
   const watchSignOut = () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    onTestFinished(() => error.mockRestore());
-    return () => error.mock.calls.some((args) => String(args[0]).includes('navigation'));
+    const { virtualConsole } = (globalThis as unknown as { jsdom: TestBrowser }).jsdom;
+    let navigated = false;
+    const notice = (error: { type?: string; message: string }) => {
+      if (error.type === 'not-implemented' && error.message.includes('navigation')) {
+        navigated = true;
+      }
+    };
+    virtualConsole.on('jsdomError', notice);
+    onTestFinished(() => void virtualConsole.off('jsdomError', notice));
+    return () => navigated;
   };
 
   test('asks before signing out when changes have not reached the server, which signing out removes', async () => {

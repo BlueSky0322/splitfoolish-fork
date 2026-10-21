@@ -102,7 +102,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  shrink.image.mockClear();
+  // Back to shrinking at once, after a test that held it up
+  shrink.image.mockReset();
   await forgetOfflineWork({ everyone: true });
   delete (navigator as { onLine?: boolean }).onLine;
 });

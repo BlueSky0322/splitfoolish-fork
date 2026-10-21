@@ -193,7 +193,7 @@ async function clearExceptUnsent(keepUnsentOf: (email: string) => boolean) {
   );
   const entries = await getMany<Entry<unknown> | undefined>(unsent);
   const kept = new Set(
-    unsent.filter((_, i) => entries[i] != null && keepUnsentOf(entries[i]!.email)),
+    unsent.filter((_, i) => entries[i] != null && keepUnsentOf(entries[i].email)),
   );
   if (kept.size === 0) return clear();
   await delMany(all.filter((k) => !kept.has(k as string)));

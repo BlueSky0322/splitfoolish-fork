@@ -207,7 +207,8 @@ async function loadKept(splitId?: string) {
 /** Runs fn holding the photo's lock, so two tabs (or the service worker) never both send it */
 function withPhotoLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-  return locks ? locks.request(`${PHOTO_LOCK_PREFIX}${id}`, fn) : fn();
+  // The lock's promise settles as fn's does
+  return locks ? (locks.request(`${PHOTO_LOCK_PREFIX}${id}`, fn) as Promise<T>) : fn();
 }
 
 // ---------- Sending ----------

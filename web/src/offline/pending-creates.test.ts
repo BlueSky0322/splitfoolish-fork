@@ -5,7 +5,7 @@ import type { PendingCreate } from './pending-creates';
 // The network and the device are stood in for: what's kept, and what the server says
 const kept = new Map<string, PendingCreate>();
 const CREATE = 'create:';
-const createSplit = vi.fn<[id: string, name: string, currency: string], Promise<unknown>>();
+const createSplit = vi.fn<(id: string, name: string, currency: string) => Promise<unknown>>();
 
 vi.mock('../api', async (original) => ({
   ...(await original<typeof import('../api')>()),
