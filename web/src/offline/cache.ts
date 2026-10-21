@@ -20,6 +20,17 @@ export const SW_USER_KEY = 'sf-user';
  */
 export const OPENED_FROM_DEVICE = 'sf-opened-from-device';
 /**
+ * That marker's content when Cloudflare Access asked to sign in again, rather than the
+ * server being out of reach (SIGNED_OUT in public/sw.js)
+ */
+export const OPENED_SIGNED_OUT = 'signed-out';
+/**
+ * Marks a page load as going to sign in: the service worker leaves it to the browser, so
+ * Cloudflare Access's sign-in page shows rather than the kept page (SIGN_IN_PARAM in
+ * public/sw.js)
+ */
+export const SIGN_IN_PARAM = 'sign-in';
+/**
  * Pictures and photos the service worker keeps, one cache per account named with its
  * email after this prefix (IMAGE_CACHE_PREFIX in public/sw.js)
  */
@@ -150,6 +161,26 @@ export function assumeLastUser(): string | null {
  */
 export const openedFromDevice = () =>
   document.querySelector(`meta[name="${OPENED_FROM_DEVICE}"]`) != null;
+
+/** The service worker opened this page from its copy because Cloudflare Access asked to sign in */
+export const openedSignedOut = () =>
+  document.querySelector(`meta[name="${OPENED_FROM_DEVICE}"]`)?.getAttribute('content') ===
+  OPENED_SIGNED_OUT;
+
+/** This page's address, marked to go to sign in and come back to it */
+export function signInAddress(): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set(SIGN_IN_PARAM, '');
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** Back from signing in: the mark comes off the address, which is otherwise as it was */
+export function dropSignInMark() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(SIGN_IN_PARAM)) return;
+  url.searchParams.delete(SIGN_IN_PARAM);
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+}
 
 // What else the page holds for the account, forgotten with the cache (photos still to
 // upload, say)

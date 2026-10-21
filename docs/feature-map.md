@@ -363,8 +363,13 @@ installs the page with no manifest, and a white launch screen.
 
 **Flow.** A page load waits up to 3 seconds for the network; offline, slower, or a
 5xx or non-page answer, and the kept page opens instead, marked as opened from the
-device. A sign-in redirect or a 4xx goes to the browser, and `/cdn-cgi/` (Access) is
-never handled. A good page is kept in the background, even when it came too late. Opened
+device. When Cloudflare Access asks to sign in again (a redirect) and a page is kept,
+the kept page opens, marked as signed out (`OPENED_SIGNED_OUT`): the last account's saved
+splits show, changes are kept on the device, and the notice offers Sign in once there's
+a connection. Sign in goes to the same page marked with `SIGN_IN_PARAM`, which the
+service worker leaves to the browser so Access answers; the mark comes off the address
+once back (`dropSignInMark`). With nothing kept yet, a sign-in redirect goes to the
+browser. A 4xx goes to the browser too, and `/cdn-cgi/` (Access) is never handled. A good page is kept in the background, even when it came too late. Opened
 from the device, the profile waits 2 seconds on `/api/me` (or not at all if it fails
 with a 5xx), then shows the last account's saved copies
 ([ProfileContext](../web/src/profile/ProfileContext.tsx)).
@@ -395,7 +400,10 @@ with a 5xx), then shows the last account's saved copies
 - Unsent work the device couldn't keep is still sent from memory while the app is
   open, and is never taken for sent elsewhere.
 - Signed out (401), an open split stops retrying on a timer until the app is shown
-  again or the connection returns.
+  again or the connection returns. A 401 for who's signed in, or a page opened signed
+  out, shows the last account's saved profile when there is one (`signInToSync`), and
+  "You're signed out" only when nothing is kept. Its Sign in never reloads, which would
+  open the kept page again.
 
 **Tests.** [cache.test.ts](../web/src/offline/cache.test.ts),
 [outbox.test.ts](../web/src/offline/outbox.test.ts) (runs `sw.js` against what the app
@@ -404,7 +412,8 @@ writes, so the copied keys and lock names can't drift),
 of answer, on the page and in `sw.js` alike),
 [shell.test.ts](../web/src/offline/shell.test.ts) (slow, failing and redirected page
 loads, stopped updates, which files are kept),
-[start.test.tsx](../web/src/offline/start.test.tsx) (starting from the device's copy),
+[start.test.tsx](../web/src/offline/start.test.tsx) (starting from the device's copy,
+and once Access asks to sign in again),
 [storage.test.ts](../web/src/offline/storage.test.ts),
 [web/build/precache.test.ts](../web/build/precache.test.ts) (what the build lists),
 [delivery.test.ts](../web/src/offline/delivery.test.ts) (page and service worker

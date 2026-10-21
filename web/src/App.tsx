@@ -9,7 +9,7 @@ import SplitScreen from './components/split/SplitScreen';
 import SplitsHome from './components/home/SplitsHome';
 import AppLayout from './components/shell/AppLayout';
 import { useRoute } from './hooks/useRoute';
-import { useProfile } from './profile/ProfileContext';
+import { signIn, useProfile } from './profile/ProfileContext';
 import { SplitStateProvider } from './split/SplitStateContext';
 
 // Signing in happens in front of the app (Cloudflare Access), so by the time this
@@ -24,7 +24,7 @@ function App() {
         icon={<SignIn size={36} />}
         title="You're signed out"
         body="Sign in again to see your splits."
-        action={<Button onClick={() => window.location.reload()}>Sign in</Button>}
+        action={<Button onClick={signIn}>Sign in</Button>}
       />
     );
   }

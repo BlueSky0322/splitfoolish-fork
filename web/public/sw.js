@@ -2,8 +2,9 @@
 // and doesn't download pictures or fonts again:
 // - The page itself comes from the network when it answers within a few seconds, and
 //   from the copy kept here when it doesn't, fails, or the server is in trouble, so the
-//   app opens offline and on a bad connection. Signing in (Cloudflare Access) is left
-//   to the network.
+//   app opens offline and on a bad connection. When Cloudflare Access asks to sign in
+//   again, the kept page opens too, marked so, and the app offers to sign in: that page
+//   load (marked with SIGN_IN_PARAM) and Access's own pages are left to the network.
 // - The kept page is only replaced once every built file it needs is kept too, along
 //   with what the app offers offline but loads later (sharing an image, exporting), as
 //   the build lists them in /precache.json. Built files of the newest two versions are
@@ -41,6 +42,10 @@ const PAGE_WAIT_MS = 3000;
 // Shared with the app, which can't be imported here: keep each the same as its twin
 /** OPENED_FROM_DEVICE in web/src/offline/cache.ts */
 const OPENED_FROM_DEVICE = 'sf-opened-from-device';
+/** OPENED_SIGNED_OUT in web/src/offline/cache.ts: opened from here because Access asked to sign in */
+const SIGNED_OUT = 'signed-out';
+/** SIGN_IN_PARAM in web/src/offline/cache.ts: a page load going to sign in, left to the browser */
+const SIGN_IN_PARAM = 'sign-in';
 /** SYNC_TAG in web/src/offline/outbox.ts */
 const SYNC_TAG = 'sf-outbox';
 /** OUTBOX_PREFIX and LOCK_PREFIX in web/src/offline/outbox.ts; CREATE_PREFIX in pending-creates.ts */
@@ -315,10 +320,10 @@ async function image(event) {
  * The kept page, marked so the app knows it opened without the server and doesn't wait
  * long on it (openedFromDevice in web/src/offline/cache.ts)
  */
-async function fromDevice(kept) {
+async function fromDevice(kept, why = 'true') {
   const html = (await kept.text()).replace(
     /<head[^>]*>/i,
-    (head) => `${head}<meta name="${OPENED_FROM_DEVICE}" content="true">`,
+    (head) => `${head}<meta name="${OPENED_FROM_DEVICE}" content="${why}">`,
   );
   const headers = new Headers(kept.headers);
   headers.delete('Content-Length');
@@ -343,6 +348,9 @@ async function pageOrKept(network) {
   if (kept == null) return network;
   // Offline, slow, or the server failing: the app is the same page whatever the address
   const answer = await Promise.race([network, wait(PAGE_WAIT_MS)]).catch(() => null);
+  // Cloudflare Access wants them to sign in again: the app opens with what it kept, and
+  // offers to sign in, rather than nothing until there's a connection good enough to
+  if (answer != null && answer.type === 'opaqueredirect') return fromDevice(kept, SIGNED_OUT);
   return answer != null && !isBroken(answer) ? answer : fromDevice(kept);
 }
 
@@ -370,6 +378,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (event.request.mode === 'navigate') {
+    // Going to sign in: Access answers, never the kept page
+    if (url.searchParams.has(SIGN_IN_PARAM)) return;
     event.respondWith(page(event));
   } else if (url.pathname.startsWith('/assets/')) {
     event.respondWith(cacheFirst(ASSETS, event.request, (r) => r.type === 'basic'));

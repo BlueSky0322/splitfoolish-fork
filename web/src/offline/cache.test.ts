@@ -7,8 +7,10 @@ import {
   SW_USER_KEY,
   assumeLastUser,
   clearCache,
+  dropSignInMark,
   readCache,
   setCacheUser,
+  signInAddress,
   writeCache,
 } from './cache';
 
@@ -87,5 +89,22 @@ describe('pictures the service worker kept', () => {
     } finally {
       Reflect.deleteProperty(window, 'caches');
     }
+  });
+});
+
+describe('going to sign in and back', () => {
+  test('the page is marked on the way, and comes back as it was', () => {
+    window.history.replaceState({ from: '?' }, '', '/?s=trip#photos');
+    expect(signInAddress()).toBe('/?s=trip&sign-in=#photos');
+
+    // Access sends them back to the marked address
+    window.history.replaceState({ from: '?' }, '', '/?s=trip&sign-in=#photos');
+    dropSignInMark();
+    expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
+      '/?s=trip#photos',
+    );
+    // Where the app came from in it is kept, for Back
+    expect(window.history.state).toEqual({ from: '?' });
+    window.history.replaceState(null, '', '/');
   });
 });

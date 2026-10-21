@@ -17,6 +17,12 @@
   pointer-events: none;
 }
 
+/* The pill lets taps through to the page, but not on its button */
+.action {
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
 /* Above the phone's add button */
 @media (max-width: 1023px) {
   .notice {
