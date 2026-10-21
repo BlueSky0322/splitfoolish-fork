@@ -342,7 +342,7 @@ page or, if it's closed, by the service worker.
 An open split sends its own changes through `useSaveQueue`.
 
 **Parts.** [web/public/sw.js](../web/public/sw.js) keeps the page, the built files and
-pictures, and sends the outbox and kept photos by background sync. It can't import app code, so the
+each account's pictures, and sends the outbox and kept photos by background sync. It can't import app code, so the
 keys, lock names and limits it shares with `offline/` and `shared/api.ts` are copied in
 it. The build writes `precache.json`, every built file the app needs offline: the entry
 and its styles, and the chunks the app's own code loads later (sharing an image, PDF
@@ -469,19 +469,27 @@ sends them, one at a time and oldest first, after the changes kept with them.
   once: the server answers with the photo it saved. An id already used for another
   photo is refused.
 - One account never sees or sends another's; another account's stay on the device,
-  unseen, for when it signs in again, and uploads under way stop (`onCacheCleared`). Where the browser has Web Locks, each upload takes a lock per
-  photo and checks it's still kept, so two tabs (or a tab and the service worker) don't
-  both send it.
+  unseen, for when it signs in again, and uploads under way stop (`onCacheCleared`).
+  Where the browser has Web Locks, each upload takes a lock per photo and checks it's
+  still kept, so two tabs (or a tab and the service worker) don't both send it.
 - The file type comes from the bytes, not what the upload says.
-- A profile picture's, split picture's or QR code's address names its version, and a
-  photo never changes once added, so the service worker and browsers can keep them for
-  good.
+- Pictures and photos are private, so every showing is checked by the server: they're
+  sent `private, no-cache` with an ETag naming their content (a photo's id, a picture's
+  version), and a browser's copy is answered with a 304 once the viewer is checked
+  again. A removed member, or another account on the same browser, gets a 404.
+- The service worker asks the server each time while online, and keeps each picture
+  for the account the server names (`IMAGE_VIEWER_HEADER`), in that account's own cache
+  (`IMAGE_CACHE_PREFIX`). It shows a kept copy only offline or while the server fails
+  (5xx), and only to the account signed in (`SW_USER_KEY`). A 403 or 404 forgets every
+  account's copy, and signing out or another account signing in clears them all.
 
 **Tests.** [photo-queue.test.ts](../web/src/offline/photo-queue.test.ts) (kept through a
 reload, accounts kept apart, order, two at a time, refused or retried, the same id when
 sent again, sent by the service worker and not again by the app, waiting for the split
 and the item), [sw.test.ts](../web/src/offline/sw.test.ts) (the service worker's photo
-sending: order, ids, retries and refusals),
+sending: order, ids, retries and refusals; pictures kept per account and shown offline
+only to it), [api.test.ts](../worker/test/api.test.ts) (a browser's copy checked again
+for each viewer),
 [worker/photos/attachments.test.ts](../worker/photos/attachments.test.ts) (the same photo sent twice at once), [OfflinePhotos.test.tsx](../web/src/components/split/OfflinePhotos.test.tsx)
 (waiting through the app reopening, removing one, a new item's receipt, online uploads,
 a refusal), [DesktopPhotos.test.tsx](../web/src/components/split/DesktopPhotos.test.tsx),

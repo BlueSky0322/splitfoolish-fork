@@ -19,8 +19,13 @@ export const SW_USER_KEY = 'sf-user';
  * server didn't send it in time (OPENED_FROM_DEVICE in public/sw.js)
  */
 export const OPENED_FROM_DEVICE = 'sf-opened-from-device';
-/** Pictures the service worker keeps (IMAGE_CACHE in public/sw.js) */
-export const IMAGE_CACHE = 'splitfoolish-images-v1';
+/**
+ * Pictures and photos the service worker keeps, one cache per account named with its
+ * email after this prefix (IMAGE_CACHE_PREFIX in public/sw.js)
+ */
+export const IMAGE_CACHE_PREFIX = 'splitfoolish-images-v2:';
+/** Where builds before that kept everyone's pictures together */
+const RETIRED_IMAGE_CACHE = 'splitfoolish-images-v1';
 /**
  * Keys of work not yet on the server: changes (OUTBOX_PREFIX), new splits (CREATE_PREFIX)
  * and photos (PHOTO_PREFIX). Kept for their own account when someone else signs in,
@@ -171,7 +176,14 @@ export async function clearCache(
   });
   await quietlyAsync(() => clearExceptUnsent(keepUnsentOf));
   // Pictures and photos the service worker kept, so the next person can't see them
-  if ('caches' in window) await quietlyAsync(() => caches.delete(IMAGE_CACHE));
+  if ('caches' in window) await quietlyAsync(clearImageCaches);
+}
+
+async function clearImageCaches() {
+  const names = (await caches.keys()).filter(
+    (name) => name.startsWith(IMAGE_CACHE_PREFIX) || name === RETIRED_IMAGE_CACHE,
+  );
+  await Promise.all(names.map((name) => caches.delete(name)));
 }
 
 async function clearExceptUnsent(keepUnsentOf: (email: string) => boolean) {

@@ -16,14 +16,23 @@ const source = readFileSync(
 
 /** How the server (or whatever is in the way) answers one request */
 export type Answer =
-  | { status: number; body?: string | null; redirected?: boolean; contentType?: string }
+  | {
+      status: number;
+      body?: string | null;
+      redirected?: boolean;
+      contentType?: string;
+      headers?: Record<string, string>;
+    }
   | { networkError: true };
 
 export const ok: Answer = { status: 200, body: '{"ok":true}' };
 
 export function respond(answer: Answer) {
   if ('networkError' in answer) return Promise.reject(new TypeError('Failed to fetch'));
-  const headers = answer.contentType ? { 'Content-Type': answer.contentType } : undefined;
+  const headers = {
+    ...(answer.contentType && { 'Content-Type': answer.contentType }),
+    ...answer.headers,
+  };
   const res = new Response(answer.body ?? null, { status: answer.status, headers });
   if (answer.redirected) Object.defineProperty(res, 'redirected', { value: true });
   return Promise.resolve(res);
@@ -116,6 +125,9 @@ export function fakeCaches() {
     new URL(typeof request === 'string' ? request : request.url, ORIGIN).href;
   return {
     stores,
+    has: (name: string) => Promise.resolve(stores.has(name)),
+    keys: () => Promise.resolve([...stores.keys()]),
+    delete: (name: string) => Promise.resolve(stores.delete(name)),
     open: (name: string) => {
       const store = stores.get(name) ?? new Map<string, Response>();
       stores.set(name, store);
@@ -212,19 +224,23 @@ export async function fetchThroughWorker(
   answer: Answer,
   caches: ReturnType<typeof fakeCaches>,
 ) {
-  const fetch = vi.fn(async () => {
+  const fetch = vi.fn<[Request, RequestInit?], Promise<Response>>(async () => {
     const res = await respond(answer);
     // From the app's own address, as the browser marks it
     Object.defineProperty(res, 'type', { value: 'basic' });
     return res;
   });
   const handlers = load({ fetch, caches });
+  const background: Promise<unknown>[] = [];
   let answered: Promise<Response> | null = null;
   handlers.fetch({
     request: new Request(`${ORIGIN}${path}`),
     respondWith: (r: Promise<Response>) => (answered = r),
+    waitUntil: (work: Promise<unknown>) => background.push(work),
   });
   if (answered == null) throw new Error(`The service worker left ${path} to the browser`);
   const response = await (answered as Promise<Response>).catch(() => null);
+  // What it carries on with afterwards (keeping a copy, say)
+  await Promise.allSettled(background);
   return { fetch, response };
 }

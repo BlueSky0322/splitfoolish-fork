@@ -12,7 +12,7 @@ import {
 import { ensureProfileStatement, paymentMethodOwner } from '../accounts/profiles';
 import { json, notFound, ok } from '../http';
 import { sharesSplit } from '../splits/sharing';
-import { imageResponse, readImage } from './images';
+import { type Viewing, imageResponse, readImage } from './images';
 
 export async function putAvatar(db: D1Database, email: string, req: Request) {
   const image = await readImage(req, MAX_AVATAR_BYTES);
@@ -57,17 +57,18 @@ export async function putPaymentQr(db: D1Database, id: string, email: string, re
 }
 
 /** A payment method's QR code, seen by its owner and the people they share a split with */
-export async function servePaymentQr(db: D1Database, id: string, viewer: string) {
+export async function servePaymentQr(db: D1Database, id: string, viewing: Viewing) {
   const row = await db
     .prepare(
-      'SELECT email, content_type AS contentType, data FROM payment_qr_codes WHERE method_id = ?',
+      `SELECT email, content_type AS contentType, version, data FROM payment_qr_codes
+       WHERE method_id = ?`,
     )
     .bind(id)
-    .first<{ email: string; contentType: string; data: ArrayBuffer | number[] }>();
-  if (row == null || !(await sharesSplit(db, viewer, row.email))) {
+    .first<{ email: string; contentType: string; version: number; data: ArrayBuffer | number[] }>();
+  if (row == null || !(await sharesSplit(db, viewing.viewer, row.email))) {
     return notFound();
   }
-  return imageResponse(row.data, row.contentType);
+  return imageResponse(viewing, row.version, row.data, row.contentType);
 }
 
 export async function deleteAvatar(db: D1Database, email: string) {
@@ -76,14 +77,14 @@ export async function deleteAvatar(db: D1Database, email: string) {
 }
 
 /** Profile pictures are visible to their owner and to people they share a split with */
-export async function serveAvatar(db: D1Database, email: string, viewer: string) {
-  if (!(await sharesSplit(db, viewer, email))) return notFound();
+export async function serveAvatar(db: D1Database, email: string, viewing: Viewing) {
+  if (!(await sharesSplit(db, viewing.viewer, email))) return notFound();
   const row = await db
-    .prepare('SELECT content_type AS contentType, data FROM avatars WHERE email = ?')
+    .prepare('SELECT content_type AS contentType, version, data FROM avatars WHERE email = ?')
     .bind(email)
-    .first<{ contentType: string; data: ArrayBuffer | number[] }>();
+    .first<{ contentType: string; version: number; data: ArrayBuffer | number[] }>();
   if (row == null) return notFound();
-  return imageResponse(row.data, row.contentType);
+  return imageResponse(viewing, row.version, row.data, row.contentType);
 }
 
 /** A split's picture; set and removed by its owner, seen by its members */
@@ -106,11 +107,14 @@ export async function deleteSplitPicture(db: D1Database, splitId: string) {
   return ok();
 }
 
-export async function serveSplitPicture(db: D1Database, splitId: string) {
+export async function serveSplitPicture(db: D1Database, splitId: string, viewing: Viewing) {
   const row = await db
-    .prepare('SELECT content_type AS contentType, data FROM split_pictures WHERE split_id = ?')
+    .prepare(
+      `SELECT content_type AS contentType, version, data FROM split_pictures
+       WHERE split_id = ?`,
+    )
     .bind(splitId)
-    .first<{ contentType: string; data: ArrayBuffer | number[] }>();
+    .first<{ contentType: string; version: number; data: ArrayBuffer | number[] }>();
   if (row == null) return notFound();
-  return imageResponse(row.data, row.contentType);
+  return imageResponse(viewing, row.version, row.data, row.contentType);
 }

@@ -262,6 +262,12 @@ export const MAX_PHOTOS_REMOVED = 100;
 export const CLIENT_ID_HEADER = 'X-Client-Id';
 
 /**
+ * On a picture or photo: the account it was shown to, so the service worker keeps it for
+ * that account alone and never shows it to another one offline
+ */
+export const IMAGE_VIEWER_HEADER = 'X-Image-Viewer';
+
+/**
  * Whose a write is: the account it was made as, which the server checks against the one
  * signed in now before changing anything. Never chooses who's signed in.
  */

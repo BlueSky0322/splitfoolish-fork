@@ -3,6 +3,7 @@
 // with the same membership checks. They are shrunk in the browser before upload, to
 // the sizes in shared/api.ts.
 
+import { IMAGE_VIEWER_HEADER } from '../../shared/api';
 import { bodyRefused, fail, readBody } from '../http';
 
 /** The image type from the file's first bytes, so a mislabelled upload can't pass as an image */
@@ -105,12 +106,43 @@ export function checkImage(bytes: Uint8Array, maxBytes: number): Image | Respons
 // D1 hands BLOBs back as an ArrayBuffer or an array of byte values depending on version
 const toBytes = (data: ArrayBuffer | number[]) => new Uint8Array(data);
 
-export function imageResponse(data: ArrayBuffer | number[], contentType: string) {
+/** Who asked for a picture, and the request, which may say which copy they already have */
+export interface Viewing {
+  req: Request;
+  viewer: string;
+}
+
+/** Whether the browser's If-None-Match names `etag` (or any copy at all) */
+const alreadyHas = (req: Request, etag: string) =>
+  (req.headers.get('If-None-Match') ?? '')
+    .split(',')
+    .map((tag) => tag.trim().replace(/^W\//, ''))
+    .some((tag) => tag === etag || tag === '*');
+
+/**
+ * A picture, already checked as the viewer's to see. `version` names its content (a
+ * photo's id, a picture's version), so the browser's copy is still good while it matches.
+ * Browsers keep it but ask again each time, so access taken away, or another account
+ * signed in on the same browser, is checked by the server before it's shown again; a
+ * copy still good is answered without the bytes.
+ */
+export function imageResponse(
+  { req, viewer }: Viewing,
+  version: string | number,
+  data: ArrayBuffer | number[],
+  contentType: string,
+) {
+  const etag = `"${version}"`;
+  const headers = {
+    'Cache-Control': 'private, no-cache',
+    'ETag': etag,
+    [IMAGE_VIEWER_HEADER]: viewer,
+  };
+  if (alreadyHas(req, etag)) return new Response(null, { status: 304, headers });
   return new Response(toBytes(data), {
     headers: {
+      ...headers,
       'Content-Type': contentType,
-      // Ids and versions never point at different content, so browsers can keep them
-      'Cache-Control': 'private, max-age=31536000, immutable',
       // Never treat the bytes as anything but the image type above
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "default-src 'none'",

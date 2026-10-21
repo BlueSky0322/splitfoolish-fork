@@ -1168,6 +1168,54 @@ describe('profile, pictures and photos', () => {
     expect((await api.call(editor, 'GET', `/api/splits/${id}`)).data.name).toBe('Renamed');
   });
 
+  it('has browsers ask again for each picture, so access taken away is checked before it shows', async () => {
+    const owner = person('owner');
+    const editor = person('editor');
+    const stranger = person('stranger');
+    const { id } = await splitWith(owner, editor);
+    const added = await upload(owner, 'POST', `/api/splits/${id}/attachments`);
+    const path = `/api/splits/${id}/attachments/${added.data.id}`;
+
+    const first = await api.raw(editor, 'GET', path);
+    expect(first.status).toBe(200);
+    expect(first.headers.get('Cache-Control')).toBe('private, no-cache');
+    // Named for whoever it was shown to, so the device keeps it for them alone
+    expect(first.headers.get('X-Image-Viewer')).toBe(editor);
+    const etag = first.headers.get('ETag')!;
+    expect(etag).toBe(`"${added.data.id}"`);
+
+    // Their copy is still good: answered without the bytes
+    const again = await api.raw(editor, 'GET', path, undefined, { 'If-None-Match': etag });
+    expect(again.status).toBe(304);
+    expect(await again.arrayBuffer()).toHaveProperty('byteLength', 0);
+    expect(again.headers.get('X-Image-Viewer')).toBe(editor);
+    // Someone else on the same browser, with that copy, is checked as themselves
+    expect(
+      (await api.raw(stranger, 'GET', path, undefined, { 'If-None-Match': etag })).status,
+    ).toBe(404);
+    // And once they're taken out of the split, so are they
+    expect((await api.call(owner, 'DELETE', `/api/splits/${id}/members/${editor}`)).status).toBe(
+      200,
+    );
+    expect((await api.raw(editor, 'GET', path, undefined, { 'If-None-Match': etag })).status).toBe(
+      404,
+    );
+  });
+
+  it('names each version of a picture, so a new one is sent in full', async () => {
+    const me = person('me');
+    const path = `/api/avatars/${encodeURIComponent(me)}`;
+    await upload(me, 'PUT', '/api/me/avatar');
+    const old = (await api.raw(me, 'GET', path)).headers.get('ETag')!;
+    expect((await api.raw(me, 'GET', path, undefined, { 'If-None-Match': old })).status).toBe(304);
+    await new Promise((r) => setTimeout(r, 5));
+    await upload(me, 'PUT', '/api/me/avatar');
+    const changed = await api.raw(me, 'GET', path, undefined, { 'If-None-Match': old });
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get('ETag')).not.toBe(old);
+    expect(new Uint8Array(await changed.arrayBuffer())).toEqual(jpeg);
+  });
+
   it('adds a photo sent again with the same id only once, and keeps that id to its sender', async () => {
     const owner = person('owner');
     const editor = person('editor');

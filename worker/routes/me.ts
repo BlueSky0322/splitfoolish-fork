@@ -39,11 +39,14 @@ me.put(`/me/payment-qr/:id${ROW_ID_PARAM}`, (c) =>
   putPaymentQr(c.env.DB, c.req.param('id'), c.var.email, c.req.raw),
 );
 me.get(`/payment-qr/:id${ROW_ID_PARAM}`, (c) =>
-  servePaymentQr(c.env.DB, c.req.param('id'), c.var.email),
+  servePaymentQr(c.env.DB, c.req.param('id'), { req: c.req.raw, viewer: c.var.email }),
 );
 
 me.get('/avatars/:email', (c) =>
-  serveAvatar(c.env.DB, c.req.param('email').toLowerCase(), c.var.email),
+  serveAvatar(c.env.DB, c.req.param('email').toLowerCase(), {
+    req: c.req.raw,
+    viewer: c.var.email,
+  }),
 );
 
 export default me;

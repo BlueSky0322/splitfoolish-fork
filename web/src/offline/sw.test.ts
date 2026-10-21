@@ -1,10 +1,10 @@
 import 'fake-indexeddb/auto';
 import { clear, get, keys, set } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { MAX_CHANGES, MAX_CHANGES_BYTES, PHOTO_ID_PARAM } from '@shared/api';
+import { IMAGE_VIEWER_HEADER, MAX_CHANGES, MAX_CHANGES_BYTES, PHOTO_ID_PARAM } from '@shared/api';
 import { MAX_NOTES_LENGTH } from '@shared/types';
 import type { Change } from '@shared/types';
-import { SW_USER_KEY } from './cache';
+import { IMAGE_CACHE_PREFIX, SW_USER_KEY } from './cache';
 import { api } from '../api';
 import { OUTBOX_PREFIX, changesBody, classifySaveFailure, nextBatch, type Queued } from './outbox';
 import { PHOTO_PREFIX } from './photo-queue';
@@ -13,6 +13,8 @@ import {
   backgroundSync,
   fakeCaches,
   fetchThroughWorker,
+  keptPaths,
+  keptText,
   ok,
   photoOnDevice,
   respond,
@@ -328,5 +330,79 @@ describe('the service worker, keeping the PDF font', () => {
     );
     expect(next.fetch).toHaveBeenCalledTimes(1);
     expect(await next.response?.text()).toBe('font bytes');
+  });
+});
+
+// Pictures and photos are private: the server checks each time who may see them, and
+// what the device keeps is each account's own, shown only when the server can't answer
+describe('the service worker, with pictures and photos', () => {
+  const PHOTO = '/api/splits/trip/attachments/a1b2c3d4e5f60718';
+  // The app's names for these, so sw.js's copies can't drift from them
+  const IMAGES = IMAGE_CACHE_PREFIX;
+  const photoFor = (viewer: string, body = 'photo bytes') => ({
+    status: 200,
+    body,
+    contentType: 'image/jpeg',
+    headers: { [IMAGE_VIEWER_HEADER]: viewer },
+  });
+
+  test('asks the server every time while online, and keeps a copy for whoever it was shown to', async () => {
+    const caches = fakeCaches();
+    await fetchThroughWorker(PHOTO, photoFor('ryan@example.com', 'first'), caches);
+    expect(keptPaths(caches, `${IMAGES}ryan@example.com`)).toEqual([PHOTO]);
+
+    const next = await fetchThroughWorker(PHOTO, photoFor('ryan@example.com', 'fresh'), caches);
+    // Past any copy the browser holds without asking, as older builds let it
+    expect(next.fetch).toHaveBeenCalledWith(expect.anything(), { cache: 'no-cache' });
+    expect(await next.response?.text()).toBe('fresh');
+  });
+
+  test('offline, shows the signed-in account its own copy, and nobody else theirs', async () => {
+    const caches = fakeCaches();
+    await fetchThroughWorker(PHOTO, photoFor('ryan@example.com'), caches);
+    const offline = await fetchThroughWorker(PHOTO, { networkError: true }, caches);
+    expect(await offline.response?.text()).toBe('photo bytes');
+
+    // Someone else signs in on this browser: Ryan's copy isn't theirs to see
+    await set(SW_USER_KEY, 'sam@example.com');
+    expect((await fetchThroughWorker(PHOTO, { networkError: true }, caches)).response).toBeNull();
+    // Nor while the server is failing
+    const failing = await fetchThroughWorker(PHOTO, { status: 503 }, caches);
+    expect(failing.response?.status).toBe(503);
+
+    // And with nobody signed in, nobody's
+    await clear();
+    expect((await fetchThroughWorker(PHOTO, { networkError: true }, caches)).response).toBeNull();
+  });
+
+  test('shows the kept copy while the server is failing', async () => {
+    const caches = fakeCaches();
+    await fetchThroughWorker(PHOTO, photoFor('ryan@example.com'), caches);
+    const failing = await fetchThroughWorker(PHOTO, { status: 503 }, caches);
+    expect(await failing.response?.text()).toBe('photo bytes');
+  });
+
+  test('forgets the copy once the server no longer shows it, and shows the refusal', async () => {
+    const caches = fakeCaches();
+    await fetchThroughWorker(PHOTO, photoFor('ryan@example.com'), caches);
+    const refused = await fetchThroughWorker(PHOTO, { status: 404, body: '{}' }, caches);
+    expect(refused.response?.status).toBe(404);
+    expect(keptPaths(caches, `${IMAGES}ryan@example.com`)).toEqual([]);
+    expect((await fetchThroughWorker(PHOTO, { networkError: true }, caches)).response).toBeNull();
+  });
+
+  test('never keeps a sign-in page sent in its place, nor shows a copy for it', async () => {
+    const caches = fakeCaches();
+    await fetchThroughWorker(PHOTO, photoFor('ryan@example.com'), caches);
+    const signIn = { status: 200, body: '<html>Sign in</html>', contentType: 'text/html' };
+    const shown = await fetchThroughWorker(PHOTO, { ...signIn, redirected: true }, caches);
+    expect(await shown.response?.text()).toBe('<html>Sign in</html>');
+    expect(await keptText(caches, `${IMAGES}ryan@example.com`, PHOTO)).toBe('photo bytes');
+  });
+
+  test('keeps nothing the server did not say whose it is', async () => {
+    const caches = fakeCaches();
+    await fetchThroughWorker(PHOTO, { status: 200, body: 'x', contentType: 'image/jpeg' }, caches);
+    expect([...caches.stores.keys()].filter((name) => name.startsWith(IMAGES))).toEqual([]);
   });
 });

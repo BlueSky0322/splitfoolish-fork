@@ -6,7 +6,7 @@ import type { Actor } from '../../shared/rules';
 import { canRemovePhoto } from '../../shared/rules';
 import { json, newId, fail, notFound, ok, isConstraintError } from '../http';
 import { memberGuardStatement, guardThatFailed } from '../bill/commit';
-import { type Image, imageResponse, readImage } from './images';
+import { type Image, type Viewing, imageResponse, readImage } from './images';
 
 const MAX_PHOTOS_PER_SPLIT = 300;
 
@@ -188,10 +188,16 @@ export const readAttachment = (db: D1Database, splitId: string, id: string) =>
     .bind(id, splitId)
     .first<{ contentType: string; data: ArrayBuffer | number[] }>();
 
-export async function serveAttachment(db: D1Database, splitId: string, id: string) {
+export async function serveAttachment(
+  db: D1Database,
+  splitId: string,
+  id: string,
+  viewing: Viewing,
+) {
   const row = await readAttachment(db, splitId, id);
   if (row == null) return notFound();
-  return imageResponse(row.data, row.contentType);
+  // A photo never changes once added, so its id names its content
+  return imageResponse(viewing, id, row.data, row.contentType);
 }
 
 /**

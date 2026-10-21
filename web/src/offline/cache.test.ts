@@ -66,3 +66,26 @@ describe('the device cache', () => {
     expect(assumeLastUser()).toBe('ann@example.com');
   });
 });
+
+describe('pictures the service worker kept', () => {
+  test('are all forgotten when someone else signs in, older builds’ shared ones too', async () => {
+    const names = new Set([
+      'splitfoolish-images-v2:ann@example.com',
+      'splitfoolish-images-v1',
+      'splitfoolish-shell-v1',
+    ]);
+    const caches = {
+      keys: () => Promise.resolve([...names]),
+      delete: (name: string) => Promise.resolve(names.delete(name)),
+    };
+    Object.defineProperty(window, 'caches', { value: caches, configurable: true });
+    try {
+      await setCacheUser('ann@example.com');
+      await setCacheUser('ben@example.com');
+      // The app's own page stays: it's nobody's
+      expect([...names]).toEqual(['splitfoolish-shell-v1']);
+    } finally {
+      Reflect.deleteProperty(window, 'caches');
+    }
+  });
+});
