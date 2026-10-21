@@ -8,6 +8,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
 import type { Env } from '../app';
+import { readBody } from '../http';
 import type { GrantProps } from './oauth';
 import { READ_SCOPE } from './scopes';
 import { TOOL_SCOPES, registerTools } from './tools';
@@ -35,12 +36,14 @@ function originRefused(req: Request, env: Env) {
   return !allowed.includes(origin);
 }
 
+/**
+ * The most a request may send: a photo for add_photo (MAX_PHOTO_BYTES) is about a third
+ * larger as base64, well within this
+ */
+const MAX_MCP_BODY_BYTES = 4 * 1024 * 1024;
+
 /** The scopes a message's tool calls need that the token doesn't carry */
-async function missingScopes(req: Request, granted: string[]) {
-  const body: unknown = await req
-    .clone()
-    .json()
-    .catch(() => null);
+function missingScopes(body: unknown, granted: string[]) {
   const messages = Array.isArray(body) ? body : [body];
   const needed = new Set<string>();
   for (const m of messages as { method?: unknown; params?: { name?: unknown } }[]) {
@@ -59,9 +62,21 @@ export const mcpHandler = {
     // Stateless: no standing event stream (GET) and no session to end (DELETE)
     if (req.method !== 'POST') return jsonError(405, 'Method not allowed', { Allow: 'POST' });
 
+    // Read once, and only so far: past the limit, or too slow, it's turned away before
+    // anything is parsed or kept
+    const bytes = await readBody(req, MAX_MCP_BODY_BYTES);
+    if (bytes === 'too large') return jsonError(413, 'Request body too large');
+    if (bytes === 'too slow') return jsonError(408, 'Request body took too long to send');
+    let parsedBody: unknown;
+    try {
+      parsedBody = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      // Not JSON: left to the transport, which answers it as ever
+    }
+
     // A call the grant doesn't cover gets the standard challenge, so the client can ask
     // the person for more; the tool would refuse it anyway
-    const missing = await missingScopes(req, ctx.auth.scope);
+    const missing = missingScopes(parsedBody, ctx.auth.scope);
     if (missing.length > 0) {
       return insufficientScope(ctx.auth, [...new Set([READ_SCOPE, ...missing])]);
     }
@@ -77,7 +92,13 @@ export const mcpHandler = {
       enableJsonResponse: true,
     });
     await server.connect(transport);
-    const res = await transport.handleRequest(req);
+    // The body as read here: the transport neither reads it again nor applies its own limit
+    const res =
+      parsedBody === undefined
+        ? await transport.handleRequest(
+            new Request(req.url, { method: req.method, headers: req.headers, body: bytes }),
+          )
+        : await transport.handleRequest(req, { parsedBody });
     const headers = new Headers(res.headers);
     headers.set('Cache-Control', 'no-store');
     return new Response(res.body, { status: res.status, headers });
