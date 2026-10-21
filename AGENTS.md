@@ -99,7 +99,10 @@ Not checked by lint, so kept by review: `shared/` uses no browser or Worker glob
   account. Switching accounts keeps each account's unsent work. Pictures and photos are
   checked by the server on every showing (`private, no-cache` with an ETag); the service
   worker keeps them per account and shows them from the device only offline, to the
-  account they were shown to.
+  account they were shown to. When Cloudflare Access asks to sign in again, the service
+  worker opens the kept page marked signed out and the app shows the saved splits with
+  Sign in; signing in goes through `signIn()` (marked with `SIGN_IN_PARAM`), never a
+  reload, or the kept page would answer again.
   Where the browser has Web Locks, the page and the service worker take the same lock
   per split. `web/public/sw.js` can't import app code, so it keeps copies of the keys,
   locks and limits it shares: change both together (`offline/outbox.test.ts` and

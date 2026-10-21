@@ -6,11 +6,14 @@ import { trackKeyboardInset } from './pwa/keyboard-inset';
 import { trackInstall } from './pwa/install';
 import { hideLaunchScreen } from './pwa/launch-screen';
 import { restoreLastPage } from './hooks/useRoute';
+import { dropSignInMark } from './offline/cache';
 import { syncWhenOnline } from './offline/sync';
 import { keepStorageOnceInstalled } from './offline/storage';
 import { reloadMySplits } from './my-splits/my-splits';
 
-// Back to the page that was open last time, before anything reads the address
+// Back from signing in: the address as it was, then (on a fresh start) the page that was
+// open last time, before anything reads the address
+dropSignInMark();
 restoreLastPage();
 // What's kept on this device while offline is sent once the connection is back, and on
 // coming back to the app

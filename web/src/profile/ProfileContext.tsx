@@ -1,7 +1,7 @@
 import { useMantineColorScheme } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { Profile } from '../api';
 import { ApiError, api } from '../api';
 import { queryClient } from '../query-client';
@@ -12,8 +12,10 @@ import { reloadMySplits } from '../my-splits/my-splits';
 import {
   assumeLastUser,
   openedFromDevice,
+  openedSignedOut,
   readCache,
   setCacheUser,
+  signInAddress,
   writeCache,
 } from '../offline/cache';
 import { isAccent } from '../theme/accents';
@@ -61,7 +63,13 @@ type Saved = Profile | ((profile: Profile) => Profile) | void;
 
 interface ProfileContextValue {
   profile: Profile | null;
+  /** Signed out, with nothing kept on this device to show meanwhile */
   signedOut: boolean;
+  /**
+   * Cloudflare Access asked to sign in again, and the last account's saved splits are
+   * shown meanwhile: changes are kept on the device until they've signed in
+   */
+  signInToSync: boolean;
   /** The server couldn't be reached, or failed, before the profile loaded */
   unreachable: boolean;
   /** Asks the server again */
@@ -112,6 +120,17 @@ export const useProfile = () => {
 export const nameFor = (email: string, displayName?: string | null) =>
   displayName?.trim() || email.split('@')[0];
 
+/** Cloudflare Access sent the request to sign in: the session ran out */
+const isSignInAnswer = (err: unknown) => err instanceof ApiError && err.status === 401;
+
+/**
+ * Goes to Cloudflare Access to sign in, then back to this page. Marked so the service
+ * worker lets Access answer rather than showing its kept copy.
+ */
+export function signIn() {
+  window.location.href = signInAddress();
+}
+
 /** Forgets what this device kept for the account, then signs out of Cloudflare Access */
 export async function signOut() {
   await forgetOfflineWork();
@@ -126,6 +145,7 @@ export function ProfileProvider({
   onAccentChange: (accent: Accent) => void;
 }) {
   const fromDevice = useRef(false);
+  const [signInToSync, setSignInToSync] = useState(false);
   // Whose saved copies were shown while the server couldn't say who's signed in
   const assumed = useRef<string | null>(null);
 
@@ -166,6 +186,7 @@ export function ProfileProvider({
         const shown = assumed.current;
         assumed.current = null;
         fromDevice.current = false;
+        setSignInToSync(false);
         // Someone else's saved copies were shown meanwhile, and are gone from this device
         // now: start afresh as the person signed in
         if (shown != null && shown !== me.email) window.location.reload();
@@ -177,13 +198,16 @@ export function ProfileProvider({
       } catch (err) {
         answered = true;
         clearTimeout(timer);
-        // No connection, or (opened from the device) the server failing: carry on as
-        // whoever last used this device, from their saved profile
+        // No connection, (opened from the device) the server failing, or Cloudflare
+        // Access asking to sign in again: carry on as whoever last used this device, from
+        // their saved profile, until they can sign in
         const serverFailed = startedFromDevice && err instanceof ApiError && err.status >= 500;
-        if (isOfflineFailure(err) || serverFailed) {
+        const toSignIn = isSignInAnswer(err) || openedSignedOut();
+        if (isOfflineFailure(err) || serverFailed || toSignIn) {
           const saved = await savedProfile();
           if (saved) {
             fromDevice.current = true;
+            setSignInToSync(toSignIn);
             return saved;
           }
         }
@@ -197,8 +221,9 @@ export function ProfileProvider({
     networkMode: 'always',
   });
   const profile = data ?? null;
-  // Signing in happens in front of the app (Cloudflare Access), so a 401 means it ran out
-  const signedOut = error instanceof ApiError && error.status === 401;
+  // Signing in happens in front of the app (Cloudflare Access), so a 401 means it ran out.
+  // Opened from the device because Access asked, the server can't be asked at all.
+  const signedOut = error != null && (isSignInAnswer(error) || openedSignedOut());
   const unreachable = error != null && !signedOut;
   const retry = useCallback(() => void refetch(), [refetch]);
 
@@ -298,6 +323,7 @@ export function ProfileProvider({
       value={{
         profile,
         signedOut,
+        signInToSync,
         unreachable,
         retry,
         change,

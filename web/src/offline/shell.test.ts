@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { OPENED_FROM_DEVICE } from './cache';
+import { OPENED_FROM_DEVICE, OPENED_SIGNED_OUT, SIGN_IN_PARAM } from './cache';
 import {
   type Answer,
   type Site,
@@ -46,8 +46,8 @@ const deployed =
 const offline: Site = () => ({ networkError: true });
 
 /** The page as the device kept it, marked so the app knows */
-const fromDevice = (html: string) =>
-  html.replace('<head>', `<head><meta name="${OPENED_FROM_DEVICE}" content="true">`);
+const fromDevice = (html: string, why = 'true') =>
+  html.replace('<head>', `<head><meta name="${OPENED_FROM_DEVICE}" content="${why}">`);
 
 /** Opens the app once with `site` and lets the service worker finish */
 async function visit(caches: ReturnType<typeof fakeCaches>, site: Site, path = '/') {
@@ -131,8 +131,29 @@ describe('opening the app', () => {
     expect(response?.status).toBe(503);
   });
 
+  test('Access asking to sign in again opens the kept page, marked so, and leaves it kept', async () => {
+    const caches = fakeCaches();
+    await visit(caches, deployed(version(1)));
+    const { text } = await visit(caches, deployed(version(2), { '/': { signIn: true } }));
+    expect(text).toBe(fromDevice(version(1).html, OPENED_SIGNED_OUT));
+    expect(await keptText(caches, SHELL, '/')).toBe(version(1).html);
+  });
+
+  test('with no page kept yet, a redirect to sign in goes to the browser', async () => {
+    const { response } = await visit(fakeCaches(), deployed(version(1), { '/': { signIn: true } }));
+    expect(response).toMatchObject({ type: 'opaqueredirect' });
+  });
+
+  test('going to sign in is left to the browser, so Access answers', async () => {
+    const caches = fakeCaches();
+    await visit(caches, deployed(version(1)));
+    const path = `/?s=trip&${SIGN_IN_PARAM}=`;
+    expect(() => openPage(path, deployed(version(1)), caches)).toThrow(
+      `left ${path} to the browser`,
+    );
+  });
+
   test.each<[string, ReturnType<Site>, Partial<Response>]>([
-    ['a redirect to sign in', { signIn: true }, { type: 'opaqueredirect' }],
     [
       'a sign-in page reached by a redirect',
       { status: 200, body: '<html>Sign in</html>', contentType: 'text/html', redirected: true },

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { get, set } from 'idb-keyval';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import type { Profile, SplitSummary } from '@shared/api';
 import { DEVICE_START_WAIT_MS } from '../profile/ProfileContext';
-import { LAST_EMAIL_KEY, OPENED_FROM_DEVICE } from './cache';
+import { LAST_EMAIL_KEY, OPENED_FROM_DEVICE, OPENED_SIGNED_OUT, SIGN_IN_PARAM } from './cache';
 import { type FakeServer, fakeServer, holdNext, renderApp, setupAppTests } from '../testing/app';
 
 // Starting the app when the server can't answer in time. The service worker opens it
@@ -168,6 +169,116 @@ describe('starting with the server out of reach', () => {
       expect(localStorage.getItem(LAST_EMAIL_KEY)).toBe('ann@example.com');
     } finally {
       finish(held, done);
+    }
+  });
+});
+
+// Cloudflare Access's session runs out: the page asks to sign in again before anything of
+// the app loads. The service worker opens the kept page instead, marked so (shell.test.ts),
+// and the last account's saved splits show, with the way to sign in when there's a
+// connection to.
+describe('starting once Access asks to sign in again', () => {
+  /** The page as the service worker opens it when Access asked to sign in */
+  function openedSignedOut() {
+    const meta = document.createElement('meta');
+    meta.name = OPENED_FROM_DEVICE;
+    meta.content = OPENED_SIGNED_OUT;
+    document.head.append(meta);
+    return () => meta.remove();
+  }
+
+  /** Where the page is sent, which jsdom can't go: noted instead */
+  function watchLeaving() {
+    const sentTo: string[] = [];
+    const real = window.location;
+    vi.stubGlobal(
+      'location',
+      new Proxy(
+        {},
+        {
+          get: (_, key) => Reflect.get(real, key),
+          set: (_, key, value: string) => {
+            if (key === 'href') sentTo.push(value);
+            return true;
+          },
+        },
+      ),
+    );
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
+    return sentTo;
+  }
+
+  test('the last account’s saved splits show, and Sign in goes to Access, back to the page', async () => {
+    const server = fakeServer();
+    await keptFromLastTime(server);
+    // Access answers instead of the server, which the app can't read
+    server.health = 'unreachable';
+    const done = openedSignedOut();
+    const sentTo = watchLeaving();
+    try {
+      renderApp(server, '/?s=kept');
+      expect(await screen.findByText(RYAN)).toBeTruthy();
+      expect(
+        await screen.findByText('Signed out. Changes are kept on this device until you sign in.'),
+      ).toBeTruthy();
+      expect(screen.queryByText("You're signed out")).toBeNull();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      // Marked, so the service worker lets Access answer rather than opening its copy
+      expect(sentTo).toEqual([`/?s=kept&${SIGN_IN_PARAM}=`]);
+    } finally {
+      done();
+    }
+  });
+
+  test('a session run out while the page was open shows the saved splits the same way', async () => {
+    const server = fakeServer();
+    await keptFromLastTime(server);
+    server.health = 'signedOut';
+    renderApp(server);
+    expect((await screen.findAllByText('Kept trip')).length).toBeGreaterThan(0);
+    expect(
+      await screen.findByText('Signed out. Changes are kept on this device until you sign in.'),
+    ).toBeTruthy();
+  });
+
+  test('with nothing kept here, it says signed out, and Sign in goes to Access', async () => {
+    const server = fakeServer();
+    server.health = 'unreachable';
+    const done = openedSignedOut();
+    const sentTo = watchLeaving();
+    try {
+      renderApp(server);
+      expect(await screen.findByText("You're signed out")).toBeTruthy();
+      expect(screen.queryByText("Couldn't reach Splitfoolish")).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      // Not a reload, which the service worker would answer with its copy again
+      expect(sentTo).toEqual([`/?${SIGN_IN_PARAM}=`]);
+    } finally {
+      done();
+    }
+  });
+
+  test('offline, it says offline, as signing in has to wait for a connection', async () => {
+    const server = fakeServer();
+    await keptFromLastTime(server);
+    server.health = 'unreachable';
+    const done = openedSignedOut();
+    const onLine = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      renderApp(server);
+      expect(await screen.findByText(RYAN)).toBeTruthy();
+      expect(
+        await screen.findByText(
+          "Offline. Changes are kept on this device and sync when you're back.",
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    } finally {
+      onLine.mockRestore();
+      done();
     }
   });
 });
