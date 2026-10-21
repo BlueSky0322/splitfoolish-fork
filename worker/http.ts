@@ -92,7 +92,7 @@ export async function readBody(
       size += next.value.byteLength;
     }
   } finally {
-    clearTimeout(timer);
+    if (timer !== undefined) clearTimeout(timer);
   }
   const body = new Uint8Array(size);
   let at = 0;

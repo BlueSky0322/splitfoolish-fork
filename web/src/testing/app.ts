@@ -422,7 +422,9 @@ function answerNow(server: FakeServer) {
     if (server.health === 'down') return json({ error: 'Internal error' }, 500);
     if (path === '/api/me' && method === 'GET') return json(server.me);
     if (path === '/fonts/NotoSansJP-subset-v2.ttf') {
-      return Promise.resolve(new Response(fontFile(), { headers: { 'Content-Type': 'font/ttf' } }));
+      return Promise.resolve(
+        new Response(new Uint8Array(fontFile()), { headers: { 'Content-Type': 'font/ttf' } }),
+      );
     }
     const failing = (kind: keyof FakeServer['failNext']) => {
       const status = server.failNext[kind];

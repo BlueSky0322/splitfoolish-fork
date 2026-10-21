@@ -34,7 +34,8 @@ const chains = new Map<string, Promise<unknown>>();
 export function withOutbox<T>(splitId: string, fn: () => Promise<T>): Promise<T> {
   const name = `${LOCK_PREFIX}${splitId}`;
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-  if (locks) return locks.request(name, fn);
+  // The lock's promise settles as fn's does
+  if (locks) return locks.request(name, fn) as Promise<T>;
   const run = (chains.get(name) ?? Promise.resolve()).then(fn, fn);
   // The next in line runs whether this one succeeded or not; its caller hears the failure
   chains.set(
@@ -57,7 +58,7 @@ export function changesBody(batch: Queued[]): ChangesBody {
   return {
     changes: batch.map((q) => q.change),
     ids: batch.map((q) => q.cid),
-    ...(currencies.every((c) => c != null) && { currencies: currencies as string[] }),
+    ...(currencies.every((c) => c != null) && { currencies: currencies }),
   };
 }
 
