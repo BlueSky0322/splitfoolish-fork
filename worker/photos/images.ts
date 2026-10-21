@@ -16,6 +16,60 @@ function detectImageType(bytes: Uint8Array): string | null {
   return null;
 }
 
+/**
+ * The most pixels a photo may have on a side, and in all. The app sends photos 1600px
+ * at most; an agent's may be a phone's full size. Far past that, one could take a lot of
+ * memory to show, in each app that opens it, from a small file.
+ */
+export const MAX_IMAGE_SIDE = 8192;
+export const MAX_IMAGE_PIXELS = 40_000_000;
+
+const u16be = (b: Uint8Array, i: number) => (b[i] << 8) | b[i + 1];
+const u32be = (b: Uint8Array, i: number) =>
+  ((b[i] << 24) >>> 0) + (b[i + 1] << 16) + u16be(b, i + 2);
+const u16le = (b: Uint8Array, i: number) => b[i] | (b[i + 1] << 8);
+const u24le = (b: Uint8Array, i: number) => b[i] | (b[i + 1] << 8) | (b[i + 2] << 16);
+
+/** A JPEG's size, from its first frame header (SOF), without decoding it */
+function jpegSize(b: Uint8Array): [number, number] | null {
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 0xff) return null;
+    const marker = b[i + 1];
+    // Fill bytes, and markers with no length
+    if (marker === 0xff) {
+      i++;
+      continue;
+    }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) {
+      i += 2;
+      continue;
+    }
+    const isFrame = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+    if (isFrame) return [u16be(b, i + 7), u16be(b, i + 5)];
+    i += 2 + u16be(b, i + 2);
+  }
+  return null;
+}
+
+/** An image's width and height from its header, or null when they can't be read */
+export function imageSize(b: Uint8Array, contentType: string): [number, number] | null {
+  if (contentType === 'image/jpeg') return jpegSize(b);
+  if (contentType === 'image/png') return b.length >= 24 ? [u32be(b, 16), u32be(b, 20)] : null;
+  // WebP: lossy (VP8), lossless (VP8L) or extended (VP8X)
+  if (b.length < 30) return null;
+  const chunk = String.fromCharCode(...b.slice(12, 16));
+  if (chunk === 'VP8 ') return [u16le(b, 26) & 0x3fff, u16le(b, 28) & 0x3fff];
+  if (chunk === 'VP8L') {
+    return [
+      1 + (((b[22] & 0x3f) << 8) | b[21]),
+      1 + (((b[24] & 0x0f) << 10) | (b[23] << 2) | ((b[22] & 0xc0) >> 6)),
+    ];
+  }
+  if (chunk === 'VP8X') return [1 + u24le(b, 24), 1 + u24le(b, 27)];
+  return null;
+}
+
 export interface Image {
   bytes: Uint8Array;
   contentType: string;
@@ -36,6 +90,14 @@ export function checkImage(bytes: Uint8Array, maxBytes: number): Image | Respons
   const contentType = detectImageType(bytes);
   if (contentType == null) {
     return fail('Only JPEG, PNG and WebP photos are supported', 415);
+  }
+  // Without a size to read, browsers couldn't show it either: only a size too large is refused
+  const size = imageSize(bytes, contentType);
+  if (
+    size != null &&
+    (size[0] > MAX_IMAGE_SIDE || size[1] > MAX_IMAGE_SIDE || size[0] * size[1] > MAX_IMAGE_PIXELS)
+  ) {
+    return fail(`Photos can be up to ${MAX_IMAGE_SIDE} pixels on a side`, 413);
   }
   return { bytes, contentType };
 }

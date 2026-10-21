@@ -22,7 +22,12 @@ import { isItemDate } from '../bill/input';
 import { getRatePreference } from '../accounts/profiles';
 import { getRateOn } from '../currency/exchange-rates';
 import { isConstraintError, newId, readName } from '../http';
-import { addAttachment, listAttachmentsStatement, readAttachment } from '../photos/attachments';
+import {
+  addAttachment,
+  listAttachmentsStatement,
+  photosPerSplit,
+  readAttachment,
+} from '../photos/attachments';
 import { checkImage } from '../photos/images';
 import { createSplitStatements } from '../splits/lifecycle';
 import { listSplitSummaries } from '../splits/summaries';
@@ -1117,6 +1122,7 @@ async function writePhoto(
     photoId,
     () => Promise.resolve(checkImage(bytes, MAX_PHOTO_BYTES)),
     [receiptStatement(db, receipt)],
+    photosPerSplit(caller.env),
   );
   if (res.status === 201) {
     // Open apps fetch the split again; none of them added this photo, so all are told

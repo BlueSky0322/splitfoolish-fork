@@ -42,6 +42,12 @@ export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   ASSETS: Fetcher;
   /** Changes per account per minute */
   API_LIMITER: RateLimit;
+  /** Agent apps registering per address per minute (mcp/oauth.ts) */
+  REGISTER_LIMITER: RateLimit;
+  /** Agent apps registering per minute, from anywhere */
+  REGISTER_ALL_LIMITER: RateLimit;
+  /** Photos a split may hold, fewer than the usual; for tests */
+  PHOTOS_PER_SPLIT?: string;
   /** How long a currency change may take before opening the split retries it; for tests */
   RECONVERT_RETRY_MS?: string;
   /** Conversions whose first attempt failed, retried with backoff (currency/reconvert-queue.ts) */

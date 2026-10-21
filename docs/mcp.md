@@ -30,6 +30,9 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   which MCP clients do on their own; no client id needs setting up. Registering gives
   an app nothing until someone allows it on the consent page, which shows that the
   app's name is unverified and where its access will be sent.
+  Registering is budgeted before anything is kept: 10 a minute from one address (as
+  Cloudflare sees it) and 100 a minute in all, a body of at most 16 KiB, a name of at
+  most 100 characters and at most 5 redirect addresses. A registered app is kept 90 days.
 - **The consent page** sits behind Cloudflare Access like the rest of the app. The
   account the agent acts as is the one Access signed in there, verified again on the
   page; nothing the agent or the form sends can change it.

@@ -232,6 +232,36 @@ describe('signing in', () => {
     }
   });
 
+  it('keeps registering to apps of a sensible size, and only so many a minute', async () => {
+    const register = (metadata: Record<string, unknown>, address = '203.0.113.7') =>
+      fetch(`${api.base}/oauth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': address },
+        body: JSON.stringify({
+          redirect_uris: [REDIRECT],
+          token_endpoint_auth_method: 'none',
+          ...metadata,
+        }),
+      });
+    // A name of half a megabyte is turned away before anything is kept
+    const huge = await register({ client_name: 'x'.repeat(512 * 1024) }, '203.0.113.1');
+    expect(huge.status).toBe(413);
+    const long = await register({ client_name: 'x'.repeat(101) }, '203.0.113.2');
+    expect(long.status).toBe(400);
+    expect(await long.json()).toMatchObject({ error: 'invalid_client_metadata' });
+    const redirects = Array.from({ length: 6 }, (_, i) => `${REDIRECT}${i}`);
+    expect((await register({ redirect_uris: redirects }, '203.0.113.3')).status).toBe(400);
+
+    // Ten a minute from one address, then the next waits; another address isn't held back
+    for (let i = 0; i < 10; i++) {
+      expect((await register({ client_name: `Agent ${i}` })).status).toBe(201);
+    }
+    const eleventh = await register({ client_name: 'Agent 10' });
+    expect(eleventh.status).toBe(429);
+    expect(await eleventh.json()).toMatchObject({ error: 'temporarily_unavailable' });
+    expect((await register({ client_name: 'Elsewhere' }, '203.0.113.9')).status).toBe(201);
+  });
+
   it('reads a request only so far, and answers one that is not JSON as ever', async () => {
     const { access } = await grant(person('alice'), [READ]);
     const send = (body: BodyInit) =>

@@ -325,6 +325,9 @@ export async function startLocalWorker(): Promise<LocalWorker> {
         'WISE_TOKEN:test-token',
         '--var',
         'RECONVERT_RETRY_MS:0',
+        // A split fills up after a dozen photos, so filling one is quick
+        '--var',
+        'PHOTOS_PER_SPLIT:12',
         // MCP and its OAuth routes on, at this run's address (worker/mcp/oauth.ts)
         '--var',
         `MCP_ORIGIN:http://127.0.0.1:${port}`,
