@@ -92,11 +92,14 @@ database, then deploys the Worker (`.github/workflows/deploy.yml`). Back up befo
 migration, and restore, as in [docs/security.md](docs/security.md).
 
 Cloudflare Access signs people in before anything else loads, which also turns away
-anything fetched without a login. Chrome on Android installs the app without its
-manifest: a white launch screen, and the page installed from as its start.
-`chrome://webapks` on the phone shows this as an empty Manifest URL. An Access
-application with a **Bypass** policy for the manifest, icons and `/launch/` was tried
-and didn't change it, even though the manifest then loaded without a login, so there is
-none. The cause hasn't been found; `chrome://inspect` (Application, then Manifest) on
-the phone's tab is where to look next. An install made without a manifest never
-updates, so reinstall once it's fixed.
+anything fetched without a login. When the service worker shows its kept page (offline,
+on a slow connection, or once the Access session has run out), the browser's request
+for the manifest met Access instead, so Chrome saw no manifest: installing then made
+an app without one, with a white launch screen and the page installed from as its start
+(`chrome://webapks` on the phone shows an empty Manifest URL). The service worker now
+keeps the manifest and its icons beside the page and answers with them when Access or
+the connection turns the request away (`INSTALL_FILES` in `web/public/sw.js`). That was
+reproduced and checked in desktop Chromium behind a stand-in for Access; if a phone
+still installs without the manifest, `chrome://inspect` (Application, then Manifest) on
+its tab shows why. An install made without a manifest never updates: remove it and
+install again from a page opened while signed in.
