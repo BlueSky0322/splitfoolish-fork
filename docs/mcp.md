@@ -90,6 +90,10 @@ names and notes are what people typed, returned as data.
   has the full count and a `nextOffset` (null on the last page). The total, balances
   and transfers always cover every expense, whatever the page. Each call reads the
   split as saved at that moment; if it changes between pages, later pages can shift.
+- **A cheap re-read:** every split has an `updatedAt` (`list_splits`, and `get_split`'s
+  `split`), which moves with every change to it, photos included. Send it back as
+  `get_split`'s `ifUnchangedSince` and, when nothing has changed, the answer is only
+  `{ unchanged: true, updatedAt }`.
 - **An expense carries only what it has.** `shares`, `exact`, `category`, `notes`,
   `original` and `photos` are left out rather than sent empty; `cost` is in currency
   units (the split's `totalCents` and balances are in cents).

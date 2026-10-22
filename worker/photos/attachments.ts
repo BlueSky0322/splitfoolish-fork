@@ -6,6 +6,7 @@ import type { Actor } from '../../shared/rules';
 import { canRemovePhoto } from '../../shared/rules';
 import { json, newId, fail, notFound, ok, isConstraintError } from '../http';
 import { memberGuardStatement, guardThatFailed } from '../bill/commit';
+import { touchSplitStatement } from '../app';
 import { type Image, type Viewing, imageResponse, readImage } from './images';
 
 const MAX_PHOTOS_PER_SPLIT = 300;
@@ -150,6 +151,8 @@ export async function addAttachment(
       db
         .prepare('INSERT INTO attachment_data (id, data) VALUES (?, ?)')
         .bind(attachment.id, image.bytes),
+      // A new photo is a change to the split, as a new expense is
+      touchSplitStatement(db, splitId),
       ...alongside,
     ]);
   } catch (err) {
@@ -226,6 +229,7 @@ export async function deleteAttachments(
   await db.batch([
     db.prepare(`DELETE FROM attachment_data WHERE id IN (${marks(found.length)})`).bind(...found),
     db.prepare(`DELETE FROM attachments WHERE id IN (${marks(found.length)})`).bind(...found),
+    touchSplitStatement(db, splitId),
   ]);
   return ok();
 }
