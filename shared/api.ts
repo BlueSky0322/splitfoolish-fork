@@ -287,7 +287,12 @@ export interface ConnectedAgent {
   returnsTo: { site: string } | { computer: true } | null;
   /** The browser and device it was let in from, such as "Chrome on Windows", if noted */
   approvedOn: string | null;
+  /** When it last called, to the nearest few minutes, in milliseconds; null if not since this was noted */
+  lastUsedAt: number | null;
 }
+
+/** When the server began noting each agent connection's last use (2026-10-22) */
+export const AGENT_USE_NOTED_SINCE = Date.UTC(2026, 9, 22);
 
 /**
  * On a picture or photo: the account it was shown to, so the service worker keeps it for

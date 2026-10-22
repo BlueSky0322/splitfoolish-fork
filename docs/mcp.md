@@ -50,7 +50,9 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   agent in Settings, under Connected agents, which ends its grant and every token from
   it at once. Each connection is listed with where it returns to (a website such as
   claude.ai, or an app on a computer) and the browser it was allowed in ("Chrome on
-  Windows"): only those few words are noted, never the browser's whole description. A
+  Windows"): only those few words are noted, never the browser's whole description,
+  and when it last called (noted at most every ten minutes, in `OAUTH_KV` under
+  `agent-used:`, so one left behind on the app's side stands out). A
   connection is one place holding tokens (claude.ai's connector for a Claude account,
   or Claude Code on one computer), not one chat.
 - **Every call is checked now, not at sign-in:** someone removed from a split loses it

@@ -183,6 +183,7 @@ describe('Connected agents', () => {
     connectedAt: Date.UTC(2026, 9, day),
     returnsTo: null,
     approvedOn: null,
+    lastUsedAt: null,
   });
 
   const listed = () =>
@@ -234,12 +235,41 @@ describe('Connected agents', () => {
     await screen.findByRole('list', { name: 'Connected agents' });
     expect(listed()).toEqual([
       expect.stringMatching(
-        /^ClaudeThrough claude\.ai, allowed in Chrome on WindowsCan see and change your splits · connected/,
+        /^ClaudeThrough claude\.ai, allowed in Chrome on Windows · not used since .*Can see and change your splits · connected/,
       ),
-      expect.stringMatching(/^ClaudeThrough an app on a computerCan see your splits · connected/),
+      expect.stringMatching(
+        /^ClaudeThrough an app on a computer · not used since .*Can see your splits · connected/,
+      ),
     ]);
     // The page says what disconnecting does once, without the card repeating its title
     expect(screen.getAllByRole('heading', { name: 'Connected agents' })).toHaveLength(1);
+  });
+
+  test('says when each was last used, so one left behind stands out', async () => {
+    const server = fakeServer();
+    server.agents = [
+      // Both through claude.ai: the connector added, then removed and added again there
+      {
+        ...agent('g1', 'Claude', ['splits:read'], 16),
+        connectedAt: Date.UTC(2026, 9, 16, 14, 34),
+        returnsTo: { site: 'claude.ai' },
+      },
+      {
+        ...agent('g2', 'Claude', ['splits:read', 'splits:write'], 16),
+        connectedAt: Date.UTC(2026, 9, 16, 15, 23),
+        returnsTo: { site: 'claude.ai' },
+        lastUsedAt: Date.now() - 5 * 60 * 1000,
+      },
+      // Connected since use was noted, and never used
+      { ...agent('g3', 'Hermes', ['splits:read'], 16), connectedAt: Date.now() - 60 * 1000 },
+    ];
+    renderApp(server, '/?settings#agents');
+    await screen.findByRole('list', { name: 'Connected agents' });
+    expect(listed()).toEqual([
+      expect.stringMatching(/^HermesNot used yetCan see your splits/),
+      expect.stringMatching(/^ClaudeThrough claude\.ai · last used today .*Can see and change/),
+      expect.stringMatching(/^ClaudeThrough claude\.ai · not used since Oct 22Can see your splits/),
+    ]);
   });
 
   test('a disconnect the server refuses keeps the agent listed, and says so', async () => {
