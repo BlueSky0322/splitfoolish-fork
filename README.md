@@ -6,15 +6,15 @@ offline.
 
 ## Layout
 
-| Folder        | What it is                                                                   |
-| ------------- | ---------------------------------------------------------------------------- |
-| `web/`        | The browser app: React, Mantine and Tailwind, built with Vite into `dist/`   |
-| `worker/`     | The API: a Hono app on Cloudflare Workers that also serves `dist/`           |
-| `shared/`     | Code both use: settling up, payment methods, rates and the API's data shapes |
-| `migrations/` | D1 (SQLite) schema changes, applied in order on deploy                       |
-| `docs/`       | The data model (`erd.md`) and where each feature lives (`feature-map.md`)    |
-| `scripts/`    | Tools run by hand: `subset-font.sh` makes the font for PDF exports           |
-| `tools/`      | Repository checks, such as the import boundaries `yarn lint` enforces        |
+| Folder        | What it is                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `web/`        | The browser app: React, Mantine and Tailwind, built with Vite into `dist/`                                    |
+| `worker/`     | The API: a Hono app on Cloudflare Workers that also serves `dist/`                                            |
+| `shared/`     | Code both use: settling up, payment methods, rates and the API's data shapes                                  |
+| `migrations/` | D1 (SQLite) schema changes, applied in order on deploy                                                        |
+| `docs/`       | The data model (`erd.md`), where each feature lives (`feature-map.md`), security and recovery (`security.md`) |
+| `scripts/`    | Tools run by hand: `subset-font.sh` makes the font for PDF exports                                            |
+| `tools/`      | Repository checks, such as the import boundaries `yarn lint` enforces                                         |
 
 `web/` and `worker/` never import each other; anything both need lives in `shared/`,
 which the app imports as `@shared/...`. `yarn lint` checks this
@@ -88,7 +88,8 @@ yarn vitest run  # unit tests, plus API tests against a local Worker
 ## Deploying
 
 Every push to `main` builds, checks and tests, applies new migrations to the production
-database, then deploys the Worker (`.github/workflows/deploy.yml`).
+database, then deploys the Worker (`.github/workflows/deploy.yml`). Back up before merging a
+migration, and restore, as in [docs/security.md](docs/security.md).
 
 Cloudflare Access signs people in before anything else loads, which also turns away
 anything fetched without a login. Chrome on Android installs the app without its
