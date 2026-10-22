@@ -30,9 +30,10 @@ const TOOLS = [
   'remove_expense',
   'rename_person',
   'route_payments',
-  'set_expense_date',
   'update_expense',
 ];
+/** What a connection allowed only to read is offered */
+const READ_TOOLS = ['get_photo', 'get_split', 'list_splits'];
 
 beforeAll(async () => {
   api = await startLocalWorker();
@@ -334,7 +335,9 @@ describe('signing in', () => {
     });
     expect(refreshed.status).toBe(200);
     const client = await connect(refreshed.data.access_token);
-    expect((await client.listTools()).tools).toHaveLength(TOOLS.length);
+    // Allowed to read only: offered the reading tools alone, and refused the rest
+    const offered = (await client.listTools()).tools.map((t) => t.name).sort();
+    expect(offered).toEqual(READ_TOOLS);
 
     const revocation = await fetch(`${api.base}/oauth/token`, {
       method: 'POST',
@@ -495,9 +498,173 @@ describe('the tools', () => {
     const bob = balanceOf(split.bob);
     expect(bob.paidCents).toBe(1000);
     expect(bob.balanceCents).toBe(1000 - bob.shareCents);
+    // Only what the expense has: no empty fields to read past
     expect(read.expenses).toEqual([
-      expect.objectContaining({ id: saved.expenseId, cost: 10, costCents: 1000, notes: null }),
+      {
+        id: saved.expenseId,
+        name: 'Dinner',
+        cost: 10,
+        payerId: split.bob,
+        participantIds: [split.me, split.bob, split.cat],
+        splitMode: 'equal',
+        addedAt: expect.any(String),
+      },
     ]);
+  });
+
+  it('take people by name, "me" and "everyone", so an expense needs no read first', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const { access } = await grant(alice, [READ, WRITE]);
+    const client = await connect(access);
+    const add = (requestId: string, fields: Record<string, unknown>) =>
+      tool(client, 'add_expense', { splitId: split.id, currency: 'MYR', requestId, ...fields });
+
+    // Alice is the owner, in the bill as "Owner"; names match whatever the case
+    const dinner = await add('by-name-0001', {
+      name: 'Dinner',
+      cost: 30,
+      payerId: 'me',
+      participantIds: ['everyone'],
+    });
+    expect(dinner.status).toBe('saved');
+    const taxi = await add('by-name-0002', {
+      name: 'Taxi',
+      cost: 20,
+      payerId: 'bob',
+      participantIds: ['Bob', 'cat', split.me],
+      splitMode: 'shares',
+      shares: { bob: 2, Cat: 1, me: 1 },
+    });
+    expect(taxi.status).toBe('saved');
+    const items = await itemsOf(alice, split.id);
+    expect(items.find((i) => i.id === dinner.expenseId)).toMatchObject({
+      payerId: split.me,
+      participantIds: expect.arrayContaining([split.me, split.bob, split.cat]),
+    });
+    // Participants come back in the bill's order, whatever order they were named in
+    expect(items.find((i) => i.id === taxi.expenseId)).toMatchObject({
+      payerId: split.bob,
+      participantIds: [split.me, split.bob, split.cat],
+      shares: { [split.bob]: 2, [split.cat]: 1, [split.me]: 1 },
+    });
+
+    // Nobody by that name, and nothing saved
+    expect(
+      (
+        await add('by-name-0003', {
+          name: 'Ghost',
+          cost: 1,
+          payerId: 'Dan',
+          participantIds: ['me'],
+        })
+      ).error,
+    ).toEqual({
+      code: 'not_found',
+      message: 'There is no one called or with the id "Dan" in this split.',
+      retryable: false,
+    });
+    expect(await itemsOf(alice, split.id)).toHaveLength(2);
+
+    // Two names alike but for case: the exact one is taken, any other spelling needs an id
+    await api.call(alice, 'POST', `/api/splits/${split.id}/changes`, {
+      changes: [{ op: 'addPerson', id: hex(), name: 'bob' }],
+    });
+    expect(
+      (
+        await add('by-name-0004', {
+          name: 'Exact',
+          cost: 1,
+          payerId: 'Bob',
+          participantIds: ['me'],
+        })
+      ).status,
+    ).toBe('saved');
+    expect(
+      (
+        await add('by-name-0005', {
+          name: 'Vague',
+          cost: 1,
+          payerId: 'BOB',
+          participantIds: ['me'],
+        })
+      ).error,
+    ).toMatchObject({
+      code: 'invalid_input',
+      message: 'More than one person is called "BOB" (Bob, bob): use an id.',
+    });
+
+    // The person tools take names too
+    expect(
+      await tool(client, 'rename_person', {
+        splitId: split.id,
+        personId: 'Cat',
+        requestId: 'rename-cat-01',
+        name: 'Catherine',
+      }),
+    ).toMatchObject({ status: 'saved', personId: split.cat });
+    expect(
+      await tool(client, 'route_payments', {
+        splitId: split.id,
+        personId: 'me',
+        requestId: 'route-me-0001',
+      }),
+    ).toMatchObject({ status: 'saved', personId: split.me });
+    // A split whose owner never put themselves in its bill: "me" is no one there
+    const bare = hex();
+    await api.call(alice, 'POST', '/api/splits', { id: bare, name: 'Bare', currency: 'MYR' });
+    await api.call(alice, 'POST', `/api/splits/${bare}/changes`, {
+      changes: [{ op: 'addPerson', id: hex(), name: 'Dan' }],
+    });
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          splitId: bare,
+          currency: 'MYR',
+          requestId: 'me-outside-01',
+          name: 'Lunch',
+          cost: 5,
+          payerId: 'me',
+          participantIds: ['everyone'],
+        })
+      ).error,
+    ).toMatchObject({ code: 'not_found', message: "This account isn't in the bill itself." });
+  });
+
+  it('read newest first, a page at a time, with totals over the whole split', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const { access } = await grant(alice, [READ]);
+    const client = await connect(access);
+    // 30 expenses, each paid a day later than the one before
+    const changes = Array.from({ length: 30 }, (_, i) => ({
+      op: 'addItem',
+      item: {
+        id: hex(),
+        name: `Day ${i + 1}`,
+        cost: 1,
+        payerId: split.bob,
+        participantIds: [split.bob],
+        createdAt: Date.UTC(2026, 0, 1 + i),
+      },
+    }));
+    await api.call(alice, 'POST', `/api/splits/${split.id}/changes`, { changes });
+
+    const first = await tool(client, 'get_split', { splitId: split.id });
+    expect(first.expenses).toHaveLength(25);
+    expect(first.expenses[0].name).toBe('Day 30');
+    expect(first.expenses[24].name).toBe('Day 6');
+    expect(first).toMatchObject({ expenseCount: 30, nextOffset: 25 });
+    expect(first.split.totalCents).toBe(3000);
+    const rest = await tool(client, 'get_split', { splitId: split.id, offset: 25 });
+    expect(rest.expenses.map((e: { name: string }) => e.name)).toEqual([
+      'Day 5',
+      'Day 4',
+      'Day 3',
+      'Day 2',
+      'Day 1',
+    ]);
+    expect(rest.nextOffset).toBeNull();
   });
 
   it('keep to the bill’s rules and the split’s currency', async () => {
@@ -516,8 +683,10 @@ describe('the tools', () => {
       (await tool(client, 'add_expense', { ...dinner, requestId: 'r-stranger', payerId: hex() }))
         .error,
     ).toEqual({
-      code: 'refused',
-      message: 'Who paid must be someone in this split',
+      code: 'not_found',
+      message: expect.stringMatching(
+        /^There is no one called or with the id "[0-9a-f]{16}" in this split\.$/,
+      ),
       retryable: false,
     });
     expect(
@@ -587,7 +756,6 @@ describe('the tools', () => {
     });
     expect(await expenseOf(live.expenseId)).toMatchObject({
       cost: 15,
-      costCents: 1500,
       original: { currency: code, amount: 30, rate: 0.5 },
     });
     // A rate given, and exact amounts in the currency paid in
@@ -635,7 +803,8 @@ describe('the tools', () => {
     });
     // A cost puts it in the split's currency
     await edit('fx-edit-0003', { cost: 50, splitMode: 'equal' });
-    expect(await expenseOf(typed.expenseId)).toMatchObject({ cost: 50, original: null });
+    expect(await expenseOf(typed.expenseId)).toMatchObject({ cost: 50 });
+    expect(await expenseOf(typed.expenseId)).not.toHaveProperty('original');
 
     // Amounts in both currencies, or the split's own as paidIn, are refused
     expect(
@@ -694,19 +863,36 @@ describe('the tools', () => {
     ).toBe('invalid_input');
     expect(await itemsOf(alice, split.id)).toHaveLength(1);
 
-    const redate = (requestId: string, date: string) =>
-      tool(client, 'set_expense_date', { splitId: split.id, expenseId, requestId, date });
+    // Dated again through update_expense, alone or with other changes
+    const redate = (requestId: string, date: string, more: Record<string, unknown> = {}) =>
+      tool(client, 'update_expense', {
+        splitId: split.id,
+        currency: 'MYR',
+        expenseId,
+        requestId,
+        date,
+        ...more,
+      });
     expect(await redate('fuel-redate-1', '2025-12-31T20:00:00+08:00')).toMatchObject({
       status: 'saved',
       expenseId,
       replayed: false,
     });
     expect((await itemsOf(alice, split.id))[0].createdAt).toBe(Date.UTC(2025, 11, 31, 12));
+    expect(await redate('fuel-redate-3', '2025-12-30', { name: 'Petrol' })).toMatchObject({
+      status: 'saved',
+    });
+    expect((await itemsOf(alice, split.id))[0]).toMatchObject({
+      name: 'Petrol',
+      createdAt: Date.UTC(2025, 11, 30, 12),
+    });
     expect((await redate('fuel-redate-2', '2999-01-01')).error).toEqual({
-      code: 'refused',
-      message: 'Pick a date that has already come',
+      code: 'invalid_input',
+      message: 'Pick a date that has already come, from 2000 on.',
       retryable: false,
     });
+    // In shape a date, but not a real one
+    expect((await redate('fuel-redate-4', '2025-13-45')).error?.code).toBe('invalid_input');
 
     const remove = (requestId: string) =>
       tool(client, 'remove_expense', { splitId: split.id, expenseId, requestId });
