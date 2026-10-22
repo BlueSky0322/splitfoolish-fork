@@ -120,6 +120,9 @@ async function grant(email: string, scope: string[], requested = scope) {
       'X-Dev-User': email,
       'Cookie': cookie,
       'Content-Type': 'application/x-www-form-urlencoded',
+      // Allowed from a browser, as a person would
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
     },
     body: form,
     redirect: 'manual',
@@ -358,6 +361,9 @@ describe('signing in', () => {
         name: 'Test agent',
         scopes: [READ],
         connectedAt: expect.any(Number),
+        // Its address to return to is on the computer itself, as Claude Code's is
+        returnsTo: { computer: true },
+        approvedOn: 'Chrome on Windows',
       },
     ]);
     // Whole seconds, so up to one before the grant was asked for

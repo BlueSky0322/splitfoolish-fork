@@ -16,6 +16,7 @@ import { getUserEmail } from '../accounts/auth';
 import { bodyRefused, isCrossSiteWrite, readBody } from '../http';
 import { mcpHandler } from './server';
 import { READ_SCOPE, SCOPES, WRITE_SCOPE } from './scopes';
+import { describeDevice } from './agents';
 
 /** What a grant carries to each MCP request: the account it acts as */
 export interface GrantProps {
@@ -143,7 +144,8 @@ async function answerConsent(oauth: OAuthHelpers, req: Request, email: string) {
   const { redirectTo } = await oauth.completeAuthorization({
     request: approved.request,
     userId: grantUserId(email),
-    metadata: {},
+    // So Settings can tell this connection from others to the same app
+    metadata: { approvedOn: describeDevice(req.headers.get('User-Agent')) ?? undefined },
     scope,
     props,
   });
