@@ -667,6 +667,73 @@ describe('the tools', () => {
     expect(rest.nextOffset).toBeNull();
   });
 
+  it('answer a re-read with only "unchanged" until something changes, photos included', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const { access } = await grant(alice, [READ, WRITE]);
+    const client = await connect(access);
+
+    const first = await tool(client, 'get_split', { splitId: split.id });
+    expect(first.error, JSON.stringify(first)).toBeUndefined();
+    const seen: string = first.split.updatedAt;
+    expect(seen).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    // The same version list_splits shows
+    const all = await tool(client, 'list_splits', {});
+    const listed = all.splits.find((s: { id: string }) => s.id === split.id);
+    expect(listed, JSON.stringify(all)).toBeDefined();
+    expect(listed.updatedAt).toBe(seen);
+
+    // Nothing has changed: a few bytes, not the split
+    expect(await tool(client, 'get_split', { splitId: split.id, ifUnchangedSince: seen })).toEqual({
+      unchanged: true,
+      updatedAt: seen,
+    });
+    // An older version, or one in another shape, reads the whole split
+    expect(
+      await tool(client, 'get_split', { splitId: split.id, ifUnchangedSince: '2000-01-01' }),
+    ).toMatchObject({ split: { updatedAt: seen } });
+
+    // A change makes the next re-read a full one, with the new version
+    await new Promise((r) => setTimeout(r, 5));
+    await tool(client, 'add_expense', {
+      splitId: split.id,
+      currency: 'MYR',
+      requestId: 'reread-0001',
+      name: 'Tea',
+      cost: 3,
+      payerId: 'me',
+      participantIds: ['everyone'],
+    });
+    const changed = await tool(client, 'get_split', { splitId: split.id, ifUnchangedSince: seen });
+    expect(changed.expenses).toHaveLength(1);
+    expect(changed.split.updatedAt > seen).toBe(true);
+
+    // A photo is a change too
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
+    await new Promise((r) => setTimeout(r, 5));
+    const added = await api.call(alice, 'POST', `/api/splits/${split.id}/attachments`, jpeg, {
+      'Content-Type': 'image/jpeg',
+    });
+    expect(added.status).toBe(201);
+    const after = await tool(client, 'get_split', {
+      splitId: split.id,
+      ifUnchangedSince: changed.split.updatedAt,
+    });
+    expect(after.photos).toHaveLength(1);
+    expect(after.split.updatedAt > changed.split.updatedAt).toBe(true);
+    // Removing it is one more
+    const removed = await api.call(alice, 'POST', `/api/splits/${split.id}/attachments/remove`, {
+      ids: [added.data.id],
+    });
+    expect(removed.status).toBe(200);
+    expect(
+      await tool(client, 'get_split', {
+        splitId: split.id,
+        ifUnchangedSince: after.split.updatedAt,
+      }),
+    ).not.toHaveProperty('unchanged');
+  });
+
   it('keep to the bill’s rules and the split’s currency', async () => {
     const alice = person('alice');
     const split = await trip(alice);
