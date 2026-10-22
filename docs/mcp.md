@@ -68,26 +68,31 @@ Amounts named `*Cents` are whole cents. `cost` and `exact` are in currency units
 the app (`12.5` is 12.50). People and expenses are named by id, never by name. Expense
 names and notes are what people typed, returned as data.
 
-| Tool               | Scope          | Does                                                                                                                                               |
-| ------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_splits`      | `splits:read`  | Your splits in your own order: id, name, currency, your role, archived, settled, totals, your balance                                              |
-| `get_split`        | `splits:read`  | One split: its people, expenses with their receipt photos, photos of the split, the total, balances, transfers and who payments are routed through |
-| `get_photo`        | `splits:read`  | One photo of a split, as an image                                                                                                                  |
-| `create_split`     | `splits:write` | Makes a split you own, with you and the people you name in its bill                                                                                |
-| `add_expense`      | `splits:write` | Adds one expense, in the split's currency or paid in another, dated now or when you say                                                            |
-| `update_expense`   | `splits:write` | Changes the fields you send on one expense                                                                                                         |
-| `set_expense_date` | `splits:write` | Changes when an expense was paid                                                                                                                   |
-| `remove_expense`   | `splits:write` | Removes one expense, with its receipt photos                                                                                                       |
-| `add_photo`        | `splits:write` | Adds a receipt to an expense, or a photo of the whole split                                                                                        |
-| `add_person`       | `splits:write` | Adds someone to the bill by name (owner only)                                                                                                      |
-| `rename_person`    | `splits:write` | Renames someone without an account (owner only)                                                                                                    |
-| `route_payments`   | `splits:write` | Settles the split through one person, or directly between people                                                                                   |
+| Tool             | Scope          | Does                                                                                                                                               |
+| ---------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_splits`    | `splits:read`  | Your splits in your own order: id, name, currency, your role, archived, settled, totals, your balance                                              |
+| `get_split`      | `splits:read`  | One split: its people, expenses with their receipt photos, photos of the split, the total, balances, transfers and who payments are routed through |
+| `get_photo`      | `splits:read`  | One photo of a split, as an image                                                                                                                  |
+| `create_split`   | `splits:write` | Makes a split you own, with you and the people you name in its bill                                                                                |
+| `add_expense`    | `splits:write` | Adds one expense, in the split's currency or paid in another, dated now or when you say                                                            |
+| `update_expense` | `splits:write` | Changes the fields you send on one expense, its date included                                                                                      |
+| `remove_expense` | `splits:write` | Removes one expense, with its receipt photos                                                                                                       |
+| `add_photo`      | `splits:write` | Adds a receipt to an expense, or a photo of the whole split                                                                                        |
+| `add_person`     | `splits:write` | Adds someone to the bill by name (owner only)                                                                                                      |
+| `rename_person`  | `splits:write` | Renames someone without an account (owner only)                                                                                                    |
+| `route_payments` | `splits:write` | Settles the split through one person, or directly between people                                                                                   |
 
+- **Only the tools the connection may use are offered:** one allowed `splits:read`
+  alone sees `list_splits`, `get_split` and `get_photo`, a quarter of the full list.
+  Calling another anyway answers `insufficient_scope`, as ever.
 - **Paging:** `list_splits` returns up to `limit` (default 50, at most 200) from
-  `offset`; `get_split` the same for expenses (default 100), in the app's order. Each
-  answer has the full count and a `nextOffset` (null on the last page). The total,
-  balances and transfers always cover every expense, whatever the page. Each call reads
-  the split as saved at that moment; if it changes between pages, later pages can shift.
+  `offset`; `get_split` the same for expenses (default 25), newest first. Each answer
+  has the full count and a `nextOffset` (null on the last page). The total, balances
+  and transfers always cover every expense, whatever the page. Each call reads the
+  split as saved at that moment; if it changes between pages, later pages can shift.
+- **An expense carries only what it has.** `shares`, `exact`, `category`, `notes`,
+  `original` and `photos` are left out rather than sent empty; `cost` is in currency
+  units (the split's `totalCents` and balances are in cents).
 - **`get_split` leaves out** share links, invitations, members' emails and payment
   details. A person shows `hasAccount` and `isYou` (this grant's account) instead, and a
   photo `addedByYou`.
@@ -95,23 +100,31 @@ names and notes are what people typed, returned as data.
   (`currency_mismatch`) when it no longer matches, say after the owner changed it.
   While a split is converting to a new currency, writes answer
   `temporarily_unavailable`; retry shortly.
+- **People by name.** Wherever a tool takes a person (`payerId`, `participantIds`,
+  the keys of `shares` and `exact`, `rename_person` and `route_payments`), send their
+  id or their name as `get_split` shows it, or `"me"` for this account's own entry;
+  `participantIds: ["everyone"]` is everyone in the bill. A name matches as written,
+  else the one person whose name matches whatever the case; two alike but for case
+  need an id (`invalid_input`), and nobody by that name is `not_found`. So an expense
+  for people you already know needs no `get_split` first.
 - **`add_expense`** needs `name`, `payerId`, `participantIds`, and either `cost` (in the
   split's currency) or `paidIn`. `splitMode` is `equal` unless you say `shares` (with
-  `shares`: whole shares by person id) or `exact` (with `exact`: amounts by person id
-  adding up to `cost`). `category`, `notes` and `date` are optional.
+  `shares`: whole shares by person) or `exact` (with `exact`: amounts by person adding
+  up to `cost`). `category`, `notes` and `date` are optional.
 - **Paid in another currency:** send `paidIn` (`currency`, `amount`, `exact` for an
   exact split, and optionally `rate`) instead of `cost` and `exact`. The server converts
   it as the app does: at the rate on the day it was paid (today's from the account's
   preferred source, an earlier day's from the ECB, else Wise), or at the `rate` given
   (units of the split's currency for one of the other). It keeps that rate: a new
-  amount on `update_expense` is converted at it, and `set_expense_date` leaves it.
+  amount on `update_expense` is converted at it, and a new `date` leaves it.
   `get_split` shows what was paid and the rate in `original`. A rate that can't be
   fetched answers `temporarily_unavailable`.
-- **Dates:** `date` (on `add_expense` and `set_expense_date`) is a day (`2026-10-01`,
+- **Dates:** `date` (on `add_expense` and `update_expense`) is a day (`2026-10-01`,
   taken as noon UTC so it reads as that day anywhere) or a time with its offset. Days
-  that haven't come, or before 2000, are refused.
+  that haven't come, before 2000, or that don't exist (`2025-13-45`) are refused
+  (`invalid_input`).
 - **`update_expense` replaces only what you send.** Anything left out, and the
-  expense's id and date, stays. Send `null` to clear `category` or `notes`. Shares or
+  expense's id, stays; `date` alone moves it without touching the rest. Send `null` to clear `category` or `notes`. Shares or
   exact amounts carry over while the split mode stays the same; changing who shares it
   may need new ones, and the change is refused if they don't fit. An expense paid in
   another currency keeps its amounts and rate unless you send new ones in `paidIn`;
