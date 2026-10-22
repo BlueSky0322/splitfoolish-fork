@@ -20,7 +20,7 @@ in [AGENTS.md](../AGENTS.md).
 | [Offline start and delivery](#offline-start-and-delivery)                      | `offline/`                                                                                        | (none; the API is the same)                                      |
 | [Pictures, photos and payment QR codes](#pictures-photos-and-payment-qr-codes) | `split/usePhotos.ts`, `offline/photo-queue.ts`, `split/pictures.ts`, `profile/ProfileContext.tsx` | `photos/`                                                        |
 | [Pages, layouts and Back](#pages-layouts-and-back)                             | `hooks/useRoute.ts`, `hooks/useBackDismiss.ts`                                                    | (none)                                                           |
-| [Agents over MCP](#agents-over-mcp)                                            | (none; agents call the Worker)                                                                    | `mcp/`, `bill/changes.ts` (`saveChanges`)                        |
+| [Agents over MCP](#agents-over-mcp)                                            | `components/settings/AgentsSection.tsx` (listing and disconnecting)                               | `mcp/`, `bill/changes.ts` (`saveChanges`)                        |
 
 App paths are under `web/src/`, Worker paths under `worker/`.
 
@@ -568,7 +568,8 @@ to read splits and their photos, create splits, add, edit, date and remove expen
 people, and route payments. The contracts, units, retries and deployment steps are in
 [mcp.md](mcp.md).
 
-**Owner.** The Worker only; the app doesn't use MCP. A split's bill still changes only
+**Owner.** The Worker; the app doesn't use MCP, and only lists and disconnects the
+agents an account let in (Settings, Connected agents). A split's bill still changes only
 through [bill/changes.ts](../worker/bill/changes.ts): `saveChanges` checks and saves a
 batch, `applyChanges` answers the API with it, and the expense tools call it with their
 retry receipt saved alongside. Photos go through `addAttachment` in
@@ -596,6 +597,12 @@ retry receipt saved alongside. Photos go through `addAttachment` in
   ([0019](../migrations/0019_mcp_receipts.sql)), deleted with their split
   (`splits/lifecycle.ts`).
 - The service worker leaves these routes to the browser (`web/public/sw.js`).
+- Connected agents: [mcp/agents.ts](../worker/mcp/agents.ts) lists the account's grants
+  (`GET /api/me/agents`, as `ConnectedAgent` in `shared/api.ts`) and ends one
+  (`DELETE /api/me/agents/:id`, `revokeGrant`), through the provider's helpers
+  (`oauthHelpers`). Settings shows them in
+  [AgentsSection](../web/src/components/settings/AgentsSection.tsx), which reads and
+  disconnects through the API itself, as nothing else shows them.
 
 **Flow.** Agent → `401` with the resource metadata → registers and sends the person to
 `/oauth/authorize` → Access signs them in, they allow it → token → `POST /mcp` → the
@@ -625,8 +632,13 @@ receipt → the split's room tells open apps.
   and they never accept an OAuth token.
 - Answers leave out share links, invitations, emails and payment details; a photo says
   only whether this account added it.
+- Grants are kept under the account they were made for, so listing and disconnecting
+  reach only the signed-in account's own; an id that isn't theirs changes nothing.
+  Disconnecting ends the grant's access and refresh tokens at once.
 
 **Tests.** [worker/test/mcp.test.ts](../worker/test/mcp.test.ts) (sign-in through the
 provider, every tool through a real MCP client, retries, scopes and membership against
-a local Worker) and [mcp/receipts.test.ts](../worker/mcp/receipts.test.ts) (the same
+a local Worker, listing and disconnecting agents for one account only),
+[SettingsPage.test.tsx](../web/src/components/settings/SettingsPage.test.tsx)
+(Connected agents: listing, asking first, a refusal) and [mcp/receipts.test.ts](../worker/mcp/receipts.test.ts) (the same
 request saved twice at once, which a local Worker can't race).

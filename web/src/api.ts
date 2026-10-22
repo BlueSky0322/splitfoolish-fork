@@ -7,6 +7,7 @@ import {
 import type {
   AcceptResult,
   ArchiveBody,
+  ConnectedAgent,
   ApiErrorBody,
   ErrorCode,
   Attachment,
@@ -152,6 +153,11 @@ export const api = {
     upload<PaymentQrResult>('PUT', `/api/me/payment-qr/${encodeURIComponent(methodId)}`, image),
   setAvatar: (photo: Blob) => upload<AvatarResult>('PUT', '/api/me/avatar', photo),
   deleteAvatar: () => request<Ok>('DELETE', '/api/me/avatar'),
+  /** Agent apps this account has let in, newest first */
+  listAgents: () => request<ConnectedAgent[]>('GET', '/api/me/agents'),
+  /** Ends one agent's access, and every token it holds */
+  disconnectAgent: (id: string) =>
+    request<Ok>('DELETE', `/api/me/agents/${encodeURIComponent(id)}`),
   listSplits: () => request<SplitList>('GET', '/api/splits'),
   /** Names of items in your splits, most recent first, with the category last given */
   listItemNames: () => request<ItemNames>('GET', '/api/item-names'),

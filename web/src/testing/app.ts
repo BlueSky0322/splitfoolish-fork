@@ -11,6 +11,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import type {
   Attachment,
   ChangesBody,
+  ConnectedAgent,
   MyInvite,
   Profile,
   SplitDetail,
@@ -140,16 +141,20 @@ export interface FakeServer {
   /** Every photo the app uploaded and the server kept, in the order they arrived */
   uploads: { splitId: string; itemId: string | null; image: Blob }[];
   /**
-   * The next save of the profile, a split's changes or its settings, or the next photo
-   * upload, answers with this status
+   * The next save of the profile, a split's changes or its settings, the next photo
+   * upload, or the next agent disconnected, answers with this status
    */
-  failNext: Partial<Record<'profile' | 'changes' | 'settings' | 'join' | 'photo', number>>;
+  failNext: Partial<
+    Record<'profile' | 'changes' | 'settings' | 'join' | 'photo' | 'agent', number>
+  >;
   /** The next batch of changes is saved, but its answer never reaches the app */
   loseNext: { changes?: boolean };
   /** Changes saved under the id the app gave them, as the real API keeps them, by split */
   receipts: Map<string, string>;
   /** Splits the signed-in account has archived */
   archived: Set<string>;
+  /** Agent apps the signed-in account has let in, in the order they were */
+  agents: ConnectedAgent[];
   /** Answers being held back until a test releases them (see holdNext) */
   held: { method: string; path: string; release: Promise<void> }[];
 }
@@ -671,6 +676,18 @@ function answerNow(server: FakeServer) {
       split.invites = split.invites?.filter((i) => i.id !== inviteMatch[2]);
       return json({ ok: true });
     }
+    // As the real one: newest first, and disconnecting one already gone changes nothing
+    if (path === '/api/me/agents' && method === 'GET') {
+      return json([...server.agents].sort((a, b) => b.connectedAt - a.connectedAt));
+    }
+    const agentMatch = /^\/api\/me\/agents\/([^/]+)$/.exec(path);
+    if (agentMatch && method === 'DELETE') {
+      const failure = failing('agent');
+      if (failure) return failure;
+      const id = decodeURIComponent(agentMatch[1]);
+      server.agents = server.agents.filter((a) => a.id !== id);
+      return json({ ok: true });
+    }
     return json({ error: `No stand-in for ${method} ${path}` }, 404);
   };
 }
@@ -697,6 +714,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     uploads: [],
     failNext: {},
     archived: new Set(),
+    agents: [],
     held: [],
   };
 }

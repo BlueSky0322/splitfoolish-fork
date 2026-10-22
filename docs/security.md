@@ -20,7 +20,8 @@ app hack-proof, and the limits below are real.
   (`X-Expected-Account`). One made as another account is refused before it changes
   anything, and the device keeps it for that account.
 - **Agents (MCP)** sign in over OAuth with scopes the person approves on a consent page
-  (`docs/mcp.md`). Registering an agent app is rate limited per address and in total.
+  (`docs/mcp.md`), and can be disconnected one by one in Settings. Registering an agent
+  app is rate limited per address and in total.
 
 ## Limits that bound abuse
 
@@ -94,8 +95,9 @@ before they're needed.
 - **A leaked Cloudflare token**: revoke it in the Cloudflare dashboard, make a new one
   with only what the deploy needs (Workers scripts and D1 edit on this account), and
   replace the GitHub secret.
-- **Agent tokens to cut off**: there is no screen for it yet. An agent can revoke its own
-  token at `/oauth/token`; to cut off every agent, empty `OAUTH_KV`, and each has to be
+- **An agent to cut off**: the person disconnects it in Settings, under Connected agents,
+  which ends its grant and tokens at once. An agent can also revoke its own token at
+  `/oauth/token`. To cut off every agent for everyone, empty `OAUTH_KV`; each has to be
   connected and approved again.
 - **Someone who shouldn't be in**: remove them in the Access policy; their next request
   is refused. Remove them from splits in the app to take away what they could see.

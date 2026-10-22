@@ -46,7 +46,9 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   with `error="insufficient_scope"`, so the client can ask for more.
 - **Lifetimes:** access tokens last an hour; refresh tokens rotate on use and the
   grant ends 30 days after sign-in. Authorizing the same app again replaces its earlier
-  grant. Revoke a token at `/oauth/token` (RFC 7009).
+  grant. Revoke a token at `/oauth/token` (RFC 7009). The person can disconnect an
+  agent in Settings, under Connected agents, which ends its grant and every token from
+  it at once.
 - **Every call is checked now, not at sign-in:** someone removed from a split loses it
   through the agent at once, as in the app.
 - **Requests are read only so far:** up to 4 MiB (a photo for `add_photo` fits), and

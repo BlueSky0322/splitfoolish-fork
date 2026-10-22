@@ -1,10 +1,11 @@
-// The signed-in account: profile, settings, payment methods and picture, and other
-// people's pictures
+// The signed-in account: profile, settings, payment methods and picture, the agent apps
+// it has let in, and other people's pictures
 
 import { Hono } from 'hono';
-import type { PaymentMethodsBody, Profile, ProfilePatch } from '../../shared/api';
+import type { ConnectedAgent, PaymentMethodsBody, Profile, ProfilePatch } from '../../shared/api';
 import type { AppEnv } from '../app';
-import { json, readJson } from '../http';
+import { json, ok, readJson } from '../http';
+import { disconnectAgent, listConnectedAgents } from '../mcp/agents';
 import {
   deleteAvatar,
   putAvatar,
@@ -29,6 +30,15 @@ me.put('/me/payment-methods', async (c) => {
   const body = await readJson<PaymentMethodsBody>(c.req.raw);
   if (body instanceof Response) return body;
   return putPaymentMethods(c.env.DB, c.var.email, body);
+});
+
+// Agent apps let in over OAuth, each disconnected on its own
+me.get('/me/agents', async (c) =>
+  json<ConnectedAgent[]>(await listConnectedAgents(c.env, c.var.email)),
+);
+me.delete('/me/agents/:id', async (c) => {
+  await disconnectAgent(c.env, c.var.email, c.req.param('id'));
+  return ok();
 });
 
 me.put('/me/avatar', (c) => putAvatar(c.env.DB, c.var.email, c.req.raw));

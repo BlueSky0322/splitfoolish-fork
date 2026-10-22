@@ -341,6 +341,52 @@ describe('signing in', () => {
     expect(revocation.status).toBe(200);
     expect((await rawCall(access, list)).status).toBe(401);
   });
+
+  it('lists the agents an account let in, for it alone, and disconnecting one ends its tokens', async () => {
+    const alice = person('alice');
+    const bob = person('bob');
+    const before = Date.now();
+    const { access, refresh, clientId } = await grant(alice, [READ]);
+    const bobs = await grant(bob, [READ, WRITE]);
+    const list = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
+
+    const listed = await api.call(alice, 'GET', '/api/me/agents');
+    expect(listed.status).toBe(200);
+    expect(listed.data).toEqual([
+      {
+        id: expect.any(String),
+        name: 'Test agent',
+        scopes: [READ],
+        connectedAt: expect.any(Number),
+      },
+    ]);
+    // Whole seconds, so up to one before the grant was asked for
+    expect(listed.data[0].connectedAt).toBeGreaterThanOrEqual(before - 1000);
+    const [{ id }] = listed.data as { id: string }[];
+    // Bob's own list is his alone
+    expect((await api.call(bob, 'GET', '/api/me/agents')).data).toEqual([
+      expect.objectContaining({ scopes: [READ, WRITE] }),
+    ]);
+
+    // Bob can't disconnect Alice's agent, even knowing its id
+    expect((await api.call(bob, 'DELETE', `/api/me/agents/${id}`)).status).toBe(200);
+    expect((await rawCall(access, list)).status).toBe(200);
+
+    expect((await api.call(alice, 'DELETE', `/api/me/agents/${id}`)).status).toBe(200);
+    expect((await api.call(alice, 'GET', '/api/me/agents')).data).toEqual([]);
+    // Neither its access token nor its refresh token works any more
+    expect((await rawCall(access, list)).status).toBe(401);
+    const refreshed = await tokenRequest({
+      grant_type: 'refresh_token',
+      refresh_token: refresh,
+      client_id: clientId,
+    });
+    expect(refreshed.status).toBe(400);
+    // Bob's agent carries on
+    expect((await rawCall(bobs.access, list)).status).toBe(200);
+    // An id that can't be a grant is turned away quietly, as one already gone is
+    expect((await api.call(alice, 'DELETE', '/api/me/agents/not:an:id')).status).toBe(200);
+  });
 });
 
 describe('the tools', () => {
