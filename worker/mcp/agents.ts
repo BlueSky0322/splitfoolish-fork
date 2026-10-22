@@ -17,6 +17,57 @@ const GRANT_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const isAgentScope = (scope: string): scope is AgentScope =>
   (AGENT_SCOPES as readonly string[]).includes(scope);
 
+/** What the consent page notes on a grant, for telling connections apart */
+export interface GrantMetadata {
+  approvedOn?: string;
+}
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** Where the app carries on once let in, from the address the browser was sent back to */
+export function returnsTo(redirectUri: string | undefined): ConnectedAgent['returnsTo'] {
+  if (!redirectUri) return null;
+  try {
+    const { hostname, protocol } = new URL(redirectUri);
+    if (LOCAL_HOSTS.has(hostname) || hostname.endsWith('.localhost')) return { computer: true };
+    // An app's own scheme (myapp://) is an app on the device too
+    if (protocol !== 'https:' && protocol !== 'http:') return { computer: true };
+    return { site: hostname };
+  } catch {
+    return null;
+  }
+}
+
+const BROWSERS: [RegExp, string][] = [
+  [/Edg(e|A|iOS)?\//, 'Edge'],
+  [/SamsungBrowser\//, 'Samsung Internet'],
+  [/OPR\/|Opera/, 'Opera'],
+  [/Firefox\/|FxiOS\//, 'Firefox'],
+  [/Chrome\/|CriOS\//, 'Chrome'],
+  [/Safari\//, 'Safari'],
+];
+const SYSTEMS: [RegExp, string][] = [
+  [/iPhone/, 'iPhone'],
+  [/iPad/, 'iPad'],
+  [/Android/, 'Android'],
+  [/CrOS/, 'ChromeOS'],
+  [/Windows/, 'Windows'],
+  [/Mac OS X|Macintosh/, 'Mac'],
+  [/Linux/, 'Linux'],
+];
+
+/**
+ * The browser and device a request came from, in a few words ("Chrome on Windows"), or
+ * null when it can't be told. Only this is kept, never the browser's whole description.
+ */
+export function describeDevice(userAgent: string | null): string | null {
+  if (!userAgent) return null;
+  const browser = BROWSERS.find(([pattern]) => pattern.test(userAgent))?.[1];
+  const system = SYSTEMS.find(([pattern]) => pattern.test(userAgent))?.[1];
+  if (browser && system) return `${browser} on ${system}`;
+  return browser ?? system ?? null;
+}
+
 /** The apps let in, newest first; none while MCP is off */
 export async function listConnectedAgents(env: Env, email: string): Promise<ConnectedAgent[]> {
   const { grantUserId, oauthHelpers } = await loadOAuth();
@@ -39,6 +90,8 @@ export async function listConnectedAgents(env: Env, email: string): Promise<Conn
         name: client?.clientName?.trim() || 'An agent app',
         scopes: grant.scope.filter(isAgentScope),
         connectedAt: grant.createdAt * 1000,
+        returnsTo: returnsTo(grant.redirectUri),
+        approvedOn: (grant.metadata as GrantMetadata | undefined)?.approvedOn ?? null,
       } satisfies ConnectedAgent;
     }),
   );

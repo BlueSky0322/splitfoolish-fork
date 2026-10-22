@@ -279,6 +279,14 @@ export interface ConnectedAgent {
   scopes: AgentScope[];
   /** When it was let in, in milliseconds */
   connectedAt: number;
+  /**
+   * Where it carries on after being let in: a website (claude.ai, say), or an app on a
+   * computer (Claude Code, say, which listens on the computer's own address). Null when
+   * that isn't known.
+   */
+  returnsTo: { site: string } | { computer: true } | null;
+  /** The browser and device it was let in from, such as "Chrome on Windows", if noted */
+  approvedOn: string | null;
 }
 
 /**

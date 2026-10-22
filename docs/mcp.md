@@ -48,7 +48,11 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   grant ends 30 days after sign-in. Authorizing the same app again replaces its earlier
   grant. Revoke a token at `/oauth/token` (RFC 7009). The person can disconnect an
   agent in Settings, under Connected agents, which ends its grant and every token from
-  it at once.
+  it at once. Each connection is listed with where it returns to (a website such as
+  claude.ai, or an app on a computer) and the browser it was allowed in ("Chrome on
+  Windows"): only those few words are noted, never the browser's whole description. A
+  connection is one place holding tokens (claude.ai's connector for a Claude account,
+  or Claude Code on one computer), not one chat.
 - **Every call is checked now, not at sign-in:** someone removed from a split loses it
   through the agent at once, as in the app.
 - **Requests are read only so far:** up to 4 MiB (a photo for `add_photo` fits), and

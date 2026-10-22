@@ -126,6 +126,11 @@
   padding: 20px 0 8px;
 }
 
+/* A list with no title above it sits evenly in its card, on phones too */
+.card[data-flush]:not(:has(> .cardHead)) {
+  padding: 8px 0;
+}
+
 .card[data-flush] > .cardHead,
 .card[data-flush] > :global(.mantine-Button-root) {
   margin: 0 20px;

@@ -19,7 +19,27 @@ const describeScopes = (agent: ConnectedAgent) =>
       : 'Can do nothing yet';
 
 const connectedOn = (at: number) =>
-  new Date(at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  new Date(at).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+/**
+ * Where it's from, to tell two connections of the same app apart: the website it carries
+ * on at, or an app on a computer, and the browser it was let in from
+ */
+function describeWhere({ returnsTo, approvedOn }: ConnectedAgent) {
+  const parts = [];
+  if (returnsTo != null) {
+    parts.push('site' in returnsTo ? `Through ${returnsTo.site}` : 'Through an app on a computer');
+  }
+  if (approvedOn != null) parts.push(`allowed in ${approvedOn}`);
+  const where = parts.join(', ');
+  return where === '' ? null : where.charAt(0).toUpperCase() + where.slice(1);
+}
 
 // Connected agents: the AI apps this account let see or change its splits (over MCP),
 // each disconnected on its own. Nothing else shows them, so they're read and ended here.
@@ -49,11 +69,7 @@ const AgentsSection = () => {
   const list = agents.data ?? [];
   return (
     <>
-      <SettingsCard
-        title="Connected agents"
-        help="AI apps you let into your splits. Disconnecting one stops it straight away."
-        flush
-      >
+      <SettingsCard flush>
         {agents.isPending ? (
           <p className={classes.listNote}>Getting your agents…</p>
         ) : agents.isError ? (
@@ -72,8 +88,11 @@ const AgentsSection = () => {
               >
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{agent.name}</div>
+                  {describeWhere(agent) && (
+                    <div className={classes.agentDetail}>{describeWhere(agent)}</div>
+                  )}
                   <div className={classes.agentDetail}>
-                    {describeScopes(agent)} · since {connectedOn(agent.connectedAt)}
+                    {describeScopes(agent)} · connected {connectedOn(agent.connectedAt)}
                   </div>
                 </div>
                 <Button

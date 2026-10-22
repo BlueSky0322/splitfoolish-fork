@@ -63,7 +63,8 @@ const GROUPS: { label: string; sections: Section[] }[] = [
         id: 'agents',
         label: 'Connected agents',
         icon: Robot,
-        blurb: 'AI apps you let see or change your splits.',
+        blurb:
+          'AI apps you let see or change your splits. Disconnecting one stops it straight away.',
         render: () => <AgentsSection />,
       },
     ],

@@ -181,6 +181,8 @@ describe('Connected agents', () => {
     name,
     scopes,
     connectedAt: Date.UTC(2026, 9, day),
+    returnsTo: null,
+    approvedOn: null,
   });
 
   const listed = () =>
@@ -198,8 +200,8 @@ describe('Connected agents', () => {
     const user = userEvent.setup();
     await screen.findByRole('list', { name: 'Connected agents' });
     expect(listed()).toEqual([
-      expect.stringMatching(/^Claude.*Can see and change your splits · since/),
-      expect.stringMatching(/^Hermes.*Can see your splits · since/),
+      expect.stringMatching(/^Claude.*Can see and change your splits · connected/),
+      expect.stringMatching(/^Hermes.*Can see your splits · connected/),
     ]);
 
     // Kept when they think better of it
@@ -215,6 +217,29 @@ describe('Connected agents', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(server.agents.map((a) => a.id)).toEqual(['g2']);
     expect(listed()).toEqual([expect.stringMatching(/^Claude/)]);
+  });
+
+  test('tells two connections of the same app apart by where they are from', async () => {
+    const server = fakeServer();
+    server.agents = [
+      {
+        ...agent('g1', 'Claude', ['splits:read', 'splits:write'], 16),
+        returnsTo: { site: 'claude.ai' },
+        approvedOn: 'Chrome on Windows',
+      },
+      // Connected before the device was noted
+      { ...agent('g2', 'Claude', ['splits:read'], 15), returnsTo: { computer: true } },
+    ];
+    renderApp(server, '/?settings#agents');
+    await screen.findByRole('list', { name: 'Connected agents' });
+    expect(listed()).toEqual([
+      expect.stringMatching(
+        /^ClaudeThrough claude\.ai, allowed in Chrome on WindowsCan see and change your splits · connected/,
+      ),
+      expect.stringMatching(/^ClaudeThrough an app on a computerCan see your splits · connected/),
+    ]);
+    // The page says what disconnecting does once, without the card repeating its title
+    expect(screen.getAllByRole('heading', { name: 'Connected agents' })).toHaveLength(1);
   });
 
   test('a disconnect the server refuses keeps the agent listed, and says so', async () => {
