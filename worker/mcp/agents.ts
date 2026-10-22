@@ -17,6 +17,29 @@ const GRANT_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const isAgentScope = (scope: string): scope is AgentScope =>
   (AGENT_SCOPES as readonly string[]).includes(scope);
 
+/**
+ * When each connection last called, kept beside the provider's own records under a prefix
+ * of ours (theirs are grant:, token:, client: and the like). Noted at most this often, and
+ * forgotten a little after the grant itself would be.
+ */
+const USED_PREFIX = 'agent-used:';
+const NOTE_USE_EVERY_MS = 10 * 60 * 1000;
+const USE_KEPT_S = 31 * 24 * 60 * 60;
+const usedKey = (userId: string, grantId: string) => `${USED_PREFIX}${userId}:${grantId}`;
+
+/**
+ * Notes that a connection just called, from its access token, which the provider makes as
+ * `userId:grantId:secret`. Done after answering; a failure only loses the note.
+ */
+export async function noteAgentUse(kv: KVNamespace, token: string, now = Date.now()) {
+  const [userId, grantId] = token.split(':');
+  if (!userId || !grantId || !GRANT_ID.test(grantId)) return;
+  const key = usedKey(userId, grantId);
+  const last = Number(await kv.get(key, { cacheTtl: 60 }));
+  if (now - last < NOTE_USE_EVERY_MS) return;
+  await kv.put(key, String(now), { expirationTtl: USE_KEPT_S });
+}
+
 /** What the consent page notes on a grant, for telling connections apart */
 export interface GrantMetadata {
   approvedOn?: string;
@@ -84,7 +107,10 @@ export async function listConnectedAgents(env: Env, email: string): Promise<Conn
   const agents = await Promise.all(
     grants.slice(0, MAX_LISTED).map(async (grant) => {
       // An app whose registration has run out still holds its grant until disconnected
-      const client = await oauth.lookupClient(grant.clientId).catch(() => null);
+      const [client, used] = await Promise.all([
+        oauth.lookupClient(grant.clientId).catch(() => null),
+        env.OAUTH_KV?.get(usedKey(userId, grant.id)).catch(() => null),
+      ]);
       return {
         id: grant.id,
         name: client?.clientName?.trim() || 'An agent app',
@@ -92,6 +118,7 @@ export async function listConnectedAgents(env: Env, email: string): Promise<Conn
         connectedAt: grant.createdAt * 1000,
         returnsTo: returnsTo(grant.redirectUri),
         approvedOn: (grant.metadata as GrantMetadata | undefined)?.approvedOn ?? null,
+        lastUsedAt: used ? Number(used) || null : null,
       } satisfies ConnectedAgent;
     }),
   );
@@ -108,4 +135,5 @@ export async function disconnectAgent(env: Env, email: string, id: string): Prom
   const oauth = oauthHelpers(env);
   if (oauth == null) return;
   await oauth.revokeGrant(id, grantUserId(email));
+  await env.OAUTH_KV?.delete(usedKey(grantUserId(email), id));
 }

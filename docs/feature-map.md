@@ -608,7 +608,12 @@ retry receipt saved alongside. Photos go through `addAttachment` in
   (`oauthHelpers`). Each says where it's from, to tell two connections of the same app
   apart: the website it returns to, or an app on a computer (`returnsTo`, from the
   grant's redirect address), and the browser it was allowed in (`approvedOn`, a few
-  words the consent page notes in the grant's metadata). Settings shows them in
+  words the consent page notes in the grant's metadata). Each also says when it last
+  called (`lastUsedAt`): every MCP request notes it, after answering and at most every
+  ten minutes, in `OAUTH_KV` under `agent-used:<user>:<grant>` beside the provider's own
+  keys (`noteAgentUse`); it expires with the grant and goes when it's disconnected. Use
+  was noted from 2026-10-22 (`AGENT_USE_NOTED_SINCE`), so older connections say "not
+  used since" then until they call. Settings shows them in
   [AgentsSection](../web/src/components/settings/AgentsSection.tsx), which reads and
   disconnects through the API itself, as nothing else shows them.
 

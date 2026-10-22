@@ -7,7 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LocalWorker } from './local-worker';
 import { startLocalWorker } from './local-worker';
 
@@ -364,11 +364,22 @@ describe('signing in', () => {
         // Its address to return to is on the computer itself, as Claude Code's is
         returnsTo: { computer: true },
         approvedOn: 'Chrome on Windows',
+        // Not used yet
+        lastUsedAt: null,
       },
     ]);
     // Whole seconds, so up to one before the grant was asked for
     expect(listed.data[0].connectedAt).toBeGreaterThanOrEqual(before - 1000);
     const [{ id }] = listed.data as { id: string }[];
+    // Once it calls, Settings can say when (noted just after answering)
+    const called = Date.now();
+    expect((await rawCall(access, list)).status).toBe(200);
+    await vi.waitFor(async () => {
+      const [agent] = (await api.call(alice, 'GET', '/api/me/agents')).data as {
+        lastUsedAt: number | null;
+      }[];
+      expect(agent.lastUsedAt).toBeGreaterThanOrEqual(called);
+    });
     // Bob's own list is his alone
     expect((await api.call(bob, 'GET', '/api/me/agents')).data).toEqual([
       expect.objectContaining({ scopes: [READ, WRITE] }),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { describeDevice, returnsTo } from './agents';
+import { describeDevice, noteAgentUse, returnsTo } from './agents';
 
 // Telling one agent connection from another in Settings: where the app carries on once
 // let in, and the browser and device it was let in from
@@ -49,5 +49,45 @@ describe('the device an agent was let in from', () => {
     [null, null],
   ])('%s', (agent, expected) => {
     expect(describeDevice(agent)).toBe(expected);
+  });
+});
+
+describe('noting when a connection was last used', () => {
+  /** The provider's key-value store, kept in memory, noting each write */
+  function store() {
+    const kept = new Map<string, string>();
+    const writes: string[] = [];
+    const kv = {
+      get: (key: string) => Promise.resolve(kept.get(key) ?? null),
+      put: (key: string, value: string) => {
+        writes.push(key);
+        kept.set(key, value);
+        return Promise.resolve();
+      },
+    } as unknown as KVNamespace;
+    return { kv, kept, writes };
+  }
+  const token = 'alice%40example.com:grantA1:secret';
+  const minute = 60 * 1000;
+
+  test('notes the first call, then at most every ten minutes', async () => {
+    const { kv, kept, writes } = store();
+    await noteAgentUse(kv, token, 1_000_000);
+    expect(kept.get('agent-used:alice%40example.com:grantA1')).toBe('1000000');
+    await noteAgentUse(kv, token, 1_000_000 + 9 * minute);
+    expect(writes).toHaveLength(1);
+    await noteAgentUse(kv, token, 1_000_000 + 10 * minute);
+    expect(kept.get('agent-used:alice%40example.com:grantA1')).toBe(
+      String(1_000_000 + 10 * minute),
+    );
+    expect(writes).toHaveLength(2);
+  });
+
+  test('notes nothing for a token it can’t read a connection from', async () => {
+    const { kv, writes } = store();
+    await noteAgentUse(kv, 'not-a-token', 1);
+    await noteAgentUse(kv, 'alice::secret', 1);
+    await noteAgentUse(kv, 'alice:bad/grant:secret', 1);
+    expect(writes).toEqual([]);
   });
 });

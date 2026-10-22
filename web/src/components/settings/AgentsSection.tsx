@@ -1,9 +1,10 @@
 import { Button } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { ConnectedAgent } from '@shared/api';
+import { AGENT_USE_NOTED_SINCE, type ConnectedAgent } from '@shared/api';
 import { api } from '../../api';
 import { showError } from '../../utils/notify';
+import { describeWhen } from '../../utils/rate-labels';
 import ResponsiveDialog from '../ui/ResponsiveDialog';
 import SettingsCard from './SettingsCard';
 import classes from './SettingsLayout.module.css';
@@ -37,9 +38,30 @@ function describeWhere({ returnsTo, approvedOn }: ConnectedAgent) {
     parts.push('site' in returnsTo ? `Through ${returnsTo.site}` : 'Through an app on a computer');
   }
   if (approvedOn != null) parts.push(`allowed in ${approvedOn}`);
-  const where = parts.join(', ');
-  return where === '' ? null : where.charAt(0).toUpperCase() + where.slice(1);
+  return parts.join(', ');
 }
+
+/**
+ * When it last called: the one still in use shows a recent time, one left behind (removed
+ * on the app's side without being disconnected here) an old one or none
+ */
+function describeUse({ lastUsedAt, connectedAt }: ConnectedAgent) {
+  if (lastUsedAt != null) return `last used ${describeWhen(lastUsedAt)}`;
+  // Use was only noted from then on, so one connected before can't say more
+  if (connectedAt < AGENT_USE_NOTED_SINCE) {
+    const since = new Date(AGENT_USE_NOTED_SINCE).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+    });
+    return `not used since ${since}`;
+  }
+  return 'not used yet';
+}
+
+const describeOrigin = (agent: ConnectedAgent) => {
+  const line = [describeWhere(agent), describeUse(agent)].filter((p) => p !== '').join(' · ');
+  return line.charAt(0).toUpperCase() + line.slice(1);
+};
 
 // Connected agents: the AI apps this account let see or change its splits (over MCP),
 // each disconnected on its own. Nothing else shows them, so they're read and ended here.
@@ -88,9 +110,7 @@ const AgentsSection = () => {
               >
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{agent.name}</div>
-                  {describeWhere(agent) && (
-                    <div className={classes.agentDetail}>{describeWhere(agent)}</div>
-                  )}
+                  <div className={classes.agentDetail}>{describeOrigin(agent)}</div>
                   <div className={classes.agentDetail}>
                     {describeScopes(agent)} · connected {connectedOn(agent.connectedAt)}
                   </div>

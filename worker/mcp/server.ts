@@ -12,6 +12,7 @@ import { readBody } from '../http';
 import type { GrantProps } from './oauth';
 import { READ_SCOPE } from './scopes';
 import { TOOL_SCOPES, registerTools } from './tools';
+import { noteAgentUse } from './agents';
 
 const jsonError = (status: number, message: string, headers?: HeadersInit) =>
   Response.json(
@@ -87,6 +88,10 @@ export const mcpHandler = {
       { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
     );
     registerTools(server, { email: ctx.props.email, scopes: ctx.auth.scope, env, ctx });
+    // So Settings can say when this connection was last used
+    if (env.OAUTH_KV != null) {
+      ctx.waitUntil(noteAgentUse(env.OAUTH_KV, ctx.auth.token).catch(() => {}));
+    }
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
