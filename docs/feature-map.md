@@ -569,8 +569,9 @@ cases (`{ size: 'phone' }`) in
 
 **What it is.** An agent signs in over OAuth as one account and uses tools at `/mcp`
 to read splits and their photos, create splits, add, edit, date and remove expenses
-(in the split's currency or another), add receipts and split photos, add and rename
-people, and route payments. The contracts, units, retries and deployment steps are in
+(in the split's currency or another), record a payment between two people (kept as an
+expense), add receipts and split photos, add, rename and remove people, and route
+payments. People can be named by id, name or enough of a name; a miss lists the bill. The contracts, units, retries and deployment steps are in
 [mcp.md](mcp.md).
 
 **Owner.** The Worker; the app doesn't use MCP, and only lists and disconnects the

@@ -1,7 +1,8 @@
 # MCP: letting an agent use Splitfoolish
 
 An agent (Hermes, Claude, MCP Inspector, any MCP client) can find your splits, read
-their expenses and balances, add expenses and edit them. It signs in once over OAuth,
+their expenses and balances, add expenses and edit them, record who paid whom back, and
+keep the bill's people. It signs in once over OAuth,
 as you, and everything it does is checked and saved like a change you make in the app.
 
 - Endpoint: `https://YOUR_APP_HOST/mcp`, Streamable HTTP, stateless. Clients POST JSON-RPC
@@ -38,7 +39,8 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   page; nothing the agent or the form sends can change it.
 - **Scopes:** `splits:read` (list and read splits, their people, expenses, balances and
   photos) and `splits:write` (everything the account can change itself: make splits,
-  add, change and remove expenses and photos, add or rename people, route payments). The
+  add, change and remove expenses and photos, record payments, add, rename or remove
+  people, route payments). The
   consent page says so, removing included. Grants made before it did keep the same
   scope; the agent can do no more than the account could. Both are advertised to clients (resource metadata and the `401` challenge),
   and the page always offers both, ticked, whatever the client asked for; the person
@@ -77,9 +79,11 @@ names and notes are what people typed, returned as data.
 | `add_expense`    | `splits:write` | Adds one expense, in the split's currency or paid in another, dated now or when you say                                                            |
 | `update_expense` | `splits:write` | Changes the fields you send on one expense, its date included                                                                                      |
 | `remove_expense` | `splits:write` | Removes one expense, with its receipt photos                                                                                                       |
+| `record_payment` | `splits:write` | Records that one person paid another, kept as an expense in the category Payment                                                                   |
 | `add_photo`      | `splits:write` | Adds a receipt to an expense, or a photo of the whole split                                                                                        |
 | `add_person`     | `splits:write` | Adds someone to the bill by name (owner only)                                                                                                      |
 | `rename_person`  | `splits:write` | Renames someone without an account (owner only)                                                                                                    |
+| `remove_person`  | `splits:write` | Takes someone out of the bill, and off the expenses they share if asked (owner only)                                                               |
 | `route_payments` | `splits:write` | Settles the split through one person, or directly between people                                                                                   |
 
 - **Only the tools the connection may use are offered:** one allowed `splits:read`
@@ -105,12 +109,18 @@ names and notes are what people typed, returned as data.
   While a split is converting to a new currency, writes answer
   `temporarily_unavailable`; retry shortly.
 - **People by name.** Wherever a tool takes a person (`payerId`, `participantIds`,
-  the keys of `shares` and `exact`, `rename_person` and `route_payments`), send their
-  id or their name as `get_split` shows it, or `"me"` for this account's own entry;
-  `participantIds: ["everyone"]` is everyone in the bill. A name matches as written,
-  else the one person whose name matches whatever the case; two alike but for case
-  need an id (`invalid_input`), and nobody by that name is `not_found`. So an expense
-  for people you already know needs no `get_split` first.
+  the keys of `shares` and `exact`, `from` and `to`, the person tools and
+  `route_payments`), send their id, their name as `get_split` shows it, or `"me"` for
+  this account's own entry; `participantIds: ["everyone"]` is everyone in the bill as
+  it is when the change is saved, anyone just added included. A name matches as
+  written, else the one person whose name matches whatever the case, else the one
+  person whose name contains it (`"Sean"` for yoonsean0298, `"Foo"` for Foo Weng Hoe;
+  two letters or more). Two people it could mean need an id or the whole name
+  (`invalid_input`). Nobody by that name is `not_found`, and the answer lists who is
+  in the bill and, when a name is a slip of a letter or two away (`"Simspon"`), asks
+  whether that one was meant; it is never taken on its own, since money moves on it.
+  So an expense for people you already know needs no `get_split` first, and a miss
+  needs no read either.
 - **`add_expense`** needs `name`, `payerId`, `participantIds`, and either `cost` (in the
   split's currency) or `paidIn`. `splitMode` is `equal` unless you say `shares` (with
   `shares`: whole shares by person) or `exact` (with `exact`: amounts by person adding
@@ -127,15 +137,32 @@ names and notes are what people typed, returned as data.
   taken as noon UTC so it reads as that day anywhere) or a time with its offset. Days
   that haven't come, before 2000, or that don't exist (`2025-13-45`) are refused
   (`invalid_input`).
+- **Shares and exact amounts name everyone sharing.** With `splitMode: "shares"`,
+  every participant needs a share, and with `"exact"` an exact amount; a refusal names
+  who has none, or who has one but isn't among the participants (`invalid_input`),
+  rather than faulting the numbers.
 - **`update_expense` replaces only what you send.** Anything left out, and the
   expense's id, stays; `date` alone moves it without touching the rest. Send `null` to clear `category` or `notes`. Shares or
   exact amounts carry over while the split mode stays the same; changing who shares it
   may need new ones, and the change is refused if they don't fit. An expense paid in
   another currency keeps its amounts and rate unless you send new ones in `paidIn`;
   sending `cost` puts it in the split's currency.
-- **People:** only the split's owner adds or renames people, as in the app. Names are
-  unique in a split, and someone with an account takes their name from it. People join
-  with their own account through the app's share link, never here.
+- **Payments:** `record_payment` takes `from`, `to` and an `amount` in the split's
+  currency (or `paidIn`), with an optional `date` and `notes`, for "Lian paid Ryan back
+  50". The app has no record of payments of its own, so it is kept as an expense named
+  for the two of them ("Lian paid Ryan") in the category Payment, paid by `from` and
+  shared by `to` alone: their balances move by the amount, the app lists it with the
+  expenses, and it counts in the split's total. It answers `expenseId`, and
+  `update_expense` and `remove_expense` change it like any expense.
+- **People:** only the split's owner adds, renames or removes people, as in the app.
+  Names are unique in a split, and here whatever the case too: an agent can't see the
+  list, and `"tom"` beside Tom would read as a second one (`refused`). Someone with an
+  account takes their name from it. People join with their own account through the
+  app's share link, never here. `remove_person` follows the app's rules: someone who
+  paid for an expense stays until it is changed; someone who shares expenses is refused
+  while on any, unless `fromExpenses` is true, which takes them off those (not one they
+  alone share, nor one split by exact amounts). Someone with an account loses the
+  split too.
 - **Photos:** `add_photo` takes a JPEG, PNG or WebP as base64 (a `data:` URL is fine),
   up to 1.5 MB before encoding, through the app's own upload path: up to 300 photos a
   split, any member may add them. Leave out `expenseId` for a photo of the whole split.

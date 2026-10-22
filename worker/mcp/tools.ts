@@ -1,9 +1,10 @@
 // The MCP tools: finding a split and reading its expenses and balances; adding, editing,
-// dating and removing expenses; adding and renaming people; and routing payments through
-// one person. They act as the account behind the agent's grant, checked afresh on every
-// call: membership (a missing split and one you're not in look the same), the account's
-// change limit, and the bill's own rules, through the same save path as the app
-// (bill/changes.ts). Every write keeps a retry receipt (receipts.ts).
+// dating and removing expenses; recording a payment between two people; adding, renaming
+// and removing people; and routing payments through one person. They act as the account
+// behind the agent's grant, checked afresh on every call: membership (a missing split and
+// one you're not in look the same), the account's change limit, and the bill's own rules,
+// through the same save path as the app (bill/changes.ts). Every write keeps a retry
+// receipt (receipts.ts).
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -12,7 +13,8 @@ import { type Attachment, MAX_PHOTO_BYTES, type RatePreference, isRowId } from '
 import { isCurrency, toCents } from '../../shared/rates';
 import type { SettleItem } from '../../shared/settle';
 import { SPLIT_MODES, balances, transfers } from '../../shared/settle';
-import type { Item } from '../../shared/types';
+import { canChangePeople, removalBlocker } from '../../shared/rules';
+import type { Item, Role } from '../../shared/types';
 import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../../shared/types';
 import type { Env } from '../app';
 import { ID_PATTERN, getRole } from '../app';
@@ -58,8 +60,10 @@ export const TOOL_SCOPES: Record<string, string> = {
   add_expense: WRITE_SCOPE,
   update_expense: WRITE_SCOPE,
   remove_expense: WRITE_SCOPE,
+  record_payment: WRITE_SCOPE,
   add_person: WRITE_SCOPE,
   rename_person: WRITE_SCOPE,
+  remove_person: WRITE_SCOPE,
   route_payments: WRITE_SCOPE,
   add_photo: WRITE_SCOPE,
   get_photo: READ_SCOPE,
@@ -132,13 +136,16 @@ const currency = z
 const amount = z.number().min(0).max(MAX_COST);
 /**
  * Someone in the bill, as an agent may name them: their id, their name as get_split
- * shows it, or "me" for this account's own entry. Resolved against the split as it is.
+ * shows it or enough of it to pick them out, or "me" for this account's own entry.
+ * Resolved against the split as it is.
  */
 const personRef = z
   .string()
   .min(1)
   .max(MAX_NAME_LENGTH)
-  .describe('A person in the bill: their id or name from get_split, or "me" for this account');
+  .describe(
+    'A person in the bill: their id, their name (or enough of it to pick them out: "Sean" for yoonsean), or "me" for this account',
+  );
 const EVERYONE = 'everyone';
 const expenseFields = {
   name: z.string().min(1).max(MAX_NAME_LENGTH).describe('What it was'),
@@ -147,7 +154,9 @@ const expenseFields = {
   participantIds: z
     .array(personRef)
     .min(1)
-    .describe('Who shares it: ids or names from get_split, "me", or ["everyone"] for all'),
+    .describe(
+      'Who shares it: ids or names, "me", or ["everyone"] for everyone in the bill when this is saved, anyone just added included',
+    ),
   splitMode: z
     .enum(SPLIT_MODES)
     .describe(
@@ -168,31 +177,36 @@ const expenseFields = {
     .describe('An optional label, such as Food; null for none'),
   notes: z.string().max(MAX_NOTES_LENGTH).nullable().describe('Optional notes; null for none'),
 };
+const paidInFields = {
+  currency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .describe("The currency it was paid in, not the split's"),
+  amount: amount.describe('What was paid, in that currency'),
+  rate: z
+    .number()
+    .positive()
+    .optional()
+    .describe(
+      "Units of the split's currency for one of this one, to use instead of the day's rate",
+    ),
+};
+const PAID_IN =
+  "Paid in another currency: the amount as paid. It's converted to the split's currency at " +
+  'the rate on the day it was paid (or the rate given), which get_split shows in original.';
 const paidIn = z
   .object({
-    currency: z
-      .string()
-      .regex(/^[A-Z]{3}$/)
-      .describe("The currency it was paid in, not the split's"),
-    amount: amount.describe('What was paid, in that currency'),
+    ...paidInFields,
     exact: z
       .record(z.string(), amount)
       .optional()
       .describe(
         'For splitMode "exact": each participant\'s amount by person (id, name or "me"), in that currency',
       ),
-    rate: z
-      .number()
-      .positive()
-      .optional()
-      .describe(
-        "Units of the split's currency for one of this one, to use instead of the day's rate",
-      ),
   })
-  .describe(
-    "Paid in another currency: the amount as paid. It's converted to the split's currency at " +
-      'the rate on the day it was paid (or the rate given), which get_split shows in original.',
-  );
+  .describe(PAID_IN);
+/** A payment in another currency: one amount, no split */
+const paidInWhole = z.object(paidInFields).describe(PAID_IN);
 const page = {
   limit: z.number().int().min(1).max(200).optional(),
   offset: z.number().int().min(0).optional(),
@@ -428,20 +442,86 @@ const moneyMixed = (paid: unknown, fields: { cost?: number; exact?: unknown }) =
     ? toolError('invalid_input', 'Send amounts either in paidIn or as cost and exact, not both.')
     : null;
 
-const noPerson = (ref: string): Refusal => ({
-  refusal: toolError('not_found', `There is no one called or with the id "${ref}" in this split.`),
-});
-
 type Person = Split['people'][number];
 
+/** How many of the bill's names a refusal lists, so the agent can pick without a read */
+const NAMES_LISTED = 20;
+
+/** The names in the bill, in its order, for a refusal: "Ryan, Sean and 3 more" */
+const listNames = (people: { name: string }[]) => {
+  const names = people.map((p) => p.name);
+  const shown = names.slice(0, NAMES_LISTED).join(', ');
+  const more = names.length - NAMES_LISTED;
+  return more > 0 ? `${shown} and ${more} more` : shown;
+};
+
 /**
- * The person a reference names: an id, "me" (this account's own entry), or a name as
- * written, else the one name that matches whatever the case. Nobody, or more than one,
- * is a refusal the agent can act on.
+ * How many single-letter edits, or swaps of two letters next to each other, turn one
+ * word into another (optimal string alignment distance)
+ */
+function edits(a: string, b: string): number {
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
+  );
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const same = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + same);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
+    }
+  }
+  return d[a.length][b.length];
+}
+
+/**
+ * The person whose name, or a word of it, is a slip of the keyboard away from what
+ * was typed: one edit for a short word, two for a longer one. Only suggested, never
+ * taken, since money moves on it.
+ */
+function closest(people: Person[], typed: string): Person | null {
+  const allowed = typed.length <= 4 ? 1 : 2;
+  let best: { person: Person; edits: number } | null = null;
+  for (const person of people) {
+    const name = person.name.toLowerCase();
+    for (const word of [name, ...name.split(/\s+/)]) {
+      const n = edits(typed, word);
+      if (n <= allowed && (best == null || n < best.edits)) best = { person, edits: n };
+    }
+  }
+  return best?.person ?? null;
+}
+
+/** Nobody: who is here, and the name that may have been meant, so the agent needs no read */
+function noPerson(people: Person[], ref: string): Refusal {
+  const near = closest(people, ref.toLowerCase());
+  const hint = near == null ? '' : ` Did you mean "${near.name}"?`;
+  return {
+    refusal: toolError(
+      'not_found',
+      `There is no one called or with the id "${ref}" in this split.${hint} People here: ${listNames(people)}.`,
+    ),
+  };
+}
+
+const ambiguous = (ref: string, people: Person[], how: string): Refusal => ({
+  refusal: toolError(
+    'invalid_input',
+    `More than one person ${how} "${ref}" (${listNames(people)}): use an id or the whole name.`,
+  ),
+});
+
+/**
+ * The person a reference names: an id, "me" (this account's own entry), a name as
+ * written, else the one name that matches whatever the case, else the one name that
+ * contains it ("Sean" for yoonsean0298). Nobody, or more than one, is a refusal the
+ * agent can act on, naming who is here.
  */
 function findPerson(people: Person[], email: string, ref: string): Person | Refusal {
   const wanted = ref.trim();
-  if (wanted.toLowerCase() === 'me') {
+  const lower = wanted.toLowerCase();
+  if (lower === 'me') {
     const mine = people.find((p) => p.memberEmail === email);
     return mine ?? { refusal: toolError('not_found', "This account isn't in the bill itself.") };
   }
@@ -449,17 +529,70 @@ function findPerson(people: Person[], email: string, ref: string): Person | Refu
   if (byId != null) return byId;
   const byName = people.find((p) => p.name === wanted);
   if (byName != null) return byName;
-  const alike = people.filter((p) => p.name.toLowerCase() === wanted.toLowerCase());
+  const alike = people.filter((p) => p.name.toLowerCase() === lower);
   if (alike.length === 1) return alike[0];
-  if (alike.length > 1) {
-    return {
-      refusal: toolError(
-        'invalid_input',
-        `More than one person is called "${wanted}" (${alike.map((p) => p.name).join(', ')}): use an id.`,
-      ),
-    };
+  if (alike.length > 1) return ambiguous(wanted, alike, 'is called');
+  // Part of a name, two letters or more: a first name, a nickname in the name
+  if (lower.length >= 2) {
+    const within = people.filter((p) => p.name.toLowerCase().includes(lower));
+    if (within.length === 1) return within[0];
+    if (within.length > 1) return ambiguous(wanted, within, 'has a name with');
   }
-  return noPerson(wanted);
+  return noPerson(people, wanted);
+}
+
+/**
+ * Whether a name is another's but for case ("tom" beside Tom), which the bill allows
+ * and an agent, which can't see the list, would not mean
+ */
+const nameAlike = (people: Person[], name: string, exceptId?: string) =>
+  people.find((p) => p.id !== exceptId && p.name.toLowerCase() === name.trim().toLowerCase());
+
+const alikeRefusal = (name: string, other: Person): Refusal => ({
+  refusal: toolError(
+    'refused',
+    `"${name}" would be a second ${other.name}: names in a split differ by more than case. Use "${other.name}", or another name.`,
+  ),
+});
+
+/**
+ * Shares or exact amounts that don't fit who shares the expense. The bill's own
+ * refusal would say the numbers are wrong, when what's missing is a person: here it
+ * names them. `sent` is what the agent gave now; what carried over may name people
+ * who have left the expense, which is fine.
+ */
+function partsProblem(
+  people: Person[],
+  item: {
+    splitMode: string;
+    participantIds: string[];
+    shares?: Record<string, number>;
+    exact?: Record<string, number>;
+    original?: { exact?: Record<string, number> } | null;
+  },
+  sent: Record<string, unknown> | undefined,
+): Refusal | null {
+  if (item.splitMode !== 'shares' && item.splitMode !== 'exact') return null;
+  const [what, field] =
+    item.splitMode === 'shares' ? ['a share', 'shares'] : ['an exact amount', 'exact'];
+  const parts = item.splitMode === 'shares' ? item.shares : item.original?.exact ?? item.exact;
+  const named = (ids: string[]) =>
+    listNames(ids.map((id) => people.find((p) => p.id === id) ?? { name: id }));
+  const refuse = (message: string): Refusal => ({ refusal: toolError('invalid_input', message) });
+  if (parts == null) {
+    return refuse(`Send ${field}, ${what} for each participant: ${named(item.participantIds)}.`);
+  }
+  const missing = item.participantIds.filter((id) => parts[id] == null);
+  if (missing.length > 0) {
+    return refuse(`Every participant needs ${what}: none given for ${named(missing)}.`);
+  }
+  const extra = Object.keys(sent ?? {}).filter((id) => !item.participantIds.includes(id));
+  if (extra.length > 0) {
+    return refuse(
+      `${named(extra)} ${extra.length === 1 ? 'has' : 'have'} ${what} but ${extra.length === 1 ? "isn't" : "aren't"} among the participants: add them to participantIds, or leave them out.`,
+    );
+  }
+  return null;
 }
 
 /** Each reference as a person id, or the first refusal */
@@ -547,7 +680,7 @@ async function writeBill(
   row: Row,
   input: { splitId: string; requestId: string; currency?: string; expenseId?: string },
   intent: Intent,
-  prepare: (split: Split) => Prepared,
+  prepare: (split: Split, role: Role) => Prepared,
 ): Promise<CallToolResult> {
   const { env, email } = caller;
   const db = env.DB;
@@ -587,7 +720,7 @@ async function writeBill(
       `This split is in ${split.currency}, not ${input.currency}. Read it again and send amounts in ${split.currency}.`,
     );
   }
-  const prepared = prepare(split);
+  const prepared = prepare(split, role);
   if ('refusal' in prepared) return prepared.refusal;
 
   const receipt: Receipt = {
@@ -867,6 +1000,10 @@ export function registerTools(mcp: McpServer, caller: Caller) {
             createdAt,
             original: people.paidIn && toOriginal(people.paidIn),
           };
+          // Who shares it is required here, so it is never left out
+          const shared = { ...item, participantIds: people.participantIds ?? [] };
+          const unfit = partsProblem(split.people, shared, people.shares ?? people.exact);
+          if (unfit) return unfit;
           return { rowId: id, changes: [{ op: 'addItem', item }] };
         },
       );
@@ -969,6 +1106,8 @@ export function registerTools(mcp: McpServer, caller: Caller) {
           notes: rest.notes !== undefined ? rest.notes : current.notes,
           original,
         };
+        const unfit = partsProblem(split.people, item, people.shares ?? people.exact);
+        if (unfit) return unfit;
         return { rowId: expenseId, changes: [{ op: 'updateItem', item }, ...redate] };
       });
     },
@@ -1001,14 +1140,91 @@ export function registerTools(mcp: McpServer, caller: Caller) {
   );
 
   server.registerTool(
+    'record_payment',
+    {
+      title: 'Record a payment',
+      description:
+        'Records that one person paid another, to settle up in part or in full ("Lian paid ' +
+        'Ryan back 50"). It is kept in the bill as an expense named for the two of them, in ' +
+        'the category Payment, paid by `from` and shared by `to` alone, so their balances move ' +
+        "by the amount; the app lists it with the expenses and counts it in the split's total. " +
+        "amount is in the split's currency, or send paidIn. Dated now unless a date is sent. " +
+        'Retrying with the same requestId returns the first answer.',
+      inputSchema: {
+        splitId,
+        requestId,
+        currency,
+        from: personRef.describe('Who paid: an id or name, or "me"'),
+        to: personRef.describe('Who was paid: an id or name, or "me"'),
+        amount: expenseFields.cost.optional(),
+        paidIn: paidInWhole.optional(),
+        notes: expenseFields.notes.optional(),
+        date: date.optional(),
+      },
+      outputSchema: savedShape('expenseId'),
+      annotations: { ...expenseWrite, destructiveHint: false },
+    },
+    async (input) => {
+      const denied = allowed('record_payment');
+      if (denied) return denied;
+      const { splitId: id, requestId: key, currency: code, date: when, paidIn: paid } = input;
+      const { from, to, amount: cost, notes = null } = input;
+      if (paid == null && cost == null) {
+        return toolError(
+          'invalid_input',
+          'Send amount, or paidIn for one paid in another currency.',
+        );
+      }
+      if (paid != null && cost != null) {
+        return toolError(
+          'invalid_input',
+          'Send the amount either as amount or in paidIn, not both.',
+        );
+      }
+      const createdAt = when == null ? undefined : toTime(when);
+      if (createdAt != null && !isItemDate(createdAt)) {
+        return toolError('invalid_input', 'Pick a date that has already come, from 2000 on.');
+      }
+      const target = { splitId: id, requestId: key, currency: code };
+      const intent = { from, to, amount: cost, paidIn: paid, notes, date: when };
+      return writeBill(caller, 'record_payment', 'expenseId', target, intent, (split) => {
+        if (paid?.currency === split.currency) return sameCurrency(split.currency);
+        const payer = findPerson(split.people, caller.email, from);
+        if ('refusal' in payer) return payer;
+        const paidTo = findPerson(split.people, caller.email, to);
+        if ('refusal' in paidTo) return paidTo;
+        if (payer.id === paidTo.id) {
+          return {
+            refusal: toolError('invalid_input', 'A payment is between two different people.'),
+          };
+        }
+        const expenseId = newId();
+        const item = {
+          id: expenseId,
+          name: `${payer.name} paid ${paidTo.name}`,
+          cost,
+          payerId: payer.id,
+          participantIds: [paidTo.id],
+          splitMode: 'equal',
+          category: 'Payment',
+          notes,
+          createdAt,
+          original: paid && toOriginal(paid),
+        };
+        return { rowId: expenseId, changes: [{ op: 'addItem', item }] };
+      });
+    },
+  );
+
+  server.registerTool(
     'add_person',
     {
       title: 'Add a person',
       description:
         "Adds someone to the split's bill by name, so expenses can be paid by or shared with " +
-        'them. Only the owner of the split can. Names are unique within a split. People join ' +
-        "with their own account through the app's share link, not here. Retrying with the same " +
-        'requestId returns the first answer.',
+        'them. Only the owner of the split can. Names are unique within a split, whatever the ' +
+        "case. People join with their own account through the app's share link, not here. " +
+        'Retrying with the same requestId returns the first answer.',
       inputSchema: { splitId, requestId, name: personName },
       outputSchema: savedShape('personId'),
       annotations: { ...expenseWrite, destructiveHint: false },
@@ -1017,7 +1233,9 @@ export function registerTools(mcp: McpServer, caller: Caller) {
       const denied = allowed('add_person');
       if (denied) return denied;
       const target = { splitId: id, requestId: key };
-      return writeBill(caller, 'add_person', 'personId', target, { name }, () => {
+      return writeBill(caller, 'add_person', 'personId', target, { name }, (split) => {
+        const other = nameAlike(split.people, name);
+        if (other != null && other.name !== name.trim()) return alikeRefusal(name, other);
         const personId = newId();
         return { rowId: personId, changes: [{ op: 'addPerson', id: personId, name }] };
       });
@@ -1043,7 +1261,63 @@ export function registerTools(mcp: McpServer, caller: Caller) {
       return writeBill(caller, 'rename_person', 'personId', target, { personId, name }, (split) => {
         const who = findPerson(split.people, caller.email, personId);
         if ('refusal' in who) return who;
+        const other = nameAlike(split.people, name, who.id);
+        if (other != null && other.name !== name.trim()) return alikeRefusal(name, other);
         return { rowId: who.id, changes: [{ op: 'renamePerson', id: who.id, name }] };
+      });
+    },
+  );
+
+  server.registerTool(
+    'remove_person',
+    {
+      title: 'Remove a person',
+      description:
+        "Takes someone out of the split's bill. Only the owner of the split can. Someone who " +
+        'paid for an expense stays until it is changed or removed. Someone who only shares ' +
+        'expenses is refused while they are on any, unless fromExpenses is true: then they are ' +
+        'taken off them, except an expense they alone share or one split by exact amounts, ' +
+        'which must be changed first. Someone with an account loses the split too. This cannot ' +
+        'be undone here. Retrying with the same requestId returns the first answer.',
+      inputSchema: {
+        splitId,
+        personId: personRef,
+        requestId,
+        fromExpenses: z
+          .boolean()
+          .optional()
+          .describe('Also take them off the expenses they share (never ones they paid for)'),
+      },
+      outputSchema: savedShape('personId'),
+      annotations: { ...expenseWrite, destructiveHint: true },
+    },
+    async ({ splitId: id, personId, requestId: key, fromExpenses = false }) => {
+      const denied = allowed('remove_person');
+      if (denied) return denied;
+      const target = { splitId: id, requestId: key };
+      const intent = { personId, fromExpenses };
+      return writeBill(caller, 'remove_person', 'personId', target, intent, (split, role) => {
+        if (!canChangePeople(role)) {
+          return {
+            refusal: toolError('forbidden', 'Only the owner can change who is in this split'),
+          };
+        }
+        const who = findPerson(split.people, caller.email, personId);
+        if ('refusal' in who) return who;
+        // The bill's own rule, with what the agent can do about it
+        const blocker = removalBlocker(who, split.items, fromExpenses);
+        if (blocker != null) {
+          return {
+            refusal: toolError(
+              'refused',
+              blocker.onItems
+                ? `${blocker.message} Send fromExpenses: true to take them off those, or change the expenses first.`
+                : blocker.message,
+            ),
+          };
+        }
+        const change = { op: 'removePerson', id: who.id, fromItems: fromExpenses };
+        return { rowId: who.id, changes: [change] };
       });
     },
   );
@@ -1361,13 +1635,14 @@ async function writeSplit(
     .first<{ displayName: string | null }>();
   const myName = profile?.displayName?.trim() || email.split('@')[0];
   const names = [...(includeMe ? [myName] : []), ...(others as string[])];
-  const repeated = names.find((n, i) => names.indexOf(n) !== i);
+  const lower = names.map((n) => n.toLowerCase());
+  const repeated = names.find((n, i) => lower.indexOf(n.toLowerCase()) !== i);
   if (repeated != null) {
     return toolError(
       'invalid_input',
-      repeated === myName && includeMe
+      includeMe && repeated.toLowerCase() === myName.toLowerCase()
         ? `${repeated} is your name in the split; name the others differently.`
-        : `${repeated} is named twice; names in a split are unique.`,
+        : `${repeated} is named twice; names in a split are unique, whatever the case.`,
     );
   }
 
