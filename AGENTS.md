@@ -4,7 +4,8 @@ Split shared expenses: React app (`web/`) and a Hono API on Cloudflare Workers w
 (`worker/`), sharing code in `shared/`. Folder layout and local setup are in
 [README.md](README.md); which module owns each feature, its data flow, invariants and
 tests are in [docs/feature-map.md](docs/feature-map.md); the data model is in
-[docs/erd.md](docs/erd.md); how the Worker's routes and modules fit together is at the
+[docs/erd.md](docs/erd.md); security, backups and recovery are in
+[docs/security.md](docs/security.md); how the Worker's routes and modules fit together is at the
 top of `worker/app.ts`.
 
 Before extending a feature, find its owner in the feature map and follow its mutation
