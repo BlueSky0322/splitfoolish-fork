@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { keys } from 'idb-keyval';
 import { describe, expect, onTestFinished, test } from 'vitest';
+import type { ConnectedAgent } from '@shared/api';
 import { writeCache } from '../../offline/cache';
 import { writeOutbox } from '../../offline/outbox';
 import { PHOTO_PREFIX } from '../../offline/photo-queue';
@@ -170,5 +171,72 @@ describe('Settings', () => {
     held.release();
     expect((await screen.findAllByText('ryan@example.com')).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Loading your (account|settings)/)).toBeNull();
+  });
+});
+
+// The AI apps this account let in over MCP, listed in Settings and disconnected one at a time
+describe('Connected agents', () => {
+  const agent = (id: string, name: string, scopes: ConnectedAgent['scopes'], day: number) => ({
+    id,
+    name,
+    scopes,
+    connectedAt: Date.UTC(2026, 9, day),
+  });
+
+  const listed = () =>
+    within(screen.getByRole('list', { name: 'Connected agents' }))
+      .getAllByRole('listitem')
+      .map((row) => row.textContent);
+
+  test('lists them newest first with what each may do, and disconnects one after asking', async () => {
+    const server = fakeServer();
+    server.agents = [
+      agent('g1', 'Hermes', ['splits:read'], 3),
+      agent('g2', 'Claude', ['splits:read', 'splits:write'], 12),
+    ];
+    renderApp(server, '/?settings#agents');
+    const user = userEvent.setup();
+    await screen.findByRole('list', { name: 'Connected agents' });
+    expect(listed()).toEqual([
+      expect.stringMatching(/^Claude.*Can see and change your splits · since/),
+      expect.stringMatching(/^Hermes.*Can see your splits · since/),
+    ]);
+
+    // Kept when they think better of it
+    await user.click(screen.getByRole('button', { name: 'Disconnect Hermes' }));
+    await screen.findByRole('dialog', { name: 'Disconnect Hermes?' });
+    await user.click(screen.getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(server.agents.map((a) => a.id)).toEqual(['g1', 'g2']);
+
+    await user.click(screen.getByRole('button', { name: 'Disconnect Hermes' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Disconnect Hermes?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Disconnect' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(server.agents.map((a) => a.id)).toEqual(['g2']);
+    expect(listed()).toEqual([expect.stringMatching(/^Claude/)]);
+  });
+
+  test('a disconnect the server refuses keeps the agent listed, and says so', async () => {
+    const server = fakeServer();
+    server.agents = [agent('g1', 'Hermes', ['splits:read'], 3)];
+    server.failNext.agent = 500;
+    renderApp(server, '/?settings#agents');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Disconnect Hermes' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Disconnect Hermes?' });
+    const said = screen.queryAllByText(/Something went wrong/).length;
+    await user.click(within(dialog).getByRole('button', { name: 'Disconnect' }));
+    // Said once more than before (an earlier test's may still be showing)
+    await waitFor(() =>
+      expect(screen.queryAllByText(/Something went wrong/)).toHaveLength(said + 1),
+    );
+    expect(listed()).toEqual([expect.stringMatching(/^Hermes/)]);
+    expect(server.agents).toHaveLength(1);
+  });
+
+  test('says when none are connected', async () => {
+    renderApp(fakeServer(), '/?settings#agents');
+    expect(await screen.findByText('No agents are connected.')).toBeTruthy();
   });
 });

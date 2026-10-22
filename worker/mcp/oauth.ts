@@ -9,7 +9,8 @@
 // email from the agent, the address or the form.
 
 import type { AuthRequest, OAuthHelpers } from '@cloudflare/workers-oauth-provider';
-import OAuthProvider, { AuthorizationError } from '@cloudflare/workers-oauth-provider';
+import type { OAuthProviderOptions } from '@cloudflare/workers-oauth-provider';
+import OAuthProvider, { AuthorizationError, getOAuthApi } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../app';
 import { getUserEmail } from '../accounts/auth';
 import { bodyRefused, isCrossSiteWrite, readBody } from '../http';
@@ -141,8 +142,7 @@ async function answerConsent(oauth: OAuthHelpers, req: Request, email: string) {
   const props: GrantProps = { email };
   const { redirectTo } = await oauth.completeAuthorization({
     request: approved.request,
-    // Grant ids can't hold ':'
-    userId: encodeURIComponent(email),
+    userId: grantUserId(email),
     metadata: {},
     scope,
     props,
@@ -257,13 +257,16 @@ async function admitRegistration(req: Request, env: Env): Promise<Request | Resp
   return new Request(req.url, { method: req.method, headers: req.headers, body });
 }
 
-const providers = new Map<string, OAuthProvider<Env>>();
+const providers = new Map<
+  string,
+  { provider: OAuthProvider<Env>; options: OAuthProviderOptions<Env> }
+>();
 
-/** The provider for this deployment's address, made once per Worker instance */
+/** The provider for this deployment's address, and how it was made, once per Worker instance */
 function providerFor(origin: string) {
-  let provider = providers.get(origin);
-  if (provider == null) {
-    provider = new OAuthProvider<Env>({
+  let made = providers.get(origin);
+  if (made == null) {
+    const options: OAuthProviderOptions<Env> = {
       apiRoute: '/mcp',
       apiHandler: mcpHandler,
       defaultHandler: oauthPages as ExportedHandler<Env>,
@@ -287,11 +290,21 @@ function providerFor(origin: string) {
       // What clients are told to ask for (resource metadata and the 401 challenge); the
       // provider doesn't hold tokens to it, each tool checks its own scope
       requiredScopes: SCOPES,
-    });
-    providers.set(origin, provider);
+    };
+    made = { provider: new OAuthProvider<Env>(options), options };
+    providers.set(origin, made);
   }
-  return provider;
+  return made;
 }
+
+/** The OAuth provider's own helpers, for code outside its routes; null while MCP is off */
+export function oauthHelpers(env: Env): OAuthHelpers | null {
+  if (!env.MCP_ORIGIN || env.OAUTH_KV == null) return null;
+  return getOAuthApi(providerFor(new URL(env.MCP_ORIGIN).origin).options, env);
+}
+
+/** The id the provider keeps an account's grants under; grant ids can't hold ':' */
+export const grantUserId = (email: string) => encodeURIComponent(email);
 
 /**
  * Answers /mcp, /oauth/* and /.well-known/*. Off (404) until the deployment says where
@@ -301,7 +314,7 @@ export async function handleOAuthRoute(req: Request, env: Env, ctx: ExecutionCon
   if (!env.MCP_ORIGIN || env.OAUTH_KV == null) {
     return Response.json({ error: 'Not found' }, { status: 404 });
   }
-  const provider = providerFor(new URL(env.MCP_ORIGIN).origin);
+  const { provider } = providerFor(new URL(env.MCP_ORIGIN).origin);
   if (req.method === 'POST' && new URL(req.url).pathname === REGISTER_PATH) {
     const admitted = await admitRegistration(req, env);
     if (admitted instanceof Response) return admitted;

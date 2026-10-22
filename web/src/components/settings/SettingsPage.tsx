@@ -7,6 +7,7 @@ import {
   DownloadSimple,
   HandCoins,
   Palette,
+  Robot,
   SignOut,
   UserCircle,
 } from '@phosphor-icons/react';
@@ -18,6 +19,7 @@ import { nameFor, useProfile } from '../../profile/ProfileContext';
 import { InstallField } from '../common/InstallApp';
 import UserAvatar from '../common/UserAvatar';
 import Skeleton, { Loading } from '../ui/Skeleton';
+import AgentsSection from './AgentsSection';
 import AppearanceSection from './AppearanceSection';
 import CurrencySection from './CurrencySection';
 import PaymentsSection from './PaymentsSection';
@@ -28,7 +30,7 @@ import { useSaveIndicator } from './useSaveIndicator';
 import { useConfirmSignOut } from './useConfirmSignOut';
 import classes from './SettingsLayout.module.css';
 
-type SectionId = 'profile' | 'getting-paid' | 'currency' | 'appearance' | 'app';
+type SectionId = 'profile' | 'getting-paid' | 'agents' | 'currency' | 'appearance' | 'app';
 
 interface Section {
   id: SectionId;
@@ -56,6 +58,13 @@ const GROUPS: { label: string; sections: Section[] }[] = [
         icon: HandCoins,
         blurb: 'Shown to people who owe you, next to their transfer in Settle up.',
         render: (track) => <PaymentsSection track={track} />,
+      },
+      {
+        id: 'agents',
+        label: 'Connected agents',
+        icon: Robot,
+        blurb: 'AI apps you let see or change your splits.',
+        render: () => <AgentsSection />,
       },
     ],
   },

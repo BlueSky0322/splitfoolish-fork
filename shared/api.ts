@@ -261,6 +261,26 @@ export const MAX_PHOTOS_REMOVED = 100;
 
 export const CLIENT_ID_HEADER = 'X-Client-Id';
 
+// ---------- Agents ----------
+
+/**
+ * What an agent may be allowed to do, chosen when it's connected: seeing splits, and
+ * changing them as the account can itself (worker/mcp/scopes.ts)
+ */
+export const AGENT_SCOPES = ['splits:read', 'splits:write'] as const;
+export type AgentScope = (typeof AGENT_SCOPES)[number];
+
+/** An agent app this account has let in, as Settings lists it */
+export interface ConnectedAgent {
+  /** The grant, which disconnecting ends */
+  id: string;
+  /** The name the app registered with */
+  name: string;
+  scopes: AgentScope[];
+  /** When it was let in, in milliseconds */
+  connectedAt: number;
+}
+
 /**
  * On a picture or photo: the account it was shown to, so the service worker keeps it for
  * that account alone and never shows it to another one offline
