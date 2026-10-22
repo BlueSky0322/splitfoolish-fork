@@ -27,7 +27,9 @@ const TOOLS = [
   'get_photo',
   'get_split',
   'list_splits',
+  'record_payment',
   'remove_expense',
+  'remove_person',
   'rename_person',
   'route_payments',
   'update_expense',
@@ -561,10 +563,37 @@ describe('the tools', () => {
       ).error,
     ).toEqual({
       code: 'not_found',
-      message: 'There is no one called or with the id "Dan" in this split.',
+      message:
+        'There is no one called or with the id "Dan" in this split. People here: Owner, Bob, Cat.',
       retryable: false,
     });
     expect(await itemsOf(alice, split.id)).toHaveLength(2);
+
+    // Part of a name picks the one person it is part of; a slip of a letter is only suggested
+    const partial = await add('by-name-0006', {
+      name: 'Coffee',
+      cost: 6,
+      payerId: 'own',
+      participantIds: ['ca', 'me'],
+    });
+    expect(partial.status).toBe('saved');
+    expect((await itemsOf(alice, split.id)).find((i) => i.id === partial.expenseId)).toMatchObject({
+      payerId: split.me,
+      participantIds: [split.me, split.cat],
+    });
+    expect(
+      (
+        await add('by-name-0007', {
+          name: 'Slip',
+          cost: 1,
+          payerId: 'Cta',
+          participantIds: ['me'],
+        })
+      ).error?.message,
+    ).toBe(
+      'There is no one called or with the id "Cta" in this split. Did you mean "Cat"? People here: Owner, Bob, Cat.',
+    );
+    expect(await itemsOf(alice, split.id)).toHaveLength(3);
 
     // Two names alike but for case: the exact one is taken, any other spelling needs an id
     await api.call(alice, 'POST', `/api/splits/${split.id}/changes`, {
@@ -591,8 +620,18 @@ describe('the tools', () => {
       ).error,
     ).toMatchObject({
       code: 'invalid_input',
-      message: 'More than one person is called "BOB" (Bob, bob): use an id.',
+      message: 'More than one person is called "BOB" (Bob, bob): use an id or the whole name.',
     });
+    expect(
+      (
+        await add('by-name-0008', {
+          name: 'Vaguer',
+          cost: 1,
+          payerId: 'bo',
+          participantIds: ['me'],
+        })
+      ).error?.message,
+    ).toBe('More than one person has a name with "bo" (Bob, bob): use an id or the whole name.');
 
     // The person tools take names too
     expect(
@@ -752,7 +791,7 @@ describe('the tools', () => {
     ).toEqual({
       code: 'not_found',
       message: expect.stringMatching(
-        /^There is no one called or with the id "[0-9a-f]{16}" in this split\.$/,
+        /^There is no one called or with the id "[0-9a-f]{16}" in this split\. People here: Owner, Bob, Cat\.$/,
       ),
       retryable: false,
     });
@@ -795,6 +834,178 @@ describe('the tools', () => {
         original: expect.objectContaining({ currency: 'USD', amount: 5, rate: 4 }),
       }),
     ]);
+  });
+
+  it('name who is missing a share or an exact amount, rather than fault the numbers', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const add = (requestId: string, fields: Record<string, unknown>) =>
+      tool(client, 'add_expense', { splitId: split.id, currency: 'MYR', requestId, ...fields });
+    const dinner = { name: 'Dinner', cost: 30, payerId: 'me', participantIds: ['everyone'] };
+    expect((await add('parts-0001', { ...dinner, splitMode: 'shares' })).error).toEqual({
+      code: 'invalid_input',
+      message: 'Send shares, a share for each participant: Owner, Bob, Cat.',
+      retryable: false,
+    });
+    expect(
+      (await add('parts-0002', { ...dinner, splitMode: 'shares', shares: { me: 2, bob: 1 } })).error
+        ?.message,
+    ).toBe('Every participant needs a share: none given for Cat.');
+    expect(
+      (
+        await add('parts-0003', {
+          ...dinner,
+          participantIds: ['me', 'bob'],
+          splitMode: 'shares',
+          shares: { me: 2, bob: 1, cat: 1 },
+        })
+      ).error?.message,
+    ).toBe(
+      "Cat has a share but isn't among the participants: add them to participantIds, or leave them out.",
+    );
+    expect(
+      (await add('parts-0004', { ...dinner, splitMode: 'exact', exact: { me: 10, bob: 20 } })).error
+        ?.message,
+    ).toBe('Every participant needs an exact amount: none given for Cat.');
+    expect(
+      (
+        await add('parts-0005', {
+          name: 'Dinner',
+          payerId: 'me',
+          participantIds: ['everyone'],
+          splitMode: 'exact',
+          paidIn: { currency: 'USD', amount: 10, exact: { me: 10 } },
+        })
+      ).error?.message,
+    ).toBe('Every participant needs an exact amount: none given for Bob, Cat.');
+    expect(await itemsOf(alice, split.id)).toHaveLength(0);
+
+    // Adding someone to an expense split by shares needs a share for them too
+    const saved = await add('parts-0006', {
+      ...dinner,
+      participantIds: ['me', 'bob'],
+      splitMode: 'shares',
+      shares: { me: 2, bob: 1 },
+    });
+    expect(saved.status).toBe('saved');
+    const edit = (requestId: string, fields: Record<string, unknown>) =>
+      tool(client, 'update_expense', {
+        splitId: split.id,
+        expenseId: saved.expenseId,
+        currency: 'MYR',
+        requestId,
+        ...fields,
+      });
+    expect((await edit('parts-0007', { participantIds: ['everyone'] })).error?.message).toBe(
+      'Every participant needs a share: none given for Cat.',
+    );
+    expect(
+      (
+        await edit('parts-0008', {
+          participantIds: ['everyone'],
+          shares: { me: 2, bob: 1, cat: 1 },
+        })
+      ).status,
+    ).toBe('saved');
+    expect(await itemsOf(alice, split.id)).toEqual([
+      expect.objectContaining({ shares: { [split.me]: 2, [split.bob]: 1, [split.cat]: 1 } }),
+    ]);
+  });
+
+  it('record a payment between two people, kept as an expense the app shows', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    await tool(client, 'add_expense', {
+      splitId: split.id,
+      currency: 'MYR',
+      requestId: 'pay-dinner-01',
+      name: 'Dinner',
+      cost: 30,
+      payerId: 'Bob',
+      participantIds: ['everyone'],
+    });
+    const pay = (requestId: string, fields: Record<string, unknown>) =>
+      tool(client, 'record_payment', { splitId: split.id, currency: 'MYR', requestId, ...fields });
+
+    // Cat pays Bob her share back, dated the day she did
+    const paid = await pay('pay-cat-0001', {
+      from: 'cat',
+      to: 'bob',
+      amount: 10,
+      date: '2026-10-20',
+    });
+    expect(paid).toMatchObject({ status: 'saved', replayed: false });
+    const read = await tool(client, 'get_split', { splitId: split.id });
+    expect(read.balances).toEqual(
+      expect.arrayContaining([
+        { personId: split.cat, paidCents: 1000, shareCents: 1000, balanceCents: 0 },
+        { personId: split.bob, paidCents: 3000, shareCents: 2000, balanceCents: 1000 },
+        { personId: split.me, paidCents: 0, shareCents: 1000, balanceCents: -1000 },
+      ]),
+    );
+    expect(read.transfers).toEqual([{ fromId: split.me, toId: split.bob, amountCents: 1000 }]);
+    expect(read.expenses.find((e: { id: string }) => e.id === paid.expenseId)).toEqual({
+      id: paid.expenseId,
+      name: 'Cat paid Bob',
+      cost: 10,
+      payerId: split.cat,
+      participantIds: [split.bob],
+      splitMode: 'equal',
+      category: 'Payment',
+      addedAt: '2026-10-20T12:00:00.000Z',
+    });
+
+    // Sent again: the first answer, not a second payment
+    expect(
+      await pay('pay-cat-0001', { from: 'cat', to: 'bob', amount: 10, date: '2026-10-20' }),
+    ).toMatchObject({
+      expenseId: paid.expenseId,
+      replayed: true,
+    });
+    expect(await itemsOf(alice, split.id)).toHaveLength(2);
+
+    // In another currency, at the rate given
+    const dollars = await pay('pay-me-00001', {
+      from: 'me',
+      to: 'Bob',
+      paidIn: { currency: 'USD', amount: 2.5, rate: 4 },
+    });
+    expect(dollars.status).toBe('saved');
+    expect((await itemsOf(alice, split.id)).find((i) => i.id === dollars.expenseId)).toMatchObject({
+      name: 'Owner paid Bob',
+      cost: 10,
+      original: expect.objectContaining({ currency: 'USD', amount: 2.5, rate: 4 }),
+    });
+    expect(
+      (await tool(client, 'list_splits', {})).splits.find((s: { id: string }) => s.id === split.id)
+        .settled,
+    ).toBe(true);
+
+    // Not a payment: to oneself, with no amount, or amounts given twice
+    expect((await pay('pay-self-0001', { from: 'me', to: 'Owner', amount: 1 })).error).toEqual({
+      code: 'invalid_input',
+      message: 'A payment is between two different people.',
+      retryable: false,
+    });
+    expect((await pay('pay-none-0001', { from: 'me', to: 'Bob' })).error?.code).toBe(
+      'invalid_input',
+    );
+    expect(
+      (
+        await pay('pay-both-0001', {
+          from: 'me',
+          to: 'Bob',
+          amount: 1,
+          paidIn: { currency: 'USD', amount: 1 },
+        })
+      ).error?.code,
+    ).toBe('invalid_input');
+    expect((await pay('pay-ghost-001', { from: 'Dan', to: 'Bob', amount: 1 })).error?.code).toBe(
+      'not_found',
+    );
+    expect(await itemsOf(alice, split.id)).toHaveLength(3);
   });
 
   it('take expenses paid in another currency, converted as the app converts them', async () => {
@@ -970,7 +1181,7 @@ describe('the tools', () => {
     expect((await remove('fuel-remove-2')).error?.code).toBe('not_found');
   });
 
-  it('add and rename people as the owner, and route payments through one of them', async () => {
+  it('add, rename and remove people as the owner, and route payments through one of them', async () => {
     const alice = person('alice');
     const dave = person('dave');
     const split = await trip(alice, dave);
@@ -988,6 +1199,33 @@ describe('the tools', () => {
       name: 'Eve',
     });
     expect(added).toMatchObject({ status: 'saved', replayed: false });
+    // A name that is another's but for case would read as a second one of them
+    expect(
+      (
+        await tool(client, 'add_person', {
+          splitId: split.id,
+          requestId: 'eve-add-0002',
+          name: 'eve',
+        })
+      ).error,
+    ).toEqual({
+      code: 'refused',
+      message:
+        '"eve" would be a second Eve: names in a split differ by more than case. Use "Eve", or another name.',
+      retryable: false,
+    });
+    expect(
+      (
+        await tool(client, 'rename_person', {
+          splitId: split.id,
+          personId: split.bob,
+          requestId: 'bob-rename-1',
+          name: 'CAT',
+        })
+      ).error?.message,
+    ).toBe(
+      '"CAT" would be a second Cat: names in a split differ by more than case. Use "Cat", or another name.',
+    );
     expect(
       await tool(client, 'rename_person', {
         splitId: split.id,
@@ -1069,6 +1307,46 @@ describe('the tools', () => {
       (await tool(client, 'get_split', { splitId: split.id })).split.routePaymentsThrough,
     ).toBeNull();
     expect((await route('route-ghost1', hex())).error?.code).toBe('not_found');
+
+    // Removing: not someone who paid, nor someone on an expense unless taken off it
+    const remove = (requestId: string, personId: string, fromExpenses?: boolean) =>
+      tool(client, 'remove_person', { splitId: split.id, requestId, personId, fromExpenses });
+    expect((await remove('rm-cat-00001', 'Cat')).error).toEqual({
+      code: 'refused',
+      message: 'Cat paid for 1 item. Edit or remove those items first.',
+      retryable: false,
+    });
+    expect((await remove('rm-evie-0001', 'Evie')).error?.message).toBe(
+      'Evie is on 1 item. Send fromExpenses: true to take them off those, or change the expenses first.',
+    );
+    expect(
+      (
+        await tool(daves, 'remove_person', {
+          splitId: split.id,
+          requestId: 'rm-evie-0002',
+          personId: 'Evie',
+        })
+      ).error?.code,
+    ).toBe('forbidden');
+    expect((await remove('rm-ghost-001', hex())).error?.code).toBe('not_found');
+    expect(await names()).toEqual([...before, 'Evie']);
+    expect(await remove('rm-evie-0003', 'Evie', true)).toMatchObject({
+      status: 'saved',
+      personId: added.personId,
+    });
+    expect(await names()).toEqual(before);
+    expect((await itemsOf(alice, split.id)).map((i) => i.participantIds)).toEqual([
+      [split.me, split.bob, split.cat],
+    ]);
+    // Someone with an account loses the split with their place in the bill
+    const davesPerson = (await tool(daves, 'get_split', { splitId: split.id })).people.find(
+      (p: { isYou: boolean }) => p.isYou,
+    );
+    expect(await remove('rm-dave-0001', davesPerson.name)).toMatchObject({
+      personId: davesPerson.id,
+    });
+    expect((await tool(daves, 'get_split', { splitId: split.id })).error?.code).toBe('not_found');
+    expect(await names()).toEqual(before.filter((n: string) => n !== davesPerson.name));
   });
 });
 
@@ -1120,12 +1398,12 @@ describe('new splits', () => {
           requestId: 'twice-bob-01',
           name: 'Trip',
           currency: 'MYR',
-          people: ['Bob', 'Bob'],
+          people: ['Bob', 'bob'],
         })
       ).error,
     ).toEqual({
       code: 'invalid_input',
-      message: 'Bob is named twice; names in a split are unique.',
+      message: 'bob is named twice; names in a split are unique, whatever the case.',
       retryable: false,
     });
     expect((await tool(client, 'list_splits', {})).splits).toEqual([]);
