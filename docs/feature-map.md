@@ -387,6 +387,11 @@ with a 5xx), then shows the last account's saved copies
   anything, and the entry stays queued without retrying on a timer. With
   `REQUIRE_EXPECTED_ACCOUNT=true` a write that names no account is refused (503
   `client_update_required`) and kept; off until installed apps send the header.
+- The manifest and the icons it names (and the iPhone icon) are kept beside the page,
+  refreshed whenever the page is, and answered from there when the network fails or
+  something answers in their place (Access), so a page opened from the device installs
+  with its manifest (`INSTALL_FILES` in `sw.js`; `shell.test.ts` checks it against the
+  manifest and `index.html`).
 - The kept page is only replaced once every file it and `precache.json` name is kept,
   so a stopped update leaves the old page whole. Built files of the newest two pages
   are kept, for a tab still open on the older one; others go when a new page is kept.

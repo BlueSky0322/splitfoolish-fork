@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { URL as NodeURL, fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { OPENED_FROM_DEVICE, OPENED_SIGNED_OUT, SIGN_IN_PARAM } from './cache';
 import {
@@ -258,5 +260,55 @@ describe('updating the kept page', () => {
     await install(deployed(version(1)), caches);
     expect(keptPaths(caches, ASSETS)).toEqual(version(1).list);
     expect(await keptText(caches, SHELL, '/')).toBe(version(1).html);
+  });
+});
+
+// Installing the app reads the manifest and its icons. Kept beside the page, they're there
+// whenever the kept page opens, so it installs with its name and icon even when Access or
+// the connection turns the browser's request for them away.
+describe('keeping what installing the app reads', () => {
+  const read = (file: string) =>
+    readFileSync(fileURLToPath(new NodeURL(`../../${file}`, import.meta.url)), 'utf8');
+  /** The manifest, each icon it names, and the iPhone icon the page links to */
+  const installFiles = () => {
+    const manifest = JSON.parse(read('public/manifest.webmanifest')) as {
+      icons: { src: string }[];
+    };
+    const touch = /rel="apple-touch-icon"\s+href="([^"]+)"/.exec(read('index.html'))![1];
+    return ['/manifest.webmanifest', ...manifest.icons.map((i) => i.src), touch].sort();
+  };
+  const serving = (files: string[]) =>
+    Object.fromEntries(
+      files.map((f) => [f, { status: 200, body: `file ${f}`, contentType: 'image/png' }]),
+    );
+
+  test('keeps each of them with the page, as the manifest and the page name them', async () => {
+    const caches = fakeCaches();
+    const files = installFiles();
+    await visit(caches, deployed(version(1), serving(files)));
+    expect(keptPaths(caches, SHELL)).toEqual(['/', '/shell-files', ...files].sort());
+  });
+
+  test.each<[string, Answer]>([
+    [
+      'Access asks to sign in',
+      { status: 200, body: '<html>Sign in</html>', contentType: 'text/html', redirected: true },
+    ],
+    ['there is no connection', { networkError: true }],
+    ['the server fails', { status: 503 }],
+  ])('when %s, the manifest comes from the kept copy', async (_when, answer) => {
+    const caches = fakeCaches();
+    await visit(caches, deployed(version(1), serving(installFiles())));
+    const { response } = await fetchThroughWorker('/manifest.webmanifest', answer, caches);
+    expect(await response?.text()).toBe('file /manifest.webmanifest');
+  });
+
+  test('from the network it is fresh, and kept so', async () => {
+    const caches = fakeCaches();
+    await visit(caches, deployed(version(1), serving(installFiles())));
+    const fresh = { status: 200, body: 'new icon', contentType: 'image/png' };
+    const { response } = await fetchThroughWorker('/icon-192.png', fresh, caches);
+    expect(await response?.text()).toBe('new icon');
+    expect(await keptText(caches, SHELL, '/icon-192.png')).toBe('new icon');
   });
 });

@@ -36,6 +36,21 @@ const KEEP = [SHELL, ASSETS, FONTS];
 const PRECACHE_LIST = '/precache.json';
 /** Kept in SHELL beside the page: which built files it and the page before it need */
 const SHELL_FILES = '/shell-files';
+/**
+ * What installing the app reads: the manifest, the icons it names, and the one iPhones use
+ * (web/public/manifest.webmanifest and web/index.html; shell.test.ts checks they match).
+ * Kept beside the page, so a page opened from here can still be installed properly, with
+ * its name, icon and launch screen, when Cloudflare Access or the connection would turn
+ * the browser's request for them away.
+ */
+const INSTALL_FILES = [
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+  '/icon.svg',
+  '/apple-touch-icon.png',
+];
 /** How long a page may take to come before the kept one is shown instead */
 const PAGE_WAIT_MS = 3000;
 
@@ -199,6 +214,14 @@ async function secureShell(response) {
   let previous = keptHtml == null ? [] : filesOf(keptHtml);
   if (record != null) previous = sameFiles(record.page, page) ? record.previous : record.files;
   await shell.put('/', response);
+  // Fetched while signed in, as the page just was; one that can't be kept now is next time
+  await Promise.all(
+    INSTALL_FILES.map((file) =>
+      fetchFile(file)
+        .then((res) => shell.put(file, res))
+        .catch(() => undefined),
+    ),
+  );
   await shell.put(
     SHELL_FILES,
     new Response(JSON.stringify({ page, files, previous }), {
@@ -254,6 +277,24 @@ async function cacheFirst(cacheName, request, accept) {
   // Only real files: a sign-in redirect or an error must not be stored
   if (response.ok && accept(response)) cache.put(request, response.clone());
   return response;
+}
+
+/**
+ * The manifest or an icon from the network, keeping it fresh; the copy kept beside the
+ * page when the request fails, or Access (or anything else) answers in its place
+ */
+async function installFile(event) {
+  const { request } = event;
+  const network = await fetch(request).catch(() => null);
+  if (network != null && network.ok && network.type === 'basic' && !network.redirected) {
+    const copy = network.clone();
+    event.waitUntil(caches.open(SHELL).then((shell) => shell.put(request, copy)));
+    return network;
+  }
+  const kept = await (await caches.open(SHELL)).match(new URL(request.url).pathname);
+  if (kept) return kept;
+  if (network == null) throw new TypeError(`${request.url} could not be fetched`);
+  return network;
 }
 
 /** Who the app last said is signed in (USER_KEY), or null */
@@ -381,6 +422,8 @@ self.addEventListener('fetch', (event) => {
     // Going to sign in: Access answers, never the kept page
     if (url.searchParams.has(SIGN_IN_PARAM)) return;
     event.respondWith(page(event));
+  } else if (INSTALL_FILES.includes(url.pathname)) {
+    event.respondWith(installFile(event));
   } else if (url.pathname.startsWith('/assets/')) {
     event.respondWith(cacheFirst(ASSETS, event.request, (r) => r.type === 'basic'));
   } else if (url.pathname.startsWith('/fonts/')) {
