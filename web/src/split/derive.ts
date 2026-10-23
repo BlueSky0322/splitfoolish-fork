@@ -1,11 +1,12 @@
 import type { Balance, SettleItem, Transfer } from '@shared/settle';
 import { balances, itemShares, transfers } from '@shared/settle';
-import type { SplitItem } from './state';
+import type { SplitItem, SplitPayment } from './state';
 import type { Person } from '@shared/types';
 import { toCents } from '@shared/rates';
 
-// Everything the split view shows that is worked out from its people and items. The
-// maths is the same code the server uses for My splits, so both always agree.
+// Everything the split view shows that is worked out from its people, items and
+// payments. The maths is the same code the server uses for My splits, so both always
+// agree.
 
 export function toSettleItem(item: SplitItem): SettleItem {
   return {
@@ -34,11 +35,13 @@ export function computeTotals(
   people: Person[],
   items: SplitItem[],
   distributorId?: string | null,
+  payments: SplitPayment[] = [],
 ): SplitTotals {
   const settleItems = items.map(toSettleItem);
   const all = balances(
     people.map((p) => p.id),
     settleItems,
+    payments.map((p) => ({ fromId: p.from.id, toId: p.to.id, amountCents: toCents(p.amount) })),
   );
   return {
     totalCents: settleItems.reduce((sum, i) => sum + i.costCents, 0),

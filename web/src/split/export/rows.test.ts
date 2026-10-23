@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { SplitMember } from '@shared/api';
 import type { Person } from '@shared/types';
 import { computeTotals } from '../derive';
-import type { SplitItem } from '../state';
+import type { SplitItem, SplitPayment } from '../state';
 import { type ExportSource, exportFileName, exportRows } from './rows';
 
 // What an export holds, before it's written as a CSV or a PDF: each item and what it
@@ -31,14 +31,16 @@ function source(
   {
     distributorId = null,
     members = [],
-  }: { distributorId?: string | null; members?: SplitMember[] } = {},
+    payments = [],
+  }: { distributorId?: string | null; members?: SplitMember[]; payments?: SplitPayment[] } = {},
 ): ExportSource {
   return {
     name: 'Japan trip',
     currency: 'MYR',
     people,
     items,
-    totals: computeTotals(people, items, distributorId),
+    payments,
+    totals: computeTotals(people, items, distributorId, payments),
     members,
   };
 }
@@ -176,6 +178,40 @@ describe('balances and who pays who in an export', () => {
     expect(rows.transfers).toEqual([
       { from: 'Ben', to: 'Ryan', amountCents: 4500, payWith: null },
       { from: 'Ann', to: 'Ryan', amountCents: 1500, payWith: null },
+    ]);
+  });
+
+  test('payments made count in the balances, and are listed with what they were for', () => {
+    const payments: SplitPayment[] = [
+      {
+        id: 'p',
+        from: ben,
+        to: ryan,
+        amount: 45,
+        itemId: 'd',
+        notes: 'Cash',
+        createdAt: OCT_10 + 86_400_000,
+        original: { currency: 'JPY', amount: 1500, rate: 0.03, rateSource: 'wise', rateAt: 1 },
+      },
+    ];
+    const rows = exportRows(source([ryan, ann, ben], items, { payments }));
+    expect(rows.totalCents).toBe(12000);
+    expect(rows.balances.map((b) => [b.name, b.balanceCents])).toEqual([
+      ['Ryan', 1500],
+      ['Ann', -1500],
+      ['Ben', 0],
+    ]);
+    expect(rows.transfers).toEqual([{ from: 'Ann', to: 'Ryan', amountCents: 1500, payWith: null }]);
+    expect(rows.payments).toEqual([
+      {
+        createdAt: OCT_10 + 86_400_000,
+        from: 'Ben',
+        to: 'Ryan',
+        amountCents: 4500,
+        original: { currency: 'JPY', amountCents: 150000, rate: 0.03 },
+        forItem: 'Dinner',
+        notes: 'Cash',
+      },
     ]);
   });
 

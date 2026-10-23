@@ -9,7 +9,13 @@ import {
 } from 'react';
 import { ApiError, NetworkError, api } from '../api';
 import type { SplitState } from './state';
-import { toApiItem, type MetaChanges, type SplitMeta, type SyncStatus } from './state';
+import {
+  toApiItem,
+  toApiPayment,
+  type MetaChanges,
+  type SplitMeta,
+  type SyncStatus,
+} from './state';
 import { readCache, removeCacheEntry, splitCacheKey, writeCache } from '../offline/cache';
 import { whenCreated } from '../offline/pending-creates';
 import { isOfflineFailure, isOffline } from '../offline/outbox';
@@ -73,9 +79,10 @@ export function useSplit(splitId: string) {
   );
 
   const show = useCallback(
-    ({ people, items, ...rest }: SplitDetail) => {
+    ({ people, items, payments, ...rest }: SplitDetail) => {
       setMeta(rest);
-      dispatch({ type: 'LOAD_STATE', payload: { people, items } });
+      // A copy kept on the device from before payments were kept has none
+      dispatch({ type: 'LOAD_STATE', payload: { people, items, payments: payments ?? [] } });
     },
     [dispatch],
   );
@@ -179,14 +186,15 @@ export function useSplit(splitId: string) {
       ...meta,
       people: state.people,
       items: state.items.map(toApiItem),
+      payments: state.payments.map(toApiPayment),
     });
-  }, [status, meta, state.people, state.items, cacheKey]);
+  }, [status, meta, state.people, state.items, state.payments, cacheKey]);
 
   // Refresh members and invites after sharing changes, without touching people/items
   // Failures are handled here (a split gone shows as gone), so callers needn't
   const refreshMeta = useCallback(async () => {
     try {
-      const { people, items, ...rest } = await api.getSplit(splitId);
+      const { people, items, payments, ...rest } = await api.getSplit(splitId);
       setMeta(rest);
     } catch (err) {
       backgroundLoadFailed(err);

@@ -5,11 +5,12 @@ import { fileSlug } from '../../utils/deliver-file';
 import { isQr, methodLine, methodName } from '../../utils/payment-labels';
 import { categoryLabel } from '../categories';
 import type { SplitTotals } from '../derive';
-import type { SplitItem } from '../state';
+import type { SplitItem, SplitPayment } from '../state';
 
 // What a split's export holds, worked out once for both the CSV and the PDF: each item
-// and what it costs each person, everyone's balance, and who pays who. It's the split
-// as this device shows it, changes not yet saved included. Amounts are whole cents.
+// and what it costs each person, the payments made, everyone's balance, and who pays
+// who. It's the split as this device shows it, changes not yet saved included. Amounts
+// are whole cents.
 
 /** The split as it's shown on this device */
 export interface ExportSource {
@@ -17,6 +18,7 @@ export interface ExportSource {
   currency: string;
   people: Person[];
   items: SplitItem[];
+  payments: SplitPayment[];
   /** Worked out with the split's distributor, as the split page does */
   totals: SplitTotals;
   /** The split's accounts, for how each person likes to be paid */
@@ -46,11 +48,23 @@ export interface ExportItem {
   notes: string | null;
 }
 
+export interface ExportPayment {
+  createdAt: number;
+  from: string;
+  to: string;
+  amountCents: number;
+  /** What was paid, when it was paid in another currency */
+  original: { currency: string; amountCents: number; rate: number | null } | null;
+  /** The item it settled, if one */
+  forItem: string | null;
+  notes: string | null;
+}
+
 export interface ExportBalance {
   name: string;
   paidCents: number;
   shareCents: number;
-  /** Paid less share: positive when others owe them */
+  /** Paid less share, and payments made less received: positive when others owe them */
   balanceCents: number;
 }
 
@@ -69,6 +83,7 @@ export interface ExportRows {
   /** One column each in the items: the split's people, then anyone removed who paid */
   people: string[];
   items: ExportItem[];
+  payments: ExportPayment[];
   /** Everyone's balance; none before anything has been added */
   balances: ExportBalance[];
   transfers: ExportTransfer[];
@@ -88,6 +103,7 @@ export function exportRows({
   currency,
   people,
   items,
+  payments,
   totals,
   members,
 }: ExportSource): ExportRows {
@@ -127,6 +143,19 @@ export function exportRows({
         notes: item.notes,
       };
     }),
+    payments: payments.map((p) => ({
+      createdAt: p.createdAt,
+      from: p.from.name,
+      to: p.to.name,
+      amountCents: toCents(p.amount),
+      original: p.original && {
+        currency: p.original.currency,
+        amountCents: toCents(p.original.amount),
+        rate: p.original.rate ?? null,
+      },
+      forItem: items.find((i) => i.id === p.itemId)?.name ?? null,
+      notes: p.notes,
+    })),
     balances: totals.hasItems
       ? columns.map((p) => {
           const b = totals.balances.get(p.id);

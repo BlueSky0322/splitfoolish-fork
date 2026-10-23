@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { Person } from '@shared/types';
 import { computeTotals } from '../derive';
-import type { SplitItem } from '../state';
+import type { SplitItem, SplitPayment } from '../state';
 import { toCsv } from './csv';
 import { type ExportRows, exportRows } from './rows';
 
@@ -21,14 +21,15 @@ const item = (over: Partial<SplitItem> & Pick<SplitItem, 'id' | 'name' | 'cost'>
   ...over,
 });
 
-function csvOf(people: Person[], items: SplitItem[]) {
+function csvOf(people: Person[], items: SplitItem[], payments: SplitPayment[] = []) {
   return toCsv(
     exportRows({
       name: 'Trip',
       currency: 'MYR',
       people,
       items,
-      totals: computeTotals(people, items),
+      payments,
+      totals: computeTotals(people, items, null, payments),
       members: [],
     }),
   );
@@ -41,6 +42,7 @@ const rowsWith = (over: Partial<ExportRows>): ExportRows => ({
   totalCents: 0,
   people: [],
   items: [],
+  payments: [],
   balances: [],
   transfers: [],
   ...over,
@@ -121,8 +123,33 @@ describe('a split as a CSV', () => {
         'Ann,30.00,130.00,-100.00\r\n' +
         '\r\n' +
         'From,To,Amount\r\n' +
-        'Ann,Ryan,100.00\r\n',
+        'Ann,Ryan,100.00\r\n' +
+        '\r\n' +
+        'Date,Paid by,Paid to,Amount (MYR),Original currency,Original amount,Rate,For,Notes\r\n',
     );
+  });
+
+  test('payments made are a table of their own, and the balances count them', () => {
+    const csv = csvOf(
+      [ryan, ann],
+      [item({ id: 'd', name: 'Dinner', cost: 100 })],
+      [
+        {
+          id: 'p',
+          from: ann,
+          to: ryan,
+          amount: 30,
+          itemId: 'd',
+          notes: null,
+          createdAt: Date.UTC(2026, 9, 12, 12),
+          original: { currency: 'JPY', amount: 1000, rate: 0.03, rateSource: 'wise', rateAt: 1 },
+        },
+      ],
+    );
+    // Paid is what was paid for; the payment shows in the balance and its own table
+    expect(csv).toContain('Ann,0.00,50.00,-20.00\r\n');
+    expect(csv).toContain('From,To,Amount\r\nAnn,Ryan,20.00\r\n');
+    expect(csv.endsWith('2026-10-12,Ann,Ryan,30.00,JPY,1000.00,0.03,Dinner,\r\n')).toBe(true);
   });
 
   test('a split with nothing in it yet is the headers alone', () => {
@@ -132,7 +159,9 @@ describe('a split as a CSV', () => {
         '\r\n' +
         'Person,Paid,Share,Balance\r\n' +
         '\r\n' +
-        'From,To,Amount\r\n',
+        'From,To,Amount\r\n' +
+        '\r\n' +
+        'Date,Paid by,Paid to,Amount (MYR),Original currency,Original amount,Rate,For,Notes\r\n',
     );
   });
 
@@ -174,6 +203,7 @@ describe('text in a CSV cell', () => {
       }),
     )
       .split('From,To,Amount\r\n')[1]
+      .split('\r\n\r\n')[0]
       .split('\r\n')
       .filter(Boolean);
 

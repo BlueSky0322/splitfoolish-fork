@@ -4,7 +4,8 @@ import { quietly } from '../utils/quietly';
 
 export type Route =
   | { view: 'home'; tab: string | null }
-  | { view: 'split'; id: string }
+  /** page: a page of the split's own, such as its payments; null for the split itself */
+  | { view: 'split'; id: string; page: 'payments' | null }
   | { view: 'join'; token: string }
   | { view: 'settings' }
   | { view: 'convert' };
@@ -14,7 +15,7 @@ function readRoute(): Route {
   const id = params.get('s');
   const token = params.get('join');
   if (token) return { view: 'join', token };
-  if (id) return { view: 'split', id };
+  if (id) return { view: 'split', id, page: params.has('payments') ? 'payments' : null };
   if (params.has('settings')) return { view: 'settings' };
   if (params.has('convert')) return { view: 'convert' };
   return { view: 'home', tab: params.get('tab') };
@@ -62,6 +63,22 @@ export function navigate(search: string, { replace = false } = {}) {
   window.dispatchEvent(new Event(ROUTE_CHANGE));
 }
 
+/** A split's address, or one of its own pages' */
+export const splitAddress = (id: string, page?: 'payments') =>
+  `?s=${encodeURIComponent(id)}${page ? `&${page}` : ''}`;
+
+/**
+ * Goes "up" to `address`: Back when this page was opened from there, so the history
+ * doesn't grow, else straight there in this page's place
+ */
+export function goUp(address: string) {
+  if (cameFrom() === address) {
+    window.history.back();
+    return;
+  }
+  navigate(address, { replace: true });
+}
+
 /** The address this page was opened from in the app, if it was */
 const cameFrom = (): string | null => {
   const state: unknown = window.history.state;
@@ -102,11 +119,7 @@ export function tabOf(route: Route): Tab | null {
 export function goToTab(tab: Tab) {
   const address = TAB_ADDRESS[tab];
   if (window.location.search === address) return;
-  if (cameFrom() === address) {
-    window.history.back();
-    return;
-  }
-  navigate(address, { replace: true });
+  goUp(address);
 }
 
 // Pages are picked from the query string: ?s=<id> is a split, ?join=<token> joins one,

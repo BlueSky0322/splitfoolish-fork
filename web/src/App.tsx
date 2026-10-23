@@ -51,6 +51,7 @@ function App() {
           <SplitStateProvider key={route.id}>
             <SplitScreen
               splitId={route.id}
+              page={route.page}
               myEmail={profile?.email ?? null}
             />
           </SplitStateProvider>

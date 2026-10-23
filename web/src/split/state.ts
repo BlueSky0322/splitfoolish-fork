@@ -1,13 +1,13 @@
-// The open split's bill on this device: its people and items, changed straight away
-// and saved after (see useSplit). Items hold the person objects they refer to; the API
-// refers to people by id.
+// The open split's bill on this device: its people, items and payments, changed
+// straight away and saved after (see useSplit). Items and payments hold the person
+// objects they refer to; the API refers to people by id.
 
 import type { ImmerReducer } from 'use-immer';
-import type { Item as ApiItem, Person } from '@shared/types';
+import type { Item as ApiItem, Payment, Person } from '@shared/types';
 import type { Attachment, SplitDetail } from '@shared/api';
 
 /** Everything about the open split besides its bill: name, members, photos and so on */
-export type SplitMeta = Omit<SplitDetail, 'people' | 'items'>;
+export type SplitMeta = Omit<SplitDetail, 'people' | 'items' | 'payments'>;
 
 /** An item with its payer and participants as person objects */
 export interface SplitItem extends Omit<ApiItem, 'payerId' | 'participantIds'> {
@@ -15,9 +15,16 @@ export interface SplitItem extends Omit<ApiItem, 'payerId' | 'participantIds'> {
   participants: Person[];
 }
 
+/** A payment with who paid and who was paid as person objects */
+export interface SplitPayment extends Omit<Payment, 'fromId' | 'toId'> {
+  from: Person;
+  to: Person;
+}
+
 export interface SplitState {
   people: Person[];
   items: SplitItem[];
+  payments: SplitPayment[];
 }
 
 // Every action is a change made on this device. Items arrive as the API shapes them.
@@ -32,7 +39,13 @@ export type SplitAction =
   | { type: 'PATCH_ITEM'; payload: Pick<SplitItem, 'id'> & Partial<SplitItem> }
   | { type: 'REMOVE_ITEM'; payload: string }
   | { type: 'CLEAR_ITEMS'; payload: null }
-  | { type: 'LOAD_STATE'; payload: { people: Person[]; items: ApiItem[] } };
+  | { type: 'ADD_PAYMENT'; payload: Payment }
+  | { type: 'UPDATE_PAYMENT'; payload: Payment }
+  | { type: 'REMOVE_PAYMENT'; payload: string }
+  | {
+      type: 'LOAD_STATE';
+      payload: { people: Person[]; items: ApiItem[]; payments: Payment[] };
+    };
 
 /**
  * The item with its people looked up. Null when its payer isn't in the bill, which only
@@ -63,6 +76,27 @@ export const toClientItem = (item: ApiItem, people: Person[]): SplitItem | null 
 const toClientItems = (items: ApiItem[], people: Person[]) =>
   items.map((i) => toClientItem(i, people)).filter((i): i is SplitItem => i != null);
 
+/**
+ * The payment with its people looked up. Null when either isn't in the bill, which only
+ * a copy out of step with the server can have; it comes back with the next load.
+ */
+export const toClientPayment = (payment: Payment, people: Person[]): SplitPayment | null => {
+  const from = people.find((p) => p.id === payment.fromId);
+  const to = people.find((p) => p.id === payment.toId);
+  if (from == null || to == null) return null;
+  const { fromId: _from, toId: _to, ...rest } = payment;
+  return { ...rest, from, to };
+};
+
+const toClientPayments = (payments: Payment[], people: Person[]) =>
+  payments.map((p) => toClientPayment(p, people)).filter((p): p is SplitPayment => p != null);
+
+export const toApiPayment = ({ from, to, ...rest }: SplitPayment): Payment => ({
+  ...rest,
+  fromId: from.id,
+  toId: to.id,
+});
+
 export const toApiItem = (item: SplitItem): ApiItem => ({
   id: item.id,
   name: item.name,
@@ -89,10 +123,14 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
       const person = draft.people.find((p) => p.id === id);
       if (person == null) break;
       Object.assign(person, changes);
-      // Items hold copies of the person, so they show the change too
+      // Items and payments hold copies of the person, so they show the change too
       for (const item of draft.items) {
         if (item.payer.id === id) Object.assign(item.payer, changes);
         for (const p of item.participants) if (p.id === id) Object.assign(p, changes);
+      }
+      for (const payment of draft.payments) {
+        if (payment.from.id === id) Object.assign(payment.from, changes);
+        if (payment.to.id === id) Object.assign(payment.to, changes);
       }
       break;
     }
@@ -104,11 +142,14 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
         item.participants = item.participants.filter((p) => p.id !== id);
         if (item.shares) delete item.shares[id];
       }
+      // The rules keep someone with payments; a copy out of step is put right by the next load
+      draft.payments = draft.payments.filter((p) => p.from.id !== id && p.to.id !== id);
       break;
     }
 
     case 'CLEAR_PEOPLE':
       draft.people = [];
+      draft.payments = [];
       break;
 
     case 'ADD_ITEM':
@@ -131,16 +172,36 @@ export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, actio
 
     case 'REMOVE_ITEM':
       draft.items = draft.items.filter((i) => i.id !== action.payload);
+      // A payment that settled it stays, no longer tied to it, as on the server
+      for (const p of draft.payments) if (p.itemId === action.payload) p.itemId = null;
       break;
 
     case 'CLEAR_ITEMS':
       draft.items = [];
+      for (const p of draft.payments) p.itemId = null;
+      break;
+
+    case 'ADD_PAYMENT':
+      draft.payments.push(...toClientPayments([action.payload], draft.people));
+      break;
+
+    case 'UPDATE_PAYMENT': {
+      const updated = toClientPayment(action.payload, draft.people);
+      draft.payments = draft.payments.flatMap((p) =>
+        p.id !== action.payload.id ? [p] : updated ? [updated] : [],
+      );
+      break;
+    }
+
+    case 'REMOVE_PAYMENT':
+      draft.payments = draft.payments.filter((p) => p.id !== action.payload);
       break;
 
     case 'LOAD_STATE': {
-      const { people, items } = action.payload;
+      const { people, items, payments } = action.payload;
       draft.people = people;
       draft.items = toClientItems(items, people);
+      draft.payments = toClientPayments(payments, people);
       break;
     }
 

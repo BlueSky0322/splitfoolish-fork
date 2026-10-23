@@ -36,7 +36,7 @@ function database(split: { currency: string; fromCurrency: string | null; since:
       batches.push(statements);
       return Promise.resolve(
         batches.length === 1
-          ? [{ results: [split] }, { results: [MYR_TEA] }, { results: [] }]
+          ? [{ results: [split] }, { results: [MYR_TEA] }, { results: [] }, { results: [] }]
           : statements.map(() => ({ results: [], meta: { changes: 1 } })),
       );
     },

@@ -4,9 +4,11 @@ import {
   CaretRight,
   Export,
   GearSix,
+  HandCoins,
   ShareNetwork,
   UsersThree,
 } from '@phosphor-icons/react';
+import { navigate, splitAddress } from '../../../hooks/useRoute';
 import type { ReactNode } from 'react';
 import { canManageInvites } from '@shared/rules';
 import { otherCurrencies } from '../../../split/derive';
@@ -58,7 +60,7 @@ function peopleLine(names: string[]) {
 // settings. Photos aren't here; they're a tab of the split.
 const SplitMenuSheet = () => {
   const { splitId, meta, me, currency, pictureVersion, openDialog } = useSplitPage();
-  const { people, items } = useSplitState().state;
+  const { people, items, payments } = useSplitState().state;
   if (meta == null) return null;
   const names = [
     ...(me ? ['You'] : []),
@@ -119,6 +121,16 @@ const SplitMenuSheet = () => {
               : `Everything is in ${currency} so far`
           }
           onClick={() => openDialog({ kind: 'currencies' })}
+        />
+        <Row
+          icon={<HandCoins size={20} />}
+          title="Payments"
+          detail={
+            payments.length > 0
+              ? `${plural(payments.length, 'payment')} recorded`
+              : 'Who paid whom back'
+          }
+          onClick={() => navigate(splitAddress(splitId, 'payments'))}
         />
         <Row
           icon={<Export size={20} />}

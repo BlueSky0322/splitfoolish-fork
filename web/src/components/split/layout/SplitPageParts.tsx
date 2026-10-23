@@ -6,6 +6,7 @@ import {
   CloudSlash,
   Export,
   GearSix,
+  HandCoins,
   Images,
   UserPlus,
   UsersThree,
@@ -14,6 +15,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import type { Person } from '@shared/types';
 import { otherCurrencyCount } from '../../../split/derive';
 import { useSplitState } from '../../../split/SplitStateContext';
+import { navigate, splitAddress } from '../../../hooks/useRoute';
 import { plural } from '../../../utils/text';
 import type { SelectionBarProps } from '../items/ItemSelection';
 import Skeleton from '../../ui/Skeleton';
@@ -135,7 +137,7 @@ export function SaveStatus({ quietRefresh = false }: { quietRefresh?: boolean })
 
 /** The split's menu (People, Share, Photos, Export...), opened from `target` */
 export function SplitMoreMenu({ target, onPhotos }: { target: ReactNode; onPhotos: () => void }) {
-  const { meta, openDialog } = useSplitPage();
+  const { splitId, meta, openDialog } = useSplitPage();
   const { state } = useSplitState();
   const photoCount = meta?.attachments.length ?? 0;
   const otherCurrencies = otherCurrencyCount(state.items);
@@ -174,6 +176,15 @@ export function SplitMoreMenu({ target, onPhotos }: { target: ReactNode; onPhoto
             Currencies
           </Menu.Item>
         )}
+        <Menu.Item
+          leftSection={<HandCoins size={16} />}
+          onClick={() => navigate(splitAddress(splitId, 'payments'))}
+        >
+          Payments
+          {state.payments.length > 0 && (
+            <span className="sf-muted"> ({state.payments.length})</span>
+          )}
+        </Menu.Item>
         <Menu.Item
           leftSection={<Export size={16} />}
           onClick={() => openDialog({ kind: 'export' })}

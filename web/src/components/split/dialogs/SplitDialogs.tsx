@@ -4,6 +4,7 @@ import EndSplit, { EndSplitTitle } from './EndSplit';
 import ExportDialog from './ExportDialog';
 import ItemDetail from '../items/ItemDetail';
 import ItemForm from '../items/ItemForm';
+import PaymentForm from '../payments/PaymentForm';
 import PeopleSheet from '../people/PeopleSheet';
 import ShareImage from './ShareImage';
 import SplitMembers, { ShareTitle } from '../people/SplitMembers';
@@ -13,7 +14,7 @@ import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import { Button } from '@mantine/core';
 import { type ReactNode, useRef, useState } from 'react';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
-import type { ItemInput } from '../../../api';
+import type { ItemInput, PaymentInput } from '../../../api';
 import type { SplitTotals } from '../../../split/derive';
 import type { SplitItem } from '../../../split/state';
 import { toApiItem } from '../../../split/state';
@@ -64,6 +65,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
     refreshMeta,
     totals,
     currency,
+    me,
     pictureVersion,
     photos,
     openDialog: setDialog,
@@ -107,6 +109,33 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
     return ok;
   };
 
+  const savePayment = (input: PaymentInput) => {
+    if (dialog?.kind !== 'payment') return false;
+    const ok = dialog.payment
+      ? actions.updatePayment(dialog.payment.id, input)
+      : actions.addPayment(input);
+    if (ok) close();
+    return ok;
+  };
+
+  // Someone's part of the item being edited, paid back: you, if you share it and didn't
+  // pay, else the first person who did; the form lets that be changed
+  const recordPaymentFor = (item: SplitItem) => {
+    const others = item.participants.filter((p) => p.id !== item.payer.id);
+    if (others.length === 0) return undefined;
+    const from = others.find((p) => p.id === me?.id) ?? others[0];
+    return () =>
+      setDialog({
+        kind: 'payment',
+        prefill: {
+          fromId: from.id,
+          toId: item.payer.id,
+          amountCents: totals.sharesByItem.get(item.id)?.get(from.id) ?? 0,
+          itemId: item.id,
+        },
+      });
+  };
+
   // A copy of a saved item (not edits still in the form), as of its date or today.
   // Receipts stay with the original.
   const duplicateItem = (item: SplitItem, keepDate: boolean) => {
@@ -143,6 +172,7 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
               deleteItems([editing], { confirmed: true });
             }}
             onDuplicate={(keepDate) => duplicateItem(editing, keepDate)}
+            onRecordPayment={recordPaymentFor(editing)}
             onCancel={close}
             onDirtyChange={(u) => {
               unsaved.current = u;
@@ -223,6 +253,22 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
               onShowItems(personId);
               close();
             }}
+          />
+        )}
+      </ResponsiveDialog>
+      <ResponsiveDialog
+        opened={dialog?.kind === 'payment'}
+        onClose={close}
+        title={dialog?.kind === 'payment' && dialog.payment ? 'Edit payment' : 'Record payment'}
+        width={440}
+      >
+        {dialog?.kind === 'payment' && (
+          <PaymentForm
+            key={dialog.payment?.id ?? 'new'}
+            payment={dialog.payment}
+            prefill={dialog.prefill}
+            onSave={savePayment}
+            onCancel={close}
           />
         )}
       </ResponsiveDialog>

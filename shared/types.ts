@@ -62,7 +62,31 @@ export interface ItemOriginal {
   rateAt?: number;
 }
 
-/** One change to a split's people or items; ids are made by the client */
+/** What a payment paid in another currency keeps: as an item does, but with no parts */
+export type PaymentOriginal = Omit<ItemOriginal, 'exact'>;
+
+/**
+ * One person paying another, to settle up in part or in full. Balances subtract it; the
+ * split's total doesn't count it. It may say which item it settles.
+ */
+export interface Payment {
+  id: string;
+  /** Who paid */
+  fromId: string;
+  /** Who was paid */
+  toId: string;
+  /** In currency units; stored as integer cents */
+  amount: number;
+  /** The item it settles, or null for a payment on the whole balance */
+  itemId: string | null;
+  notes: string | null;
+  /** When it was paid, in ms */
+  createdAt: number;
+  /** Set when it was paid in a currency other than the split's */
+  original: PaymentOriginal | null;
+}
+
+/** One change to a split's people, items or payments; ids are made by the client */
 export type Change =
   | { op: 'addPerson'; id: string; name: string; memberEmail?: string | null }
   | { op: 'renamePerson'; id: string; name: string }
@@ -82,6 +106,10 @@ export type Change =
    */
   | { op: 'setItemDate'; id: string; createdAt: number }
   | { op: 'clearItems' }
+  /** A payment, dated when it was paid; one paid in another currency sends original */
+  | { op: 'addPayment'; payment: Payment }
+  | { op: 'updatePayment'; payment: Payment }
+  | { op: 'removePayment'; id: string }
   /**
    * Sent by older versions of the app, which converted items again at today's rate. Does
    * nothing now: items keep the rate of the day they were paid.

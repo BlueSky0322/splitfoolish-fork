@@ -1,8 +1,8 @@
-// Converting a split's items after its currency changes, in the background. Each item
-// keeps what was originally paid: items already in another currency are converted
-// again from that, plain items become "paid in the old currency", and items paid in
-// the new currency become plain again, so switching back restores the exact amounts.
-// Each is converted at the rate on the day it was paid.
+// Converting a split's items and payments after its currency changes, in the
+// background. Each keeps what was originally paid: ones already in another currency
+// are converted again from that, plain ones become "paid in the old currency", and
+// ones paid in the new currency become plain again, so switching back restores the
+// exact amounts. Each is converted at the rate on the day it was paid.
 
 import type { RateSource } from '../../shared/rates';
 import { convertCents, convertParts, fitsItemCents, rateDay } from '../../shared/rates';
@@ -32,6 +32,18 @@ const MAX_RETRY_S = 60 * 60;
 /** How long to wait before try number `attempts + 1`: 1 minute, 2, 4 ... up to an hour */
 export const retryDelaySeconds = (attempts: number) =>
   Math.min(60 * 2 ** Math.max(0, attempts - 1), MAX_RETRY_S);
+
+/** What an item or payment was paid in and when, which decides its rate */
+interface Paid {
+  createdAt: number;
+  originalCurrency: string | null;
+}
+
+interface PaymentRow extends Paid {
+  id: string;
+  amountCents: number;
+  originalCents: number | null;
+}
 
 interface ItemRow {
   id: string;
@@ -67,7 +79,7 @@ export async function reconvertSplit(
   fetchRate: (from: string, to: string, at: number) => Promise<Rate>,
   onlySince?: number,
 ): Promise<boolean> {
-  const [splitRows, itemRows, partRows] = await db.batch([
+  const [splitRows, itemRows, partRows, paymentRows] = await db.batch([
     db
       .prepare(
         `SELECT currency, converting_from AS fromCurrency, converting_since AS since
@@ -89,6 +101,13 @@ export async function reconvertSplit(
          FROM item_participants ip JOIN items i ON i.id = ip.item_id WHERE i.split_id = ?`,
       )
       .bind(splitId),
+    db
+      .prepare(
+        `SELECT id, amount_cents AS amountCents, created_at AS createdAt,
+           original_currency AS originalCurrency, original_cents AS originalCents
+         FROM payments WHERE split_id = ?`,
+      )
+      .bind(splitId),
   ]);
   const split = splitRows.results[0] as
     | { currency: string; fromCurrency: string | null; since: number | null }
@@ -98,21 +117,24 @@ export async function reconvertSplit(
   const { currency: to, fromCurrency, since } = split;
 
   const items = itemRows.results as ItemRow[];
+  const payments = paymentRows.results as PaymentRow[];
   const partsOf = new Map<string, PartRow[]>();
   for (const part of partRows.results as PartRow[]) {
     partsOf.set(part.itemId, [...(partsOf.get(part.itemId) ?? []), part]);
   }
-  // What each item was paid in: its own currency, or the split's old one
-  const paidIn = (item: ItemRow) => item.originalCurrency ?? fromCurrency;
+  // What each item or payment was paid in: its own currency, or the split's old one
+  const paidIn = (paid: Paid) => paid.originalCurrency ?? fromCurrency;
 
   // One rate per currency and day. Throws if one can't be had; the split stays
   // converting and is retried.
-  const keyOf = (item: ItemRow) => `${paidIn(item)} ${rateDay(item.createdAt)}`;
-  const wanted = new Map(items.filter((i) => paidIn(i) !== to).map((i) => [keyOf(i), i]));
+  const keyOf = (paid: Paid) => `${paidIn(paid)} ${rateDay(paid.createdAt)}`;
+  const wanted = new Map(
+    [...items, ...payments].filter((p) => paidIn(p) !== to).map((p) => [keyOf(p), p]),
+  );
   const rates = new Map(
     await Promise.all(
       [...wanted].map(
-        async ([key, i]) => [key, await fetchRate(paidIn(i), to, i.createdAt)] as const,
+        async ([key, p]) => [key, await fetchRate(paidIn(p), to, p.createdAt)] as const,
       ),
     ),
   );
@@ -191,6 +213,46 @@ export async function reconvertSplit(
         );
       }
     }
+  }
+
+  for (const payment of payments) {
+    const from = paidIn(payment);
+    const paidCents = payment.originalCents ?? payment.amountCents;
+    if (from === to) {
+      // Paid in the new currency: plain again, exactly as typed
+      statements.push(
+        db
+          .prepare(
+            `UPDATE payments SET amount_cents = ?, original_currency = NULL, original_cents = NULL,
+               rate = NULL, rate_source = NULL, rate_at = NULL
+             WHERE id = ? AND ${stillTo}`,
+          )
+          .bind(paidCents, payment.id, splitId, to),
+      );
+      continue;
+    }
+    const rate = rates.get(keyOf(payment))!;
+    const amountCents = convertCents(paidCents, rate.rate);
+    if (!fitsItemCents(amountCents)) return undoCurrencyChange(db, splitId, to, since);
+    statements.push(
+      db
+        .prepare(
+          `UPDATE payments SET amount_cents = ?, original_currency = ?, original_cents = ?,
+             rate = ?, rate_source = ?, rate_at = ?
+           WHERE id = ? AND ${stillTo}`,
+        )
+        .bind(
+          amountCents,
+          from,
+          paidCents,
+          rate.rate,
+          rate.source,
+          rate.fetchedAt,
+          payment.id,
+          splitId,
+          to,
+        ),
+    );
   }
 
   // Done, unless the currency was changed again while this ran

@@ -19,7 +19,7 @@ const FAILED: Record<ExportKind, string> = {
 // the browser has a share sheet (Windows, macOS), which would only offer to copy it.
 const ExportDialog = ({ onDone }: { onDone: () => void }) => {
   const { meta, currency, totals } = useSplitPage();
-  const { people, items } = useSplitState().state;
+  const { people, items, payments } = useSplitState().state;
   const [busy, setBusy] = useState<ExportKind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isDesktop = useIsDesktop();
@@ -40,6 +40,7 @@ const ExportDialog = ({ onDone }: { onDone: () => void }) => {
         currency,
         people,
         items,
+        payments,
         totals,
         members: meta.members,
       });

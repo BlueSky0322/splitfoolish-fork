@@ -1,4 +1,4 @@
-import { ActionIcon, Menu, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Button, Menu, UnstyledButton } from '@mantine/core';
 import { CalendarBlank, Copy, PencilSimple, Trash } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { toCents } from '@shared/rates';
@@ -11,6 +11,10 @@ import PhotoViewer from '../../ui/PhotoViewer';
 import PersonAvatar from '../PersonAvatar';
 import { PaidBy } from './PaidBy';
 import { useSplitPage } from '../SplitPageContext';
+import { useSplitState } from '../../../split/SplitStateContext';
+import { useSplitActions } from '../../../split/useSplit';
+import { PaymentRow } from '../payments/PaymentRow';
+import { deletePayment } from '../payments/delete-payment';
 import classes from './ItemDetail.module.css';
 
 /** "Sat 11 Oct" */
@@ -19,8 +23,9 @@ const shortDate = (at: number) =>
 
 /**
  * Phones: an item as it stands (10l). The amount and how it was converted, its category,
- * date and payer, what each person's part comes to, and its receipts. Duplicate, Delete
- * and Edit sit at the bottom; Edit opens the form.
+ * date and payer, what each person's part comes to (with Paid back, to record that they
+ * paid it), the payments that settled it, and its receipts. Duplicate, Delete and Edit
+ * sit at the bottom; Edit opens the form.
  */
 const ItemDetail = ({
   item,
@@ -34,9 +39,12 @@ const ItemDetail = ({
   /** Adds a copy, keeping its date or as of today */
   onDuplicate: (keepDate: boolean) => void;
 }) => {
-  const { splitId, currency, totals, photos } = useSplitPage();
+  const { splitId, currency, totals, photos, openDialog } = useSplitPage();
+  const { payments } = useSplitState().state;
+  const actions = useSplitActions();
   const [viewing, setViewing] = useState<number | null>(null);
   const parts = totals.sharesByItem.get(item.id);
+  const settledBy = payments.filter((p) => p.itemId === item.id);
   const receipts = photos.photosOf(item.id);
   const { original } = item;
   const Icon = categoryIcon(item.category);
@@ -80,12 +88,47 @@ const ItemDetail = ({
               size={30}
             />
             <span className={classes.name}>{p.name}</span>
+            {p.id !== item.payer.id && (
+              <Button
+                variant="subtle"
+                size="compact-xs"
+                aria-label={`${p.name} paid back`}
+                onClick={() =>
+                  openDialog({
+                    kind: 'payment',
+                    prefill: {
+                      fromId: p.id,
+                      toId: item.payer.id,
+                      amountCents: parts?.get(p.id) ?? 0,
+                      itemId: item.id,
+                    },
+                  })
+                }
+              >
+                Paid back
+              </Button>
+            )}
             <span className={classes.partAmount}>
               {formatAmount(parts?.get(p.id) ?? 0, currency)}
             </span>
           </li>
         ))}
       </ul>
+      {settledBy.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h6 className="sf-label">Paid back</h6>
+          {settledBy.map((p) => (
+            <PaymentRow
+              key={p.id}
+              payment={p}
+              currency={currency}
+              showItem={false}
+              onEdit={() => openDialog({ kind: 'payment', payment: p })}
+              onDelete={() => deletePayment(actions, p)}
+            />
+          ))}
+        </div>
+      )}
       {item.notes && <p className={classes.notes}>{item.notes}</p>}
       {receipts.length > 0 && (
         <div className={classes.receipts}>

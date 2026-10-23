@@ -1886,17 +1886,147 @@ describe('the rate on the day an item was paid', () => {
   });
 });
 
-describe('changing a split currency', () => {
-  /** Opens the split until its items are converted, or gives up after a few seconds */
-  async function waitConverted(who: string, id: string) {
-    for (let i = 0; i < 40; i++) {
-      const split = (await api.call(who, 'GET', `/api/splits/${id}`)).data;
-      if (!split.converting) return split;
-      await new Promise((r) => setTimeout(r, 150));
-    }
-    throw new Error('Still converting');
+describe('payments', () => {
+  /** A split with A and B in its bill, where A paid 30 for both */
+  async function dinnerFor(owner: string) {
+    const { id } = await splitWith(owner);
+    const [a, b, dinner] = [hex(), hex(), hex()];
+    const res = await change(
+      owner,
+      id,
+      { op: 'addPerson', id: a, name: 'A' },
+      { op: 'addPerson', id: b, name: 'B' },
+      {
+        op: 'addItem',
+        item: { id: dinner, name: 'Dinner', cost: 30, payerId: a, participantIds: [a, b] },
+      },
+    );
+    expect(res.status).toBe(200);
+    return { id, a, b, dinner };
   }
+  const payment = (over: Record<string, unknown>) => ({
+    id: hex(),
+    amount: 15,
+    itemId: null,
+    notes: null,
+    createdAt: Date.UTC(2026, 9, 20, 12),
+    original: null,
+    ...over,
+  });
 
+  it('records, edits and removes a payment, which balances count and the total ignores', async () => {
+    const owner = person('owner');
+    const { id, a, b, dinner } = await dinnerFor(owner);
+    const paid = payment({ fromId: b, toId: a, itemId: dinner, notes: 'Cash' });
+    expect((await change(owner, id, { op: 'addPayment', payment: paid })).status).toBe(200);
+    const split = (await api.call(owner, 'GET', `/api/splits/${id}`)).data;
+    expect(split.payments).toEqual([paid]);
+    expect(split.items).toHaveLength(1);
+    expect(await listed(owner, id)).toMatchObject({ totalCents: 3000, settled: true });
+
+    // Paid only part of it after all
+    const less = { ...paid, amount: 10, notes: null };
+    expect((await change(owner, id, { op: 'updatePayment', payment: less })).status).toBe(200);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.payments).toEqual([less]);
+    expect(await listed(owner, id)).toMatchObject({ settled: false });
+
+    // Removed, and removing it again changes nothing
+    expect((await change(owner, id, { op: 'removePayment', id: paid.id })).status).toBe(200);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.payments).toEqual([]);
+    expect((await change(owner, id, { op: 'removePayment', id: paid.id })).status).toBe(200);
+  });
+
+  it('refuses a payment to oneself, by a stranger, of nothing, or for an item that is gone', async () => {
+    const owner = person('owner');
+    const { id, a, b } = await dinnerFor(owner);
+    const refused = async (over: Record<string, unknown>) => {
+      const res = await change(owner, id, { op: 'addPayment', payment: payment(over) });
+      expect(res.status).toBe(409);
+      return res.data.error as string;
+    };
+    expect(await refused({ fromId: a, toId: a })).toBe('A payment is between two different people');
+    expect(await refused({ fromId: a, toId: hex() })).toBe(
+      'A payment is between two people in this split',
+    );
+    expect(await refused({ fromId: a, toId: b, amount: 0 })).toBe(
+      'A payment is of more than nothing',
+    );
+    expect(await refused({ fromId: a, toId: b, itemId: hex() })).toBe(
+      'That item was removed by someone else',
+    );
+    expect(await refused({ fromId: a, toId: b, id: 'short' })).toBe('Invalid payment');
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.payments).toEqual([]);
+  });
+
+  it('keeps someone who made or received a payment, and unties one when its item goes', async () => {
+    const owner = person('owner');
+    const { id, a, b, dinner } = await dinnerFor(owner);
+    const paid = payment({ fromId: b, toId: a, itemId: dinner });
+    await change(owner, id, { op: 'addPayment', payment: paid });
+    const removal = await change(owner, id, { op: 'removePerson', id: b, fromItems: true });
+    expect(removal.status).toBe(409);
+    expect(removal.data.error).toBe('B made or received 1 payment. Remove those first.');
+    expect((await change(owner, id, { op: 'clearPeople' })).status).toBe(409);
+
+    // The dinner goes; the payment stays, for nothing in particular now
+    expect((await change(owner, id, { op: 'removeItem', id: dinner })).status).toBe(200);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).data.payments).toEqual([
+      { ...paid, itemId: null },
+    ]);
+    expect(await listed(owner, id)).toMatchObject({ totalCents: 0, myBalanceCents: null });
+    // And the split goes with its payments
+    expect((await api.call(owner, 'DELETE', `/api/splits/${id}`)).status).toBe(200);
+    expect((await api.call(owner, 'GET', `/api/splits/${id}`)).status).toBe(404);
+  });
+
+  it('takes a payment in another currency at the rate on its day, and converts it with the split', async () => {
+    const owner = person('owner');
+    const { id, a, b } = await dinnerFor(owner);
+    api.rates.set('JPY', 'MYR', 0.03);
+    const yen = payment({
+      fromId: b,
+      toId: a,
+      amount: 0,
+      original: { currency: 'JPY', amount: 500 },
+    });
+    expect((await change(owner, id, { op: 'addPayment', payment: yen })).status).toBe(200);
+    const saved = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.payments[0];
+    expect(saved).toMatchObject({
+      amount: 15,
+      original: { currency: 'JPY', amount: 500, rate: 0.03, rateSource: 'wise' },
+    });
+    // Typed in a currency the split no longer has: converted, not taken as the new one
+    const typedInMyr = await api.call(owner, 'POST', `/api/splits/${id}/changes`, {
+      changes: [{ op: 'addPayment', payment: payment({ fromId: a, toId: b, amount: 5 }) }],
+      currencies: ['MYR'],
+    });
+    expect(typedInMyr.status).toBe(200);
+
+    // The split changes currency: payments go with it, and come back exactly
+    api.rates.set('MYR', 'EUR', 0.2);
+    api.rates.set('JPY', 'EUR', 0.006);
+    await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: 'EUR' });
+    let split = await waitConverted(owner, id);
+    expect(split.payments.map((p: { amount: number }) => p.amount).sort()).toEqual([1, 3]);
+    // And back, exactly as they were
+    api.rates.set('EUR', 'MYR', 5);
+    await api.call(owner, 'PATCH', `/api/splits/${id}`, { currency: 'MYR' });
+    split = await waitConverted(owner, id);
+    expect(split.payments.map((p: { amount: number }) => p.amount).sort()).toEqual([15, 5]);
+  });
+});
+
+/** Opens the split until its items are converted, or gives up after a few seconds */
+async function waitConverted(who: string, id: string) {
+  for (let i = 0; i < 40; i++) {
+    const split = (await api.call(who, 'GET', `/api/splits/${id}`)).data;
+    if (!split.converting) return split;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error('Still converting');
+}
+
+describe('changing a split currency', () => {
   it('converts every item in the background, and changing back restores them exactly', async () => {
     const owner = person('owner');
     const { id } = await splitWith(owner);

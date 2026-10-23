@@ -1,4 +1,4 @@
-// A split's bill: its people and items. Clients send batches of small changes
+// A split's bill: its people, items and payments. Clients send batches of small changes
 // (add this person, remove that item); each batch is checked against the split's
 // current contents and applied all-or-nothing, touching only the rows involved, so
 // people editing the same split don't overwrite each other.
@@ -24,6 +24,7 @@ import {
   readId,
   readItem,
   readMemberEmail,
+  readPayment,
   readRateChange,
   toModelItem,
   tooLarge,
@@ -124,11 +125,13 @@ const insertParticipantsStatements = (
 
 /**
  * Deletes the items `where` picks, and what hangs off them, children first: their
- * photos' bytes, the photos, who's on them, then the items
+ * photos' bytes, the photos, who's on them, then the items. A payment that settled one
+ * stays, no longer tied to it.
  */
 const deleteItemsStatements = (db: D1Database, where: 'id = ?' | 'split_id = ?', value: string) => {
   const items = `SELECT id FROM items WHERE ${where}`;
   return [
+    db.prepare(`UPDATE payments SET item_id = NULL WHERE item_id IN (${items})`).bind(value),
     db
       .prepare(
         `DELETE FROM attachment_data WHERE id IN
@@ -141,7 +144,7 @@ const deleteItemsStatements = (db: D1Database, where: 'id = ?' | 'split_id = ?',
   ];
 };
 
-/** The original-currency columns for an item, in the order the queries list them */
+/** The original-currency columns for an item or payment, in the order the queries list them */
 const conversionValues = (c: ModelItem['converted']) => [
   c?.currency ?? null,
   c?.cents ?? null,
@@ -164,7 +167,9 @@ function removePersonStatements(
   const person = model.people.get(id);
   // Already removed (by someone else) is fine: the result is the same
   if (person == null) return [];
-  const blocker = removalBlocker({ id, name: person.name }, [...model.items.values()], fromItems);
+  const blocker = removalBlocker({ id, name: person.name }, [...model.items.values()], fromItems, [
+    ...model.payments.values(),
+  ]);
   if (blocker != null) {
     throw new Refused(
       blocker.onItems ? `${blocker.message} Edit or remove those items first.` : blocker.message,
@@ -269,6 +274,9 @@ function changeStatements(
 
     case 'clearPeople': {
       if (model.items.size > 0) throw new Refused('Remove the items first, then clear the people.');
+      if (model.payments.size > 0) {
+        throw new Refused('Remove the payments first, then clear the people.');
+      }
       const emails = [...model.people.values()]
         .map((p) => p.memberEmail)
         .filter((e): e is string => e != null && e !== model.owner && model.members.has(e));
@@ -344,6 +352,7 @@ function changeStatements(
       const id = readId(change.id);
       // Already removed (by someone else) is fine: the result is the same
       if (!model.items.delete(id)) return [];
+      untiePayments(model, (itemId) => itemId === id);
       return deleteItemsStatements(db, 'id = ?', id);
     }
 
@@ -361,7 +370,73 @@ function changeStatements(
 
     case 'clearItems':
       model.items.clear();
+      untiePayments(model, () => true);
       return deleteItemsStatements(db, 'split_id = ?', splitId);
+
+    case 'addPayment': {
+      if (model.payments.size >= MAX_ITEMS) {
+        throw new Refused(`A split can have up to ${MAX_ITEMS.toLocaleString('en-US')} payments`);
+      }
+      const createdAt = paidAt(model, 'addPayment', change.payment);
+      const payment = readPayment(model, change.payment, rates, createdAt);
+      if (model.payments.has(payment.id)) throw new Refused('Invalid payment');
+      model.payments.set(payment.id, { ...payment, createdAt });
+      return [
+        db
+          .prepare(
+            `INSERT INTO payments
+               (id, split_id, from_person_id, to_person_id, amount_cents, item_id, notes,
+                created_at, original_currency, original_cents, rate, rate_source, rate_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            payment.id,
+            splitId,
+            payment.fromId,
+            payment.toId,
+            payment.amountCents,
+            payment.itemId,
+            payment.notes,
+            createdAt,
+            ...conversionValues(payment.converted),
+          ),
+      ];
+    }
+
+    case 'updatePayment': {
+      const createdAt = paidAt(model, 'updatePayment', change.payment);
+      const payment = readPayment(model, change.payment, rates, createdAt);
+      if (!model.payments.has(payment.id)) {
+        throw new Refused('This payment was removed by someone else');
+      }
+      model.payments.set(payment.id, { ...payment, createdAt });
+      return [
+        db
+          .prepare(
+            `UPDATE payments SET from_person_id = ?, to_person_id = ?, amount_cents = ?,
+               item_id = ?, notes = ?, created_at = ?, original_currency = ?, original_cents = ?,
+               rate = ?, rate_source = ?, rate_at = ?
+             WHERE id = ?`,
+          )
+          .bind(
+            payment.fromId,
+            payment.toId,
+            payment.amountCents,
+            payment.itemId,
+            payment.notes,
+            createdAt,
+            ...conversionValues(payment.converted),
+            payment.id,
+          ),
+      ];
+    }
+
+    case 'removePayment': {
+      const id = readId(change.id);
+      // Already removed (by someone else) is fine: the result is the same
+      if (!model.payments.delete(id)) return [];
+      return [db.prepare('DELETE FROM payments WHERE id = ?').bind(id)];
+    }
 
     case 'refreshRates':
       // Sent by older versions of the app, perhaps from a device's outbox. Items keep the
@@ -376,8 +451,21 @@ function changeStatements(
   }
 }
 
+/** Payments tied to the items `gone` picks stay, no longer tied to them */
+function untiePayments(model: Model, gone: (itemId: string) => boolean) {
+  for (const p of model.payments.values()) {
+    if (p.itemId != null && gone(p.itemId)) p.itemId = null;
+  }
+}
+
 /** Changes that convert amounts, held back while the split changes currency */
-const CONVERTING_OPS = new Set<Change['op']>(['addItem', 'updateItem', 'setRate']);
+const CONVERTING_OPS = new Set<Change['op']>([
+  'addItem',
+  'updateItem',
+  'setRate',
+  'addPayment',
+  'updatePayment',
+]);
 
 /** Whether a batch saves amounts, which are only right in the currency they were read in */
 const amountsIn = (batch: Batch) => batch.some((c) => c != null && CONVERTING_OPS.has(c.op));
@@ -416,12 +504,18 @@ export interface SentWith {
 }
 
 /**
- * An item typed in the split's currency at the time, which has changed since: it's an
- * item paid in that currency, converted like any other, rather than its amount being
- * taken to be in the new one
+ * An item or payment typed in the split's currency at the time, which has changed
+ * since: it's one paid in that currency, converted like any other, rather than its
+ * amount being taken to be in the new one
  */
 function typedIn(change: Change, currency: string | null | undefined, model: Model): Change {
   if (currency == null || currency === model.currency) return change;
+  if (change?.op === 'addPayment' || change?.op === 'updatePayment') {
+    const payment = change.payment as unknown as Record<string, unknown> | null;
+    if (payment == null || typeof payment !== 'object' || payment.original != null) return change;
+    const original = { currency, amount: payment.amount };
+    return { ...change, payment: { ...payment, original } } as Change;
+  }
   if (change?.op !== 'addItem' && change?.op !== 'updateItem') return change;
   const item = change.item as unknown as Record<string, unknown> | null;
   if (item == null || typeof item !== 'object' || item.original != null) return change;
@@ -587,6 +681,7 @@ export async function applyChanges(
 
 /** Rows to delete, children first, when a whole split is deleted: its photos and bill */
 export const deleteContentStatements = (db: D1Database, splitId: string) => [
+  db.prepare('DELETE FROM payments WHERE split_id = ?').bind(splitId),
   ...deleteItemsStatements(db, 'split_id = ?', splitId),
   // Photos of the whole split, on no item
   db

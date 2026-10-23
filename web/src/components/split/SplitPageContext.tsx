@@ -2,7 +2,7 @@ import { type ReactNode, createContext, useContext } from 'react';
 import type { Attachment } from '@shared/api';
 import type { Person } from '@shared/types';
 import type { SplitTotals } from '../../split/derive';
-import type { SplitItem, SplitMeta } from '../../split/state';
+import type { SplitItem, SplitMeta, SplitPayment } from '../../split/state';
 import type { MetaChanges, SyncStatus } from '../../split/state';
 import type { usePhotos } from '../../split/usePhotos';
 import type { Prefill } from './useConvertPrefill';
@@ -32,7 +32,17 @@ export type Dialog =
   | { kind: 'menu' }
   | { kind: 'currencies' }
   /** Deleting items would delete their photos too */
-  | ({ kind: 'confirmDelete' } & DeleteConfirmation);
+  | ({ kind: 'confirmDelete' } & DeleteConfirmation)
+  /** Recording a payment (prefilled from a transfer or an item's part), or editing one */
+  | { kind: 'payment'; payment?: SplitPayment; prefill?: PaymentPrefill };
+
+/** What a payment form starts with: who, how much in the split's currency, and for what */
+export interface PaymentPrefill {
+  fromId?: string;
+  toId?: string;
+  amountCents?: number;
+  itemId?: string | null;
+}
 
 export interface SplitPage {
   splitId: string;

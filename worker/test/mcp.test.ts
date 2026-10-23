@@ -30,6 +30,7 @@ const TOOLS = [
   'list_splits',
   'record_payment',
   'remove_expense',
+  'remove_payment',
   'remove_person',
   'rename_person',
   'route_payments',
@@ -487,6 +488,7 @@ describe('the tools', () => {
       'expenseCount',
       'expenses',
       'nextOffset',
+      'payments',
       'people',
       'photos',
       'split',
@@ -904,7 +906,14 @@ describe('the tools', () => {
     expect(saved.totalCents).toBe(6200);
     expect(saved.balances).toEqual(
       expect.arrayContaining([
-        { person: 'Bob', paidCents: 2000, shareCents: 2100, balanceCents: -100 },
+        {
+          person: 'Bob',
+          paidCents: 2000,
+          shareCents: 2100,
+          sentCents: 0,
+          receivedCents: 0,
+          balanceCents: -100,
+        },
       ]),
     );
     expect(saved.transfers).toHaveLength(2);
@@ -1084,11 +1093,11 @@ describe('the tools', () => {
     ]);
   });
 
-  it('record a payment between two people, kept as an expense the app shows', async () => {
+  it('record a payment between two people, which balances count and the total ignores', async () => {
     const alice = person('alice');
     const split = await trip(alice);
     const client = await connect((await grant(alice, [READ, WRITE])).access);
-    await tool(client, 'add_expense', {
+    const dinner = await tool(client, 'add_expense', {
       splitId: split.id,
       currency: 'MYR',
       requestId: 'pay-dinner-01',
@@ -1100,61 +1109,86 @@ describe('the tools', () => {
     const pay = (requestId: string, fields: Record<string, unknown>) =>
       tool(client, 'record_payment', { splitId: split.id, currency: 'MYR', requestId, ...fields });
 
-    // Cat pays Bob her share back, dated the day she did
+    // Cat pays Bob her share of the dinner back, dated the day she did
     const paid = await pay('pay-cat-0001', {
       from: 'cat',
       to: 'bob',
       amount: 10,
+      expenseId: dinner.expenseId,
       date: '2026-10-20',
     });
     expect(paid).toMatchObject({ status: 'saved', replayed: false });
+    expect(paid.expenseId).toBeUndefined();
     const read = await tool(client, 'get_split', { splitId: split.id });
     expect(read.balances).toEqual(
       expect.arrayContaining([
-        { person: 'Cat', paidCents: 1000, shareCents: 1000, balanceCents: 0 },
-        { person: 'Bob', paidCents: 3000, shareCents: 2000, balanceCents: 1000 },
-        { person: 'Owner', paidCents: 0, shareCents: 1000, balanceCents: -1000 },
+        {
+          person: 'Cat',
+          paidCents: 0,
+          shareCents: 1000,
+          sentCents: 1000,
+          receivedCents: 0,
+          balanceCents: 0,
+        },
+        {
+          person: 'Bob',
+          paidCents: 3000,
+          shareCents: 1000,
+          sentCents: 0,
+          receivedCents: 1000,
+          balanceCents: 1000,
+        },
       ]),
     );
     expect(read.transfers).toEqual([{ from: 'Owner', to: 'Bob', amountCents: 1000 }]);
-    expect(read.expenses.find((e: { id: string }) => e.id === paid.expenseId)).toEqual({
-      id: paid.expenseId,
-      name: 'Cat paid Bob',
-      cost: 10,
-      payer: 'Cat',
-      participants: ['Bob'],
-      splitMode: 'equal',
-      category: 'Payment',
-      addedAt: '2026-10-20T12:00:00.000Z',
-    });
+    // A payment of its own: not an expense, and not in the total
+    expect(read.split.totalCents).toBe(3000);
+    expect(read.expenses).toHaveLength(1);
+    expect(read.payments).toEqual([
+      {
+        id: paid.paymentId,
+        from: 'Cat',
+        to: 'Bob',
+        amount: 10,
+        expenseId: dinner.expenseId,
+        paidAt: '2026-10-20T12:00:00.000Z',
+      },
+    ]);
 
     // Sent again: the first answer, not a second payment
     expect(
-      await pay('pay-cat-0001', { from: 'cat', to: 'bob', amount: 10, date: '2026-10-20' }),
-    ).toMatchObject({
-      expenseId: paid.expenseId,
-      replayed: true,
-    });
-    expect(await itemsOf(alice, split.id)).toHaveLength(2);
+      await pay('pay-cat-0001', {
+        from: 'cat',
+        to: 'bob',
+        amount: 10,
+        expenseId: dinner.expenseId,
+        date: '2026-10-20',
+      }),
+    ).toMatchObject({ paymentId: paid.paymentId, replayed: true });
 
-    // In another currency, at the rate given
+    // In another currency, at the rate given, with the balances after it
     const dollars = await pay('pay-me-00001', {
       from: 'me',
       to: 'Bob',
       paidIn: { currency: 'USD', amount: 2.5, rate: 4 },
+      withBalances: true,
     });
     expect(dollars.status).toBe('saved');
-    expect((await itemsOf(alice, split.id)).find((i) => i.id === dollars.expenseId)).toMatchObject({
-      name: 'Owner paid Bob',
-      cost: 10,
-      original: expect.objectContaining({ currency: 'USD', amount: 2.5, rate: 4 }),
+    expect(dollars.transfers).toEqual([]);
+    const again = await tool(client, 'get_split', { splitId: split.id });
+    expect(again.payments).toHaveLength(2);
+    expect(again.payments[0]).toMatchObject({
+      id: dollars.paymentId,
+      from: 'Owner',
+      amount: 10,
+      original: { currency: 'USD', amount: 2.5, rate: 4 },
     });
     expect(
       (await tool(client, 'list_splits', {})).splits.find((s: { id: string }) => s.id === split.id)
         .settled,
     ).toBe(true);
 
-    // Not a payment: to oneself, with no amount, or amounts given twice
+    // Not a payment: to oneself, with no amount, amounts given twice, nobody, no such expense
     expect((await pay('pay-self-0001', { from: 'me', to: 'Owner', amount: 1 })).error).toEqual({
       code: 'invalid_input',
       message: 'A payment is between two different people.',
@@ -1176,7 +1210,29 @@ describe('the tools', () => {
     expect((await pay('pay-ghost-001', { from: 'Dan', to: 'Bob', amount: 1 })).error?.code).toBe(
       'not_found',
     );
-    expect(await itemsOf(alice, split.id)).toHaveLength(3);
+    expect(
+      (await pay('pay-noexp-001', { from: 'me', to: 'Bob', amount: 1, expenseId: hex() })).error
+        ?.code,
+    ).toBe('not_found');
+
+    // Removed, once; Bob can't leave while a payment names him
+    const remove = (requestId: string, paymentId: string) =>
+      tool(client, 'remove_payment', { splitId: split.id, requestId, paymentId });
+    expect(await remove('pay-rm-00001', paid.paymentId)).toMatchObject({
+      status: 'saved',
+      paymentId: paid.paymentId,
+    });
+    expect((await remove('pay-rm-00002', paid.paymentId)).error?.code).toBe('not_found');
+    expect((await tool(client, 'get_split', { splitId: split.id })).payments).toHaveLength(1);
+    expect(
+      (
+        await tool(client, 'remove_person', {
+          splitId: split.id,
+          requestId: 'pay-rm-bob-1',
+          personId: 'Bob',
+        })
+      ).error?.message,
+    ).toBe('Bob paid for 1 item. Edit or remove those items first.');
   });
 
   it('take expenses paid in another currency, converted as the app converts them', async () => {
