@@ -21,6 +21,7 @@ const REDIRECT = 'http://127.0.0.1:9/callback';
 /** Every tool the server offers, in name order */
 const TOOLS = [
   'add_expense',
+  'add_expenses',
   'add_person',
   'add_photo',
   'create_split',
@@ -424,14 +425,20 @@ describe('the tools', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(TOOLS);
     const add = tools.find((t) => t.name === 'add_expense')!;
+    // The split and its currency can be left out, so a write needs no read before it
     expect(add.inputSchema.required).toEqual(
-      expect.arrayContaining(['splitId', 'requestId', 'currency', 'name', 'payerId']),
+      expect.arrayContaining(['requestId', 'name', 'payerId', 'participantIds']),
     );
+    expect(add.inputSchema.required).not.toEqual(expect.arrayContaining(['splitId']));
+    expect(add.inputSchema.required).not.toEqual(expect.arrayContaining(['currency']));
     // One of cost or paidIn, checked when it's called
     expect(Object.keys(add.inputSchema.properties ?? {})).toEqual(
-      expect.arrayContaining(['cost', 'paidIn', 'date']),
+      expect.arrayContaining(['cost', 'paidIn', 'date', 'withBalances']),
     );
-    expect(add.outputSchema?.properties).toHaveProperty('replayed');
+    // The whole list is what every turn of an agent carries: kept short, with no output
+    // schemas (answers are described in a sentence instead)
+    expect(tools.every((t) => t.outputSchema == null)).toBe(true);
+    expect(JSON.stringify(tools).length).toBeLessThan(23_000);
 
     const listed = await tool(client, 'list_splits', {});
     expect(listed.splits).toEqual([
@@ -492,12 +499,13 @@ describe('the tools', () => {
     expect(read.split).toMatchObject({ currency: 'MYR', totalCents: 1000, converting: false });
     // 10.00 three ways is 3.34 + 3.33 + 3.33, as the app works it out; Alice, who joined
     // the split, isn't on it
-    const balanceOf = (id: string) =>
-      read.balances.find((b: { personId: string }) => b.personId === id);
-    const shares = [split.me, split.bob, split.cat].map((id) => balanceOf(id).shareCents);
+    // People are named by name in answers, as they may be in requests
+    const balanceOf = (name: string) =>
+      read.balances.find((b: { person: string }) => b.person === name);
+    const shares = ['Owner', 'Bob', 'Cat'].map((name) => balanceOf(name).shareCents);
     expect(shares.sort()).toEqual([333, 333, 334]);
     expect(read.balances).toHaveLength(4);
-    const bob = balanceOf(split.bob);
+    const bob = balanceOf('Bob');
     expect(bob.paidCents).toBe(1000);
     expect(bob.balanceCents).toBe(1000 - bob.shareCents);
     // Only what the expense has: no empty fields to read past
@@ -506,8 +514,8 @@ describe('the tools', () => {
         id: saved.expenseId,
         name: 'Dinner',
         cost: 10,
-        payerId: split.bob,
-        participantIds: [split.me, split.bob, split.cat],
+        payer: 'Bob',
+        participants: ['Owner', 'Bob', 'Cat'],
         splitMode: 'equal',
         addedAt: expect.any(String),
       },
@@ -836,6 +844,169 @@ describe('the tools', () => {
     ]);
   });
 
+  it('add several expenses in one call, all or none, with the same ids on a retry', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const receipt = {
+      splitId: split.id,
+      requestId: 'receipt-00001',
+      expenses: [
+        { name: 'Ramen', cost: 30, payerId: 'me', participantIds: ['everyone'] },
+        {
+          name: 'Beer',
+          cost: 12,
+          payerId: 'me',
+          participantIds: ['me', 'bob'],
+          date: '2026-10-20',
+        },
+        {
+          name: 'Taxi',
+          payerId: 'Bob',
+          participantIds: ['everyone'],
+          splitMode: 'shares',
+          shares: { me: 2, bob: 1, cat: 1 },
+          paidIn: { currency: 'USD', amount: 5, rate: 4 },
+        },
+      ],
+    };
+    // One wrong line saves nothing, and is named
+    expect(
+      (
+        await tool(client, 'add_expenses', {
+          ...receipt,
+          expenses: [
+            ...receipt.expenses,
+            { name: 'Ghost', cost: 1, payerId: 'Dan', participantIds: ['me'] },
+          ],
+        })
+      ).error,
+    ).toMatchObject({
+      code: 'not_found',
+      message: expect.stringMatching(/^Expense 4 \("Ghost"\): There is no one called/),
+    });
+    expect(
+      (
+        await tool(client, 'add_expenses', {
+          ...receipt,
+          requestId: 'receipt-00002',
+          expenses: [{ name: 'Nothing', payerId: 'me', participantIds: ['me'] }],
+        })
+      ).error?.message,
+    ).toBe('Expense 1 ("Nothing"): Send cost, or paidIn for one paid in another currency.');
+    expect(await itemsOf(alice, split.id)).toHaveLength(0);
+
+    const saved = await tool(client, 'add_expenses', { ...receipt, withBalances: true });
+    expect(saved).toMatchObject({ status: 'saved', splitId: split.id, replayed: false });
+    expect(saved.expenseIds).toHaveLength(3);
+    expect(saved.expenseId).toBeUndefined();
+    // With the balances after it, as get_split would give them: 30 + 12 + 20
+    expect(saved.totalCents).toBe(6200);
+    expect(saved.balances).toEqual(
+      expect.arrayContaining([
+        { person: 'Bob', paidCents: 2000, shareCents: 2100, balanceCents: -100 },
+      ]),
+    );
+    expect(saved.transfers).toHaveLength(2);
+    const items = await itemsOf(alice, split.id);
+    expect(items.map((i) => [i.id, i.name])).toEqual(
+      expect.arrayContaining([
+        [saved.expenseIds[0], 'Ramen'],
+        [saved.expenseIds[1], 'Beer'],
+        [saved.expenseIds[2], 'Taxi'],
+      ]),
+    );
+    expect(items.find((i) => i.name === 'Taxi')).toMatchObject({
+      cost: 20,
+      shares: { [split.me]: 2, [split.bob]: 1, [split.cat]: 1 },
+    });
+    // Sent again: the same answer, the same ids, nothing added
+    const again = await tool(client, 'add_expenses', receipt);
+    expect(again).toMatchObject({ replayed: true, expenseIds: saved.expenseIds });
+    expect(again.balances).toBeUndefined();
+    expect(await itemsOf(alice, split.id)).toHaveLength(3);
+    expect(
+      (await tool(client, 'add_expenses', { ...receipt, expenses: receipt.expenses.slice(1) }))
+        .error?.code,
+    ).toBe('idempotency_conflict');
+  });
+
+  it('take the split by name, or the only one, so the first write needs no read', async () => {
+    const alice = person('alice');
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const lunch = {
+      requestId: 'lunch-000001',
+      name: 'Lunch',
+      cost: 10,
+      payerId: 'me',
+      participantIds: ['everyone'],
+    };
+    // No split yet
+    expect((await tool(client, 'add_expense', lunch)).error).toEqual({
+      code: 'not_found',
+      message: 'This account is in no split yet; create_split makes one.',
+      retryable: false,
+    });
+    // The only split: no splitId and no currency needed
+    const japan = await trip(alice);
+    await api.call(alice, 'PATCH', `/api/splits/${japan.id}`, { name: 'Japan trip' });
+    const first = await tool(client, 'add_expense', { ...lunch, withBalances: true });
+    expect(first).toMatchObject({ status: 'saved', splitId: japan.id, totalCents: 1000 });
+    expect(first.balances).toHaveLength(3);
+    expect((await tool(client, 'get_split', {})).split.name).toBe('Japan trip');
+    // A second split: say which, by name, enough of it, or id; the currency is checked
+    // when it is sent
+    const bali = await trip(alice);
+    await api.call(alice, 'PATCH', `/api/splits/${bali.id}`, { name: 'Bali 2025' });
+    expect(
+      (await tool(client, 'add_expense', { ...lunch, requestId: 'lunch-000002' })).error,
+    ).toEqual({
+      code: 'invalid_input',
+      message: 'Say which split, by id or name: Bali 2025, Japan trip.',
+      retryable: false,
+    });
+    expect((await tool(client, 'get_split', { splitId: 'bali' })).split.id).toBe(bali.id);
+    expect((await tool(client, 'get_split', { splitId: 'JAPAN TRIP' })).split.id).toBe(japan.id);
+    expect((await tool(client, 'get_split', { splitId: japan.id })).split.id).toBe(japan.id);
+    expect(
+      await tool(client, 'add_expense', { ...lunch, requestId: 'lunch-000003', splitId: 'Bali' }),
+    ).toMatchObject({ status: 'saved', splitId: bali.id });
+    expect(
+      (
+        await tool(client, 'add_expense', {
+          ...lunch,
+          requestId: 'lunch-000004',
+          splitId: 'Bali',
+          currency: 'USD',
+        })
+      ).error?.code,
+    ).toBe('currency_mismatch');
+    // Ambiguity names the splits; a slip of a letter is suggested; an archived one gives way
+    expect((await tool(client, 'get_split', { splitId: 'i' })).error?.code).toBe('not_found');
+    expect((await tool(client, 'get_split', { splitId: 'Bali 2024' })).error).toEqual({
+      code: 'not_found',
+      message:
+        'There is no split called or with the id "Bali 2024" that this account is in. Did you mean "Bali 2025"? Splits here: Bali 2025, Japan trip.',
+      retryable: false,
+    });
+    const kyoto = await trip(alice);
+    await api.call(alice, 'PATCH', `/api/splits/${kyoto.id}`, { name: 'Japan again' });
+    expect((await tool(client, 'get_split', { splitId: 'japan' })).error?.message).toBe(
+      'More than one split is called or has a name with "japan" (Japan again, Japan trip): use an id or the whole name.',
+    );
+    await api.call(alice, 'PUT', '/api/archived', { id: kyoto.id, archived: true });
+    expect((await tool(client, 'get_split', { splitId: 'japan' })).split.id).toBe(japan.id);
+    // A stranger's split is no split at all, by id or by name
+    const stranger = person('stranger');
+    const strangers = await connect((await grant(stranger, [READ, WRITE])).access);
+    expect((await tool(strangers, 'get_split', { splitId: japan.id })).error?.code).toBe(
+      'not_found',
+    );
+    expect((await tool(strangers, 'get_split', { splitId: 'Japan trip' })).error?.code).toBe(
+      'not_found',
+    );
+  });
+
   it('name who is missing a share or an exact amount, rather than fault the numbers', async () => {
     const alice = person('alice');
     const split = await trip(alice);
@@ -940,18 +1111,18 @@ describe('the tools', () => {
     const read = await tool(client, 'get_split', { splitId: split.id });
     expect(read.balances).toEqual(
       expect.arrayContaining([
-        { personId: split.cat, paidCents: 1000, shareCents: 1000, balanceCents: 0 },
-        { personId: split.bob, paidCents: 3000, shareCents: 2000, balanceCents: 1000 },
-        { personId: split.me, paidCents: 0, shareCents: 1000, balanceCents: -1000 },
+        { person: 'Cat', paidCents: 1000, shareCents: 1000, balanceCents: 0 },
+        { person: 'Bob', paidCents: 3000, shareCents: 2000, balanceCents: 1000 },
+        { person: 'Owner', paidCents: 0, shareCents: 1000, balanceCents: -1000 },
       ]),
     );
-    expect(read.transfers).toEqual([{ fromId: split.me, toId: split.bob, amountCents: 1000 }]);
+    expect(read.transfers).toEqual([{ from: 'Owner', to: 'Bob', amountCents: 1000 }]);
     expect(read.expenses.find((e: { id: string }) => e.id === paid.expenseId)).toEqual({
       id: paid.expenseId,
       name: 'Cat paid Bob',
       cost: 10,
-      payerId: split.cat,
-      participantIds: [split.bob],
+      payer: 'Cat',
+      participants: ['Bob'],
       splitMode: 'equal',
       category: 'Payment',
       addedAt: '2026-10-20T12:00:00.000Z',
@@ -1046,7 +1217,7 @@ describe('the tools', () => {
     });
     expect(await expenseOf(typed.expenseId)).toMatchObject({
       cost: 45,
-      exact: { [split.bob]: 27, [split.cat]: 18 },
+      exact: { Bob: 27, Cat: 18 },
       original: { currency: 'USD', amount: 10, rate: 4.5 },
     });
 
@@ -1293,12 +1464,12 @@ describe('the tools', () => {
       tool(client, 'route_payments', { splitId: split.id, requestId, personId });
     expect(await route('route-bob-01', split.bob)).toMatchObject({ personId: split.bob });
     const routed = await tool(client, 'get_split', { splitId: split.id });
-    expect(routed.split.routePaymentsThrough).toBe(split.bob);
+    expect(routed.split.routePaymentsThrough).toBe('Bob');
     expect(routed.transfers).toEqual(
       expect.arrayContaining([
-        { fromId: split.me, toId: split.bob, amountCents: 1000 },
-        { fromId: added.personId, toId: split.bob, amountCents: 1000 },
-        { fromId: split.bob, toId: split.cat, amountCents: 3000 },
+        { from: 'Owner', to: 'Bob', amountCents: 1000 },
+        { from: 'Evie', to: 'Bob', amountCents: 1000 },
+        { from: 'Bob', to: 'Cat', amountCents: 3000 },
       ]),
     );
     expect(routed.transfers).toHaveLength(3);
