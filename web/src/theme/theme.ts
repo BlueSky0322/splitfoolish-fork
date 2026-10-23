@@ -1,6 +1,6 @@
 import type { CSSVariablesResolver } from '@mantine/core';
 import { createTheme } from '@mantine/core';
-import { ACCENT_RAMPS } from './accents';
+import { ACCENT_RAMPS, ACCENT_SHADE } from '@shared/accents';
 import type { Accent } from '@shared/api';
 
 // Nocturne neutrals, laid out the way Mantine reads them: text at 0, the page at 7
@@ -26,7 +26,7 @@ export const buildTheme = (accent: Accent) =>
     radius: { xs: '4px', sm: '6px', md: '8px', lg: '14px', xl: '22px' },
     colors: { dark: [...dark], accent: ACCENT_RAMPS[accent].ramp },
     primaryColor: 'accent',
-    primaryShade: { dark: 4, light: 6 },
+    primaryShade: { ...ACCENT_SHADE },
     cursorType: 'pointer',
     components: {
       // Spelled out so the outlined primary style in tokens.css can find them

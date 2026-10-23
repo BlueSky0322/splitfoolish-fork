@@ -102,15 +102,22 @@ async function grant(email: string, scope: string[], requested = scope) {
   const html = await page.text();
   expect(page.status).toBe(200);
   // The page says who is granting what, to which app
-  expect(html).toContain(`Signed in as <strong>${email}</strong>`);
+  expect(html).toContain('Signed in as');
+  expect(html).toContain(`<span>${email}</span>`);
   expect(html).toContain('Test agent');
   // Both scopes are offered and ticked, whatever the client asked for
   for (const s of [READ, WRITE]) {
     expect(html).toContain(`name="scope" value="${s}" checked`);
   }
-  // Each says all it allows, removing and photos included
-  expect(html).toContain('See your splits: their people, expenses, balances and photos');
+  // Each says all it allows, removing, photos, payments and people included
+  expect(html).toContain('See your splits');
+  expect(html).toContain('Their people, expenses, balances and photos');
   expect(html).toContain('add, change and remove expenses and photos');
+  expect(html).toContain('Record and remove payments');
+  expect(html).toContain('Add, rename or remove people');
+  // Where its access goes, and that a registered app's name is its own claim
+  expect(html).toContain('name not verified');
+  expect(html).toContain(new URL(REDIRECT).hostname);
   const handle = /name="handle" value="([^"]+)"/.exec(html)![1];
   const cookie = page.headers
     .getSetCookie()

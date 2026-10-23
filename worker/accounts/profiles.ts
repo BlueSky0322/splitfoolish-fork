@@ -346,6 +346,20 @@ export function assembleMembers([members, methods]: D1Result[]): SplitMember[] {
   }));
 }
 
+/** How someone's pages look: their theme and accent, and their picture's version if any */
+export async function getAppearance(db: D1Database, email: string) {
+  const [settings, avatar] = await db.batch([
+    db.prepare('SELECT theme, accent FROM user_settings WHERE email = ?').bind(email),
+    db.prepare('SELECT version FROM avatars WHERE email = ?').bind(email),
+  ]);
+  const saved = settings.results[0] as Pick<Settings, 'theme' | 'accent'> | undefined;
+  return {
+    theme: saved?.theme ?? DEFAULT_SETTINGS.theme,
+    accent: saved?.accent ?? DEFAULT_SETTINGS.accent,
+    avatarVersion: (avatar.results[0] as { version: number } | undefined)?.version ?? null,
+  };
+}
+
 /** Where someone's exchange rates come from: Wise unless they picked the ECB */
 export async function getRatePreference(db: D1Database, email: string): Promise<RatePreference> {
   const row = await db

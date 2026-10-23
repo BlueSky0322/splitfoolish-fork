@@ -1,9 +1,23 @@
-import type { MantineColorsTuple } from '@mantine/core';
-import { ACCENTS, type Accent } from '@shared/api';
+import { ACCENTS, type Accent } from './api';
+
+/** Ten shades, light to dark, laid out as Mantine reads a colour */
+export type AccentRamp = readonly [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
 
 // The accent colours someone can pick in Settings. Each ramp is in OKLCH on the same
 // lightness scale as the default blurple, so every accent reads the same. Shade 4 is
-// the accent on the dark theme and shade 6 on the light one.
+// the accent on the dark theme and shade 6 on the light one (ACCENT_SHADE): the app's
+// theme and the Worker's consent page both draw it from here.
 export const ACCENT_RAMPS = {
   blurple: {
     label: 'Blurple',
@@ -95,7 +109,10 @@ export const ACCENT_RAMPS = {
       '#271417',
     ],
   },
-} satisfies Record<Accent, { label: string; ramp: MantineColorsTuple }>;
+} satisfies Record<Accent, { label: string; ramp: AccentRamp }>;
+
+/** Which shade of a ramp is the accent on each theme */
+export const ACCENT_SHADE = { dark: 4, light: 6 } as const;
 
 export const isAccent = (value: unknown): value is Accent =>
   (ACCENTS as readonly unknown[]).includes(value);
