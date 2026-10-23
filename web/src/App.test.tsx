@@ -24,6 +24,13 @@ describe('the app', () => {
     const user = userEvent.setup();
     const tabs = await screen.findByRole('navigation', { name: 'Sections' });
     const depth = window.history.length;
+    // You comes first, under the thumb, and Splits last
+    const names = within(tabs)
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    expect(names).toHaveLength(4);
+    expect(names[0]).toMatch(/You$/);
+    expect(names[3]).toBe('Splits');
 
     await user.click(within(tabs).getByRole('button', { name: 'Convert' }));
     expect(window.location.search).toBe('?convert');
