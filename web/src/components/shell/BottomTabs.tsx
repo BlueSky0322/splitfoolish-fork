@@ -9,7 +9,7 @@ import UserAvatar from '../common/UserAvatar';
 import classes from './BottomTabs.module.css';
 import { useTabsHidden } from './tabs-visibility';
 
-// The phone's way around: Splits, Invites, Convert and You, on every top-level page and
+// The phone's way around: You, Invites, Convert and Splits, on every top-level page and
 // inside a split. Hidden while picking items (tabs-visibility.ts).
 
 const TabButton = ({
@@ -51,9 +51,18 @@ const BottomTabs = ({ route }: { route: Route }) => {
       aria-label="Sections"
     >
       <TabButton
-        tab="splits"
-        label="Splits"
-        icon={<Receipt size={22} />}
+        tab="you"
+        label="You"
+        icon={
+          <UserAvatar
+            preview={false}
+            size={22}
+            name={profile ? nameFor(profile.email, profile.displayName) : '?'}
+            email={profile?.email}
+            avatarVersion={profile?.avatarVersion}
+            previewSrc={profile?.avatarPreview}
+          />
+        }
         current={current}
       />
       <TabButton
@@ -70,18 +79,9 @@ const BottomTabs = ({ route }: { route: Route }) => {
         current={current}
       />
       <TabButton
-        tab="you"
-        label="You"
-        icon={
-          <UserAvatar
-            preview={false}
-            size={22}
-            name={profile ? nameFor(profile.email, profile.displayName) : '?'}
-            email={profile?.email}
-            avatarVersion={profile?.avatarVersion}
-            previewSrc={profile?.avatarPreview}
-          />
-        }
+        tab="splits"
+        label="Splits"
+        icon={<Receipt size={22} />}
         current={current}
       />
     </nav>
