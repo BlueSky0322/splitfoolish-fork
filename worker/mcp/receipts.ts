@@ -39,15 +39,18 @@ export async function hashBytes(bytes: Uint8Array) {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export const findReceipt = (db: D1Database, email: string, requestId: string) =>
+/** The receipt an account's request left, if any; for a batch read with other lookups */
+export const receiptLookup = (db: D1Database, email: string, requestId: string) =>
   db
     .prepare(
       `SELECT email, request_id AS requestId, fingerprint, tool, split_id AS splitId,
          expense_id AS expenseId, saved_at AS savedAt
        FROM mcp_receipts WHERE email = ? AND request_id = ?`,
     )
-    .bind(email, requestId)
-    .first<Receipt>();
+    .bind(email, requestId);
+
+export const findReceipt = (db: D1Database, email: string, requestId: string) =>
+  receiptLookup(db, email, requestId).first<Receipt>();
 
 /** Saves a receipt; fails the whole batch if this account already used the request id */
 export const receiptStatement = (db: D1Database, r: Receipt) =>

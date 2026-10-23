@@ -568,10 +568,13 @@ cases (`{ size: 'phone' }`) in
 ## Agents over MCP
 
 **What it is.** An agent signs in over OAuth as one account and uses tools at `/mcp`
-to read splits and their photos, create splits, add, edit, date and remove expenses
-(in the split's currency or another), record a payment between two people (kept as an
-expense), add receipts and split photos, add, rename and remove people, and route
-payments. People can be named by id, name or enough of a name; a miss lists the bill. The contracts, units, retries and deployment steps are in
+to read splits and their photos, create splits, add (one or many at once), edit, date
+and remove expenses (in the split's currency or another), record a payment between two
+people (kept as an expense), add receipts and split photos, add, rename and remove
+people, and route payments. Splits and people can be named by id, name or enough of a
+name, and answers name people by name; a miss lists what there is. A write can answer
+with the balances after it, and reads membership, the retry receipt and the bill in one
+database round trip (`loadSplit`). The contracts, units, retries and deployment steps are in
 [mcp.md](mcp.md).
 
 **Owner.** The Worker; the app doesn't use MCP, and only lists and disconnects the
@@ -636,12 +639,14 @@ receipt → the split's room tells open apps.
 - An expense write and its receipt are saved in one transaction: a retry with the same
   `requestId` returns the first answer and never applies the change again, and the same
   id for a different change is refused.
-- Writes name the split's currency and are refused when it's another. An expense paid
-  in another currency keeps its amounts and rate unless new ones are sent, and is
-  converted at the rate on the day it was paid, as in the app.
-- A photo or a new split is saved under an id that comes from the account and request
-  id, so a retry never adds a second one; a split's people are saved with its receipt,
-  so a retry finishes a split an earlier try began.
+- A write that names the split's currency is refused when it's another; one that
+  doesn't is in the split's currency as it is. An expense paid in another currency
+  keeps its amounts and rate unless new ones are sent, and is converted at the rate on
+  the day it was paid, as in the app.
+- A photo, a new split, or each expense of a batch is saved under an id that comes
+  from the account and request id, so a retry never adds a second one and a batch
+  retry answers the same ids; a split's people are saved with its receipt, so a retry
+  finishes a split an earlier try began.
 - `/api/*` keeps its own sign-in and cross-site checks; MCP never goes through them,
   and they never accept an OAuth token.
 - Answers leave out share links, invitations, emails and payment details; a photo says

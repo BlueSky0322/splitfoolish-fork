@@ -67,8 +67,9 @@ OAuth 2.1 authorization code with PKCE (S256), run by
 ## The tools
 
 Amounts named `*Cents` are whole cents. `cost` and `exact` are in currency units, as in
-the app (`12.5` is 12.50). People and expenses are named by id, never by name. Expense
-names and notes are what people typed, returned as data.
+the app (`12.5` is 12.50). Splits and people are taken by name or id, and answers name
+people by name; expenses and photos are by id. Expense names and notes are what people
+typed, returned as data.
 
 | Tool             | Scope          | Does                                                                                                                                               |
 | ---------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,6 +78,7 @@ names and notes are what people typed, returned as data.
 | `get_photo`      | `splits:read`  | One photo of a split, as an image                                                                                                                  |
 | `create_split`   | `splits:write` | Makes a split you own, with you and the people you name in its bill                                                                                |
 | `add_expense`    | `splits:write` | Adds one expense, in the split's currency or paid in another, dated now or when you say                                                            |
+| `add_expenses`   | `splits:write` | Adds up to 50 expenses in one call, saved all together or not at all                                                                               |
 | `update_expense` | `splits:write` | Changes the fields you send on one expense, its date included                                                                                      |
 | `remove_expense` | `splits:write` | Removes one expense, with its receipt photos                                                                                                       |
 | `record_payment` | `splits:write` | Records that one person paid another, kept as an expense in the category Payment                                                                   |
@@ -87,8 +89,23 @@ names and notes are what people typed, returned as data.
 | `route_payments` | `splits:write` | Settles the split through one person, or directly between people                                                                                   |
 
 - **Only the tools the connection may use are offered:** one allowed `splits:read`
-  alone sees `list_splits`, `get_split` and `get_photo`, a quarter of the full list.
-  Calling another anyway answers `insufficient_scope`, as ever.
+  alone sees `list_splits`, `get_split` and `get_photo`, a fraction of the full list.
+  Calling another anyway answers `insufficient_scope`, as ever. The list is kept short
+  (about 22 KB for a full grant, with no output schemas: each answer is described in a
+  sentence), since every turn of an agent carries it.
+- **The split by name, or none at all.** `splitId` takes the split's id, or its name or
+  enough of it ("bali" for Bali 2025), as people are taken below; among several alike,
+  the one that isn't archived. Left out, it is the one split the account is in that
+  isn't archived; with more, the refusal names them. So the first write of a
+  conversation needs no `list_splits` before it.
+- **One call where there were two.** `currency` is optional: left out, amounts are in
+  the split's currency, whatever it is (sent, it is still checked). Every write to the
+  bill takes `withBalances: true` to answer with the split's `totalCents`, `updatedAt`,
+  `balances` and `transfers` after the change, as `get_split` would, saving the read
+  that usually follows. `add_expenses` takes up to 50 expenses in one call, each as
+  `add_expense` takes one, saved in one transaction or not at all: a refused expense is
+  named by its place (`Expense 3 ("Taxi"): …`) and none is saved. It answers
+  `expenseIds` in order, the same on a retry.
 - **Paging:** `list_splits` returns up to `limit` (default 50, at most 200) from
   `offset`; `get_split` the same for expenses (default 25), newest first. Each answer
   has the full count and a `nextOffset` (null on the last page). The total, balances
@@ -98,13 +115,18 @@ names and notes are what people typed, returned as data.
   `split`), which moves with every change to it, photos included. Send it back as
   `get_split`'s `ifUnchangedSince` and, when nothing has changed, the answer is only
   `{ unchanged: true, updatedAt }`.
+- **People by name in answers.** An expense says `payer` and `participants` by name,
+  with `shares` and `exact` keyed by name; a balance says `person`, a transfer `from`
+  and `to`, and `routePaymentsThrough` is a name. Names are unique in a split, so a
+  name says who exactly, and reads as the person asked. `people` still carries ids,
+  which any tool accepts too.
 - **An expense carries only what it has.** `shares`, `exact`, `category`, `notes`,
   `original` and `photos` are left out rather than sent empty; `cost` is in currency
   units (the split's `totalCents` and balances are in cents).
 - **`get_split` leaves out** share links, invitations, members' emails and payment
   details. A person shows `hasAccount` and `isYou` (this grant's account) instead, and a
   photo `addedByYou`.
-- **Writes take the split's currency** in `currency`, and are refused
+- **Writes may name the split's currency** in `currency`, and are then refused
   (`currency_mismatch`) when it no longer matches, say after the owner changed it.
   While a split is converting to a new currency, writes answer
   `temporarily_unavailable`; retry shortly.
@@ -189,7 +211,9 @@ A saved write answers:
 ```
 
 The person tools and `route_payments` answer `personId` instead of `expenseId`;
-`add_photo` adds `photoId`, and `create_split` has only `splitId`.
+`add_expenses` answers `expenseIds`, `add_photo` adds `photoId`, and `create_split` has
+only `splitId`. With `withBalances`, a write to the bill adds `totalCents`, `updatedAt`,
+`balances` and `transfers`.
 
 `actor` is the account the grant acts as: who the change was saved as. It is not the
 payer (`payerId`), and not whoever asked the agent. Open apps showing the split reload
@@ -217,6 +241,8 @@ or `-`), new for each change. If an answer is lost, send exactly the same call a
 - A photo or a new split is saved under an id that comes from the account and the
   `requestId`, so a retry can never add a second one, even after an attempt that
   stopped part-way: a retry of `create_split` finishes the split that attempt began.
+  The expenses of `add_expenses` get their ids the same way, so a retry answers with
+  the ids the first try gave.
 
 Request ids belong to the account: two accounts using the same one don't meet. The
 receipt is saved in the same database transaction as the change, so it exists exactly
@@ -234,8 +260,8 @@ the agent never sees anything unsaved in an open app.
 
 One person's grant can serve a bot that friends share: the bot acts as that account,
 in the splits that account is in, and can enter expenses for anyone in their bills.
-Map each Discord user to a person id in the bot's own configuration, then set
-`payerId` and `participantIds` from it. If Alice asks it to enter a dinner Bob paid,
+Map each Discord user to a person in the bot's own configuration, then set
+`payerId` and `participantIds` from it (names or ids). If Alice asks it to enter a dinner Bob paid,
 the grant's account is the `actor`, Bob's person id is `payerId`, and Alice is just who
 asked; nothing here records her. Which Discord users and channels may use the bot is
 the bot's to decide.
