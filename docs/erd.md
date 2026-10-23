@@ -116,7 +116,7 @@ erDiagram
         text rate_preference "wise or ecb (Frankfurter)"
         int sidebar_open
         text items_view "card or table"
-        text items_group_by "none, day, payer or category"
+        text items_group_by "none, day, week, month, payer or category"
         text items_sort_key "date, name, payer or amount"
         text items_sort_dir "asc or desc"
         int updated_at

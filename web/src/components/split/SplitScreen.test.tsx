@@ -533,7 +533,14 @@ describe('the split page', () => {
 
     // Every grouping is listed, so No grouping is one tap, not three
     await user.click(screen.getByRole('button', { name: 'Group items: By day' }));
-    expect(await menuItems()).toEqual(['No grouping', 'By day', 'By payer', 'By category']);
+    expect(await menuItems()).toEqual([
+      'No grouping',
+      'By day',
+      'By week',
+      'By month',
+      'By payer',
+      'By category',
+    ]);
     await user.click(screen.getByRole('menuitem', { name: 'No grouping' }));
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(await screen.findByRole('button', { name: 'Group items: No grouping' })).toBeTruthy();

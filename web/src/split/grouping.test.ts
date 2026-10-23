@@ -92,6 +92,38 @@ describe('grouping items', () => {
     expect(groupItems(items, 'payer', 'date', 'asc').every((g) => g.day == null)).toBe(true);
   });
 
+  test('by week puts Monday to Sunday together, and by month a whole month', () => {
+    // 5 to 11 October 2026 is one week (Monday to Sunday); the 12th starts the next
+    const more = [
+      ...items,
+      item('5', 'Lunch', 20, ann, day(12, 13)),
+      item('6', 'Bus', 3, ben, day(31, 9)),
+    ];
+    const weeks = groupItems(more, 'week', 'date', 'asc');
+    expect(weeks.map((g) => [g.key, g.items.map((i) => i.id), g.subtotalCents])).toEqual([
+      ['2026-10-05', ['1', '2', '4', '3'], 47375],
+      ['2026-10-12', ['5'], 2000],
+      ['2026-10-26', ['6'], 300],
+    ]);
+    // Named by its first and last day: "5–11 Oct"; one that straddles months names both
+    expect(weeks[0].label).toMatch(/^(5–11 Oct|Oct 5–11)$/);
+    expect(weeks[2].label).toMatch(/26 Oct|Oct 26/);
+    expect(weeks[2].label).toMatch(/1 Nov|Nov 1/);
+    expect(weeks[2].label).toContain(' – ');
+    const months = groupItems(
+      [...more, item('7', 'Rent', 500, ann, day(1, 10) - 86_400_000)],
+      'month',
+      'date',
+      'asc',
+    );
+    expect(months.map((g) => [g.key, g.label, g.items.map((i) => i.id)])).toEqual([
+      ['2026-09', expect.stringMatching(/September 2026/), ['7']],
+      ['2026-10', expect.stringMatching(/October 2026/), ['1', '2', '4', '3', '5', '6']],
+    ]);
+    // Only a day is exact enough to add an item to from its heading
+    expect([...weeks, ...months].every((g) => g.day == null)).toBe(true);
+  });
+
   test('by payer names the group after the payer', () => {
     const groups = groupItems(items, 'payer', 'date', 'asc');
     expect(groups.map((g) => [g.key, g.label, g.items.map((i) => i.id), g.subtotalCents])).toEqual([

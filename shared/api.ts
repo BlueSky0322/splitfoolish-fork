@@ -13,7 +13,7 @@ export const ACCENTS = ['blurple', 'blue', 'teal', 'green', 'amber', 'rose'] as 
 /** Where an account's exchange rates come from first (see RATE_PROVIDERS) */
 export const RATE_PREFERENCES = ['wise', 'ecb'] as const;
 export const ITEMS_VIEWS = ['card', 'table'] as const;
-export const ITEMS_GROUPS = ['none', 'day', 'payer', 'category'] as const;
+export const ITEMS_GROUPS = ['none', 'day', 'week', 'month', 'payer', 'category'] as const;
 export const ITEMS_SORT_KEYS = ['date', 'name', 'payer', 'amount'] as const;
 export const SORT_DIRS = ['asc', 'desc'] as const;
 

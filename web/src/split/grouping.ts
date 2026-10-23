@@ -19,6 +19,8 @@ export interface ItemGroup {
 export const GROUP_LABELS: Record<GroupBy, string> = {
   none: 'No grouping',
   day: 'By day',
+  week: 'By week',
+  month: 'By month',
   payer: 'By payer',
   category: 'By category',
 };
@@ -38,6 +40,47 @@ export const dayLabel = (time: number) =>
     day: 'numeric',
     month: 'short',
   });
+
+/** The start of the week (Monday) a time falls in, in local time */
+export const weekStart = (time: number) => {
+  const d = new Date(time);
+  const sinceMonday = (d.getDay() + 6) % 7;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - sinceMonday);
+};
+
+/** "6–12 Oct", or "29 Sep – 5 Oct" when a week straddles two months (years, if two) */
+export const weekLabel = (time: number) => {
+  const from = weekStart(time);
+  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6);
+  const sameMonth = from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear();
+  const sameYear = from.getFullYear() === to.getFullYear();
+  const ends: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  };
+  if (sameMonth) {
+    // The month once, after both days: "6–12 Oct"
+    const parts = new Intl.DateTimeFormat(undefined, ends).formatToParts(to);
+    const month = parts.find((p) => p.type === 'month')?.value ?? '';
+    const dayFirst =
+      parts.findIndex((p) => p.type === 'day') < parts.findIndex((p) => p.type === 'month');
+    return dayFirst
+      ? `${from.getDate()}–${to.getDate()} ${month}`
+      : `${month} ${from.getDate()}–${to.getDate()}`;
+  }
+  return `${from.toLocaleDateString(undefined, ends)} – ${to.toLocaleDateString(undefined, ends)}`;
+};
+
+/** The month a time falls in, as YYYY-MM in local time */
+export const monthKey = (time: number) => {
+  const d = new Date(time);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/** "October 2026" */
+export const monthLabel = (time: number) =>
+  new Date(time).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
 const compare = (key: SortKey) => (a: SplitItem, b: SplitItem) => {
   switch (key) {
@@ -84,9 +127,13 @@ export function groupItems(
     const [groupKey, label] =
       groupBy === 'day'
         ? [dayKey(item.createdAt), dayLabel(item.createdAt)]
-        : groupBy === 'payer'
-          ? [item.payer.id, item.payer.name]
-          : [item.category ?? '', categoryLabel(item.category)];
+        : groupBy === 'week'
+          ? [dayKey(weekStart(item.createdAt).getTime()), weekLabel(item.createdAt)]
+          : groupBy === 'month'
+            ? [monthKey(item.createdAt), monthLabel(item.createdAt)]
+            : groupBy === 'payer'
+              ? [item.payer.id, item.payer.name]
+              : [item.category ?? '', categoryLabel(item.category)];
     let group = groups.get(groupKey);
     if (group == null) {
       group = { key: groupKey, label, items: [], subtotalCents: 0 };
