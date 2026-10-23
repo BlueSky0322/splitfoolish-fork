@@ -74,8 +74,9 @@ balance, pending invites, archive, your own order, and search across items and s
 - UI: [components/home/](../web/src/components/home/SplitsHome.tsx) (desktop and
   [MobileHome](../web/src/components/home/MobileHome.tsx), search, sorting, invites)
   and the [sidebar](../web/src/components/shell/Sidebar.tsx).
-- API: [worker/splits/summaries.ts](../worker/splits/summaries.ts) (the list with totals, search, item name
-  suggestions, used currencies), [worker/splits/lifecycle.ts](../worker/splits/lifecycle.ts)
+- API: [worker/splits/summaries.ts](../worker/splits/summaries.ts) (the list with totals, all of it or a
+  page cut in the database, with the count over all; search, item name suggestions,
+  used currencies), [worker/splits/lifecycle.ts](../worker/splits/lifecycle.ts)
   (create, rename, order, delete), and [worker/routes/splits.ts](../worker/routes/splits.ts)
   (archive, search).
 - Shared: `SplitSummary` and the list shapes in [shared/api.ts](../shared/api.ts).
@@ -618,9 +619,11 @@ retry receipt saved alongside. Photos go through `addAttachment` in
   both together.
 - Tools: [mcp/server.ts](../worker/mcp/server.ts) (a fresh stateless MCP server per
   request, the Origin check and scope step-up) and
-  [mcp/tools.ts](../worker/mcp/tools.ts). Reads reuse `listSplitSummaries`,
-  `contentStatements`, `listAttachmentsStatement` and `shared/settle.ts`; rates come
-  from `getRate` with the account's preference, as for the API.
+  [mcp/tools.ts](../worker/mcp/tools.ts). Reads reuse `listSplitSummaries` (a page
+  at a time), `contentStatements`, `listAttachmentsStatement` and `shared/settle.ts`;
+  rates come from `getRate` with the account's preference, as for the API. A
+  `get_split` with `ifUnchangedSince` reads only the split's `updated_at` (as a
+  member) before deciding whether to read the bill.
 - Receipts: [mcp/receipts.ts](../worker/mcp/receipts.ts) and the `mcp_receipts` table
   ([0019](../migrations/0019_mcp_receipts.sql)), deleted with their split
   (`splits/lifecycle.ts`).

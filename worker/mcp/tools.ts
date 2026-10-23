@@ -338,6 +338,18 @@ async function loadSplit(
   };
 }
 
+/** When the split last changed, to a member; null to anyone else, as for a missing split */
+async function updatedAtOf(db: D1Database, id: string, email: string) {
+  const row = await db
+    .prepare(
+      `SELECT s.updated_at AS updatedAt FROM splits s
+       JOIN split_members m ON m.split_id = s.id AND m.email = ? WHERE s.id = ?`,
+    )
+    .bind(email, id)
+    .first<{ updatedAt: number }>();
+  return row?.updatedAt ?? null;
+}
+
 type Split = NonNullable<Awaited<ReturnType<typeof loadSplit>>['split']>;
 type Person = Split['people'][number];
 
@@ -963,8 +975,11 @@ export function registerTools(mcp: McpServer, caller: Caller) {
     async ({ limit = 50, offset = 0 }) => {
       const denied = allowed('list_splits');
       if (denied) return denied;
-      const all = await listSplitSummaries(db, caller.email);
-      const shown = all.slice(offset, offset + limit);
+      // The page is cut in the database, so only its bills are read
+      const { splits: shown, total } = await listSplitSummaries(db, caller.email, {
+        limit,
+        offset,
+      });
       return result({
         splits: shown.map((s) => ({
           id: s.id,
@@ -979,8 +994,8 @@ export function registerTools(mcp: McpServer, caller: Caller) {
           myBalanceCents: s.myBalanceCents,
           updatedAt: new Date(s.updatedAt).toISOString(),
         })),
-        total: all.length,
-        nextOffset: offset + shown.length < all.length ? offset + shown.length : null,
+        total,
+        nextOffset: offset + shown.length < total ? offset + shown.length : null,
       });
     },
   );
@@ -1016,13 +1031,18 @@ export function registerTools(mcp: McpServer, caller: Caller) {
       const located = await locateSplit(db, caller.email, ref);
       if ('content' in located) return located;
       const { id, role } = located;
+      // The version they have is still the latest: nothing to read again, and the bill
+      // isn't read to find out
+      if (ifUnchangedSince != null) {
+        const latest = await updatedAtOf(db, id, caller.email);
+        if (latest == null) return notFound();
+        if (Date.parse(ifUnchangedSince) === latest) {
+          return result({ unchanged: true as const, updatedAt: new Date(latest).toISOString() });
+        }
+      }
       const { split, attachments } = await loadSplit(db, id, caller.email, { photos: true });
       if (split == null) return notFound();
       const totals = settle(split);
-      // The version they have is still the latest: nothing to read again
-      if (ifUnchangedSince != null && Date.parse(ifUnchangedSince) === split.updatedAt) {
-        return result({ unchanged: true as const, updatedAt: totals.updatedAt });
-      }
       const photosOf = (itemId: string | null) =>
         attachments.filter((a) => a.itemId === itemId).map((a) => photoOut(a, caller.email));
       // Newest first: what an agent is usually asked about, and all a casual read costs

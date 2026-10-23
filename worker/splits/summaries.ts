@@ -8,54 +8,72 @@ import type { SettleItem, SplitMode, Transfer } from '../../shared/settle';
 import { balances } from '../../shared/settle';
 import type { Role } from '../../shared/types';
 
-export async function listSplitSummaries(db: D1Database, email: string): Promise<SplitSummary[]> {
-  const [splits, items, participants, mine, people, payments] = await db.batch([
-    db
-      .prepare(
-        `SELECT s.id, s.name, s.currency, s.updated_at AS updatedAt, m.role,
-           m.archived_at IS NOT NULL AS archived,
-           (SELECT count(*) FROM split_members WHERE split_id = s.id) AS memberCount,
-           (SELECT version FROM split_pictures WHERE split_id = s.id) AS pictureVersion
-         FROM splits s JOIN split_members m ON m.split_id = s.id
-         WHERE m.email = ?
-         ORDER BY m.sort_position IS NOT NULL, m.sort_position, s.updated_at DESC`,
-      )
-      .bind(email),
-    db
-      .prepare(
-        `SELECT i.id, i.split_id AS splitId, i.cost_cents AS costCents, i.payer_id AS payerId,
-           i.split_mode AS splitMode
-         FROM items i JOIN split_members m ON m.split_id = i.split_id WHERE m.email = ?`,
-      )
-      .bind(email),
-    db
-      .prepare(
-        `SELECT ip.item_id AS itemId, ip.person_id AS personId, ip.shares, ip.exact_cents AS exactCents
-         FROM item_participants ip JOIN items i ON i.id = ip.item_id
-         JOIN split_members m ON m.split_id = i.split_id WHERE m.email = ?`,
-      )
-      .bind(email),
+/** A page of someone's splits: `limit` of them from `offset`, in their own order */
+export interface SplitPage {
+  limit: number;
+  offset: number;
+}
+
+// The splits a read is about, in the person's order: those they belong to, or a page of
+// them. Every bill query joins this, so only the bills on the page are read.
+const PAGE_OF_SPLITS = `page AS (
+  SELECT s.id FROM splits s JOIN split_members m ON m.split_id = s.id
+  WHERE m.email = ?1
+  ORDER BY m.sort_position IS NOT NULL, m.sort_position, s.updated_at DESC
+  LIMIT ?2 OFFSET ?3)`;
+
+/** Adds `row` to the list kept under `key`, starting one if there is none */
+function file<T>(into: Map<string, T[]>, key: string, row: T) {
+  const list = into.get(key);
+  if (list == null) into.set(key, [row]);
+  else list.push(row);
+}
+
+/**
+ * Someone's splits with their totals and balances, all of them or one page, and how
+ * many there are in all
+ */
+export async function listSplitSummaries(
+  db: D1Database,
+  email: string,
+  page?: SplitPage,
+): Promise<{ splits: SplitSummary[]; total: number }> {
+  // A negative limit is no limit
+  const [limit, offset] = page == null ? [-1, 0] : [page.limit, page.offset];
+  const paged = (sql: string) =>
+    db.prepare(`WITH ${PAGE_OF_SPLITS} ${sql}`).bind(email, limit, offset);
+  const [splits, items, participants, mine, people, payments, count] = await db.batch([
+    paged(
+      `SELECT s.id, s.name, s.currency, s.updated_at AS updatedAt, m.role,
+         m.archived_at IS NOT NULL AS archived,
+         (SELECT count(*) FROM split_members WHERE split_id = s.id) AS memberCount,
+         (SELECT version FROM split_pictures WHERE split_id = s.id) AS pictureVersion
+       FROM page JOIN splits s ON s.id = page.id
+       JOIN split_members m ON m.split_id = s.id AND m.email = ?1
+       ORDER BY m.sort_position IS NOT NULL, m.sort_position, s.updated_at DESC`,
+    ),
+    paged(
+      `SELECT i.id, i.split_id AS splitId, i.cost_cents AS costCents, i.payer_id AS payerId,
+         i.split_mode AS splitMode
+       FROM items i JOIN page ON page.id = i.split_id`,
+    ),
+    paged(
+      `SELECT ip.item_id AS itemId, ip.person_id AS personId, ip.shares, ip.exact_cents AS exactCents
+       FROM item_participants ip JOIN items i ON i.id = ip.item_id
+       JOIN page ON page.id = i.split_id`,
+    ),
     // The person in each split's bill who is this account, if any
-    db
-      .prepare(
-        `SELECT p.split_id AS splitId, p.id FROM people p
-         JOIN split_members m ON m.split_id = p.split_id AND m.email = ?1
-         WHERE p.member_email = ?1`,
-      )
-      .bind(email),
-    db
-      .prepare(
-        `SELECT p.split_id AS splitId, p.id FROM people p
-         JOIN split_members m ON m.split_id = p.split_id WHERE m.email = ?`,
-      )
-      .bind(email),
-    db
-      .prepare(
-        `SELECT p.split_id AS splitId, p.from_person_id AS fromId, p.to_person_id AS toId,
-           p.amount_cents AS amountCents
-         FROM payments p JOIN split_members m ON m.split_id = p.split_id WHERE m.email = ?`,
-      )
-      .bind(email),
+    paged(
+      `SELECT p.split_id AS splitId, p.id FROM people p JOIN page ON page.id = p.split_id
+       WHERE p.member_email = ?1`,
+    ),
+    paged(`SELECT p.split_id AS splitId, p.id FROM people p JOIN page ON page.id = p.split_id`),
+    paged(
+      `SELECT p.split_id AS splitId, p.from_person_id AS fromId, p.to_person_id AS toId,
+         p.amount_cents AS amountCents
+       FROM payments p JOIN page ON page.id = p.split_id`,
+    ),
+    db.prepare('SELECT count(*) AS total FROM split_members WHERE email = ?').bind(email),
   ]);
 
   const bySplit = new Map<string, SettleItem[]>();
@@ -74,7 +92,7 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
       participants: [],
     };
     byItem.set(i.id, item);
-    bySplit.set(i.splitId, [...(bySplit.get(i.splitId) ?? []), item]);
+    file(bySplit, i.splitId, item);
   }
   for (const p of participants.results as {
     itemId: string;
@@ -89,14 +107,14 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
   );
   const peopleOf = new Map<string, string[]>();
   for (const p of people.results as { splitId: string; id: string }[]) {
-    peopleOf.set(p.splitId, [...(peopleOf.get(p.splitId) ?? []), p.id]);
+    file(peopleOf, p.splitId, p.id);
   }
   const paidBack = new Map<string, Transfer[]>();
   for (const p of payments.results as ({ splitId: string } & Transfer)[]) {
-    paidBack.set(p.splitId, [...(paidBack.get(p.splitId) ?? []), p]);
+    file(paidBack, p.splitId, p);
   }
 
-  return (
+  const summaries = (
     splits.results as {
       id: string;
       name: string;
@@ -109,10 +127,11 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
     }[]
   ).map((s) => {
     const splitItems = bySplit.get(s.id) ?? [];
-    const splitPayments = paidBack.get(s.id) ?? [];
     const me = myPerson.get(s.id);
     const ids = peopleOf.get(s.id) ?? [];
     const totalCents = splitItems.reduce((a, i) => a + i.costCents, 0);
+    // Everyone's balance once; balances() gives every id it's asked about an entry
+    const all = balances(ids, splitItems, paidBack.get(s.id) ?? []);
     return {
       ...s,
       archived: s.archived === 1,
@@ -120,15 +139,12 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
       itemCount: splitItems.length,
       totalCents,
       // Something was spent and no one owes anyone, payments counted
-      settled:
-        totalCents > 0 &&
-        [...balances(ids, splitItems, splitPayments).values()].every((b) => b.balanceCents === 0),
-      // Null when no one in the bill is linked to this account; balances() gives every
-      // id it's asked about an entry
-      myBalanceCents:
-        me == null ? null : balances([me], splitItems, splitPayments).get(me)!.balanceCents,
+      settled: totalCents > 0 && [...all.values()].every((b) => b.balanceCents === 0),
+      // Null when no one in the bill is linked to this account
+      myBalanceCents: me == null ? null : all.get(me)!.balanceCents,
     };
   });
+  return { splits: summaries, total: (count.results[0] as { total: number }).total };
 }
 
 const MAX_ITEM_NAMES = 500;
