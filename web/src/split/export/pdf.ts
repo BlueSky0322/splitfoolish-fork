@@ -88,6 +88,15 @@ function pdfTables(rows: ExportRows) {
       money(t.amountCents, currency),
       t.payWith ?? '',
     ]),
+    payments: rows.payments.map((p) => [
+      day(p.createdAt),
+      p.from,
+      p.to,
+      p.forItem ?? '',
+      p.original == null
+        ? money(p.amountCents, currency)
+        : `${money(p.amountCents, currency)}\n${money(p.original.amountCents, p.original.currency)}`,
+    ]),
   };
 }
 
@@ -208,6 +217,15 @@ export async function makePdf(rows: ExportRows, now: number): Promise<Blob> {
     write(rows.items.length > 0 ? 'Everyone is settled up.' : 'Nothing to settle yet.', 10, MUTED);
   } else {
     table([2], { head: [['From', 'To', 'Amount', 'Pay with']], body: tables.transfers });
+  }
+
+  if (tables.payments.length > 0) {
+    heading('Payments');
+    table([4], {
+      head: [['Date', 'Paid by', 'Paid to', 'For', 'Amount']],
+      body: tables.payments,
+      columnStyles: { 0: { cellWidth: 24 }, 4: { cellWidth: 38 } },
+    });
   }
 
   // Page numbers, once the number of pages is known

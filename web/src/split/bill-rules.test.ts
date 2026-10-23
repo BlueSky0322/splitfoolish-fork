@@ -24,13 +24,31 @@ const item = (over: Partial<SplitItem>): SplitItem => ({
   ...over,
 });
 
-const bill = (...items: SplitItem[]): SplitState => ({ people: [ann, ben, cat], items });
+const bill = (...items: SplitItem[]): SplitState => ({
+  people: [ann, ben, cat],
+  items,
+  payments: [],
+});
 
 describe('removalMessage', () => {
   test('someone who paid for anything stays', () => {
     expect(removalMessage(bill(item({})), 'a', true)).toBe(
       'Ann paid for 1 item. Edit or remove those items first.',
     );
+  });
+
+  test('someone who made or received a payment stays', () => {
+    const state = {
+      ...bill(),
+      payments: [{ from: ben, to: cat } as SplitState['payments'][number]],
+    };
+    expect(removalMessage(state, 'b', true)).toBe(
+      'Ben made or received 1 payment. Remove those first.',
+    );
+    expect(removalMessage(state, 'c', true)).toBe(
+      'Cat made or received 1 payment. Remove those first.',
+    );
+    expect(removalMessage(state, 'a', true)).toBeNull();
   });
 
   test('someone on items can go from them, but only when asked to', () => {

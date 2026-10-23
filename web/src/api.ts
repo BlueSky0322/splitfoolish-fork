@@ -37,7 +37,7 @@ import type {
   RemovePhotosBody,
 } from '@shared/api';
 import type { PaymentMethod } from '@shared/payments';
-import type { Item as ApiItem } from '@shared/types';
+import type { Item as ApiItem, Payment } from '@shared/types';
 import { newId } from './utils/id';
 
 /** The signed-in account, as this device holds it */
@@ -51,6 +51,8 @@ export const countActionableInvites = (invites: MyInvite[] | null) =>
   (invites ?? []).filter((i) => i.kind !== 'sent').length;
 
 export type ItemInput = Omit<ApiItem, 'id' | 'createdAt'>;
+/** A payment as the app saves it; the id is the app's to make */
+export type PaymentInput = Omit<Payment, 'id'>;
 
 export class ApiError extends Error {
   constructor(

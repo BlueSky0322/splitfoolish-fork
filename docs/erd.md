@@ -17,6 +17,9 @@ erDiagram
     items ||--|{ item_participants : "split between"
     people ||--o{ item_participants : "shares in"
     items ||--o{ attachments : "receipts"
+    splits ||--o{ payments : "paid back"
+    people ||--o{ payments : "paid / was paid"
+    items ||--o{ payments : "settled by"
     attachments ||--|| attachment_data : "bytes"
     profiles ||--o| user_settings : "prefers"
     profiles ||--o| avatars : "pictured by"
@@ -57,6 +60,21 @@ erDiagram
         text name UK "unique per split"
         text member_email "the account this person is, if linked; unique per split"
         int position
+    }
+    payments {
+        text id PK
+        text split_id FK
+        text from_person_id FK "who paid"
+        text to_person_id FK "who was paid"
+        text item_id FK "the item it settles, if one; cleared when it goes"
+        int amount_cents "in the split's currency"
+        int created_at "when it was paid"
+        text notes
+        text original_currency "as items: what was paid, and the rate, when in another currency"
+        int original_cents
+        real rate
+        text rate_source
+        int rate_at
     }
     items {
         text id PK
@@ -172,9 +190,16 @@ erDiagram
   edited until it's done; the app holds such changes and sends them again.
 - **Shared, not per person.** Who to route payments through is a property of the split
   (`splits.distributor_person_id`), so everyone in it sees the same transfers.
+- **Payments are their own fact.** One person paying another back is a `payments` row,
+  not an item: balances subtract it and the split's total ignores it. It may name the
+  item it settles, for context only; when that item goes, the payment stays, untied.
+  Like an item, one paid in another currency keeps what was paid and the rate on its
+  day, and is converted with the split. Someone who made or received a payment can't be
+  removed until it is.
 - **Deleting cleans up.** Deleting a split removes its members, invites, people, items,
-  picture, photos and photo bytes. Deleting an item removes its receipts. Removing a person who
-  was the settle-up route sets the route back to none.
+  payments, picture, photos and photo bytes. Deleting an item removes its receipts and
+  unties its payments. Removing a person who was the settle-up route sets the route
+  back to none.
 - **Joining.** Opening the share link doesn't join you: it gives you a `split_invites`
   row (one per person per split, so opening it again changes nothing) that waits in
   Invites. Accepting deletes it, adds you to `split_members` and puts you in the bill: a

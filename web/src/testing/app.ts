@@ -219,8 +219,12 @@ export function splitDetail(id: string, items: Item[] = []): SplitDetail {
     attachments: [],
     people: [person('me', 'Ryan', EMAIL), person('ann', 'Ann')],
     items,
+    payments: [],
   };
 }
+
+const settlePayments = (s: SplitDetail) =>
+  s.payments.map((p) => ({ fromId: p.fromId, toId: p.toId, amountCents: toCents(p.amount) }));
 
 /** Where the signed-in account stands in a split, as the server works it out */
 const settleItems = (s: SplitDetail) =>
@@ -240,7 +244,7 @@ const settleItems = (s: SplitDetail) =>
 function myBalance(s: SplitDetail) {
   const me = s.people.find((p) => p.memberEmail === EMAIL);
   if (me == null) return null;
-  return balances([me.id], settleItems(s)).get(me.id)!.balanceCents;
+  return balances([me.id], settleItems(s), settlePayments(s)).get(me.id)!.balanceCents;
 }
 
 const summaryOf = (s: SplitDetail, archived: boolean): SplitSummary => ({
@@ -258,6 +262,7 @@ const summaryOf = (s: SplitDetail, archived: boolean): SplitSummary => ({
       ...balances(
         s.people.map((p) => p.id),
         settleItems(s),
+        settlePayments(s),
       ).values(),
     ].every((b) => b.balanceCents === 0),
   archived,
@@ -346,6 +351,19 @@ function apply(server: FakeServer, split: SplitDetail, change: Change) {
       break;
     case 'removeItem':
       split.items = split.items.filter((i) => i.id !== change.id);
+      // A payment that settled it stays, untied
+      split.payments = split.payments.map((p) =>
+        p.itemId === change.id ? { ...p, itemId: null } : p,
+      );
+      break;
+    case 'addPayment':
+      split.payments.push(change.payment);
+      break;
+    case 'updatePayment':
+      split.payments = split.payments.map((p) => (p.id === change.payment.id ? change.payment : p));
+      break;
+    case 'removePayment':
+      split.payments = split.payments.filter((p) => p.id !== change.id);
       break;
     case 'setItemDate':
       split.items = split.items.map((i) =>

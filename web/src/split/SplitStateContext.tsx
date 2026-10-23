@@ -11,7 +11,7 @@ interface SplitStateContextValue {
 
 const SplitStateContext = createContext<SplitStateContextValue | null>(null);
 
-const EMPTY: SplitState = { people: [], items: [] };
+const EMPTY: SplitState = { people: [], items: [], payments: [] };
 
 /** The open split's bill; mounted with its page (keyed by the split), so each starts empty */
 export const SplitStateProvider = ({ children }: { children: ReactNode }) => {

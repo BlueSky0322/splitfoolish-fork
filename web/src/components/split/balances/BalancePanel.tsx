@@ -14,6 +14,9 @@ import { isQr, methodName } from '../../../utils/payment-labels';
 import QrViewer from '../../common/QrViewer';
 import BalanceBars from './BalanceBars';
 import TransferRow from './TransferRow';
+import { PaymentRow } from '../payments/PaymentRow';
+import { deletePayment } from '../payments/delete-payment';
+import { navigate, splitAddress } from '../../../hooks/useRoute';
 import { HeroSkeleton, PanelSkeleton } from '../layout/SplitSkeletons';
 import classes from './Balances.module.css';
 import page from '../Split.module.css';
@@ -178,9 +181,12 @@ const ROUTE_HELP =
  * The balances and who pays whom. variant 'sheet' is Settle up on phones: larger rows
  * and no outer card.
  */
+/** How many of the latest payments Settle up shows; the rest are on the Payments page */
+const LATEST_PAYMENTS = 3;
+
 const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) => {
-  const { totals, currency, me, distributorId, meta, status, openDialog } = useSplitPage();
-  const { people } = useSplitState().state;
+  const { splitId, totals, currency, me, distributorId, meta, status, openDialog } = useSplitPage();
+  const { people, payments } = useSplitState().state;
   const actions = useSplitActions();
   const onDistributorChange = (id: string | null) => actions.setDistributor(id);
   const onShareImage = () => openDialog({ kind: 'share' });
@@ -314,10 +320,55 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
                         />
                       ) : undefined
                     }
+                    action={
+                      <Button
+                        variant="subtle"
+                        size="compact-xs"
+                        onClick={() =>
+                          openDialog({
+                            kind: 'payment',
+                            prefill: { fromId: t.fromId, toId: t.toId, amountCents: t.amountCents },
+                          })
+                        }
+                      >
+                        Mark as paid
+                      </Button>
+                    }
                   />
                 </div>
               );
             })}
+          </div>
+        )}
+      </section>
+
+      <section className={classes.panelSection}>
+        <h6 className="sf-label">Payments</h6>
+        {payments.length === 0 ? (
+          <div className="sf-muted text-sm">No payments yet.</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {[...payments]
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, LATEST_PAYMENTS)
+              .map((p) => (
+                <PaymentRow
+                  key={p.id}
+                  payment={p}
+                  currency={currency}
+                  onEdit={() => openDialog({ kind: 'payment', payment: p })}
+                  onDelete={() => deletePayment(actions, p)}
+                />
+              ))}
+            <button
+              type="button"
+              className={page.linkButton}
+              onClick={() => navigate(splitAddress(splitId, 'payments'))}
+            >
+              {payments.length > LATEST_PAYMENTS
+                ? `See all ${payments.length} payments`
+                : 'All payments'}
+            </button>
           </div>
         )}
       </section>

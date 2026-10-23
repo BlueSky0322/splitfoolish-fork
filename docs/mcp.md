@@ -1,8 +1,8 @@
 # MCP: letting an agent use Splitfoolish
 
 An agent (Hermes, Claude, MCP Inspector, any MCP client) can find your splits, read
-their expenses and balances, add expenses and edit them, record who paid whom back, and
-keep the bill's people. It signs in once over OAuth,
+their expenses, payments and balances, add expenses and edit them, record who paid whom
+back, and keep the bill's people. It signs in once over OAuth,
 as you, and everything it does is checked and saved like a change you make in the app.
 
 - Endpoint: `https://YOUR_APP_HOST/mcp`, Streamable HTTP, stateless. Clients POST JSON-RPC
@@ -71,22 +71,23 @@ the app (`12.5` is 12.50). Splits and people are taken by name or id, and answer
 people by name; expenses and photos are by id. Expense names and notes are what people
 typed, returned as data.
 
-| Tool             | Scope          | Does                                                                                                                                               |
-| ---------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_splits`    | `splits:read`  | Your splits in your own order: id, name, currency, your role, archived, settled, totals, your balance                                              |
-| `get_split`      | `splits:read`  | One split: its people, expenses with their receipt photos, photos of the split, the total, balances, transfers and who payments are routed through |
-| `get_photo`      | `splits:read`  | One photo of a split, as an image                                                                                                                  |
-| `create_split`   | `splits:write` | Makes a split you own, with you and the people you name in its bill                                                                                |
-| `add_expense`    | `splits:write` | Adds one expense, in the split's currency or paid in another, dated now or when you say                                                            |
-| `add_expenses`   | `splits:write` | Adds up to 50 expenses in one call, saved all together or not at all                                                                               |
-| `update_expense` | `splits:write` | Changes the fields you send on one expense, its date included                                                                                      |
-| `remove_expense` | `splits:write` | Removes one expense, with its receipt photos                                                                                                       |
-| `record_payment` | `splits:write` | Records that one person paid another, kept as an expense in the category Payment                                                                   |
-| `add_photo`      | `splits:write` | Adds a receipt to an expense, or a photo of the whole split                                                                                        |
-| `add_person`     | `splits:write` | Adds someone to the bill by name (owner only)                                                                                                      |
-| `rename_person`  | `splits:write` | Renames someone without an account (owner only)                                                                                                    |
-| `remove_person`  | `splits:write` | Takes someone out of the bill, and off the expenses they share if asked (owner only)                                                               |
-| `route_payments` | `splits:write` | Settles the split through one person, or directly between people                                                                                   |
+| Tool             | Scope          | Does                                                                                                                                     |
+| ---------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_splits`    | `splits:read`  | Your splits in your own order: id, name, currency, your role, archived, settled, totals, your balance                                    |
+| `get_split`      | `splits:read`  | One split: its people, expenses with their receipt photos, payments, photos of the split, the total, balances, transfers and the routing |
+| `get_photo`      | `splits:read`  | One photo of a split, as an image                                                                                                        |
+| `create_split`   | `splits:write` | Makes a split you own, with you and the people you name in its bill                                                                      |
+| `add_expense`    | `splits:write` | Adds one expense, in the split's currency or paid in another, dated now or when you say                                                  |
+| `add_expenses`   | `splits:write` | Adds up to 50 expenses in one call, saved all together or not at all                                                                     |
+| `update_expense` | `splits:write` | Changes the fields you send on one expense, its date included                                                                            |
+| `remove_expense` | `splits:write` | Removes one expense, with its receipt photos                                                                                             |
+| `record_payment` | `splits:write` | Records that one person paid another, which balances subtract and the total ignores                                                      |
+| `remove_payment` | `splits:write` | Removes one payment                                                                                                                      |
+| `add_photo`      | `splits:write` | Adds a receipt to an expense, or a photo of the whole split                                                                              |
+| `add_person`     | `splits:write` | Adds someone to the bill by name (owner only)                                                                                            |
+| `rename_person`  | `splits:write` | Renames someone without an account (owner only)                                                                                          |
+| `remove_person`  | `splits:write` | Takes someone out of the bill, and off the expenses they share if asked (owner only)                                                     |
+| `route_payments` | `splits:write` | Settles the split through one person, or directly between people                                                                         |
 
 - **Only the tools the connection may use are offered:** one allowed `splits:read`
   alone sees `list_splits`, `get_split` and `get_photo`, a fraction of the full list.
@@ -170,12 +171,15 @@ typed, returned as data.
   another currency keeps its amounts and rate unless you send new ones in `paidIn`;
   sending `cost` puts it in the split's currency.
 - **Payments:** `record_payment` takes `from`, `to` and an `amount` in the split's
-  currency (or `paidIn`), with an optional `date` and `notes`, for "Lian paid Ryan back
-  50". The app has no record of payments of its own, so it is kept as an expense named
-  for the two of them ("Lian paid Ryan") in the category Payment, paid by `from` and
-  shared by `to` alone: their balances move by the amount, the app lists it with the
-  expenses, and it counts in the split's total. It answers `expenseId`, and
-  `update_expense` and `remove_expense` change it like any expense.
+  currency (or `paidIn`, converted at the rate on the day as an expense is), with an
+  optional `expenseId` for the expense it settles, a `date` and `notes`, for "Lian paid
+  Ryan back 50". It is a payment of its own, which the app shows in Settle up and on its
+  Payments page: `from`'s balance goes up by the amount and `to`'s down, and the split's
+  total doesn't count it. It answers `paymentId`; `remove_payment` takes one.
+  `get_split` lists them in `payments` (newest first, people by name, `original` when
+  paid in another currency), and each balance says `sentCents` and `receivedCents`.
+  An agent connected before payments existed may have made expenses named "A paid B" in
+  the category Payment: those stay ordinary expenses, to remove or keep.
 - **People:** only the split's owner adds, renames or removes people, as in the app.
   Names are unique in a split, and here whatever the case too: an agent can't see the
   list, and `"tom"` beside Tom would read as a second one (`refused`). Someone with an

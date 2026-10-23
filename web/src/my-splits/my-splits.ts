@@ -187,6 +187,7 @@ export function createSplit(
     attachments: [],
     people: [],
     items: [],
+    payments: [],
   };
   const summary: SplitSummary = {
     id,

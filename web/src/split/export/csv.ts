@@ -83,6 +83,29 @@ export function toCsv(rows: ExportRows): string {
     [],
     header(['From', 'To', 'Amount']),
     ...rows.transfers.map((t) => [text(t.from), text(t.to), amount(t.amountCents)]),
+    [],
+    header([
+      'Date',
+      'Paid by',
+      'Paid to',
+      `Amount (${rows.currency})`,
+      'Original currency',
+      'Original amount',
+      'Rate',
+      'For',
+      'Notes',
+    ]),
+    ...rows.payments.map((p) => [
+      text(isoDate(p.createdAt)),
+      text(p.from),
+      text(p.to),
+      amount(p.amountCents),
+      text(p.original?.currency ?? null),
+      amount(p.original?.amountCents ?? null),
+      number(p.original?.rate ?? null),
+      text(p.forItem),
+      text(p.notes),
+    ]),
   ];
   return BOM + lines.map((line) => line.map(cell).join(',') + '\r\n').join('');
 }

@@ -52,9 +52,9 @@ describe('summarising a split', () => {
     // Ann paid 10.00 and owes 3.34 + 10.00; Ben paid 30.00 and owes 3.33 + 2.25;
     // Cat paid 5.50 and owes 3.33 + 20.00 + 3.25
     expect(Object.fromEntries(s.balances)).toEqual({
-      a: { paidCents: 1000, shareCents: 1334, balanceCents: -334 },
-      b: { paidCents: 3000, shareCents: 558, balanceCents: 2442 },
-      c: { paidCents: 550, shareCents: 2658, balanceCents: -2108 },
+      a: { paidCents: 1000, shareCents: 1334, sentCents: 0, receivedCents: 0, balanceCents: -334 },
+      b: { paidCents: 3000, shareCents: 558, sentCents: 0, receivedCents: 0, balanceCents: 2442 },
+      c: { paidCents: 550, shareCents: 2658, sentCents: 0, receivedCents: 0, balanceCents: -2108 },
     });
     // Ben is the only one owed: Cat, who owes most, pays first
     expect(s.transfers).toEqual([
@@ -70,9 +70,9 @@ describe('summarising a split', () => {
     expect(s.transfers).toEqual([]);
     expect(s.sharesByItem.size).toBe(0);
     expect(Object.fromEntries(s.balances)).toEqual({
-      a: { paidCents: 0, shareCents: 0, balanceCents: 0 },
-      b: { paidCents: 0, shareCents: 0, balanceCents: 0 },
-      c: { paidCents: 0, shareCents: 0, balanceCents: 0 },
+      a: { paidCents: 0, shareCents: 0, sentCents: 0, receivedCents: 0, balanceCents: 0 },
+      b: { paidCents: 0, shareCents: 0, sentCents: 0, receivedCents: 0, balanceCents: 0 },
+      c: { paidCents: 0, shareCents: 0, sentCents: 0, receivedCents: 0, balanceCents: 0 },
     });
   });
 

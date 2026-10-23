@@ -29,7 +29,11 @@ export interface SettleItem {
 export interface Balance {
   paidCents: number;
   shareCents: number;
-  /** paid − share: positive means others owe this person */
+  /** Paid back to others, in payments */
+  sentCents: number;
+  /** Received from others, in payments */
+  receivedCents: number;
+  /** paid − share + sent − received: positive means others owe this person */
   balanceCents: number;
 }
 
@@ -84,14 +88,27 @@ export function itemShares(item: SettleItem): Map<string, number> {
   return result;
 }
 
-export function balances(personIds: string[], items: SettleItem[]): Map<string, Balance> {
-  const result = new Map<string, Balance>(
-    personIds.map((id) => [id, { paidCents: 0, shareCents: 0, balanceCents: 0 }]),
-  );
+/**
+ * Where everyone stands: what they paid for and their share of everything, less what
+ * they have since paid back or been paid (payments made between people)
+ */
+export function balances(
+  personIds: string[],
+  items: SettleItem[],
+  payments: Transfer[] = [],
+): Map<string, Balance> {
+  const fresh = (): Balance => ({
+    paidCents: 0,
+    shareCents: 0,
+    sentCents: 0,
+    receivedCents: 0,
+    balanceCents: 0,
+  });
+  const result = new Map<string, Balance>(personIds.map((id) => [id, fresh()]));
   const entry = (id: string) => {
     let b = result.get(id);
     if (b == null) {
-      b = { paidCents: 0, shareCents: 0, balanceCents: 0 };
+      b = fresh();
       result.set(id, b);
     }
     return b;
@@ -101,7 +118,13 @@ export function balances(personIds: string[], items: SettleItem[]): Map<string, 
     entry(item.payerId).paidCents += item.costCents;
     for (const [personId, cents] of itemShares(item)) entry(personId).shareCents += cents;
   }
-  for (const b of result.values()) b.balanceCents = b.paidCents - b.shareCents;
+  for (const p of payments) {
+    entry(p.fromId).sentCents += p.amountCents;
+    entry(p.toId).receivedCents += p.amountCents;
+  }
+  for (const b of result.values()) {
+    b.balanceCents = b.paidCents - b.shareCents + b.sentCents - b.receivedCents;
+  }
   return result;
 }
 

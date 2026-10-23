@@ -29,7 +29,13 @@ const owed = (amounts: Record<string, number>): Map<string, Balance> =>
   new Map(
     Object.entries(amounts).map(([id, cents]) => [
       id,
-      { paidCents: Math.max(cents, 0), shareCents: Math.max(-cents, 0), balanceCents: cents },
+      {
+        paidCents: Math.max(cents, 0),
+        shareCents: Math.max(-cents, 0),
+        sentCents: 0,
+        receivedCents: 0,
+        balanceCents: cents,
+      },
     ]),
   );
 
@@ -151,9 +157,32 @@ describe('balances and transfers', () => {
     expect(all.get('ann')).toEqual({
       paidCents: 24800,
       shareCents: 6200 + 3000 + 1,
+      sentCents: 0,
+      receivedCents: 0,
       balanceCents: 15599,
     });
     expect([...all.values()].reduce((a, b) => a + b.balanceCents, 0)).toBe(0);
+  });
+
+  test('a payment moves the two people it is between, and nothing else', () => {
+    const before = balances(people, items);
+    const after = balances(people, items, [{ fromId: 'ben', toId: 'ann', amountCents: 3000 }]);
+    expect(after.get('ben')).toEqual({
+      ...before.get('ben'),
+      sentCents: 3000,
+      balanceCents: before.get('ben')!.balanceCents + 3000,
+    });
+    expect(after.get('ann')).toEqual({
+      ...before.get('ann'),
+      receivedCents: 3000,
+      balanceCents: 15599 - 3000,
+    });
+    expect(after.get('cat')).toEqual(before.get('cat'));
+    expect([...after.values()].reduce((a, b) => a + b.balanceCents, 0)).toBe(0);
+    // Ben, who owed a little, is now owed; the transfers still clear everyone
+    expect(transfers(before).some((t) => t.fromId === 'ben')).toBe(true);
+    expect(transfers(after).some((t) => t.fromId === 'ben')).toBe(false);
+    expect(afterPaying(after, transfers(after))).toEqual(allZero(after));
   });
 
   test('transfers clear every balance in at most one fewer payment than people', () => {

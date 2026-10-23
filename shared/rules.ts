@@ -48,6 +48,12 @@ export interface RemovalItem {
   splitMode: SplitMode;
 }
 
+/** As much of a payment as the removal rules look at */
+export interface RemovalPayment {
+  fromId: string;
+  toId: string;
+}
+
 /**
  * Why a person can't be removed. onItems: only because they're on items, which
  * removing them with fromItems would take them off.
@@ -58,21 +64,27 @@ export interface RemovalBlocker {
 }
 
 const items = (n: number) => (n === 1 ? '1 item' : `${n} items`);
+const payments = (n: number) => (n === 1 ? '1 payment' : `${n} payments`);
 
 /**
- * Why a person can't be removed, or null if they can. Someone who paid for anything
- * stays; with fromItems they come off items they share, unless that would leave an
- * item with nobody or break an exact split.
+ * Why a person can't be removed, or null if they can. Someone who paid for anything, or
+ * made or received a payment, stays; with fromItems they come off items they share,
+ * unless that would leave an item with nobody or break an exact split.
  */
 export function removalBlocker(
   person: { id: string; name: string },
   bill: RemovalItem[],
   fromItems: boolean,
+  paidBack: RemovalPayment[] = [],
 ): RemovalBlocker | null {
   const blocked = (message: string, onItems = false) => ({ message, onItems });
   const paid = bill.filter((i) => i.payerId === person.id).length;
   if (paid > 0) {
     return blocked(`${person.name} paid for ${items(paid)}. Edit or remove those items first.`);
+  }
+  const settled = paidBack.filter((p) => p.fromId === person.id || p.toId === person.id).length;
+  if (settled > 0) {
+    return blocked(`${person.name} made or received ${payments(settled)}. Remove those first.`);
   }
   const shared = bill.filter((i) => i.participantIds.includes(person.id));
   if (shared.length === 0) return null;

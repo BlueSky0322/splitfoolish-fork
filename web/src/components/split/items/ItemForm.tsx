@@ -10,12 +10,20 @@ import {
   Textarea,
   UnstyledButton,
 } from '@mantine/core';
-import { CalendarBlank, Check, Copy, DotsThree, Minus, Plus, Trash } from '@phosphor-icons/react';
+import {
+  CalendarBlank,
+  Check,
+  Copy,
+  DotsThree,
+  HandCoins,
+  Minus,
+  Plus,
+  Trash,
+} from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useEffect, useId, useMemo, useState } from 'react';
 import {
   MAX_ITEM_CENTS,
-  type RateSource,
   convertCents,
   fitsItemCents,
   isValidRate,
@@ -41,6 +49,7 @@ import {
   keepTimeOf,
   toDateInput,
 } from '../../../utils/date-input';
+import { ConversionRow } from './ConversionRow';
 import { DayField } from './DayField';
 import { useIsDesktop, useIsMobile } from '../../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
@@ -49,7 +58,6 @@ import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
-import { SOURCE_LABELS, describeRate } from '../../../utils/rate-labels';
 import { plural } from '../../../utils/text';
 import { useRate } from '../../../hooks/useRate';
 import { buildItemInput, chooseRate, exactCents } from '../../../split/item-input';
@@ -70,6 +78,8 @@ interface ItemFormProps {
   onDelete?: () => void;
   /** Adds a copy of the item being edited, keeping its date or as of today */
   onDuplicate?: (keepDate: boolean) => void;
+  /** Records that someone paid their part of it back (desktop's More menu) */
+  onRecordPayment?: () => void;
   onCancel: () => void;
   /** What's been entered or changed that closing would lose, as a sentence; null when nothing */
   onDirtyChange?: (unsaved: string | null) => void;
@@ -90,6 +100,7 @@ const ItemForm = ({
   onSave,
   onDelete,
   onDuplicate,
+  onRecordPayment,
   onCancel,
   onDirtyChange,
 }: ItemFormProps) => {
@@ -297,7 +308,7 @@ const ItemForm = ({
     );
   };
 
-  const moreMenu = (onDuplicate || onDelete) && (
+  const moreMenu = (onDuplicate || onDelete || onRecordPayment) && (
     <Menu
       position={headerSlot ? 'bottom-end' : 'top-start'}
       withinPortal={false}
@@ -331,6 +342,14 @@ const ItemForm = ({
               Dated today
             </Menu.Item>
           </>
+        )}
+        {onRecordPayment && (
+          <Menu.Item
+            leftSection={<HandCoins size={16} />}
+            onClick={onRecordPayment}
+          >
+            Record payment
+          </Menu.Item>
         )}
         {onDuplicate && onDelete && <Menu.Divider />}
         {onDelete && (
@@ -744,95 +763,4 @@ function describeEntered(amount: boolean, name: boolean) {
   if (amount) return "You've entered an amount.";
   if (name) return "You've entered a name.";
   return "What you've entered will be lost.";
-}
-
-/** Paid in another currency: the rate it's converted at, the day's or one typed */
-function ConversionRow({
-  entryCurrency,
-  currency,
-  ownRateChosen,
-  ownRate,
-  onOwnRate,
-  rateError,
-  costCents,
-  note,
-  rate,
-  rateSource,
-  paidBefore,
-  compact,
-  onChooseOwn,
-  onUseLive,
-}: {
-  /** Phones: one line, "≈ RM 89.10 at 0.0297, Wise" */
-  compact?: boolean;
-  entryCurrency: string;
-  currency: string;
-  ownRateChosen: boolean;
-  ownRate: number | '';
-  onOwnRate: (rate: number | '') => void;
-  rateError: string | null | undefined;
-  costCents: number | null;
-  note: string;
-  rate: number | null;
-  rateSource: RateSource | null;
-  /** Paid before today, so it goes back to that day's rate rather than the live one */
-  paidBefore: boolean;
-  onChooseOwn: () => void;
-  onUseLive: () => void;
-}) {
-  return (
-    <div className={classes.conversion}>
-      {ownRateChosen ? (
-        <>
-          <span>1 {entryCurrency} =</span>
-          <NumberInput
-            aria-label={`How much 1 ${entryCurrency} is in ${currency}`}
-            className={classes.rateInput}
-            value={ownRate}
-            onChange={(v) => onOwnRate(v === '' ? '' : Number(v))}
-            min={0}
-            decimalScale={6}
-            hideControls
-            size="xs"
-            placeholder="0.00"
-            error={rateError}
-          />
-          <span>{currency}</span>
-          {costCents != null && (
-            <span className={classes.converted}>≈ {formatMoney(costCents, currency)}</span>
-          )}
-          <UnstyledButton
-            className={classes.rateToggle}
-            onClick={onUseLive}
-          >
-            {paidBefore ? "Use that day's rate" : 'Use the live rate'}
-          </UnstyledButton>
-        </>
-      ) : (
-        <>
-          <span className={compact ? undefined : classes.converted}>
-            {note}
-            {compact && costCents != null && rate != null && rateSource != null && (
-              <>
-                {' '}
-                at {rate.toLocaleString(undefined, { maximumSignificantDigits: 4 })},{' '}
-                {SOURCE_LABELS[rateSource]}
-              </>
-            )}
-          </span>
-          {!compact && rate != null && rateSource != null && (
-            <span>
-              {describeRate(rate, entryCurrency, currency)} · {SOURCE_LABELS[rateSource]}
-            </span>
-          )}
-          <UnstyledButton
-            className={classes.rateToggle}
-            onClick={onChooseOwn}
-          >
-            Use my own rate
-          </UnstyledButton>
-        </>
-      )}
-    </div>
-  );
 }

@@ -16,6 +16,8 @@ interface TransferRowProps {
   fromMe?: boolean;
   /** A second line in the same box, e.g. how to pay */
   payLine?: ReactNode;
+  /** Something to do about it, such as marking it paid */
+  action?: ReactNode;
 }
 
 // "Chen pays Ben RM 102.50", used in the balance panel, Settle up and the share image:
@@ -28,6 +30,7 @@ const TransferRow = ({
   size = 'md',
   fromMe = false,
   payLine,
+  action,
 }: TransferRowProps) => {
   const avatar = { md: 26, lg: 30, xl: 52 }[size];
   const row = (
@@ -69,6 +72,7 @@ const TransferRow = ({
           <PersonName person={to} />
         </span>
       </span>
+      {action}
     </div>
   );
   if (payLine == null) return row;

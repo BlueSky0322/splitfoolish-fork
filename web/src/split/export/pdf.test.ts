@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { SplitMember } from '@shared/api';
 import type { Person } from '@shared/types';
 import { computeTotals } from '../derive';
-import type { SplitItem } from '../state';
+import type { SplitItem, SplitPayment } from '../state';
 import { FONT, makePdf } from './pdf';
 import { type ExportSource, exportRows } from './rows';
 
@@ -80,13 +80,18 @@ const hanakoPays: SplitMember = {
   paymentMethods: [{ id: 'm', type: 'DuitNow', detail: '012-345 6789' }],
 };
 
-function source(items: SplitItem[], people = [ryan, hanako]): ExportSource {
+function source(
+  items: SplitItem[],
+  people = [ryan, hanako],
+  payments: SplitPayment[] = [],
+): ExportSource {
   return {
     name: '日本旅行',
     currency: 'MYR',
     people,
     items,
-    totals: computeTotals(people, items),
+    payments,
+    totals: computeTotals(people, items, null, payments),
     members: [hanakoPays],
   };
 }
@@ -217,6 +222,26 @@ describe('a split as a PDF', () => {
     expect(texts()).toContain('No items yet.');
     expect(texts()).toContain('Nothing to settle yet.');
     expect(texts()).not.toContain('Balances');
+  });
+
+  test('lists payments made in a table of their own, only when there are any', async () => {
+    const paid: SplitPayment = {
+      id: 'p',
+      from: hanako,
+      to: ryan,
+      amount: 20,
+      itemId: 'h',
+      notes: null,
+      createdAt: Date.UTC(2026, 9, 13, 12),
+      original: null,
+    };
+    await makePdf(exportRows(source(trip.items, [ryan, hanako], [paid])), OCT_16);
+    expect(texts()).toContain('Payments');
+    const payments = tables()[3];
+    expect(payments.head).toEqual([['Date', 'Paid by', 'Paid to', 'For', 'Amount']]);
+    expect(payments.body).toEqual([
+      [expect.stringContaining('13'), hanako.name, 'Ryan', 'Hotel', 'RM 20.00'],
+    ]);
   });
 
   test('when everyone is even, says they are settled up', async () => {

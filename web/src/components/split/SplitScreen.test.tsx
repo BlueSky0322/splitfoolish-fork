@@ -155,6 +155,37 @@ describe('the split page', () => {
     await waitFor(() => expect(server.splits.get('trip')!.items).toHaveLength(2));
   });
 
+  test('marks a transfer as paid, which settles it; the payment can be deleted, with Undo', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+    const settling = screen.getByText('Who pays who').closest('section')!;
+    await user.click(within(settling).getByRole('button', { name: 'Mark as paid' }));
+    // Prefilled with who pays whom and how much; one tap records it
+    const form = await screen.findByRole('dialog');
+    expect(within(form).getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '30.00');
+    await user.click(within(form).getByRole('button', { name: 'Record payment' }));
+
+    expect(await screen.findByText('Everyone is settled up.')).toBeTruthy();
+    const payments = screen.getByRole('heading', { name: 'Payments' }).closest('section')!;
+    expect(within(payments).getByText(readsAs('Ann paid Ryan'))).toBeTruthy();
+    expect(within(payments).getByText(/^RM\s?30\.00$/)).toBeTruthy();
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.payments).toMatchObject([
+        { fromId: 'ann', toId: 'me', amount: 30, itemId: null },
+      ]),
+    );
+
+    await user.click(within(payments).getByRole('button', { name: 'Payment actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete payment' }));
+    expect(await screen.findByText(readsAs('Ann pays Ryan'))).toBeTruthy();
+    await waitFor(() => expect(server.splits.get('trip')!.payments).toEqual([]));
+    await user.click(await screen.findByRole('button', { name: 'Undo' }));
+    expect(await screen.findByText('Everyone is settled up.')).toBeTruthy();
+    await waitFor(() => expect(server.splits.get('trip')!.payments).toHaveLength(1));
+  });
+
   test('moving items to another day says so, with Undo to put each back on its own date', async () => {
     const split = trip();
     split.items[1].createdAt = Date.UTC(2026, 9, 8, 12);
@@ -433,6 +464,37 @@ describe('the split page', () => {
     ]);
     expect(selectedTab()).toBe('Photos');
     expect(await screen.findByRole('button', { name: 'Take photo' })).toBeTruthy();
+  });
+
+  test('on a phone, the item sheet records who paid their part back, and the Payments page lists it', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Dinner'));
+    const detail = await screen.findByRole('dialog');
+    await user.click(within(detail).getByRole('button', { name: 'Ann paid back' }));
+    // Her part of the dinner, for the dinner, to Ryan who paid
+    const save = await screen.findByRole('button', { name: 'Record payment' });
+    const form = save.closest('form')!;
+    expect(within(form).getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '45.00');
+    expect(within(form).getByText('For Dinner')).toBeTruthy();
+    await user.click(save);
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.payments).toMatchObject([
+        { fromId: 'ann', toId: 'me', amount: 45, itemId: 'dinner' },
+      ]),
+    );
+
+    // Every payment, on a page of its own from the menu; Back returns to the split
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    await user.click(within(await screen.findByRole('dialog')).getByText('Payments'));
+    expect(await screen.findByRole('heading', { name: 'Payments' })).toBeTruthy();
+    expect(window.location.search).toBe('?s=trip&payments');
+    expect(screen.getByText(readsAs('Ann paid Ryan'))).toBeTruthy();
+    expect(screen.getByText(/for Dinner/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to Trip' }));
+    await waitFor(() => expect(window.location.search).toBe('?s=trip'));
+    expect(await screen.findByText('Dinner')).toBeTruthy();
   });
 
   test("on a phone, the split's menu is a sheet", async () => {

@@ -1,8 +1,8 @@
 import { produce } from 'immer';
 import { describe, expect, test } from 'vitest';
-import type { Item, Person } from '@shared/types';
+import type { Item, Payment, Person } from '@shared/types';
 import type { SplitAction, SplitState } from './state';
-import { splitReducer, toApiItem } from './state';
+import { splitReducer, toApiItem, toApiPayment } from './state';
 
 const ann: Person = { id: 'a', name: 'Ann', memberEmail: null };
 const ben: Person = { id: 'b', name: 'Ben', memberEmail: null };
@@ -27,8 +27,8 @@ const run = (state: SplitState, ...actions: SplitAction[]) =>
 
 const loaded = () =>
   run(
-    { people: [], items: [] },
-    { type: 'LOAD_STATE', payload: { people: [ann, ben], items: [apiItem()] } },
+    { people: [], items: [], payments: [] },
+    { type: 'LOAD_STATE', payload: { people: [ann, ben], items: [apiItem()], payments: [] } },
   );
 
 describe('splitReducer', () => {
@@ -95,13 +95,54 @@ describe('splitReducer', () => {
     ],
   ])('an item %s loads and comes back unchanged', (_, item) => {
     const state = run(
-      { people: [], items: [] },
-      { type: 'LOAD_STATE', payload: { people: [ann, ben, cat], items: [item] } },
+      { people: [], items: [], payments: [] },
+      { type: 'LOAD_STATE', payload: { people: [ann, ben, cat], items: [item], payments: [] } },
     );
     const [client] = state.items;
     expect(client.payer).toEqual(item.payerId === 'c' ? cat : ben);
     expect(client.participants.map((p) => p.id)).toEqual(item.participantIds);
     expect(toApiItem(client)).toEqual(item);
+  });
+
+  test('loads payments with their people, keeps them in step, and unties one when its item goes', () => {
+    const paid: Payment = {
+      id: 'p1',
+      fromId: 'b',
+      toId: 'a',
+      amount: 15,
+      itemId: 'i1',
+      notes: null,
+      createdAt: 2,
+      original: null,
+    };
+    const ghost = { ...paid, id: 'p2', fromId: 'nobody' };
+    let state = run(
+      { people: [], items: [], payments: [] },
+      {
+        type: 'LOAD_STATE',
+        payload: { people: [ann, ben], items: [apiItem()], payments: [paid, ghost] },
+      },
+    );
+    // One whose person isn't in the bill waits for the next load
+    expect(state.payments.map((p) => p.id)).toEqual(['p1']);
+    expect(state.payments[0]).toMatchObject({ from: ben, to: ann });
+    expect(toApiPayment(state.payments[0])).toEqual(paid);
+
+    state = run(state, { type: 'UPDATE_PERSON', payload: { id: 'b', name: 'Benny' } });
+    expect(state.payments[0].from.name).toBe('Benny');
+    state = run(state, { type: 'REMOVE_ITEM', payload: 'i1' });
+    expect(state.payments[0].itemId).toBeNull();
+    state = run(
+      state,
+      { type: 'UPDATE_PAYMENT', payload: { ...paid, amount: 10 } },
+      { type: 'ADD_PAYMENT', payload: { ...paid, id: 'p3', itemId: null } },
+    );
+    expect(state.payments.map((p) => [p.id, p.amount])).toEqual([
+      ['p1', 10],
+      ['p3', 15],
+    ]);
+    state = run(state, { type: 'REMOVE_PAYMENT', payload: 'p1' });
+    expect(state.payments.map((p) => p.id)).toEqual(['p3']);
   });
 
   test('renaming a person renames them on the items that refer to them', () => {
@@ -132,16 +173,16 @@ describe('splitReducer', () => {
 
   test('drops participants that are no longer in the bill', () => {
     const state = run(
-      { people: [], items: [] },
-      { type: 'LOAD_STATE', payload: { people: [ann], items: [apiItem()] } },
+      { people: [], items: [], payments: [] },
+      { type: 'LOAD_STATE', payload: { people: [ann], items: [apiItem()], payments: [] } },
     );
     expect(state.items[0].participants).toEqual([ann]);
   });
 
   test('leaves out an item whose payer is not in the bill, until it reloads', () => {
     const state = run(
-      { people: [], items: [] },
-      { type: 'LOAD_STATE', payload: { people: [ben], items: [apiItem()] } },
+      { people: [], items: [], payments: [] },
+      { type: 'LOAD_STATE', payload: { people: [ben], items: [apiItem()], payments: [] } },
     );
     expect(state.items).toEqual([]);
   });

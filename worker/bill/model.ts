@@ -29,10 +29,28 @@ export interface ModelItem {
   } | null;
 }
 
-/** The split's people and items as they will be after each change, for checking the next one */
+/** What a payment paid in another currency was converted at, as for an item */
+export type Conversion = ModelItem['converted'];
+
+export interface ModelPayment {
+  fromId: string;
+  toId: string;
+  amountCents: number;
+  /** The item it settles, if any */
+  itemId: string | null;
+  /** When it was paid, in ms; one in another currency is converted at that day's rate */
+  createdAt: number;
+  converted: Conversion;
+}
+
+/**
+ * The split's people, items and payments as they will be after each change, for
+ * checking the next one
+ */
 export interface Model {
   people: Map<string, { name: string; memberEmail: string | null }>;
   items: Map<string, ModelItem>;
+  payments: Map<string, ModelPayment>;
   /** The split's currency; items in others are converted into it */
   currency: string;
   /** Its items are being converted into a new currency */
@@ -43,8 +61,28 @@ export interface Model {
   nextItemPosition: number;
 }
 
+/** The conversion columns of an item or payment row, as the model keeps them */
+interface ConversionRow {
+  currency: string | null;
+  cents: number | null;
+  rate: number | null;
+  source: RateSource | null;
+  at: number | null;
+}
+
+const conversionOf = (r: ConversionRow): Conversion =>
+  r.currency == null || r.cents == null || r.rate == null
+    ? null
+    : {
+        currency: r.currency,
+        cents: r.cents,
+        rate: r.rate,
+        source: savedRateSource(r.source),
+        at: r.at ?? 0,
+      };
+
 export async function loadModel(db: D1Database, splitId: string): Promise<Model> {
-  const [people, items, participants, positions, members, split] = await db.batch([
+  const [people, items, participants, payments, positions, members, split] = await db.batch([
     db
       .prepare('SELECT id, name, member_email AS memberEmail FROM people WHERE split_id = ?')
       .bind(splitId),
@@ -61,6 +99,14 @@ export async function loadModel(db: D1Database, splitId: string): Promise<Model>
         `SELECT ip.item_id AS itemId, ip.person_id AS personId,
            ip.original_exact_cents AS originalExactCents
          FROM item_participants ip JOIN items i ON i.id = ip.item_id WHERE i.split_id = ?`,
+      )
+      .bind(splitId),
+    db
+      .prepare(
+        `SELECT id, from_person_id AS fromId, to_person_id AS toId, amount_cents AS amountCents,
+           item_id AS itemId, created_at AS createdAt, original_currency AS currency,
+           original_cents AS cents, rate, rate_source AS source, rate_at AS at
+         FROM payments WHERE split_id = ?`,
       )
       .bind(splitId),
     db
@@ -87,17 +133,12 @@ export async function loadModel(db: D1Database, splitId: string): Promise<Model>
     ),
     items: new Map(
       (
-        items.results as {
+        items.results as ({
           id: string;
           payerId: string;
           splitMode: SplitMode;
           createdAt: number;
-          currency: string | null;
-          cents: number | null;
-          rate: number | null;
-          source: RateSource | null;
-          at: number | null;
-        }[]
+        } & ConversionRow)[]
       ).map((i) => [
         i.id,
         {
@@ -106,16 +147,29 @@ export async function loadModel(db: D1Database, splitId: string): Promise<Model>
           originalExact: new Map<string, number>(),
           splitMode: i.splitMode,
           createdAt: i.createdAt,
-          converted:
-            i.currency == null || i.cents == null || i.rate == null
-              ? null
-              : {
-                  currency: i.currency,
-                  cents: i.cents,
-                  rate: i.rate,
-                  source: savedRateSource(i.source),
-                  at: i.at ?? 0,
-                },
+          converted: conversionOf(i),
+        },
+      ]),
+    ),
+    payments: new Map(
+      (
+        payments.results as ({
+          id: string;
+          fromId: string;
+          toId: string;
+          amountCents: number;
+          itemId: string | null;
+          createdAt: number;
+        } & ConversionRow)[]
+      ).map((p) => [
+        p.id,
+        {
+          fromId: p.fromId,
+          toId: p.toId,
+          amountCents: p.amountCents,
+          itemId: p.itemId,
+          createdAt: p.createdAt,
+          converted: conversionOf(p),
         },
       ]),
     ),

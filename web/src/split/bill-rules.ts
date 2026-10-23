@@ -53,5 +53,6 @@ export function removalMessage(
     participantIds: i.participants.map((p) => p.id),
     splitMode: i.splitMode,
   }));
-  return removalBlocker(person, items, fromItems)?.message ?? null;
+  const payments = state.payments.map((p) => ({ fromId: p.from.id, toId: p.to.id }));
+  return removalBlocker(person, items, fromItems, payments)?.message ?? null;
 }

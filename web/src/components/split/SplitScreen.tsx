@@ -22,6 +22,7 @@ import DesktopSplitLayout from './layout/DesktopSplitLayout';
 import { MoveDateDialog } from './items/ItemSelection';
 import { ItemCards, ItemTable } from './items/ItemViews';
 import MobileSplitLayout from './layout/MobileSplitLayout';
+import PaymentsPage from './payments/PaymentsPage';
 import { AvatarVersionsContext, PersonName } from './PersonAvatar';
 import { PersonColorsContext } from './person-colors-context';
 import { personColors } from '../../split/person-colors';
@@ -39,7 +40,16 @@ import { canRemovePhoto } from '@shared/rules';
 // The split page: loads the split, works out what's shown from it, and builds the parts
 // both layouts place (the item list, the balances, the menu, the dialogs). The layouts
 // read the rest from SplitPageProvider.
-const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | null }) => {
+const SplitScreen = ({
+  splitId,
+  page: splitPage,
+  myEmail,
+}: {
+  splitId: string;
+  /** One of the split's own pages, instead of the split itself */
+  page: 'payments' | null;
+  myEmail: string | null;
+}) => {
   const { status, waiting, meta, metaChanges, refreshMeta, actions, retry, whenSaved } =
     useSplit(splitId);
   const photos = usePhotos({ splitId, meta, metaChanges, whenSaved });
@@ -60,8 +70,8 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
     ? meta?.distributorId ?? null
     : null;
   const totals = useMemo(
-    () => computeTotals(state.people, state.items, distributorId),
-    [state.people, state.items, distributorId],
+    () => computeTotals(state.people, state.items, distributorId, state.payments),
+    [state.people, state.items, distributorId, state.payments],
   );
   // My splits hears about a new picture first (it may be uploaded from New split)
   const listed = useMySplitsSnapshot().splits?.find((s) => s.id === splitId);
@@ -302,7 +312,9 @@ const SplitScreen = ({ splitId, myEmail }: { splitId: string; myEmail: string | 
       <SplitActionsContext.Provider value={actions}>
         <AvatarVersionsContext.Provider value={avatarVersions}>
           <PersonColorsContext.Provider value={colors}>
-            {isDesktop ? (
+            {splitPage === 'payments' ? (
+              <PaymentsPage dialogs={parts.dialogs} />
+            ) : isDesktop ? (
               <DesktopSplitLayout
                 parts={parts}
                 selection={selectionUi}

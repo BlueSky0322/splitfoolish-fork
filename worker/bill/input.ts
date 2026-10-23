@@ -19,7 +19,7 @@ import type { ItemOriginal } from '../../shared/types';
 import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../../shared/types';
 import type { Rate } from '../currency/exchange-rates';
 import { readName } from '../http';
-import type { Batch, Model, ModelItem, UncheckedChange } from './model';
+import type { Batch, Conversion, Model, ModelItem, UncheckedChange } from './model';
 import { Refused } from './model';
 
 const MAX_CATEGORY_LENGTH = 32;
@@ -88,10 +88,16 @@ function readOriginal(model: Model, raw: unknown): OriginalInput | null {
 }
 
 /** The saved conversion an edit keeps, by the rule the app's preview follows too */
-const reusableConversion = (model: Model, itemId: unknown, original: OriginalInput) => {
-  const saved = typeof itemId === 'string' ? model.items.get(itemId)?.converted : null;
-  return saved != null && keepsSavedConversion(saved, original) ? saved : null;
-};
+const reusableConversion = (saved: Conversion | undefined, original: OriginalInput) =>
+  saved != null && keepsSavedConversion(saved, original) ? saved : null;
+
+/** What an item or payment being edited was converted at, if it was */
+const savedConversion = (model: Model, op: UncheckedChange['op'], id: unknown) =>
+  typeof id !== 'string'
+    ? null
+    : op === 'updatePayment'
+      ? model.payments.get(id)?.converted
+      : model.items.get(id)?.converted;
 
 /** What a setRate change does, checked: the currency, and the rate typed (or null) */
 export function readRateChange(
@@ -154,8 +160,17 @@ export function ratesToFetch(model: Model, changes: Batch): Map<string, RateWant
           original && { currency: original.currency, typed: original.manualRate != null },
         );
         if (original == null || original.manualRate != null) continue;
-        if (reusableConversion(model, id, original) != null) continue;
+        if (reusableConversion(savedConversion(model, change.op, id), original) != null) continue;
         want(original.currency, at);
+      } else if (change?.op === 'addPayment' || change?.op === 'updatePayment') {
+        // A payment in another currency takes the rate of the day it was paid, like an item
+        const payment = (change.payment ?? {}) as Record<string, unknown>;
+        const original = readOriginal(model, payment.original);
+        if (original == null || original.manualRate != null) continue;
+        if (reusableConversion(savedConversion(model, change.op, payment.id), original) != null) {
+          continue;
+        }
+        want(original.currency, paidAt(model, change.op, change.payment));
       }
     } catch (err) {
       // Refused properly when the batch is checked
@@ -166,12 +181,22 @@ export function ratesToFetch(model: Model, changes: Batch): Map<string, RateWant
 }
 
 /**
- * When an item being saved was paid: for a new one, the time it brings (readCreatedAt);
- * for an edit, the date it has now, which only setItemDate changes
+ * When an item or payment being saved was paid: for a new one, the time it brings
+ * (readCreatedAt); for an item edit, the date it has now, which only setItemDate
+ * changes; for a payment edit, the date sent, when it's one, else the one it has
  */
-export function paidAt(model: Model, op: 'addItem' | 'updateItem', raw: unknown) {
-  if (op === 'addItem') return readCreatedAt(raw);
-  const id = (raw as { id?: unknown } | null)?.id;
+export function paidAt(
+  model: Model,
+  op: 'addItem' | 'updateItem' | 'addPayment' | 'updatePayment',
+  raw: unknown,
+) {
+  if (op === 'addItem' || op === 'addPayment') return readCreatedAt(raw);
+  const sent = raw as { id?: unknown; createdAt?: unknown } | null;
+  const id = sent?.id;
+  if (op === 'updatePayment') {
+    if (isItemDate(sent?.createdAt)) return sent.createdAt;
+    return (typeof id === 'string' ? model.payments.get(id)?.createdAt : null) ?? Date.now();
+  }
   return (typeof id === 'string' ? model.items.get(id)?.createdAt : null) ?? Date.now();
 }
 
@@ -315,19 +340,14 @@ export function readItem(model: Model, raw: unknown, rates: FetchedRates, paid: 
 
   // In another currency: converted here, whatever the app worked out for its preview
   const original = readOriginal(model, item.original);
-  let converted: ModelItem['converted'] = null;
-  let costCents: number;
-  if (original != null) {
-    const { rate, source, at } =
-      reusableConversion(model, item.id, original) ??
-      chooseRate(original.manualRate, rates.get(rateKey(original.currency, paid)));
-    converted = { currency: original.currency, cents: original.cents, rate, source, at };
-    costCents = convertCents(original.cents, rate);
-  } else {
-    costCents = toCents(readCost(item.cost));
-  }
-
-  if (!fitsItemCents(costCents)) throw new Refused(tooLarge(model.currency));
+  const { converted, cents: costCents } = convertedAmount(
+    model,
+    original,
+    original == null ? item.cost : null,
+    savedConversion(model, 'updateItem', item.id),
+    rates,
+    paid,
+  );
 
   const payerId = item.payerId;
   if (typeof payerId !== 'string' || !model.people.has(payerId)) {
@@ -362,17 +382,6 @@ export function readItem(model: Model, raw: unknown, rates: FetchedRates, paid: 
     category = item.category.trim();
   }
 
-  let notes: string | null = null;
-  if (item.notes != null) {
-    if (typeof item.notes !== 'string') throw new Refused('Invalid notes');
-    // Kept as typed, line breaks and all; only blank space around them goes
-    const trimmed = item.notes.trim();
-    if (trimmed.length > MAX_NOTES_LENGTH) {
-      throw new Refused(`Notes can be up to ${MAX_NOTES_LENGTH} characters`);
-    }
-    notes = trimmed === '' ? null : trimmed;
-  }
-
   return {
     id: item.id,
     name,
@@ -381,7 +390,92 @@ export function readItem(model: Model, raw: unknown, rates: FetchedRates, paid: 
     splitMode,
     participants,
     category,
-    notes,
+    notes: readNotes(item.notes),
+    converted,
+  };
+}
+
+/** Notes as sent, checked: kept as typed, line breaks and all; only blank space around them goes */
+export function readNotes(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string') throw new Refused('Invalid notes');
+  const trimmed = value.trim();
+  if (trimmed.length > MAX_NOTES_LENGTH) {
+    throw new Refused(`Notes can be up to ${MAX_NOTES_LENGTH} characters`);
+  }
+  return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * An amount in the split's currency: converted from what was typed in another (at a
+ * conversion kept from before, the rate typed, or the one fetched for `paid`), or
+ * read as sent; refused when it comes to more than the bill holds exactly
+ */
+function convertedAmount(
+  model: Model,
+  original: OriginalInput | null,
+  plain: unknown,
+  saved: Conversion | undefined,
+  rates: FetchedRates,
+  paid: number,
+): { converted: Conversion; cents: number } {
+  let converted: Conversion = null;
+  let cents: number;
+  if (original != null) {
+    const { rate, source, at } =
+      reusableConversion(saved, original) ??
+      chooseRate(original.manualRate, rates.get(rateKey(original.currency, paid)));
+    converted = { currency: original.currency, cents: original.cents, rate, source, at };
+    cents = convertCents(original.cents, rate);
+  } else {
+    cents = toCents(readCost(plain));
+  }
+  if (!fitsItemCents(cents)) throw new Refused(tooLarge(model.currency));
+  return { converted, cents };
+}
+
+/**
+ * A payment as sent, checked: between two different people in the split, of more than
+ * nothing, for an item that is there if it names one; one in another currency is
+ * converted at the rate for `paid`
+ */
+export function readPayment(model: Model, raw: unknown, rates: FetchedRates, paid: number) {
+  const payment = (raw ?? {}) as Record<string, unknown>;
+  if (!isRowId(payment.id)) throw new Refused('Invalid payment');
+  const { fromId, toId } = payment;
+  if (
+    typeof fromId !== 'string' ||
+    typeof toId !== 'string' ||
+    !model.people.has(fromId) ||
+    !model.people.has(toId)
+  ) {
+    throw new Refused('A payment is between two people in this split');
+  }
+  if (fromId === toId) throw new Refused('A payment is between two different people');
+  const original = readOriginal(model, payment.original);
+  const { converted, cents: amountCents } = convertedAmount(
+    model,
+    original,
+    original == null ? payment.amount : null,
+    savedConversion(model, 'updatePayment', payment.id),
+    rates,
+    paid,
+  );
+  if (amountCents <= 0) throw new Refused('A payment is of more than nothing');
+  let itemId: string | null = null;
+  if (payment.itemId != null) {
+    if (typeof payment.itemId !== 'string' || !model.items.has(payment.itemId)) {
+      throw new Refused('That item was removed by someone else');
+    }
+    itemId = payment.itemId;
+  }
+  return {
+    id: payment.id,
+    fromId,
+    toId,
+    amountCents,
+    itemId,
+    notes: readNotes(payment.notes),
     converted,
   };
 }

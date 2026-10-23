@@ -4,12 +4,12 @@
 // currencies used in them, for Settings.
 
 import type { FoundItem, ItemNameUse, SplitSummary } from '../../shared/api';
-import type { SettleItem, SplitMode } from '../../shared/settle';
+import type { SettleItem, SplitMode, Transfer } from '../../shared/settle';
 import { balances } from '../../shared/settle';
 import type { Role } from '../../shared/types';
 
 export async function listSplitSummaries(db: D1Database, email: string): Promise<SplitSummary[]> {
-  const [splits, items, participants, mine, people] = await db.batch([
+  const [splits, items, participants, mine, people, payments] = await db.batch([
     db
       .prepare(
         `SELECT s.id, s.name, s.currency, s.updated_at AS updatedAt, m.role,
@@ -49,6 +49,13 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
          JOIN split_members m ON m.split_id = p.split_id WHERE m.email = ?`,
       )
       .bind(email),
+    db
+      .prepare(
+        `SELECT p.split_id AS splitId, p.from_person_id AS fromId, p.to_person_id AS toId,
+           p.amount_cents AS amountCents
+         FROM payments p JOIN split_members m ON m.split_id = p.split_id WHERE m.email = ?`,
+      )
+      .bind(email),
   ]);
 
   const bySplit = new Map<string, SettleItem[]>();
@@ -84,6 +91,10 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
   for (const p of people.results as { splitId: string; id: string }[]) {
     peopleOf.set(p.splitId, [...(peopleOf.get(p.splitId) ?? []), p.id]);
   }
+  const paidBack = new Map<string, Transfer[]>();
+  for (const p of payments.results as ({ splitId: string } & Transfer)[]) {
+    paidBack.set(p.splitId, [...(paidBack.get(p.splitId) ?? []), p]);
+  }
 
   return (
     splits.results as {
@@ -98,6 +109,7 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
     }[]
   ).map((s) => {
     const splitItems = bySplit.get(s.id) ?? [];
+    const splitPayments = paidBack.get(s.id) ?? [];
     const me = myPerson.get(s.id);
     const ids = peopleOf.get(s.id) ?? [];
     const totalCents = splitItems.reduce((a, i) => a + i.costCents, 0);
@@ -107,13 +119,14 @@ export async function listSplitSummaries(db: D1Database, email: string): Promise
       peopleCount: ids.length,
       itemCount: splitItems.length,
       totalCents,
-      // Something was spent and no one owes anyone
+      // Something was spent and no one owes anyone, payments counted
       settled:
         totalCents > 0 &&
-        [...balances(ids, splitItems).values()].every((b) => b.balanceCents === 0),
+        [...balances(ids, splitItems, splitPayments).values()].every((b) => b.balanceCents === 0),
       // Null when no one in the bill is linked to this account; balances() gives every
       // id it's asked about an entry
-      myBalanceCents: me == null ? null : balances([me], splitItems).get(me)!.balanceCents,
+      myBalanceCents:
+        me == null ? null : balances([me], splitItems, splitPayments).get(me)!.balanceCents,
     };
   });
 }

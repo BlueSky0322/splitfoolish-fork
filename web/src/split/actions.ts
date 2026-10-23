@@ -1,6 +1,7 @@
 import type { Dispatch } from 'react';
-import type { ItemInput } from '../api';
-import type { Item as ApiItem, Change } from '@shared/types';
+import type { ItemInput, PaymentInput } from '../api';
+import type { Item as ApiItem, Change, Payment } from '@shared/types';
+import { toCents } from '@shared/rates';
 import { showRefusal } from '../utils/notify';
 import { newId } from '../utils/id';
 import { atRate, removalMessage } from './bill-rules';
@@ -49,6 +50,12 @@ export interface SplitActions {
   clearItems: () => boolean;
   /** Every item in a currency at a typed rate, or when null at the rate on the day it was paid */
   setRate: (currency: string, rate: number | null) => boolean;
+  /** Records that one person paid another; id lets the caller refer to it straight away */
+  addPayment: (payment: PaymentInput, options?: { id?: string }) => boolean;
+  updatePayment: (paymentId: string, payment: PaymentInput) => boolean;
+  removePayment: (paymentId: string) => boolean;
+  /** Puts back a payment that was just removed (Undo) */
+  restorePayment: (payment: Payment) => boolean;
 }
 
 export interface ActionDeps {
@@ -67,6 +74,19 @@ const refuse = (message: string) => {
   showRefusal(message);
   return false;
 };
+
+/** Why a payment can't be saved, in the server's words, or null when it can */
+function paymentProblem(state: SplitState, p: PaymentInput): string | null {
+  const here = (id: string) => state.people.some((person) => person.id === id);
+  if (!here(p.fromId) || !here(p.toId)) return 'A payment is between two people in this split';
+  if (p.fromId === p.toId) return 'A payment is between two different people';
+  const amount = p.original?.amount ?? p.amount;
+  if (!(toCents(amount) > 0)) return 'A payment is of more than nothing';
+  if (p.itemId != null && !state.items.some((i) => i.id === p.itemId)) {
+    return 'That item was removed by someone else';
+  }
+  return null;
+}
 
 export const makeSplitActions = (d: ActionDeps): SplitActions => {
   // Someone with an account loses access along with their person, as the server does it,
@@ -139,6 +159,9 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
     clearPeople: () => {
       if (d.current().items.length > 0) {
         return refuse('Remove the items first, then clear the people.');
+      }
+      if (d.current().payments.length > 0) {
+        return refuse('Remove the payments first, then clear the people.');
       }
       revokeAccessOf(d.current().people);
       d.dispatch({ type: 'CLEAR_PEOPLE', payload: null });
@@ -225,6 +248,40 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
         }
       }
       d.queue({ op: 'setRate', currency, rate });
+      return true;
+    },
+    addPayment: (input, { id = newId() } = {}) => {
+      const problem = paymentProblem(d.current(), input);
+      if (problem) return refuse(problem);
+      const payment = { id, ...input };
+      d.dispatch({ type: 'ADD_PAYMENT', payload: payment });
+      // In another currency the server works out the amount; show its number after
+      if (input.original) d.reloadAfterSave();
+      d.queue({ op: 'addPayment', payment });
+      return true;
+    },
+    updatePayment: (paymentId, input) => {
+      const existing = d.current().payments.find((p) => p.id === paymentId);
+      // Removed meanwhile, say by someone else
+      if (existing == null) return refuse('That payment has been removed');
+      const problem = paymentProblem(d.current(), input);
+      if (problem) return refuse(problem);
+      const payment = { id: paymentId, ...input };
+      d.dispatch({ type: 'UPDATE_PAYMENT', payload: payment });
+      if (input.original || existing.original) d.reloadAfterSave();
+      d.queue({ op: 'updatePayment', payment });
+      return true;
+    },
+    removePayment: (paymentId) => {
+      if (!d.current().payments.some((p) => p.id === paymentId)) return false;
+      d.dispatch({ type: 'REMOVE_PAYMENT', payload: paymentId });
+      d.queue({ op: 'removePayment', id: paymentId });
+      return true;
+    },
+    restorePayment: (payment) => {
+      if (d.current().payments.some((p) => p.id === payment.id)) return false;
+      d.dispatch({ type: 'ADD_PAYMENT', payload: payment });
+      d.queue({ op: 'addPayment', payment });
       return true;
     },
   };

@@ -4,7 +4,7 @@
 
 import type { PaymentMethod } from './payments';
 import type { RateSource } from './rates';
-import type { Change, Item, Person, Role } from './types';
+import type { Change, Item, Payment, Person, Role } from './types';
 
 // ---------- Account ----------
 
@@ -144,6 +144,7 @@ export interface SplitDetail {
   attachments: Attachment[];
   people: Person[];
   items: Item[];
+  payments: Payment[];
 }
 
 /** An item name used in your splits, for suggestions */

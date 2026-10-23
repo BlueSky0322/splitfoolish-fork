@@ -38,11 +38,11 @@ const meta = {
 
 function setup(items: Item[] = [item()]) {
   let state = produce<SplitState>(
-    { people: [], items: [] },
+    { people: [], items: [], payments: [] },
     (draft) =>
       void splitReducer(draft, {
         type: 'LOAD_STATE',
-        payload: { people: [ryan, ann, ben], items },
+        payload: { people: [ryan, ann, ben], items, payments: [] },
       }),
   );
   const queued: Change[] = [];
@@ -160,6 +160,40 @@ describe('split actions', () => {
     expect(actions.removeItem('i1')).toBe(true);
     expect(state().items.map((i) => i.id)).toEqual(['i2']);
     expect(queued).toEqual([{ op: 'removeItem', id: 'i1' }]);
+  });
+
+  test('a payment shows what is queued, is refused when it makes no sense, and comes back with Undo', () => {
+    const { actions, queued, state } = setup();
+    const input = {
+      fromId: 'b',
+      toId: 'r',
+      amount: 15,
+      itemId: 'i1',
+      notes: null,
+      createdAt: 5,
+      original: null,
+    };
+    expect(actions.addPayment(input, { id: 'p1' })).toBe(true);
+    expect(state().payments).toMatchObject([{ id: 'p1', from: { id: 'b' }, to: { id: 'r' } }]);
+    expect(queued).toEqual([{ op: 'addPayment', payment: { id: 'p1', ...input } }]);
+
+    // To oneself, of nothing, or for an item that is gone: refused, and nothing queued
+    expect(actions.addPayment({ ...input, toId: 'b' })).toBe(false);
+    expect(actions.addPayment({ ...input, amount: 0 })).toBe(false);
+    expect(actions.addPayment({ ...input, itemId: 'gone' })).toBe(false);
+    expect(actions.updatePayment('p9', input)).toBe(false);
+    expect(queued).toHaveLength(1);
+    // Clearing everyone waits for the payments to go
+    expect(actions.clearPeople()).toBe(false);
+
+    expect(actions.removePayment('p1')).toBe(true);
+    expect(state().payments).toEqual([]);
+    expect(actions.restorePayment({ id: 'p1', ...input })).toBe(true);
+    expect(state().payments.map((p) => p.id)).toEqual(['p1']);
+    expect(queued.slice(1)).toEqual([
+      { op: 'removePayment', id: 'p1' },
+      { op: 'addPayment', payment: { id: 'p1', ...input } },
+    ]);
   });
 
   test('a name already in the split is refused, and nothing is queued', () => {

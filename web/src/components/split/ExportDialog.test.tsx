@@ -82,7 +82,9 @@ const TRIP_CSV =
   'Ann,30.00,139.00,-109.00\r\n' +
   '\r\n' +
   'From,To,Amount\r\n' +
-  'Ann,Ryan,109.00\r\n';
+  'Ann,Ryan,109.00\r\n' +
+  '\r\n' +
+  'Date,Paid by,Paid to,Amount (MYR),Original currency,Original amount,Rate,For,Notes\r\n';
 
 /** On a computer: More, then Export */
 async function openExport(server = fakeServer(trip())) {

@@ -1,11 +1,17 @@
-// A split's bill as the apps show it: its people and their items, read in one batch
-// with the rest of the split.
+// A split's bill as the apps show it: its people, their items and the payments between
+// them, read in one batch with the rest of the split.
 
 import type { RateSource } from '../../shared/rates';
 import type { SplitMode } from '../../shared/settle';
-import type { Item, Person } from '../../shared/types';
+import type { Item, Payment, Person } from '../../shared/types';
 
-/** Reads a split's people and items; run as part of a larger batch, then pass to assembleContent */
+/** How many statements contentStatements makes, for callers that batch them with others */
+export const CONTENT_STATEMENTS = 4;
+
+/**
+ * Reads a split's people, items and payments; run as part of a larger batch, then pass
+ * to assembleContent
+ */
 export const contentStatements = (db: D1Database, splitId: string) => [
   db
     .prepare(
@@ -31,6 +37,14 @@ export const contentStatements = (db: D1Database, splitId: string) => [
        JOIN items i ON i.id = ip.item_id
        JOIN people p ON p.id = ip.person_id
        WHERE i.split_id = ? ORDER BY p.position, p.rowid`,
+    )
+    .bind(splitId),
+  db
+    .prepare(
+      `SELECT id, from_person_id AS fromId, to_person_id AS toId, amount_cents AS amountCents,
+         item_id AS itemId, notes, created_at AS createdAt, original_currency AS originalCurrency,
+         original_cents AS originalCents, rate, rate_source AS rateSource, rate_at AS rateAt
+       FROM payments WHERE split_id = ? ORDER BY created_at, rowid`,
     )
     .bind(splitId),
 ];
@@ -59,7 +73,22 @@ interface ParticipantRow {
   originalExactCents: number | null;
 }
 
-export function assembleContent([people, items, participants]: D1Result[]) {
+interface PaymentRow {
+  id: string;
+  fromId: string;
+  toId: string;
+  amountCents: number;
+  itemId: string | null;
+  notes: string | null;
+  createdAt: number;
+  originalCurrency: string | null;
+  originalCents: number | null;
+  rate: number | null;
+  rateSource: RateSource | null;
+  rateAt: number | null;
+}
+
+export function assembleContent([people, items, participants, payments]: D1Result[]) {
   const byItem = new Map<string, ParticipantRow[]>();
   for (const row of participants.results as ParticipantRow[]) {
     byItem.set(row.itemId, [...(byItem.get(row.itemId) ?? []), row]);
@@ -105,5 +134,26 @@ export function assembleContent([people, items, participants]: D1Result[]) {
               },
       };
     }),
+    payments: (payments.results as PaymentRow[]).map(
+      (p): Payment => ({
+        id: p.id,
+        fromId: p.fromId,
+        toId: p.toId,
+        amount: p.amountCents / 100,
+        itemId: p.itemId,
+        notes: p.notes,
+        createdAt: p.createdAt,
+        original:
+          p.originalCurrency == null
+            ? null
+            : {
+                currency: p.originalCurrency,
+                amount: (p.originalCents ?? 0) / 100,
+                rate: p.rate ?? undefined,
+                rateSource: p.rateSource ?? undefined,
+                rateAt: p.rateAt ?? undefined,
+              },
+      }),
+    ),
   };
 }

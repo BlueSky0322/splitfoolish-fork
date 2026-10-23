@@ -101,9 +101,10 @@ worked out.
 ## Editing a split: items and people
 
 **What it is.** The split page (`?s=<id>`): its people, its items (added, added to a
-day from its heading, edited, duplicated, moved to another day, deleted) and its details.
+day from its heading, edited, duplicated, moved to another day, deleted), the payments
+between its people (recorded, edited, deleted) and its details.
 
-**Owner.** The bill (people and items) is changed only through
+**Owner.** The bill (people, items and payments) is changed only through
 [split/actions.ts](../web/src/split/actions.ts), which updates
 [split/state.ts](../web/src/split/state.ts) at once and queues the matching `Change` in
 [split/useSaveQueue.ts](../web/src/split/useSaveQueue.ts). The split's other details
@@ -164,6 +165,12 @@ queued after it and reloads the split.
 - An item comes to at most `MAX_ITEM_CENTS` once converted (`fitsItemCents`), and a split
   holds at most `MAX_ITEMS`, so totals and shares stay exact. A currency change an item
   is too large for puts the split back in its old currency (`currency/reconvert.ts`).
+- A payment (`addPayment`, `updatePayment`, `removePayment`; `readPayment` in
+  `bill/input.ts`) is between two different people in the split, of more than nothing,
+  and may name an item that is there. Someone who made or received a payment stays in
+  the split (`removalBlocker`), and the people can't be cleared while any remain. An
+  item that goes leaves its payments, untied (`item_id` cleared by `changes.ts`, SET
+  NULL as the backstop). A payment is capped like items and converted like them.
 - Only the newest load of a split is shown, and a device copy never replaces what the
   server said (`useSplit.ts`).
 - People's colours are worked out, not stored: by their order in the split, the first
@@ -182,12 +189,17 @@ order), [person-colors.test.ts](../web/src/split/person-colors.test.ts),
 
 ## Settling up and currencies
 
-**What it is.** Who owes whom and how they pay, items paid in other currencies, the
-Currencies sheet, and the Convert page (`?convert`).
+**What it is.** Who owes whom and how they pay, payments made between people (Mark as
+paid on a transfer, Paid back on someone's part of an item, the Payments page at
+`?s=<id>&payments`), items paid in other currencies, the Currencies sheet, and the
+Convert page (`?convert`).
 
 **Owner.** Settling is worked out, not stored: [split/derive.ts](../web/src/split/derive.ts)
 turns the bill into totals, balances and transfers with
-[shared/settle.ts](../shared/settle.ts). Converted items keep their original amount and
+[shared/settle.ts](../shared/settle.ts), each balance paid less share, plus payments
+made less received. Payments themselves are part of the bill (see Editing a split):
+[components/split/payments/](../web/src/components/split/payments/PaymentsPage.tsx)
+records, lists, edits and deletes them through the split's actions. Converted items keep their original amount and
 the rate on the day they were paid (`getRateOn` in
 [worker/currency/exchange-rates.ts](../worker/currency/exchange-rates.ts)), so settling
 never moves with today's rates; [split/currencies.ts](../web/src/split/currencies.ts)
@@ -217,7 +229,9 @@ lists them for the Currencies sheet, and typed rates go through the split's acti
   [AGENTS.md](../AGENTS.md)).
 - Converted exact parts add up to the converted total, the leftover cents going by
   largest remainder (`convertParts`).
-- An item is recorded at the rate on the UTC day it was paid (`rateDay`) and kept at
+- A payment never counts in the split's total, and is never shown as an item: the
+  total is what was spent, settling is what moved between people.
+- An item, or a payment, is recorded at the rate on the UTC day it was paid (`rateDay`) and kept at
   it, so what someone owes never moves with the rates: a new amount is converted at the
   same rate (`keepsSavedConversion`), and moving it to another day (`setItemDate`)
   leaves the rate. Only a typed rate, a new currency for the item, or a new currency for
@@ -245,7 +259,8 @@ again with its id).
 ## Exporting a split
 
 **What it is.** Export in the split's menu (More on computers, ⋯ on phones): a CSV for
-spreadsheets or a PDF to keep or send, shared on phones and saved elsewhere.
+spreadsheets or a PDF to keep or send, shared on phones and saved elsewhere. Both list
+the items, the balances, who pays who, and the payments made.
 
 **Owner.** [split/export/](../web/src/split/export/export.ts) builds both from the
 split as this device shows it (unsaved changes included); nothing is sent to the
@@ -520,8 +535,10 @@ what Back does.
 **Owner.**
 
 - [hooks/useRoute.ts](../web/src/hooks/useRoute.ts): pages come from the query string
-  (`?s=<id>`, `?settings`, `?convert`, `?tab=invites`) through `navigate()`, and the
-  last page reopens on a fresh start.
+  (`?s=<id>`, `?s=<id>&payments`, `?settings`, `?convert`, `?tab=invites`) through
+  `navigate()` (`splitAddress` for a split's pages), and the last page reopens on a
+  fresh start. A page opened from another goes back up with `goUp`: Back when it came
+  from there, else straight there in its own place.
 - [hooks/useBreakpoints.ts](../web/src/hooks/useBreakpoints.ts): `useIsMobile` (under
   768px) and `useIsDesktop` (1024px and up).
 - [hooks/useBackDismiss.ts](../web/src/hooks/useBackDismiss.ts): Back closes the top
@@ -569,9 +586,9 @@ cases (`{ size: 'phone' }`) in
 
 **What it is.** An agent signs in over OAuth as one account and uses tools at `/mcp`
 to read splits and their photos, create splits, add (one or many at once), edit, date
-and remove expenses (in the split's currency or another), record a payment between two
-people (kept as an expense), add receipts and split photos, add, rename and remove
-people, and route payments. Splits and people can be named by id, name or enough of a
+and remove expenses (in the split's currency or another), record and remove payments
+between two people, add receipts and split photos, add, rename and remove people, and
+route payments. Splits and people can be named by id, name or enough of a
 name, and answers name people by name; a miss lists what there is. A write can answer
 with the balances after it, and reads membership, the retry receipt and the bill in one
 database round trip (`loadSplit`). The contracts, units, retries and deployment steps are in

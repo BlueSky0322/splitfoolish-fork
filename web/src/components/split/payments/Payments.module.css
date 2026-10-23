@@ -1,0 +1,168 @@
+/* A payment: "Tom → Ryan  RM 30.00", with when and what for under the names */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--sf-border);
+  border-radius: 12px;
+  background: var(--sf-surface);
+}
+
+.arrow {
+  color: var(--sf-text-muted);
+  flex: 0 0 auto;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.line {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.details {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amount {
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+/* The Payments page */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 16px 24px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sf-text-muted);
+  font-size: 14px;
+  min-width: 0;
+}
+
+.back span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.summary {
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--sf-text-muted);
+  font-size: 14px;
+}
+
+/* The payment form */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.amountRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--sf-border);
+  border-radius: 14px;
+}
+
+.amountRow:focus-within {
+  border-color: var(--sf-accent);
+}
+
+.currency {
+  flex: 0 0 auto;
+  width: 76px;
+}
+
+.amountInput {
+  font-family: var(--sf-font-num);
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--sf-text);
+  font-size: 30px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.amountInput::placeholder {
+  color: color-mix(in srgb, var(--sf-text) 30%, transparent);
+}
+
+.error {
+  font-size: 12px;
+  color: var(--mantine-color-error);
+}
+
+.people {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.forItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--sf-text-muted);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
