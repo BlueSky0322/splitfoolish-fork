@@ -36,7 +36,9 @@ OAuth 2.1 authorization code with PKCE (S256), run by
   most 100 characters and at most 5 redirect addresses. A registered app is kept 90 days.
 - **The consent page** sits behind Cloudflare Access like the rest of the app. The
   account the agent acts as is the one Access signed in there, verified again on the
-  page; nothing the agent or the form sends can change it.
+  page; nothing the agent or the form sends can change it. The page shows who is
+  asking (a registered app's name is its own claim, and the page says so), where the
+  access goes, and what it may do, in the account's theme and accent.
 - **Scopes:** `splits:read` (list and read splits, their people, expenses, balances and
   photos) and `splits:write` (everything the account can change itself: make splits,
   add, change and remove expenses and photos, record payments, add, rename or remove

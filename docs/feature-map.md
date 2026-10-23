@@ -611,9 +611,11 @@ retry receipt saved alongside. Photos go through `addAttachment` in
 - Sign-in: [mcp/oauth.ts](../worker/mcp/oauth.ts), with
   `@cloudflare/workers-oauth-provider` running discovery, registration, tokens and the
   bearer check; the consent page at `/oauth/authorize` is the app's, behind Access.
-  Grants live in the `OAUTH_KV` namespace (hashed by the library). The page can't
-  import the app, so it keeps copies of the app's colours (`web/src/theme/tokens.css`,
-  the Blurple accent) and icon (`web/public/icon.svg`): change both together.
+  Grants live in the `OAUTH_KV` namespace (hashed by the library). The page follows
+  the account's theme and accent (`getAppearance` in `accounts/profiles.ts`, the ramps
+  in `shared/accents.ts`); it can't import the app, so it keeps copies of the app's
+  neutral colours (`web/src/theme/tokens.css`) and icon (`web/public/icon.svg`): change
+  both together.
 - Tools: [mcp/server.ts](../worker/mcp/server.ts) (a fresh stateless MCP server per
   request, the Origin check and scope step-up) and
   [mcp/tools.ts](../worker/mcp/tools.ts). Reads reuse `listSplitSummaries`,

@@ -2,7 +2,7 @@ import { Button, UnstyledButton } from '@mantine/core';
 import { CheckCircle, Plus } from '@phosphor-icons/react';
 import type { CSSProperties } from 'react';
 import { useProfile } from '../../profile/ProfileContext';
-import { ACCENT_RAMPS } from '../../theme/accents';
+import { ACCENT_RAMPS } from '@shared/accents';
 import type { Accent } from '@shared/api';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';

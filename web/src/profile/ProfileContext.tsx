@@ -18,7 +18,7 @@ import {
   signInAddress,
   writeCache,
 } from '../offline/cache';
-import { isAccent } from '../theme/accents';
+import { isAccent } from '@shared/accents';
 import {
   DEFAULT_SETTINGS,
   THEMES,
