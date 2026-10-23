@@ -1018,6 +1018,17 @@ describe('profile, pictures and photos', () => {
     expect(profile.displayName).toBe('Mei');
     expect(profile.settings.theme).toBe('light');
     expect(profile.preferredPaymentMethodId).toBe(methods[1].id);
+    // Items grouped by week or month follow the account like the other groupings
+    for (const itemsGroupBy of ['week', 'month']) {
+      expect((await api.call(me, 'PATCH', '/api/me', { settings: { itemsGroupBy } })).status).toBe(
+        200,
+      );
+      expect((await api.call(me, 'GET', '/api/me')).data.settings.itemsGroupBy).toBe(itemsGroupBy);
+    }
+    expect(
+      (await api.call(me, 'PATCH', '/api/me', { settings: { itemsGroupBy: 'fortnight' } })).status,
+    ).toBe(400);
+    expect((await api.call(me, 'GET', '/api/me')).data.settings.itemsGroupBy).toBe('month');
     expect(profile.paymentMethods.map((m: { id: string }) => m.id)).toEqual(
       methods.map((m) => m.id),
     );
