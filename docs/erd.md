@@ -7,6 +7,8 @@ account key everywhere.
 ```mermaid
 erDiagram
     splits ||--o{ split_members : "shared with"
+    splits ||--o{ change_receipts : "saves noted"
+    splits ||--o{ mcp_receipts : "agent writes noted"
     splits ||--o{ split_invites : "pending invites"
     splits ||--o{ people : "in the bill"
     splits ||--o{ items : "bought"
@@ -43,7 +45,28 @@ erDiagram
         text role "owner or editor"
         text share_token UK "a member's own share link"
         int sort_position "their own order for My splits; null comes first"
+        int archived_at "null: in My splits, not the archive"
         int joined_at
+    }
+    change_receipts {
+        text split_id PK, FK
+        text email PK "the account that sent it"
+        text change_id PK "the app's id for the change"
+        text fingerprint "the change as sent"
+        int saved_at "kept 90 days"
+    }
+    mcp_receipts {
+        text email PK "the account the agent acts as"
+        text request_id PK "the agent's id for the request"
+        text fingerprint "which tool, split, expense and fields"
+        text tool
+        text split_id FK
+        text expense_id
+        int saved_at "kept with the split"
+    }
+    write_guards {
+        int member "never a row: NOT NULL refuses a write whose check failed"
+        int currency
     }
     split_invites {
         text id PK
@@ -219,7 +242,45 @@ erDiagram
   can't bring them back. Changing the link, by reset or removal, also withdraws the
   invites picked up from it. Only the owner changes `people`; anyone in the split can
   change `items`.
+- **Saves are noted, so a retry counts once.** `change_receipts` keeps each change the
+  app sent by its id, with a fingerprint of it, for 90 days (every save drops the
+  split's older ones); `mcp_receipts` keeps an agent's expense writes by request id
+  for as long as the split. Each is written in the batch that saves the change, so
+  the receipt exists exactly when the change was saved. `write_guards` has no rows:
+  a save inserts a NULL into it when a check made in its batch fails, and NOT NULL
+  undoes the batch.
 - **Lazy profiles.** A profile row is made the first time someone saves a setting,
   name, picture or payment method; until then the defaults apply. Emails in
   `split_members`, `split_invites` and `people.member_email` don't reference
   `profiles`, because someone can be invited, or join a split, before they have one.
+
+## Indexes
+
+Every index, and the query it is for. The primary keys above serve lookups by id. A
+split's people, items, photos and receipts are read by `split_id` in the order shown;
+SQLite reads an index in its own order, so the sort costs nothing, and `rowid`, the
+tie-breaker, is the implied last key of every index.
+
+| Index                                                    | Serves                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------ |
+| `split_members_by_email`                                 | My splits, and every "which splits am I in" join             |
+| `split_members_by_share_token` (unique)                  | Opening a member's share link                                |
+| `split_invites_by_email`                                 | Someone's pending invites                                    |
+| `people_by_split_position`                               | A split's people in order; the next position for a new one   |
+| `people_member_email` (unique, where linked)             | One person per account in a split; the account's own person  |
+| `items_by_split_position`                                | A split's items in order; the next position for a new one    |
+| `items_by_payer`                                         | Removing a person: what they paid for                        |
+| `item_participants_by_person`                            | Removing a person: the items they share                      |
+| `payments_by_split`, `_by_from`, `_by_to`, `_by_item`    | A split's payments; whether a person or item has any         |
+| `attachments_by_split_created_at`                        | A split's photos, oldest first                               |
+| `attachments_by_item`                                    | An item's receipts, and deleting them with it                |
+| `payment_methods_by_email` (email, position)             | Someone's payment methods in order                           |
+| `one_preferred_payment_method` (unique, where preferred) | At most one preferred method per account                     |
+| `payment_qr_codes_by_email`                              | Dropping codes whose method is gone                          |
+| `mcp_receipts_split`                                     | Deleting a split's agent receipts with it                    |
+| `change_receipts_by_split_saved_at`                      | Dropping a split's receipts older than 90 days on every save |
+
+My splits (`worker/splits/summaries.ts`) reads the person's splits and their whole
+bills, for totals and balances, in one batch; the agent's `list_splits` reads one page
+of them, cut in the database. Searching items by name is a `LIKE '%text%'` over the
+person's splits, which no index on the name can narrow.

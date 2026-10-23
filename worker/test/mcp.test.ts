@@ -1603,7 +1603,13 @@ describe('new splits', () => {
     );
     expect(new Set(together.map((t) => t.splitId)).size).toBe(1);
     expect(together.filter((t) => t.replayed === false)).toHaveLength(1);
-    expect((await tool(client, 'list_splits', {})).splits).toHaveLength(2);
+    const all = (await tool(client, 'list_splits', {})).splits;
+    expect(all).toHaveLength(2);
+    // A page at a time, in the same order, with the count over all of them
+    const firstPage = await tool(client, 'list_splits', { limit: 1 });
+    expect(firstPage).toMatchObject({ splits: [all[0]], total: 2, nextOffset: 1 });
+    const lastPage = await tool(client, 'list_splits', { limit: 1, offset: 1 });
+    expect(lastPage).toMatchObject({ splits: [all[1]], total: 2, nextOffset: null });
 
     const read = await tool(client, 'get_split', { splitId: made.splitId });
     expect(read.split).toMatchObject({ name: 'Bali', currency: 'IDR', role: 'owner' });

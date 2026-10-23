@@ -92,7 +92,7 @@ splits.use(`${SPLIT_PATH}/*`, async (c, next) => {
 });
 
 splits.get('/splits', async (c) =>
-  json<SplitList>({ splits: await listSplitSummaries(c.env.DB, c.var.email) }),
+  json<SplitList>({ splits: (await listSplitSummaries(c.env.DB, c.var.email)).splits }),
 );
 
 // Your own order for your splits, as dragged in the app: every id, first to last

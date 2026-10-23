@@ -110,14 +110,15 @@ typed, returned as data.
   named by its place (`Expense 3 ("Taxi"): …`) and none is saved. It answers
   `expenseIds` in order, the same on a retry.
 - **Paging:** `list_splits` returns up to `limit` (default 50, at most 200) from
-  `offset`; `get_split` the same for expenses (default 25), newest first. Each answer
+  `offset`, reading only that page's bills; `get_split` the same for expenses (default
+  25), newest first, over the whole bill (balances always are). Each answer
   has the full count and a `nextOffset` (null on the last page). The total, balances
   and transfers always cover every expense, whatever the page. Each call reads the
   split as saved at that moment; if it changes between pages, later pages can shift.
 - **A cheap re-read:** every split has an `updatedAt` (`list_splits`, and `get_split`'s
   `split`), which moves with every change to it, photos included. Send it back as
   `get_split`'s `ifUnchangedSince` and, when nothing has changed, the answer is only
-  `{ unchanged: true, updatedAt }`.
+  `{ unchanged: true, updatedAt }`, decided before the bill is read.
 - **People by name in answers.** An expense says `payer` and `participants` by name,
   with `shares` and `exact` keyed by name; a balance says `person`, a transfer `from`
   and `to`, and `routePaymentsThrough` is a name. Names are unique in a split, so a
