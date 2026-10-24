@@ -37,6 +37,14 @@
   text-overflow: ellipsis;
 }
 
+/* Notes wrap, so an address in them can be read and opened */
+.notes {
+  font-size: 12px;
+  color: var(--sf-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .amount {
   font-family: var(--sf-font-num);
   font-variant-numeric: tabular-nums;

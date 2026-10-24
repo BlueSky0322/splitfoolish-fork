@@ -497,6 +497,41 @@ describe('the split page', () => {
     expect(await screen.findByText('Dinner')).toBeTruthy();
   });
 
+  test('web addresses in notes open as links: in the item sheet on a phone, from the form on desktop', async () => {
+    const noted = () =>
+      splitDetail('trip', [
+        item({
+          id: 'dinner',
+          name: 'Dinner',
+          cost: 90,
+          notes: 'Menu at https://example.com/menu, booked under Ryan',
+        }),
+      ]);
+    renderApp(fakeServer(noted()), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Dinner'));
+    const sheet = await screen.findByRole('dialog');
+    const link = within(sheet).getByRole('link', { name: 'https://example.com/menu' });
+    // The address alone, not the comma after it, in a new tab
+    expect(link.getAttribute('href')).toBe('https://example.com/menu');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(sheet.textContent).toContain(', booked under Ryan');
+
+    // Desktop reads notes in the form: the address is offered under them
+    cleanup();
+    renderApp(fakeServer(noted()), '/?s=trip');
+    await user.click(await screen.findByText('Dinner'));
+    const form = await screen.findByRole('dialog');
+    expect(within(form).getByRole('textbox', { name: 'Notes' })).toHaveProperty(
+      'value',
+      'Menu at https://example.com/menu, booked under Ryan',
+    );
+    const chip = within(form).getByRole('link', { name: 'https://example.com/menu' });
+    expect(chip.getAttribute('href')).toBe('https://example.com/menu');
+    expect(chip.getAttribute('target')).toBe('_blank');
+  });
+
   test("on a phone, the split's menu is a sheet", async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();

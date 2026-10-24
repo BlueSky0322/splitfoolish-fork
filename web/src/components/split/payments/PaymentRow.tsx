@@ -5,12 +5,14 @@ import { dayLabel } from '../../../split/grouping';
 import type { SplitPayment } from '../../../split/state';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { formatMoney } from '../../../utils/money';
+import LinkedText from '../../ui/LinkedText';
 import PersonAvatar, { PersonName } from '../PersonAvatar';
 import classes from './Payments.module.css';
 
 /**
  * "Tom paid Ryan RM 30.00", with when, what it was for and what was paid in another
- * currency under it; Edit and Delete in a menu when the row offers them
+ * currency under it, then its notes in full, addresses in them as links; Edit and
+ * Delete in a menu when the row offers them
  */
 export const PaymentRow = ({
   payment,
@@ -39,7 +41,6 @@ export const PaymentRow = ({
           ? ''
           : ` at ${original.rate.toLocaleString(undefined, { maximumSignificantDigits: 4 })}`
       }`,
-    payment.notes,
   ].filter(Boolean);
   return (
     <div className={classes.row}>
@@ -60,6 +61,11 @@ export const PaymentRow = ({
           <PersonName person={payment.from} /> paid <PersonName person={payment.to} />
         </span>
         <span className={classes.details}>{details.join(' · ')}</span>
+        {payment.notes && (
+          <span className={classes.notes}>
+            <LinkedText text={payment.notes} />
+          </span>
+        )}
       </div>
       <span className={classes.amount}>{formatMoney(toCents(payment.amount), currency)}</span>
       {(onEdit || onDelete) && (

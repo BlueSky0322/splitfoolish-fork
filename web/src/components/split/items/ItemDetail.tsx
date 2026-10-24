@@ -7,6 +7,7 @@ import { categoryIcon, categoryLabel } from '../../../split/categories';
 import type { SplitItem } from '../../../split/state';
 import { formatAmount, formatMoney } from '../../../utils/money';
 import { SOURCE_LABELS } from '../../../utils/rate-labels';
+import LinkedText from '../../ui/LinkedText';
 import PhotoViewer from '../../ui/PhotoViewer';
 import PersonAvatar from '../PersonAvatar';
 import { PaidBy } from './PaidBy';
@@ -129,7 +130,11 @@ const ItemDetail = ({
           ))}
         </div>
       )}
-      {item.notes && <p className={classes.notes}>{item.notes}</p>}
+      {item.notes && (
+        <p className={classes.notes}>
+          <LinkedText text={item.notes} />
+        </p>
+      )}
       {receipts.length > 0 && (
         <div className={classes.receipts}>
           {receipts.map((photo, i) => (

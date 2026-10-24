@@ -1,0 +1,11 @@
+/* A web address in someone's notes */
+.link {
+  color: var(--sf-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.link:hover {
+  text-decoration-thickness: 2px;
+}

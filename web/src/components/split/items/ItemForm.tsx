@@ -11,6 +11,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import {
+  ArrowSquareOut,
   CalendarBlank,
   Check,
   Copy,
@@ -58,7 +59,7 @@ import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
-import { plural } from '../../../utils/text';
+import { findLinks, plural } from '../../../utils/text';
 import { useRate } from '../../../hooks/useRate';
 import { buildItemInput, chooseRate, exactCents } from '../../../split/item-input';
 
@@ -147,6 +148,7 @@ const ItemForm = ({
   );
   const [category, setCategory] = useState<string | null>(item?.category ?? null);
   const [notes, setNotes] = useState(item?.notes ?? '');
+  const links = useMemo(() => findLinks(notes).filter((p) => p.href != null), [notes]);
   // The day it was paid: an item's own, the day whose heading it was added from, or today
   const [ownDayText] = useState(() =>
     toDateInput(new Date(item?.createdAt ?? initialDay ?? Date.now())),
@@ -592,6 +594,24 @@ const ItemForm = ({
         }
         inputWrapperOrder={['label', 'input', 'description']}
       />
+      {links.length > 0 && (
+        // The addresses in the notes, to open from here: on desktop the form is where
+        // an item's notes are read in full
+        <div className={classes.links}>
+          {links.map((l) => (
+            <a
+              key={l.href}
+              className={classes.link}
+              href={l.href}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ArrowSquareOut size={14} />
+              {l.text}
+            </a>
+          ))}
+        </div>
+      )}
 
       <div className={classes.field}>
         <div className={classes.label}>
