@@ -32,7 +32,7 @@ import {
   photosPerSplit,
   readAttachment,
 } from '../photos/attachments';
-import { checkImage } from '../photos/images';
+import { checkImage, fetchImage } from '../photos/images';
 import { createSplitStatements } from '../splits/lifecycle';
 import { listSplitSummaries } from '../splits/summaries';
 import { notifySplit } from '../splits/room';
@@ -1517,9 +1517,10 @@ export function registerTools(mcp: McpServer, caller: Caller) {
     {
       title: 'Add a photo',
       description:
-        'Adds a receipt to an expense, or with no expenseId a photo of the whole split. JPEG, ' +
-        `PNG or WebP as base64 (a data: URL is fine), at most ${MAX_PHOTO_BYTES / 1_000_000} MB ` +
-        `before encoding; a split holds up to 300. Answers photoId. ${RETRY}`,
+        'Adds a receipt to an expense, or with no expenseId a photo of the whole split: a JPEG, ' +
+        'PNG or WebP as image (base64; a data: URL is fine) or at imageUrl (an http(s) address ' +
+        `the server fetches), at most ${MAX_PHOTO_BYTES / 1_000_000} MB either way; a split ` +
+        `holds up to 300. Answers photoId. ${RETRY}`,
       inputSchema: {
         splitId,
         expenseId: rowId('expense')
@@ -1531,14 +1532,33 @@ export function registerTools(mcp: McpServer, caller: Caller) {
           .string()
           .min(1)
           .max(MAX_PHOTO_BASE64 + DATA_URL_ROOM)
+          .optional()
           .describe('Base64 image'),
+        imageUrl: z
+          .string()
+          .min(1)
+          .max(MAX_PHOTO_URL)
+          .optional()
+          .describe('Instead of image: where the photo is on the web'),
       },
       annotations: { ...expenseWrite, destructiveHint: false },
     },
-    async ({ splitId: ref, expenseId = null, requestId: key, image }) => {
+    async ({ splitId: ref, expenseId = null, requestId: key, image, imageUrl }) => {
       const denied = allowed('add_photo');
       if (denied) return denied;
-      return writePhoto(caller, ref, expenseId, key, image);
+      if ((image == null) === (imageUrl == null)) {
+        return toolError(
+          'invalid_input',
+          'Send the photo as image or at imageUrl, one of the two.',
+        );
+      }
+      return writePhoto(
+        caller,
+        ref,
+        expenseId,
+        key,
+        image != null ? { image } : { imageUrl: imageUrl! },
+      );
     },
   );
 
@@ -1603,6 +1623,8 @@ export function registerTools(mcp: McpServer, caller: Caller) {
 const MAX_PHOTO_BASE64 = Math.ceil(MAX_PHOTO_BYTES / 3) * 4;
 /** Room for a data: URL prefix and line breaks around the base64 */
 const DATA_URL_ROOM = 64 * 1024;
+/** The longest web address a photo may be fetched from */
+const MAX_PHOTO_URL = 2048;
 
 /** An image sent as base64 (with or without a data: URL prefix); null when it isn't */
 function fromBase64(text: string) {
@@ -1630,16 +1652,21 @@ function toBase64(bytes: Uint8Array) {
 const photoIdFor = async (email: string, requestId: string) =>
   (await fingerprint({ photoFor: email, requestId })).slice(0, 16);
 
+/** A photo as an agent sends it: its bytes as base64, or a web address to fetch it from */
+type PhotoSource = { image: string } | { imageUrl: string };
+
 /**
  * Adds a photo through the app's own path (photos/attachments.ts), with its receipt in
- * the same batch, or answers a retry with what was saved the first time
+ * the same batch, or answers a retry with what was saved the first time. One at a web
+ * address is fetched only once the split has room and the expense is there, and a retry
+ * is the same request when it names the same address.
  */
 async function writePhoto(
   caller: Caller,
   ref: string | undefined,
   expenseId: string | null,
   requestId: string,
-  image: string,
+  source: PhotoSource,
 ): Promise<CallToolResult> {
   const { env, email } = caller;
   const db = env.DB;
@@ -1647,8 +1674,9 @@ async function writePhoto(
   const located = await locateSplit(db, email, ref);
   if ('content' in located) return located;
   const splitId = located.id;
-  const bytes = fromBase64(image);
-  if (bytes == null || bytes.length === 0) {
+  const address = 'imageUrl' in source ? source.imageUrl : null;
+  const bytes = 'image' in source ? fromBase64(source.image) : null;
+  if (address == null && (bytes == null || bytes.length === 0)) {
     return toolError('invalid_input', 'The image must be base64-encoded JPEG, PNG or WebP.');
   }
 
@@ -1657,7 +1685,7 @@ async function writePhoto(
     tool: 'add_photo',
     splitId,
     expenseId,
-    image: await hashBytes(bytes),
+    ...(address == null ? { image: await hashBytes(bytes!) } : { imageUrl: address }),
   });
   const answer = (outcome: Answered) =>
     'conflict' in outcome
@@ -1690,7 +1718,10 @@ async function writePhoto(
     email,
     expenseId,
     photoId,
-    () => Promise.resolve(checkImage(bytes, MAX_PHOTO_BYTES)),
+    () =>
+      address == null
+        ? Promise.resolve(checkImage(bytes!, MAX_PHOTO_BYTES))
+        : fetchImage(address, MAX_PHOTO_BYTES),
     [receiptStatement(db, receipt)],
     photosPerSplit(caller.env),
   );

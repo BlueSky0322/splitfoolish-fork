@@ -475,7 +475,8 @@ method through a profile change.
   in the item form, with a spinner on their way up or marked as waiting.
 - API: [worker/photos/](../worker/photos/) stores images in D1 and serves them only to
   members: photos on a split in `attachments.ts` (`addAttachment` checks and saves one,
-  for the app's uploads and the MCP's `add_photo`); profile, split and payment QR pictures
+  for the app's uploads and the MCP's `add_photo`, which may also fetch it from a web
+  address through `fetchImage` in `images.ts`); profile, split and payment QR pictures
   in `pictures.ts` (profile pictures and QR codes also to people who share a split);
   checking and serving the bytes in `images.ts`.
 - Shared: size limits and `Attachment` in [shared/api.ts](../shared/api.ts), and
@@ -658,6 +659,9 @@ receipt → the split's room tells open apps.
   whatever the client asked for; the person decides what the grant carries.
 - Membership, scope and roles are checked on every call, retries included; a split
   you're not in is `not_found`, like a missing one.
+- The one outside address the Worker fetches on an agent's say is a photo's
+  (`add_photo` with `imageUrl`): http(s) only, bounded in size and time, checked as an
+  upload is, and nothing of the answer but that check's verdict comes back.
 - An expense write and its receipt are saved in one transaction: a retry with the same
   `requestId` returns the first answer and never applies the change again, and the same
   id for a different change is refused.
