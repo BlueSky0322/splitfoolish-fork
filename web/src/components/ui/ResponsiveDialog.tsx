@@ -43,7 +43,7 @@ const ResponsiveDialog = ({
         withCloseButton={!floating}
         title={
           <span className={classes.sheetTitleRow}>
-            <span className="min-w-0 flex-1 truncate">{title}</span>
+            <span className={classes.sheetTitleText}>{title}</span>
             <span
               ref={setSlot}
               className={classes.headerSlot}
