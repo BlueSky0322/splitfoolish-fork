@@ -25,6 +25,8 @@ const READY_TIMEOUT_MS = 90_000;
 const PROBE_TIMEOUT_MS = 5_000;
 /** How long wrangler and workerd get to exit after being asked, before they're killed */
 const EXIT_TIMEOUT_MS = 10_000;
+/** How many times the Worker is started on fresh ports when one it was given is taken */
+const BIND_ATTEMPTS = 3;
 /** The pair the readiness check asks for, which only this run's fake services hear about */
 const PROBE_PAIR = ['PRB', 'PRC'] as const;
 
@@ -333,72 +335,85 @@ export async function startLocalWorker(): Promise<LocalWorker> {
 
     const rates = await startFakeRates();
     cleanups.push(() => rates.close());
-    const [port, inspectorPort] = [await freePort(), await freePort()];
-    const worker = start(
-      [
-        'wrangler',
-        'dev',
-        '--ip',
-        '127.0.0.1',
-        '--port',
-        String(port),
-        '--inspector-port',
-        String(inspectorPort),
-        '--persist-to',
-        persist,
-        '--var',
-        'ACCESS_TEAM_DOMAIN:',
-        '--var',
-        'ACCESS_AUD:',
-        '--var',
-        'DEV_USER_EMAIL:nobody@example.com',
-        '--var',
-        `WISE_BASE:${rates.base}`,
-        '--var',
-        `FRANKFURTER_BASE:${rates.base}`,
-        '--var',
-        'WISE_TOKEN:test-token',
-        '--var',
-        'RECONVERT_RETRY_MS:0',
-        // A split fills up after a dozen photos, so filling one is quick
-        '--var',
-        'PHOTOS_PER_SPLIT:12',
-        // MCP and its OAuth routes on, at this run's address (worker/mcp/oauth.ts)
-        '--var',
-        `MCP_ORIGIN:http://127.0.0.1:${port}`,
-        // Queued conversion retries every second, rather than after minutes
-        '--var',
-        'RECONVERT_RETRY_DELAY_S:1',
-        '--log-level',
-        'warn',
-      ],
-      env,
-    );
-    cleanups.push(() => stopGroup(worker.child));
-    let exitCode: number | null | undefined;
-    void worker.exited.then((code) => (exitCode = code));
+    // A port picked free a moment ago can be taken by the time workerd binds it: the
+    // other Worker-backed test file starts at the same moment. Then once more, on others.
+    let port = 0;
+    let inspectorPort = 0;
+    const launch = () =>
+      start(
+        [
+          'wrangler',
+          'dev',
+          '--ip',
+          '127.0.0.1',
+          '--port',
+          String(port),
+          '--inspector-port',
+          String(inspectorPort),
+          '--persist-to',
+          persist,
+          '--var',
+          'ACCESS_TEAM_DOMAIN:',
+          '--var',
+          'ACCESS_AUD:',
+          '--var',
+          'DEV_USER_EMAIL:nobody@example.com',
+          '--var',
+          `WISE_BASE:${rates.base}`,
+          '--var',
+          `FRANKFURTER_BASE:${rates.base}`,
+          '--var',
+          'WISE_TOKEN:test-token',
+          '--var',
+          'RECONVERT_RETRY_MS:0',
+          // A split fills up after a dozen photos, so filling one is quick
+          '--var',
+          'PHOTOS_PER_SPLIT:12',
+          // MCP and its OAuth routes on, at this run's address (worker/mcp/oauth.ts)
+          '--var',
+          `MCP_ORIGIN:http://127.0.0.1:${port}`,
+          // Queued conversion retries every second, rather than after minutes
+          '--var',
+          'RECONVERT_RETRY_DELAY_S:1',
+          '--log-level',
+          'warn',
+        ],
+        env,
+      );
+    let base = '';
+    for (let attempt = 1; ; attempt++) {
+      [port, inspectorPort] = [await freePort(), await freePort()];
+      const worker = launch();
+      cleanups.push(() => stopGroup(worker.child));
+      let exitCode: number | null | undefined;
+      void worker.exited.then((code) => (exitCode = code));
 
-    // Ready once it answers a request that reaches this run's fake rate services, so a
-    // Worker from another run that got the same port is never mistaken for this one
-    const base = `http://127.0.0.1:${port}`;
-    const started = Date.now();
-    let answered = false;
-    for (;;) {
-      try {
-        const res = await fetch(`${base}/api/rates?from=${PROBE_PAIR[0]}&to=${PROBE_PAIR[1]}`, {
-          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-        });
-        await res.arrayBuffer();
-        answered = true;
-      } catch {
-        // Not listening yet, or too slow to answer: asked again
+      // Ready once it answers a request that reaches this run's fake rate services, so a
+      // Worker from another run that got the same port is never mistaken for this one
+      base = `http://127.0.0.1:${port}`;
+      const started = Date.now();
+      let answered = false;
+      let ready = false;
+      while (!ready) {
+        try {
+          const res = await fetch(`${base}/api/rates?from=${PROBE_PAIR[0]}&to=${PROBE_PAIR[1]}`, {
+            signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+          });
+          await res.arrayBuffer();
+          answered = true;
+        } catch {
+          // Not listening yet, or too slow to answer: asked again
+        }
+        if (rates.heardProbe()) ready = true;
+        else if (exitCode !== undefined || Date.now() - started > READY_TIMEOUT_MS) {
+          const taken =
+            exitCode !== undefined && worker.output.text.includes('Address already in use');
+          if (taken && attempt < BIND_ATTEMPTS) break;
+          const why = answered ? 'its port answers, but not from this run' : "it didn't start";
+          throw new Error(`wrangler dev on port ${port}: ${why}\n${worker.output.text}`);
+        } else await sleep(250);
       }
-      if (rates.heardProbe()) break;
-      if (exitCode !== undefined || Date.now() - started > READY_TIMEOUT_MS) {
-        const why = answered ? 'its port answers, but not from this run' : "it didn't start";
-        throw new Error(`wrangler dev on port ${port}: ${why}\n${worker.output.text}`);
-      }
-      await sleep(250);
+      if (ready) break;
     }
 
     const raw: LocalWorker['raw'] = (who, method, path, body, headers = {}) =>
