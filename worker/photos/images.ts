@@ -84,6 +84,43 @@ export async function readImage(req: Request, maxBytes: number) {
   return checkImage(bytes, maxBytes);
 }
 
+/** How long fetching a photo from a web address may take, to connect and to arrive */
+const FETCH_IMAGE_MS = 10_000;
+
+/**
+ * A photo at a web address an agent gave (mcp/tools.ts), fetched and checked as an
+ * upload is. The address is any http(s) one: the Worker runs on Cloudflare with no
+ * private network behind it, the answer must be an image by its bytes, and nothing of
+ * it but that check's verdict comes back. Statuses here stay off 404 and 409, which
+ * writePhoto reads as the expense or the split's room.
+ */
+export async function fetchImage(address: string, maxBytes: number): Promise<Image | Response> {
+  let url: URL;
+  try {
+    url = new URL(address);
+  } catch {
+    return fail('That address is not valid', 400);
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    return fail('A photo address starts with http:// or https://, with no sign-in in it', 400);
+  }
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Accept: 'image/jpeg, image/png, image/webp, image/*;q=0.8' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(FETCH_IMAGE_MS),
+    });
+  } catch {
+    return fail("That address couldn't be reached", 400);
+  }
+  if (!res.ok) return fail("That address didn't answer with a photo", 400);
+  const bytes = await readBody(res, maxBytes, FETCH_IMAGE_MS);
+  if (bytes === 'too large') return fail('That photo is too large', 413);
+  if (bytes === 'too slow') return fail('That address took too long to send the photo', 400);
+  return checkImage(bytes, maxBytes);
+}
+
 /** An image's bytes, checked; or the answer refusing them */
 export function checkImage(bytes: Uint8Array, maxBytes: number): Image | Response {
   if (bytes.length > maxBytes) return fail('That photo is too large', 413);

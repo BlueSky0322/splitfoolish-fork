@@ -4,6 +4,7 @@
 // the bill's own rules, and that retries never apply a change twice.
 
 import { createHash, randomBytes } from 'node:crypto';
+import { createServer } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
@@ -1664,6 +1665,99 @@ describe('photos', () => {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   const OTHER_PNG =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('fetch a photo from a web address, once the split has room and the expense is there', async () => {
+    // A site with a receipt on it, a page that is not a photo, and nothing at /missing
+    const asked: string[] = [];
+    const site = createServer((req, res) => {
+      asked.push(req.url ?? '');
+      if (req.url === '/receipt.png') {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        return res.end(Buffer.from(PNG, 'base64'));
+      }
+      if (req.url === '/page.html') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        return res.end('<html><body>Not a photo</body></html>');
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((done) => site.listen(0, '127.0.0.1', done));
+    const base = `http://127.0.0.1:${(site.address() as { port: number }).port}`;
+    try {
+      const alice = person('alice');
+      const split = await trip(alice);
+      const client = await connect((await grant(alice, [READ, WRITE])).access);
+      const { expenseId } = await tool(client, 'add_expense', {
+        splitId: split.id,
+        requestId: 'mart-add-001',
+        currency: 'MYR',
+        name: 'Mart',
+        cost: 22.7,
+        payerId: split.bob,
+        participantIds: ['everyone'],
+      });
+
+      const receipt = {
+        splitId: split.id,
+        expenseId,
+        requestId: 'mart-photo-1',
+        imageUrl: `${base}/receipt.png`,
+      };
+      const first = await tool(client, 'add_photo', receipt);
+      expect(first).toMatchObject({ status: 'saved', expenseId, actor: alice, replayed: false });
+      expect(asked).toEqual(['/receipt.png']);
+      // A retry names the same address and is answered without fetching it again; the
+      // same request id for another address is refused
+      expect(await tool(client, 'add_photo', receipt)).toEqual({ ...first, replayed: true });
+      expect(asked).toEqual(['/receipt.png']);
+      const other = await tool(client, 'add_photo', { ...receipt, imageUrl: `${base}/other.png` });
+      expect(other.error?.code).toBe('idempotency_conflict');
+      const read = await tool(client, 'get_split', { splitId: split.id });
+      expect(read.expenses[0].photos).toMatchObject([
+        { id: first.photoId, contentType: 'image/png' },
+      ]);
+
+      // What is at the address must be a photo, and the address must answer
+      const page = await tool(client, 'add_photo', {
+        ...receipt,
+        requestId: 'mart-photo-2',
+        imageUrl: `${base}/page.html`,
+      });
+      expect(page.error).toMatchObject({ code: 'invalid_input' });
+      expect(page.error?.message).toContain('Only JPEG, PNG and WebP');
+      const missing = await tool(client, 'add_photo', {
+        ...receipt,
+        requestId: 'mart-photo-3',
+        imageUrl: `${base}/missing`,
+      });
+      expect(missing.error).toMatchObject({ code: 'invalid_input' });
+      // Not fetched at all for an expense that is not there, or an address that is not
+      // on the web, or a call that sends the photo both ways or neither
+      asked.length = 0;
+      const gone = await tool(client, 'add_photo', {
+        ...receipt,
+        requestId: 'mart-photo-4',
+        expenseId: 'ffffffffffffffff',
+      });
+      expect(gone.error?.code).toBe('not_found');
+      for (const bad of [
+        { imageUrl: 'ftp://127.0.0.1/receipt.png' },
+        { imageUrl: `${base}/receipt.png`, image: PNG },
+        { imageUrl: undefined },
+      ]) {
+        const refused = await tool(client, 'add_photo', {
+          ...receipt,
+          requestId: 'mart-photo-5',
+          ...bad,
+        });
+        expect(refused.error?.code).toBe('invalid_input');
+      }
+      expect(asked).toEqual([]);
+    } finally {
+      site.close();
+    }
+  });
 
   it('add a receipt to an expense and a photo of the split, once, and look at them', async () => {
     const alice = person('alice');

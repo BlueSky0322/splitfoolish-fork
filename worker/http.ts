@@ -67,7 +67,7 @@ export const BODY_DEADLINE_MS = 30_000;
  * the limit is kept or waited for.
  */
 export async function readBody(
-  req: Request,
+  req: Pick<Request, 'headers' | 'body'>,
   limit: number,
   deadline = BODY_DEADLINE_MS,
 ): Promise<Uint8Array | 'too large' | 'too slow'> {
