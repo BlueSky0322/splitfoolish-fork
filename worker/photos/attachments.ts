@@ -203,15 +203,61 @@ export async function serveAttachment(
   return imageResponse(viewing, id, row.data, row.contentType);
 }
 
+/** One of this split's photos, as listed; null when there's no such photo in it */
+export const findAttachment = async (db: D1Database, splitId: string, id: string) => {
+  const found = await attachmentByIdStatement(db, id).first<Attachment & { splitId: string }>();
+  if (found == null || found.splitId !== splitId) return null;
+  const { splitId: _, ...attachment } = found;
+  return attachment;
+};
+
+/**
+ * Puts a photo on another of the split's items, or on the split itself (`itemId` null):
+ * the agent's (mcp/tools.ts), by whoever may remove it. `alongside` is saved in the same
+ * batch. A photo already where it's asked to go is left as it is.
+ */
+export async function moveAttachment(
+  db: D1Database,
+  splitId: string,
+  id: string,
+  itemId: string | null,
+  actor: Actor,
+  alongside: D1PreparedStatement[] = [],
+) {
+  const [photo, item] = await db.batch<{ uploadedBy?: string; id?: string }>([
+    db
+      .prepare('SELECT uploaded_by AS uploadedBy FROM attachments WHERE id = ? AND split_id = ?')
+      .bind(id, splitId),
+    db.prepare('SELECT id FROM items WHERE id = ? AND split_id = ?').bind(itemId ?? '', splitId),
+  ]);
+  const row = photo.results[0];
+  if (row == null) return notFound();
+  if (!canRemovePhoto(row.uploadedBy!, actor)) {
+    return fail('Only the person who added a photo, or the owner, can move it', 403);
+  }
+  if (itemId != null && item.results.length === 0) {
+    return fail('That item no longer exists', 404);
+  }
+  await db.batch([
+    db
+      .prepare('UPDATE attachments SET item_id = ? WHERE id = ? AND split_id = ?')
+      .bind(itemId, id, splitId),
+    touchSplitStatement(db, splitId),
+    ...alongside,
+  ]);
+  return ok();
+}
+
 /**
  * Removes photos from the split: all of them, or none when any isn't this person's to
- * remove. Ones already gone are skipped.
+ * remove. Ones already gone are skipped. `alongside` is saved in the same batch.
  */
 export async function deleteAttachments(
   db: D1Database,
   splitId: string,
   ids: string[],
   actor: Actor,
+  alongside: D1PreparedStatement[] = [],
 ) {
   const marks = (n: number) => Array.from({ length: n }, () => '?').join(', ');
   const { results } = await db
@@ -230,6 +276,7 @@ export async function deleteAttachments(
     db.prepare(`DELETE FROM attachment_data WHERE id IN (${marks(found.length)})`).bind(...found),
     db.prepare(`DELETE FROM attachments WHERE id IN (${marks(found.length)})`).bind(...found),
     touchSplitStatement(db, splitId),
+    ...alongside,
   ]);
   return ok();
 }

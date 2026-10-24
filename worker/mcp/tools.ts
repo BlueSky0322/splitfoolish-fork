@@ -13,6 +13,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { type Attachment, MAX_PHOTO_BYTES, type RatePreference, isRowId } from '../../shared/api';
 import { isCurrency, toCents } from '../../shared/rates';
+import type { Actor } from '../../shared/rules';
 import { canChangePeople, removalBlocker } from '../../shared/rules';
 import type { SettleItem } from '../../shared/settle';
 import { SPLIT_MODES, balances, transfers } from '../../shared/settle';
@@ -28,7 +29,10 @@ import { getRateOn } from '../currency/exchange-rates';
 import { isConstraintError, newId, readName } from '../http';
 import {
   addAttachment,
+  deleteAttachments,
+  findAttachment,
   listAttachmentsStatement,
+  moveAttachment,
   photosPerSplit,
   readAttachment,
 } from '../photos/attachments';
@@ -71,13 +75,21 @@ export const TOOL_SCOPES: Record<string, string> = {
   remove_person: WRITE_SCOPE,
   route_payments: WRITE_SCOPE,
   add_photo: WRITE_SCOPE,
+  move_photo: WRITE_SCOPE,
+  remove_photo: WRITE_SCOPE,
   get_photo: READ_SCOPE,
   create_split: WRITE_SCOPE,
 };
 
 type WriteTool = Exclude<
   keyof typeof TOOL_SCOPES,
-  'list_splits' | 'get_split' | 'get_photo' | 'add_photo' | 'create_split'
+  | 'list_splits'
+  | 'get_split'
+  | 'get_photo'
+  | 'add_photo'
+  | 'move_photo'
+  | 'remove_photo'
+  | 'create_split'
 >;
 
 type ErrorCode =
@@ -1563,6 +1575,59 @@ export function registerTools(mcp: McpServer, caller: Caller) {
   );
 
   server.registerTool(
+    'move_photo',
+    {
+      title: 'Move a photo',
+      description: `Puts a photo on another expense, or with expenseId null on the whole split. ${RETRY}`,
+      inputSchema: {
+        splitId,
+        photoId: rowId('photo'),
+        expenseId: rowId('expense').nullable().describe('null: a photo of the whole split'),
+        requestId,
+      },
+      annotations: { ...expenseWrite, destructiveHint: false },
+    },
+    async ({ splitId: ref, photoId, expenseId, requestId: key }) => {
+      const denied = allowed('move_photo');
+      if (denied) return denied;
+      return changePhoto(
+        caller,
+        'move_photo',
+        ref,
+        photoId,
+        key,
+        expenseId,
+        (db, splitId, actor, alongside) =>
+          moveAttachment(db, splitId, photoId, expenseId, actor, alongside),
+      );
+    },
+  );
+
+  server.registerTool(
+    'remove_photo',
+    {
+      title: 'Remove a photo',
+      description: `Removes one photo. It cannot be undone here. ${RETRY}`,
+      inputSchema: { splitId, photoId: rowId('photo'), requestId },
+      annotations: { ...expenseWrite, destructiveHint: true },
+    },
+    async ({ splitId: ref, photoId, requestId: key }) => {
+      const denied = allowed('remove_photo');
+      if (denied) return denied;
+      return changePhoto(
+        caller,
+        'remove_photo',
+        ref,
+        photoId,
+        key,
+        null,
+        (db, splitId, actor, alongside) =>
+          deleteAttachments(db, splitId, [photoId], actor, alongside),
+      );
+    },
+  );
+
+  server.registerTool(
     'get_photo',
     {
       title: 'Look at a photo',
@@ -1740,6 +1805,85 @@ async function writePhoto(
     return toolError('not_found', 'There is no expense with that id in this split.');
   }
   if (res.status === 409) return toolError('refused', error);
+  return toolError('invalid_input', error);
+}
+
+/**
+ * Moves or removes a photo through the app's own path, with its receipt in the same
+ * batch, or answers a retry with what was saved the first time. The photo must be in
+ * the split now; `expenseId` is where it goes (a move) or null.
+ */
+async function changePhoto(
+  caller: Caller,
+  tool: 'move_photo' | 'remove_photo',
+  ref: string | undefined,
+  photoId: string,
+  requestId: string,
+  expenseId: string | null,
+  apply: (
+    db: D1Database,
+    splitId: string,
+    actor: Actor,
+    alongside: D1PreparedStatement[],
+  ) => Promise<Response>,
+): Promise<CallToolResult> {
+  const { env, email } = caller;
+  const db = env.DB;
+  if (await overLimit(caller)) return rateLimited();
+  const located = await locateSplit(db, email, ref);
+  if ('content' in located) return located;
+  const splitId = located.id;
+  const print = await fingerprint({ tool, splitId, photoId, expenseId });
+  const answer = (outcome: Answered) =>
+    'conflict' in outcome
+      ? conflict()
+      : result({
+          status: 'saved' as const,
+          splitId: outcome.receipt.splitId,
+          photoId,
+          expenseId: outcome.receipt.expenseId || null,
+          requestId,
+          savedAt: new Date(outcome.receipt.savedAt).toISOString(),
+          actor: email,
+          replayed: outcome.replayed,
+        });
+  const earlier = await findReceipt(db, email, requestId);
+  if (earlier != null) return answer(sameRequest(earlier, print));
+  if ((await findAttachment(db, splitId, photoId)) == null) {
+    return toolError('not_found', 'There is no photo with that id in this split.');
+  }
+
+  const receipt: Receipt = {
+    email,
+    requestId,
+    fingerprint: print,
+    tool,
+    splitId,
+    expenseId: expenseId ?? '',
+    savedAt: Date.now(),
+  };
+  let res: Response;
+  try {
+    res = await apply(db, splitId, { email, role: located.role }, [receiptStatement(db, receipt)]);
+  } catch (err) {
+    // The same request sent twice at once: the other saved it, and its receipt says so
+    if (!isConstraintError(err)) throw err;
+    const other = await findReceipt(db, email, requestId);
+    if (other == null) throw err;
+    return answer(sameRequest(other, print));
+  }
+  if (res.ok) {
+    notifySplit(env, caller.ctx, splitId, null);
+    return answer({ receipt, replayed: false });
+  }
+  const { error } = await res.json<{ error: string }>();
+  if (res.status === 403) return toolError('forbidden', error);
+  if (res.status === 404) {
+    return toolError(
+      'not_found',
+      expenseId == null ? error : 'There is no expense with that id in this split.',
+    );
+  }
   return toolError('invalid_input', error);
 }
 

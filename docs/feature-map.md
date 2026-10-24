@@ -476,11 +476,13 @@ method through a profile change.
 - API: [worker/photos/](../worker/photos/) stores images in D1 and serves them only to
   members: photos on a split in `attachments.ts` (`addAttachment` checks and saves one,
   for the app's uploads and the MCP's `add_photo`, which may also fetch it from a web
-  address through `fetchImage` in `images.ts`); profile, split and payment QR pictures
+  address through `fetchImage` in `images.ts`; `deleteAttachments` for the app and the
+  MCP's `remove_photo`; `moveAttachment` for the MCP's `move_photo` alone); profile, split and payment QR pictures
   in `pictures.ts` (profile pictures and QR codes also to people who share a split);
   checking and serving the bytes in `images.ts`.
 - Shared: size limits and `Attachment` in [shared/api.ts](../shared/api.ts), and
-  `canRemovePhoto` in [shared/rules.ts](../shared/rules.ts).
+  `canRemovePhoto` in [shared/rules.ts](../shared/rules.ts), which also says who may
+  move one.
 
 **Flow.** Picked → shrunk once (at most two photos shrunk or sent at a time) → kept on
 the device as bytes, tagged with the account → shown at once → sent once online, the
