@@ -1,0 +1,127 @@
+/* The spending chart: a ring, then a row per slice (components/split/balances/Spending.tsx) */
+.spending {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.ring {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+/* A 2px gap of the surface between slices; one picked or under the pointer stays
+   while the rest fade */
+.slice {
+  stroke: var(--sf-surface);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  outline: none;
+}
+
+.slice[data-dim] {
+  opacity: 0.4;
+}
+
+.slice:focus-visible {
+  stroke: var(--sf-accent);
+}
+
+.centreValue {
+  font-family: var(--sf-font-num);
+  font-size: 17px;
+  font-weight: 600;
+  fill: var(--sf-text);
+}
+
+.centreLabel {
+  font-size: 10.5px;
+  fill: var(--sf-text-muted);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+}
+
+/* The name, amount and share on one line, the bar on its own under them, so a long
+   name keeps its room in the narrow panel */
+.row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto 36px;
+  grid-template-rows: auto 5px;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 5px;
+  padding: 6px 6px 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sf-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.row:hover,
+.row[aria-pressed='true'] {
+  background: var(--sf-hover);
+}
+
+.row[data-dim] {
+  opacity: 0.55;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.rowLabel {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A thin bar, rounded at the end it grows to */
+.rowTrack {
+  grid-column: 2 / -1;
+  height: 5px;
+  border-radius: 0 3px 3px 0;
+  background: var(--sf-tint);
+}
+
+.rowBar {
+  display: block;
+  height: 100%;
+  border-radius: 0 3px 3px 0;
+}
+
+.rowAmount {
+  font-family: var(--sf-font-num);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rowShare {
+  font-family: var(--sf-font-num);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sf-text-muted);
+  text-align: right;
+}

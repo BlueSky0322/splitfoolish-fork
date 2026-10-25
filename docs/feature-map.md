@@ -212,7 +212,12 @@ lists them for the Currencies sheet, and typed rates go through the split's acti
 
 **Parts.**
 
-- UI: [components/split/balances/](../web/src/components/split/balances/BalancePanel.tsx),
+- UI: [components/split/balances/](../web/src/components/split/balances/BalancePanel.tsx)
+  (the Settle up panel, and [Spending](../web/src/components/split/balances/Spending.tsx):
+  where the money went as a ring and rows, by category, by who paid or by whose share,
+  from [split/spending.ts](../web/src/split/spending.ts); the ring's hues are the
+  `--sf-series-*` tokens, in a fixed order checked apart under colour-vision
+  deficiency, with the rows naming every slice; people's slices take their own colours),
   [CurrenciesSheet](../web/src/components/split/dialogs/CurrenciesSheet.tsx),
   [components/convert/](../web/src/components/convert/ConvertPage.tsx), and the rate
   hook [hooks/useRate.ts](../web/src/hooks/useRate.ts).

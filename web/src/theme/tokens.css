@@ -18,6 +18,14 @@
   --sf-shadow-sm: 0 0 0 1px #3f424d;
   --sf-shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
   --sf-shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+  /* The spending chart's slices, in ring order (components/split/balances/Spending.tsx):
+     blue, orange, aqua, yellow, magenta, stepped for each surface and checked apart
+     under colour-vision deficiency, neighbours and the wrap included */
+  --sf-series-0: #3987e5;
+  --sf-series-1: #d95926;
+  --sf-series-2: #199e70;
+  --sf-series-3: #c98500;
+  --sf-series-4: #d55181;
   color-scheme: dark;
 }
 
@@ -36,6 +44,11 @@
   --sf-shadow-sm: 0 0 0 1px #cfd3e5;
   --sf-shadow-md: 0 0 0 1px #b2b6ca, 0 6px 18px rgba(30, 32, 43, 0.12);
   --sf-shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(30, 32, 43, 0.18);
+  --sf-series-0: #2a78d6;
+  --sf-series-1: #eb6834;
+  --sf-series-2: #1baf7a;
+  --sf-series-3: #eda100;
+  --sf-series-4: #e87ba4;
   color-scheme: light;
 }
 
@@ -52,6 +65,8 @@
   --sf-tint: color-mix(in srgb, var(--sf-text) 5%, transparent);
   --sf-tag: color-mix(in srgb, var(--sf-text) 9%, transparent);
   --sf-accent-tint: color-mix(in srgb, var(--sf-accent) 14%, transparent);
+  /* The spending chart's "everything else" slice: a quiet gray, never a hue */
+  --sf-series-rest: color-mix(in srgb, var(--sf-text) 30%, transparent);
   --sf-avatar: color-mix(in srgb, var(--sf-accent) 24%, var(--sf-surface));
   /* People's colours (split/person-colors.ts): blue, amber, aqua and pink stay apart
      side by side, then violet and orange. Avatar fills, the same in both themes, each

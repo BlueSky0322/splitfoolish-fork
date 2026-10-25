@@ -3,6 +3,7 @@ import {
   CaretLeft,
   CaretRight,
   ChartBarHorizontal,
+  ChartPieSlice,
   Copy,
   QrCode,
   ShareNetwork,
@@ -13,6 +14,7 @@ import { formatMoney } from '../../../utils/money';
 import { isQr, methodName } from '../../../utils/payment-labels';
 import QrViewer from '../../common/QrViewer';
 import BalanceBars from './BalanceBars';
+import Spending from './Spending';
 import TransferRow from './TransferRow';
 import { PaymentRow } from '../payments/PaymentRow';
 import { deletePayment } from '../payments/delete-payment';
@@ -198,8 +200,8 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
   const mine = me ? totals.balances.get(me.id) : null;
   const count = totals.transfers.length;
   const isSheet = variant === 'sheet';
-  // The sheet keeps balances and routing on a second view
-  const [view, setView] = useState<'transfers' | 'balances'>('transfers');
+  // The sheet keeps balances and routing, and the spending chart, on views of their own
+  const [view, setView] = useState<'transfers' | 'balances' | 'spending'>('transfers');
 
   const bars = people.length > 0 && totals.hasItems && (
     <section className={classes.panelSection}>
@@ -208,6 +210,13 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
         people={people}
         balances={totals.balances}
       />
+    </section>
+  );
+  // Where the money went, once anything was spent
+  const spending = totals.hasItems && (
+    <section className={classes.panelSection}>
+      <h6 className="sf-label">Spending</h6>
+      <Spending />
     </section>
   );
   const route = (
@@ -244,7 +253,7 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
     );
   }
 
-  if (isSheet && view === 'balances') {
+  if (isSheet && view !== 'transfers') {
     return (
       <div className={classes.sheetPanel}>
         <Button
@@ -256,9 +265,15 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
         >
           Settle up
         </Button>
-        {bars}
-        <hr className="sf-rule" />
-        {route}
+        {view === 'spending' ? (
+          spending
+        ) : (
+          <>
+            {bars}
+            <hr className="sf-rule" />
+            {route}
+          </>
+        )}
       </div>
     );
   }
@@ -374,17 +389,31 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
       </section>
 
       {isSheet ? (
-        <UnstyledButton
-          className={classes.sheetRow}
-          onClick={() => setView('balances')}
-        >
-          <ChartBarHorizontal size={18} />
-          <span className="flex-1">Balances and routing</span>
-          <CaretRight size={16} />
-        </UnstyledButton>
+        <>
+          <UnstyledButton
+            className={classes.sheetRow}
+            onClick={() => setView('balances')}
+          >
+            <ChartBarHorizontal size={18} />
+            <span className="flex-1">Balances and routing</span>
+            <CaretRight size={16} />
+          </UnstyledButton>
+          {totals.hasItems && (
+            <UnstyledButton
+              className={classes.sheetRow}
+              onClick={() => setView('spending')}
+            >
+              <ChartPieSlice size={18} />
+              <span className="flex-1">Spending</span>
+              <span className="sf-muted">{formatMoney(totals.totalCents, currency)}</span>
+              <CaretRight size={16} />
+            </UnstyledButton>
+          )}
+        </>
       ) : (
         <>
           {bars}
+          {spending}
           {route}
         </>
       )}
