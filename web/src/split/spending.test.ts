@@ -32,7 +32,7 @@ describe('spending', () => {
     expect(byCategory(items)).toEqual([
       { key: 'food', label: 'Food', cents: 10250, count: 2 },
       { key: 'transport', label: 'Transport', cents: 3000, count: 1 },
-      { key: '', label: 'Uncategorised', cents: 750, count: 1 },
+      { key: 'other', label: 'Other', cents: 750, count: 1 },
     ]);
   });
 

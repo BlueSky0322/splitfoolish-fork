@@ -128,7 +128,7 @@ export function exportRows({
       return {
         createdAt: item.createdAt,
         name: item.name,
-        category: item.category == null ? null : categoryLabel(item.category),
+        category: categoryLabel(item.category),
         amountCents: toCents(item.cost),
         original: item.original && {
           currency: item.original.currency,

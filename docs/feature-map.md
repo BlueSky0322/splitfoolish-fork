@@ -172,6 +172,10 @@ queued after it and reloads the split.
   the split (`removalBlocker`), and the people can't be cleared while any remain. An
   item that goes leaves its payments, untied (`item_id` cleared by `changes.ts`, SET
   NULL as the backstop). A payment is capped like items and converted like them.
+- An item without a category is Other wherever categories show (`categoryKey` in
+  `split/categories.ts`: grouping, the item sheet, exports, the Spending chart); the
+  item form starts on Other, and a name used before brings its category until one is
+  picked. The API still takes and keeps `null`.
 - A person is linked to one of the split's accounts by the owner ("Link to an account",
   `assignAccount`, which first takes the account off whoever had it, who stays as a
   guest) or by that member ("This is me", `linkPerson`); an account is at most one

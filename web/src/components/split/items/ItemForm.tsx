@@ -39,7 +39,7 @@ import { api } from '../../../api';
 import type { SplitItem } from '../../../split/state';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { useSplitPage } from '../SplitPageContext';
-import { CATEGORIES } from '../../../split/categories';
+import { CATEGORIES, OTHER, categoryKey } from '../../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../../split/item-names';
 import { currencySymbol, formatMoney } from '../../../utils/money';
 import { evaluateSum } from '../../../utils/math';
@@ -146,7 +146,9 @@ const ItemForm = ({
       people.map((p) => [p.id, original?.exact?.[p.id] ?? item?.exact?.[p.id] ?? '']),
     ),
   );
-  const [category, setCategory] = useState<string | null>(item?.category ?? null);
+  // Other until picked; a name used before brings its category while none is picked
+  const [category, setCategory] = useState<string>(categoryKey(item?.category ?? null));
+  const [categoryPicked, setCategoryPicked] = useState(item != null);
   const [notes, setNotes] = useState(item?.notes ?? '');
   const links = useMemo(() => findLinks(notes).filter((p) => p.href != null), [notes]);
   // The day it was paid: an item's own, the day whose heading it was added from, or today
@@ -370,11 +372,13 @@ const ItemForm = ({
   const categorySelect = (
     <Select
       label="Category"
-      placeholder="None"
       data={CATEGORIES.map((c) => ({ value: c.key, label: c.label }))}
       value={category}
-      onChange={setCategory}
-      clearable
+      onChange={(v) => {
+        setCategory(v ?? OTHER);
+        setCategoryPicked(true);
+      }}
+      allowDeselect={false}
       // Inside a dialog, so screen readers can reach the options (the dialog hides other popups)
       comboboxProps={{ withinPortal: false }}
     />
@@ -447,7 +451,7 @@ const ItemForm = ({
           // A name used before brings its category, unless one is already chosen
           const past = suggestions.find((s) => s.name === picked);
           const known = CATEGORIES.some((c) => c.key === past?.category);
-          if (past?.category && known && category == null) setCategory(past.category);
+          if (past?.category && known && !categoryPicked) setCategory(past.category);
         }}
         maxLength={MAX_NAME_LENGTH}
         size="md"

@@ -152,7 +152,8 @@ typed, returned as data.
 - **`add_expense`** needs `name`, `payerId`, `participantIds`, and either `cost` (in the
   split's currency) or `paidIn`. `splitMode` is `equal` unless you say `shares` (with
   `shares`: whole shares by person) or `exact` (with `exact`: amounts by person adding
-  up to `cost`). `category`, `notes` and `date` are optional.
+  up to `cost`). `category`, `notes` and `date` are optional; an expense without a
+  category shows as Other in the app.
 - **Paid in another currency:** send `paidIn` (`currency`, `amount`, `exact` for an
   exact split, and optionally `rate`) instead of `cost` and `exact`. The server converts
   it as the app does: at the rate on the day it was paid (today's from the account's

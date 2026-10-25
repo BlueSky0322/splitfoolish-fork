@@ -113,9 +113,9 @@ describe('a split as a CSV', () => {
       '\uFEFF' +
         'Date,Item,Category,Amount (MYR),Original currency,Original amount,Rate,Rate source,Paid by,Split mode,Ryan,Ann,Notes\r\n' +
         '2026-10-10,Dinner,Food,100.00,,,,,Ryan,Equal,50.00,50.00,\r\n' +
-        '2026-10-11,Taxi,,30.00,,,,,Ann,Equal,15.00,15.00,"Airport, late"\r\n' +
+        '2026-10-11,Taxi,Other,30.00,,,,,Ann,Equal,15.00,15.00,"Airport, late"\r\n' +
         '2026-10-12,Ramen,Food,90.00,JPY,3000.00,0.03,Wise,Ryan,Equal,45.00,45.00,\r\n' +
-        '2026-10-12,Hotel,,60.00,,,,,Ryan,Shares,40.00,20.00,\r\n' +
+        '2026-10-12,Hotel,Other,60.00,,,,,Ryan,Shares,40.00,20.00,\r\n' +
         '\r\n' +
         'Person,Paid,Share,Balance\r\n' +
         'Ryan,250.00,150.00,100.00\r\n' +
@@ -239,7 +239,7 @@ describe('text in a CSV cell', () => {
     const notes = 'He said "two plates",\nthen\r\nleft';
     const csv = csvOf([ryan, ann], [item({ id: 'd', name: 'Dinner, "set"', cost: 10, notes })]);
     expect(csv).toContain(
-      '2026-10-10,"Dinner, ""set""",,10.00,,,,,Ryan,Equal,5.00,5.00,"He said ""two plates"",\nthen\r\nleft"\r\n',
+      '2026-10-10,"Dinner, ""set""",Other,10.00,,,,,Ryan,Equal,5.00,5.00,"He said ""two plates"",\nthen\r\nleft"\r\n',
     );
     const [, dinner] = parseCsv(csv.slice(1));
     expect(dinner[1]).toBe('Dinner, "set"');
