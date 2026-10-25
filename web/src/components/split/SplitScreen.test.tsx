@@ -569,7 +569,7 @@ describe('the split page', () => {
     expect(within(sheet).queryByRole('button', { name: 'Link to an account' })).toBeNull();
   });
 
-  test('Settle up shows where the money went, by category or by person, and a slice can be picked', async () => {
+  test('Settle up shows where the money went, by category or by person, and a slice opens in detail', async () => {
     const spent = () =>
       splitDetail('trip', [
         item({ id: 'dinner', name: 'Dinner', cost: 90, category: 'food' }),
@@ -585,23 +585,47 @@ describe('the split page', () => {
     renderApp(fakeServer(spent()), '/?s=trip');
     const user = userEvent.setup();
     const spending = (await screen.findByText('Spending')).closest('section')!;
-    // The whole, then each category as a row with its amount and share
-    expect(within(spending).getByText('132.50')).toBeTruthy();
+    const middle = () => within(spending).getByRole('status').textContent;
+    // The whole in the middle, then each category as a row with its amount and share
+    expect(middle()).toBe('132.50MYR · 3 items');
     const slices = within(spending).getByRole('group', { name: 'Slices' });
     const rows = () =>
       within(slices)
         .getAllByRole('button')
+        .filter((b) => b.hasAttribute('aria-expanded'))
         .map((r) => r.textContent);
     expect(rows()).toEqual(['FoodRM 102.5077%', 'TransportRM 30.0023%']);
-    // Picking a row puts it in the middle; picking it again lets go
-    await user.click(within(slices).getByRole('button', { name: /^Food/ }));
-    expect(within(spending).getByText('102.50')).toBeTruthy();
-    expect(within(spending).getByText('Food · 77%')).toBeTruthy();
-    await user.click(within(slices).getByRole('button', { name: /^Food/ }));
-    // Still in the middle while the pointer rests on it
-    expect(within(spending).getByText('Food · 77%')).toBeTruthy();
-    await user.unhover(within(slices).getByRole('button', { name: /^Food/ }));
-    expect(within(spending).getByText('132.50')).toBeTruthy();
+
+    // Tapping a row holds it in the middle and opens it in detail: who paid for it,
+    // then its items, largest first
+    const food = within(slices).getByRole('button', { name: /^Food/ });
+    await user.click(food);
+    expect(food.getAttribute('aria-expanded')).toBe('true');
+    expect(middle()).toBe('102.50Food77%');
+    const details = within(spending).getByRole('region', { name: 'Food in detail' });
+    expect(within(details).getByText('All paid by Ryan')).toBeTruthy();
+    const parts = () =>
+      within(within(details).getByRole('list', { name: 'Food items' }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent);
+    expect(parts()).toEqual([
+      expect.stringMatching(/^Dinner.+RM\s?90\.00$/),
+      expect.stringMatching(/^Snacks.+RM\s?12\.50$/),
+    ]);
+    // An item in it opens, as from the list
+    await user.click(within(details).getByRole('button', { name: /^Dinner/ }));
+    const form = await screen.findByRole('dialog');
+    expect(within(form).getByRole('textbox', { name: 'What it was for' })).toHaveProperty(
+      'value',
+      'Dinner',
+    );
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // Tapping it again closes it, and the whole comes back once the pointer leaves
+    await user.click(food);
+    expect(within(spending).queryByRole('region', { name: 'Food in detail' })).toBeNull();
+    await user.unhover(food);
+    expect(middle()).toBe('132.50MYR · 3 items');
     // The ring's slices say the same, for a screen reader
     const ring = within(spending).getByRole('group', { name: 'Spending by categories' });
     expect(
@@ -610,12 +634,24 @@ describe('the split page', () => {
         .map((b) => b.getAttribute('aria-label')),
     ).toEqual(['Food, RM 102.50, 77%', 'Transport, RM 30.00, 23%']);
 
-    // By who paid, and by whose share it was
+    // By who paid: a person in detail is their spending by category
     await user.click(within(spending).getByRole('radio', { name: 'Paid by' }));
     expect(rows()).toEqual(['RyanRM 102.5077%', 'AnnRM 30.0023%']);
+    await user.click(within(slices).getByRole('button', { name: /^Ann/ }));
+    const ann = within(spending).getByRole('region', { name: 'Ann in detail' });
+    expect(within(ann).getByText('By category').parentElement!.textContent).toBe(
+      'By categoryTransport RM 30.00',
+    );
+    // By whose share it was: each item at their part of it, out of what it cost
     await user.click(within(spending).getByRole('radio', { name: 'Shares' }));
     // Ann: 45 + 15 + 12.50; Ryan: 45 + 15
     expect(rows()).toEqual(['AnnRM 72.5055%', 'RyanRM 60.0045%']);
+    await user.click(within(slices).getByRole('button', { name: /^Ann/ }));
+    const share = within(spending).getByRole('region', { name: 'Ann in detail' });
+    expect(within(share).getByText(/Food · of RM\s?90\.00/)).toBeTruthy();
+    expect(within(share).getByText('By category').parentElement!.textContent).toBe(
+      'By categoryFood RM 57.50Transport RM 15.00',
+    );
   });
 
   test('a new item is Other unless a category is picked, and an item without one shows as Other', async () => {

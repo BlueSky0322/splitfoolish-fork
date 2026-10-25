@@ -7,14 +7,20 @@ import type { SplitItem } from './state';
 // Where a split's money went, as the Spending chart shows it: whole cents, largest
 // first. Payments between people aren't spending, so they never count here.
 
-/** One slice of the spending: what it is, how much, and over how many items */
+/** One item's part of a slice: its cost, or a person's share of it */
+export interface Part {
+  itemId: string;
+  cents: number;
+}
+
+/** One slice of the spending: what it is, how much, and the items that make it up */
 export interface Slice {
   /** A category key, a person id, or REST for the folded tail */
   key: string;
   label: string;
   cents: number;
-  /** How many items make it up; a person's share counts every item they're on */
-  count: number;
+  /** Largest first */
+  parts: Part[];
 }
 
 /** The key of the slice the smaller categories are folded into */
@@ -23,55 +29,54 @@ export const REST = 'rest';
 /** How many slices the chart shows apart before the rest fold into one */
 export const MAX_SLICES = 5;
 
+const byCents = (a: { cents: number }, b: { cents: number }) => b.cents - a.cents;
+
 const sorted = (slices: Slice[]) =>
   slices
     .filter((s) => s.cents > 0)
-    .sort((a, b) => b.cents - a.cents || a.label.localeCompare(b.label));
+    .map((s) => ({ ...s, parts: [...s.parts].sort(byCents) }))
+    .sort((a, b) => byCents(a, b) || a.label.localeCompare(b.label));
+
+/** Adds one item's part to the slice kept under `key`, starting it with `label` */
+function add(slices: Map<string, Slice>, key: string, label: string, part: Part) {
+  const slice = slices.get(key) ?? { key, label, cents: 0, parts: [] };
+  slice.cents += part.cents;
+  slice.parts.push(part);
+  slices.set(key, slice);
+}
 
 /** Each category's items added up; items without one count as Other */
 export function byCategory(items: SplitItem[]): Slice[] {
   const slices = new Map<string, Slice>();
   for (const item of items) {
-    const key = categoryKey(item.category);
-    const slice = slices.get(key) ?? {
-      key,
-      label: categoryLabel(item.category),
-      cents: 0,
-      count: 0,
-    };
-    slice.cents += toCents(item.cost);
-    slice.count += 1;
-    slices.set(key, slice);
+    add(slices, categoryKey(item.category), categoryLabel(item.category), {
+      itemId: item.id,
+      cents: toCents(item.cost),
+    });
   }
   return sorted([...slices.values()]);
 }
 
 /** What each person paid out, by the items they paid for */
 export function byPayer(items: SplitItem[], people: Person[]): Slice[] {
-  const slices = new Map(
-    people.map((p): [string, Slice] => [p.id, { key: p.id, label: p.name, cents: 0, count: 0 }]),
-  );
+  const names = new Map(people.map((p) => [p.id, p.name]));
+  const slices = new Map<string, Slice>();
   for (const item of items) {
-    const slice = slices.get(item.payer.id);
-    if (slice == null) continue;
-    slice.cents += toCents(item.cost);
-    slice.count += 1;
+    const name = names.get(item.payer.id);
+    if (name == null) continue;
+    add(slices, item.payer.id, name, { itemId: item.id, cents: toCents(item.cost) });
   }
   return sorted([...slices.values()]);
 }
 
 /** What each person's share of the items comes to, whoever paid */
 export function byShare(items: SplitItem[], people: Person[], totals: SplitTotals): Slice[] {
-  const slices = new Map(
-    people.map((p): [string, Slice] => [
-      p.id,
-      { key: p.id, label: p.name, cents: totals.balances.get(p.id)?.shareCents ?? 0, count: 0 },
-    ]),
-  );
+  const names = new Map(people.map((p) => [p.id, p.name]));
+  const slices = new Map<string, Slice>();
   for (const item of items) {
-    for (const p of item.participants) {
-      const slice = slices.get(p.id);
-      if (slice != null) slice.count += 1;
+    for (const [personId, cents] of totals.sharesByItem.get(item.id) ?? []) {
+      const name = names.get(personId);
+      if (name != null && cents > 0) add(slices, personId, name, { itemId: item.id, cents });
     }
   }
   return sorted([...slices.values()]);
@@ -90,9 +95,30 @@ export function foldTail(slices: Slice[], max = MAX_SLICES): Slice[] {
       key: REST,
       label: 'Everything else',
       cents: tail.reduce((sum, s) => sum + s.cents, 0),
-      count: tail.reduce((sum, s) => sum + s.count, 0),
+      parts: tail.flatMap((s) => s.parts).sort(byCents),
     },
   ];
+}
+
+/**
+ * A slice cut the other way, largest first: a category by who paid for it, a person's
+ * spending by category
+ */
+export function crossCut(slice: Slice, by: 'payer' | 'category', items: SplitItem[]) {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const cut = new Map<string, { key: string; label: string; cents: number }>();
+  for (const part of slice.parts) {
+    const item = byId.get(part.itemId);
+    if (item == null) continue;
+    const [key, label] =
+      by === 'payer'
+        ? [item.payer.id, item.payer.name]
+        : [categoryKey(item.category), categoryLabel(item.category)];
+    const entry = cut.get(key) ?? { key, label, cents: 0 };
+    entry.cents += part.cents;
+    cut.set(key, entry);
+  }
+  return [...cut.values()].sort((a, b) => byCents(a, b) || a.label.localeCompare(b.label));
 }
 
 /** A slice's share of the whole, as a whole percentage */
