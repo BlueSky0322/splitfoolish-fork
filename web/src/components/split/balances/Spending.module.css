@@ -12,9 +12,26 @@
   gap: 12px;
 }
 
-.ring {
+/* The ring, with what the middle shows laid over its hole */
+.ringWrap {
+  position: relative;
   flex: 0 0 auto;
+}
+
+.ring {
+  display: block;
   overflow: visible;
+}
+
+.centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
 }
 
 /* A 2px gap of the surface between slices; one picked or under the pointer stays
@@ -39,12 +56,24 @@
   font-family: var(--sf-font-num);
   font-size: 17px;
   font-weight: 600;
-  fill: var(--sf-text);
+  line-height: 1.2;
 }
 
+/* A slice's name, inside the hole: shortened with "…" when it won't fit */
 .centreLabel {
+  max-width: 84px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--sf-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.centreSub {
   font-size: 10.5px;
-  fill: var(--sf-text-muted);
+  line-height: 1.3;
+  color: var(--sf-text-muted);
 }
 
 .rows {
@@ -57,6 +86,7 @@
 /* The name, amount and share on one line, the bar on its own under them, so a long
    name keeps its room in the narrow panel */
 .row {
+  width: 100%;
   display: grid;
   grid-template-columns: 10px minmax(0, 1fr) auto 36px;
   grid-template-rows: auto 5px;
@@ -74,9 +104,21 @@
   transition: opacity 0.15s;
 }
 
-.row:hover,
-.row[aria-pressed='true'] {
+.row:hover {
   background: var(--sf-hover);
+}
+
+/* A row and, once tapped, its details under it in the same box */
+.rowWrap {
+  border-radius: 8px;
+}
+
+.rowWrap[data-open] {
+  background: var(--sf-tint);
+}
+
+.rowWrap[data-open] .row:hover {
+  background: transparent;
 }
 
 .row[data-dim] {
@@ -124,4 +166,92 @@
   font-variant-numeric: tabular-nums;
   color: var(--sf-text-muted);
   text-align: right;
+}
+
+/* A slice in detail, under its row */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 6px 8px 26px;
+}
+
+/* The slice cut the other way, as chips */
+.cut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.cutLabel {
+  color: var(--sf-text-muted);
+}
+
+.cutChip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sf-tag);
+  white-space: nowrap;
+}
+
+.cutAmount {
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+  color: var(--sf-text-secondary);
+}
+
+.parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* One item: its name and day, its part at the end; tapping opens it */
+.part {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 0;
+  border-top: 1px solid var(--sf-divider);
+}
+
+.partText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.partName {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.partSub {
+  font-size: 11.5px;
+  color: var(--sf-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.partAmount {
+  font-family: var(--sf-font-num);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.more {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--sf-accent);
 }
