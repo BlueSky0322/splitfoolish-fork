@@ -569,6 +569,55 @@ describe('the split page', () => {
     expect(within(sheet).queryByRole('button', { name: 'Link to an account' })).toBeNull();
   });
 
+  test('Settle up shows where the money went, by category or by person, and a slice can be picked', async () => {
+    const spent = () =>
+      splitDetail('trip', [
+        item({ id: 'dinner', name: 'Dinner', cost: 90, category: 'food' }),
+        item({ id: 'taxi', name: 'Taxi', cost: 30, category: 'transport', payerId: 'ann' }),
+        item({
+          id: 'snacks',
+          name: 'Snacks',
+          cost: 12.5,
+          category: 'food',
+          participantIds: ['ann'],
+        }),
+      ]);
+    renderApp(fakeServer(spent()), '/?s=trip');
+    const user = userEvent.setup();
+    const spending = (await screen.findByText('Spending')).closest('section')!;
+    // The whole, then each category as a row with its amount and share
+    expect(within(spending).getByText('132.50')).toBeTruthy();
+    const slices = within(spending).getByRole('group', { name: 'Slices' });
+    const rows = () =>
+      within(slices)
+        .getAllByRole('button')
+        .map((r) => r.textContent);
+    expect(rows()).toEqual(['FoodRM 102.5077%', 'TransportRM 30.0023%']);
+    // Picking a row puts it in the middle; picking it again lets go
+    await user.click(within(slices).getByRole('button', { name: /^Food/ }));
+    expect(within(spending).getByText('102.50')).toBeTruthy();
+    expect(within(spending).getByText('Food · 77%')).toBeTruthy();
+    await user.click(within(slices).getByRole('button', { name: /^Food/ }));
+    // Still in the middle while the pointer rests on it
+    expect(within(spending).getByText('Food · 77%')).toBeTruthy();
+    await user.unhover(within(slices).getByRole('button', { name: /^Food/ }));
+    expect(within(spending).getByText('132.50')).toBeTruthy();
+    // The ring's slices say the same, for a screen reader
+    const ring = within(spending).getByRole('group', { name: 'Spending by categories' });
+    expect(
+      within(ring)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Food, RM 102.50, 77%', 'Transport, RM 30.00, 23%']);
+
+    // By who paid, and by whose share it was
+    await user.click(within(spending).getByRole('radio', { name: 'Paid by' }));
+    expect(rows()).toEqual(['RyanRM 102.5077%', 'AnnRM 30.0023%']);
+    await user.click(within(spending).getByRole('radio', { name: 'Shares' }));
+    // Ann: 45 + 15 + 12.50; Ryan: 45 + 15
+    expect(rows()).toEqual(['AnnRM 72.5055%', 'RyanRM 60.0045%']);
+  });
+
   test("on a phone, the split's menu is a sheet", async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
