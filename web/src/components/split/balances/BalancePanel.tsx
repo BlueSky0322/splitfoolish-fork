@@ -4,6 +4,7 @@ import {
   CaretRight,
   ChartBarHorizontal,
   ChartPieSlice,
+  Check,
   Copy,
   QrCode,
   ShareNetwork,
@@ -336,9 +337,8 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
                       ) : undefined
                     }
                     action={
-                      <Button
-                        variant="subtle"
-                        size="compact-xs"
+                      <UnstyledButton
+                        className={classes.payChip}
                         onClick={() =>
                           openDialog({
                             kind: 'payment',
@@ -346,8 +346,9 @@ const BalancePanel = ({ variant = 'panel' }: { variant?: 'panel' | 'sheet' }) =>
                           })
                         }
                       >
+                        <Check size={13} />
                         Mark as paid
-                      </Button>
+                      </UnstyledButton>
                     }
                   />
                 </div>

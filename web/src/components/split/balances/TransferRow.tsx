@@ -53,26 +53,29 @@ const TransferRow = ({
         />
         <span className={classes.transferAmount}>{formatMoney(amountCents, currency)}</span>
       </div>
-      {/* One line: names too long for it shorten with "…", so "pays" always shows */}
-      <span
-        className={classes.transferText}
-        title={fromMe ? `You pay ${to.name}` : `${from.name} pays ${to.name}`}
-      >
-        {fromMe ? (
-          <span className={classes.transferPays}>You pay </span>
-        ) : (
-          <>
-            <span className={classes.transferName}>
-              <PersonName person={from} />
-            </span>
-            <span className={classes.transferPays}> pays </span>
-          </>
-        )}
-        <span className={classes.transferName}>
-          <PersonName person={to} />
+      {/* Who pays whom, with what to do about it at the end of the same line. One
+          line: names too long for it shorten with "…", so "pays" always shows */}
+      <div className={classes.transferBottom}>
+        <span
+          className={classes.transferText}
+          title={fromMe ? `You pay ${to.name}` : `${from.name} pays ${to.name}`}
+        >
+          {fromMe ? (
+            <span className={classes.transferPays}>You pay </span>
+          ) : (
+            <>
+              <span className={classes.transferName}>
+                <PersonName person={from} />
+              </span>
+              <span className={classes.transferPays}> pays </span>
+            </>
+          )}
+          <span className={classes.transferName}>
+            <PersonName person={to} />
+          </span>
         </span>
-      </span>
-      {action}
+        {action}
+      </div>
     </div>
   );
   if (payLine == null) return row;
