@@ -1,6 +1,6 @@
 import type { Person } from '@shared/types';
 import { toCents } from '@shared/rates';
-import { categoryLabel } from './categories';
+import { categoryKey, categoryLabel } from './categories';
 import type { SplitTotals } from './derive';
 import type { SplitItem } from './state';
 
@@ -28,11 +28,11 @@ const sorted = (slices: Slice[]) =>
     .filter((s) => s.cents > 0)
     .sort((a, b) => b.cents - a.cents || a.label.localeCompare(b.label));
 
-/** Each category's items added up; items without one are "Uncategorised" */
+/** Each category's items added up; items without one count as Other */
 export function byCategory(items: SplitItem[]): Slice[] {
   const slices = new Map<string, Slice>();
   for (const item of items) {
-    const key = item.category ?? '';
+    const key = categoryKey(item.category);
     const slice = slices.get(key) ?? {
       key,
       label: categoryLabel(item.category),

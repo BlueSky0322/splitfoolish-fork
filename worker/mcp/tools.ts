@@ -177,7 +177,7 @@ const expenseFields = {
   exact: z
     .record(z.string(), amount)
     .describe('Amounts by person adding up to cost, for splitMode exact'),
-  category: z.string().max(32).nullable().describe('Label such as Food; null for none'),
+  category: z.string().max(32).nullable().describe('Label such as Food; null shows as Other'),
   notes: z.string().max(MAX_NOTES_LENGTH).nullable(),
 };
 const paidInFields = {

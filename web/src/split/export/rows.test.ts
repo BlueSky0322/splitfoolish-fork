@@ -63,7 +63,7 @@ describe('the items in an export', () => {
       {
         createdAt: OCT_10,
         name: 'Dinner',
-        category: null,
+        category: 'Other',
         amountCents: 10000,
         original: null,
         paidBy: 'Ryan',
@@ -109,7 +109,7 @@ describe('the items in an export', () => {
     );
     expect(rows.items.map((i) => [i.name, i.category, i.splitMode, i.shares, i.notes])).toEqual([
       ['Hotel', 'Accommodation', 'shares', [4000, 2000, null], null],
-      ['Snacks', null, 'exact', [3000, null, 2000], 'From the 7-Eleven'],
+      ['Snacks', 'Other', 'exact', [3000, null, 2000], 'From the 7-Eleven'],
     ]);
     expect(rows.items[1].between).toEqual([
       { name: 'Ryan', cents: 3000 },

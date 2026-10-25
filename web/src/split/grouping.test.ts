@@ -170,12 +170,7 @@ describe('grouping items', () => {
       'date',
       'asc',
     );
-    expect(groups.map((g) => g.label)).toEqual([
-      'Accommodation',
-      'Transport',
-      'Food',
-      'Uncategorised',
-    ]);
+    expect(groups.map((g) => g.label)).toEqual(['Accommodation', 'Transport', 'Food', 'Other']);
   });
 
   test('no grouping is one group of everything', () => {

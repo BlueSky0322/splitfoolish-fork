@@ -64,12 +64,10 @@ const ItemDetail = ({
         )}
       </div>
       <div className={classes.tags}>
-        {item.category && (
-          <span className="sf-tag">
-            {Icon && <Icon size={12} />}
-            {categoryLabel(item.category)}
-          </span>
-        )}
+        <span className="sf-tag">
+          {Icon && <Icon size={12} />}
+          {categoryLabel(item.category)}
+        </span>
         <span className="sf-tag">{shortDate(item.createdAt)}</span>
         <span className="sf-tag">
           <PaidBy item={item} />

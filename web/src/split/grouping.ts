@@ -1,6 +1,6 @@
 import type { Settings } from '@shared/api';
 import type { SplitItem } from './state';
-import { categoryLabel } from './categories';
+import { categoryKey, categoryLabel } from './categories';
 import { toCents } from '@shared/rates';
 
 export type GroupBy = Settings['itemsGroupBy'];
@@ -133,7 +133,7 @@ export function groupItems(
             ? [monthKey(item.createdAt), monthLabel(item.createdAt)]
             : groupBy === 'payer'
               ? [item.payer.id, item.payer.name]
-              : [item.category ?? '', categoryLabel(item.category)];
+              : [categoryKey(item.category), categoryLabel(item.category)];
     let group = groups.get(groupKey);
     if (group == null) {
       group = { key: groupKey, label, items: [], subtotalCents: 0 };

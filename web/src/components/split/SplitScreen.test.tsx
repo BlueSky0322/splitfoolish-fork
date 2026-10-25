@@ -618,6 +618,28 @@ describe('the split page', () => {
     expect(rows()).toEqual(['AnnRM 72.5055%', 'RyanRM 60.0045%']);
   });
 
+  test('a new item is Other unless a category is picked, and an item without one shows as Other', async () => {
+    const server = fakeServer(trip());
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await screen.findByText('Dinner');
+    await addSnacks(user);
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.find((i) => i.name === 'Snacks')).toMatchObject({
+        category: 'other',
+      }),
+    );
+    // An older item with none stored is grouped and charted as Other, never left out
+    await user.click(screen.getByRole('button', { name: 'By day' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'By category' }));
+    // One group of Other holds all three items; nothing is "Uncategorised" anywhere
+    const header = (await screen.findAllByText('Other')).find((el) =>
+      el.parentElement?.textContent?.startsWith('OtherRM 136.00'),
+    );
+    expect(header).toBeTruthy();
+    expect(screen.queryByText('Uncategorised')).toBeNull();
+  }, 10_000);
+
   test("on a phone, the split's menu is a sheet", async () => {
     renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
