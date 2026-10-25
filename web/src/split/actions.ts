@@ -22,6 +22,11 @@ export interface SplitActions {
   renamePerson: (personId: string, name: string) => boolean;
   /** "This is me": links a person to an account, or unlinks with null */
   linkPerson: (personId: string, memberEmail: string | null) => boolean;
+  /**
+   * The owner's "Link to an account": makes a guest that member, taking the account off
+   * whoever had it, who stays in the bill as a guest
+   */
+  assignAccount: (personId: string, memberEmail: string) => boolean;
   /** fromItems also takes them off items they share; see removalMessage for what's allowed */
   removePerson: (personId: string, fromItems?: boolean) => boolean;
   clearPeople: () => boolean;
@@ -138,6 +143,26 @@ export const makeSplitActions = (d: ActionDeps): SplitActions => {
         }
       }
       // Linked people go by their account's display name, as the server shows them
+      const displayName = d.meta()?.members.find((m) => m.email === memberEmail)?.displayName;
+      d.dispatch({
+        type: 'UPDATE_PERSON',
+        payload: { id: personId, memberEmail, ...(displayName ? { name: displayName } : {}) },
+      });
+      d.queue({ op: 'linkPerson', id: personId, memberEmail });
+      return true;
+    },
+    assignAccount: (personId, memberEmail) => {
+      const people = d.current().people;
+      const person = people.find((p) => p.id === personId);
+      if (person == null) return false;
+      if (person.memberEmail != null) {
+        return refuse(`${person.name} is already linked to an account`);
+      }
+      const holder = people.find((p) => p.memberEmail === memberEmail);
+      if (holder != null) {
+        d.dispatch({ type: 'UPDATE_PERSON', payload: { id: holder.id, memberEmail: null } });
+        d.queue({ op: 'linkPerson', id: holder.id, memberEmail: null });
+      }
       const displayName = d.meta()?.members.find((m) => m.email === memberEmail)?.displayName;
       d.dispatch({
         type: 'UPDATE_PERSON',

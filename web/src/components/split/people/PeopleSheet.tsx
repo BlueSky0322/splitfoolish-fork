@@ -61,6 +61,9 @@ function PersonPage({
   const [name, setName] = useState(person.name);
   // What removing them would do, while waiting for a yes
   const [confirming, setConfirming] = useState<{ text: string; fromItems: boolean } | null>(null);
+  // The split's members, offered to the owner to make this guest one of them
+  const [linking, setLinking] = useState(false);
+  const members = meta?.members ?? [];
   const byId = new Map(state.people.map((p) => [p.id, p]));
   const balance = totals.balances.get(person.id);
   const theirs = totals.transfers.filter((t) => t.fromId === person.id || t.toId === person.id);
@@ -220,6 +223,47 @@ function PersonPage({
               <UserCheck size={18} />
               <span className="flex-1">This is me</span>
             </UnstyledButton>
+          )}
+          {isOwner && !hasAccount && members.length > 0 && (
+            <UnstyledButton
+              className={classes.action}
+              onClick={() => setLinking((on) => !on)}
+              aria-expanded={linking}
+            >
+              <UserCheck size={18} />
+              <span className="flex-1">Link to an account</span>
+              <CaretRight
+                size={14}
+                className={linking ? classes.open : undefined}
+              />
+            </UnstyledButton>
+          )}
+          {linking && (
+            <div
+              className={classes.choices}
+              role="group"
+              aria-label="Link to an account"
+            >
+              {members.map((m) => {
+                // A member already in the bill as someone else moves to this person
+                const holder = state.people.find((p) => p.memberEmail === m.email);
+                return (
+                  <UnstyledButton
+                    key={m.email}
+                    className={classes.choice}
+                    onClick={() => {
+                      if (actions.assignAccount(person.id, m.email)) setLinking(false);
+                    }}
+                  >
+                    <span className="flex-1 min-w-0 truncate">
+                      {nameFor(m.email, m.displayName)}
+                      <span className="sf-muted"> · {m.email}</span>
+                    </span>
+                    {holder && <span className="sf-muted text-xs">now {holder.name}</span>}
+                  </UnstyledButton>
+                );
+              })}
+            </div>
           )}
           {itemCount > 0 && (
             <UnstyledButton
