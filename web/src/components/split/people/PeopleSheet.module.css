@@ -131,6 +131,35 @@
   color: var(--sf-negative);
 }
 
+/* The members to choose from, under "Link to an account" */
+.choices {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--sf-divider);
+  background: var(--sf-tint);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px 0 44px;
+  font-size: 14px;
+}
+
+.choice + .choice {
+  border-top: 1px solid var(--sf-divider);
+}
+
+.choice:hover {
+  background: var(--sf-hover);
+}
+
+.open {
+  transform: rotate(90deg);
+}
+
 .confirm {
   display: flex;
   flex-direction: column;

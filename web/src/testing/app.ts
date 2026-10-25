@@ -373,6 +373,20 @@ function apply(server: FakeServer, split: SplitDetail, change: Change) {
     case 'addPerson':
       split.people.push(person(change.id, change.name, change.memberEmail ?? null));
       break;
+    case 'linkPerson': {
+      // A linked person goes by the account's display name, as the server shows them
+      const member = split.members.find((m) => m.email === change.memberEmail);
+      split.people = split.people.map((p) =>
+        p.id === change.id
+          ? {
+              ...p,
+              memberEmail: change.memberEmail,
+              ...(member?.displayName ? { name: member.displayName } : {}),
+            }
+          : p,
+      );
+      break;
+    }
     default:
       // So a test that needs another change says so, rather than passing by accident
       throw new Error(`No stand-in for the change ${change.op}`);

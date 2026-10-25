@@ -94,6 +94,23 @@ describe('split actions', () => {
     ]);
   });
 
+  test('giving a guest an account takes it off whoever had it, in that order', () => {
+    const { actions, queued, state } = setup();
+    expect(actions.assignAccount('b', 'ann@example.com')).toBe(true);
+    expect(state().people.map((p) => [p.id, p.name, p.memberEmail])).toEqual([
+      ['r', 'Ryan', 'ryan@example.com'],
+      ['a', 'Ann', null],
+      ['b', 'Ann', 'ann@example.com'],
+    ]);
+    expect(queued).toEqual([
+      { op: 'linkPerson', id: 'a', memberEmail: null },
+      { op: 'linkPerson', id: 'b', memberEmail: 'ann@example.com' },
+    ]);
+    // Someone with an account keeps it
+    expect(actions.assignAccount('r', 'ann@example.com')).toBe(false);
+    expect(queued).toHaveLength(2);
+  });
+
   test('an added item shows exactly what is queued to be saved', () => {
     const { actions, queued, state } = setup([]);
     const input = {

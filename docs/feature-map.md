@@ -172,6 +172,10 @@ queued after it and reloads the split.
   the split (`removalBlocker`), and the people can't be cleared while any remain. An
   item that goes leaves its payments, untied (`item_id` cleared by `changes.ts`, SET
   NULL as the backstop). A payment is capped like items and converted like them.
+- A person is linked to one of the split's accounts by the owner ("Link to an account",
+  `assignAccount`, which first takes the account off whoever had it, who stays as a
+  guest) or by that member ("This is me", `linkPerson`); an account is at most one
+  person in a split (`people_member_email`, `readMemberEmail`).
 - Only the newest load of a split is shown, and a device copy never replaces what the
   server said (`useSplit.ts`).
 - People's colours are worked out, not stored: by their order in the split, the first

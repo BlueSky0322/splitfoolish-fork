@@ -8,6 +8,7 @@ import {
   item,
   liveRoom,
   liveSockets,
+  person,
   readsAs,
   renderApp,
   setupAppTests,
@@ -530,6 +531,42 @@ describe('the split page', () => {
     const chip = within(form).getByRole('link', { name: 'https://example.com/menu' });
     expect(chip.getAttribute('href')).toBe('https://example.com/menu');
     expect(chip.getAttribute('target')).toBe('_blank');
+  });
+
+  test('the owner links a guest to a member, taking the account off the person it joined as', async () => {
+    // Ann joined under her account after the owner had added her as a guest
+    const detail = splitDetail('trip', [item({ id: 'dinner', name: 'Dinner', cost: 90 })]);
+    detail.members.push({
+      email: 'ann@example.com',
+      role: 'editor',
+      displayName: 'Ann Lee',
+      avatarVersion: null,
+      paymentMethods: [],
+    });
+    detail.people.push(person('ann2', 'Ann Lee', 'ann@example.com'));
+    const server = fakeServer(detail);
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Edit people' }));
+    const sheet = await screen.findByRole('dialog');
+    await user.click(within(sheet).getByText('Ann'));
+    expect(within(sheet).getByText('Guest, without an account')).toBeTruthy();
+    await user.click(within(sheet).getByRole('button', { name: 'Link to an account' }));
+    const choices = within(sheet).getByRole('group', { name: 'Link to an account' });
+    // The member is offered with where the account is now
+    const annLee = within(choices).getByRole('button', { name: /Ann Lee.*now Ann Lee/ });
+    await user.click(annLee);
+    // The guest is now that account, named by it, and the person she joined as is a guest
+    expect(within(sheet).getByText('ann@example.com')).toBeTruthy();
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.people.map((p) => [p.id, p.name, p.memberEmail])).toEqual([
+        ['me', 'Ryan', 'ryan@example.com'],
+        ['ann', 'Ann Lee', 'ann@example.com'],
+        ['ann2', 'Ann Lee', null],
+      ]),
+    );
+    // Someone with an account isn't offered the option
+    expect(within(sheet).queryByRole('button', { name: 'Link to an account' })).toBeNull();
   });
 
   test("on a phone, the split's menu is a sheet", async () => {
