@@ -83,6 +83,15 @@
   color: var(--sf-text-label);
 }
 
+/* The names, and the action chip kept at the end of their line */
+.transferBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
 .transferText {
   display: flex;
   min-width: 0;
@@ -171,7 +180,8 @@
   white-space: nowrap;
 }
 
-.transferGroup[data-size='lg'] .payChip {
+.transferGroup[data-size='lg'] .payChip,
+.transfer[data-size='lg'] .payChip {
   height: 36px;
 }
 

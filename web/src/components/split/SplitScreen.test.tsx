@@ -45,7 +45,9 @@ describe('the split page', () => {
       readsAs(/^(Ann pays|Ryan pays|You pay) (Ann|Ryan)$/),
     );
     expect(transfer.textContent).toBe('Ann pays Ryan');
-    expect(within(transfer.parentElement!).getByText(/^RM\s?30\.00$/)).toBeTruthy();
+    // The amount is on the row's first line, above the names
+    const row = transfer.parentElement!.parentElement!;
+    expect(within(row).getByText(/^RM\s?30\.00$/)).toBeTruthy();
   });
 
   test('an item for one person says who paid for whom, or that it was their own', async () => {
