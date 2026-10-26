@@ -656,6 +656,39 @@ describe('the split page', () => {
     );
   });
 
+  test('the share image shows where the money went, and gives up the item list first when full', async () => {
+    renderApp(
+      fakeServer(
+        splitDetail('trip', [
+          item({ id: 'dinner', name: 'Dinner', cost: 90, category: 'food' }),
+          item({ id: 'taxi', name: 'Taxi', cost: 30, category: 'transport', payerId: 'ann' }),
+        ]),
+      ),
+      '/?s=trip',
+    );
+    // A card is too tall while it lists the items; without them it fits
+    const tall = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.textContent?.includes('Taxi') ? 2000 : 1000;
+      });
+    onTestFinished(() => tall.mockRestore());
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Share as image' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Share as image' });
+    const card = within(dialog).getByText('Who pays who').parentElement!;
+    // Each category with its amount and share of the whole, the total in the middle
+    const legend = within(card).getByText('Food').parentElement!.parentElement!;
+    expect([...legend.children].map((row) => row.textContent)).toEqual([
+      'FoodRM 90.0075%',
+      'TransportRM 30.0025%',
+    ]);
+    expect(within(card).getByText('2 items')).toBeTruthy();
+    // One slice of the ring for each
+    expect(legend.previousElementSibling!.querySelectorAll('path')).toHaveLength(2);
+    expect(within(card).queryByText('Taxi')).toBeNull();
+  });
+
   test('a new item is Other unless a category is picked, and an item without one shows as Other', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
