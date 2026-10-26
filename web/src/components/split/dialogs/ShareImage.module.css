@@ -74,6 +74,88 @@
   gap: 14px;
 }
 
+/* Where the money went: the ring with the total in it, and a row per category */
+.spending {
+  display: flex;
+  align-items: center;
+  gap: 56px;
+}
+
+.ring {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.ring svg {
+  display: block;
+}
+
+.ringCentre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.ringTotal {
+  font-family: var(--sf-font-num);
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ringSub {
+  color: var(--sf-text-muted);
+  font-size: 20px;
+}
+
+.legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 24px;
+}
+
+.legendRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.swatch {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.legendLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legendAmount {
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.legendShare {
+  width: 64px;
+  color: var(--sf-text-muted);
+  font-family: var(--sf-font-num);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .rule {
   height: 2px;
   margin: 24px 0 8px;

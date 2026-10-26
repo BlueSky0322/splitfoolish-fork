@@ -21,6 +21,7 @@ import { formatAmount, formatMoney } from '../../../utils/money';
 import { plural } from '../../../utils/text';
 import { usePersonColors } from '../person-colors-context';
 import { useSplitPage } from '../SplitPageContext';
+import { RING_INNER, RING_OUTER, RING_SIZE, arcsOf, categoryColor, sector } from './ring';
 import classes from './Spending.module.css';
 
 type View = 'categories' | 'paid' | 'shares';
@@ -31,24 +32,8 @@ const VIEWS: { value: View; label: string }[] = [
   { value: 'shares', label: 'Shares' },
 ];
 
-// The ring: a 2px gap of the surface between slices, and the figure in the middle
-const SIZE = 160;
-const OUTER = 78;
-const INNER = 52;
-
 /** How many of a slice's items its details list before "Show all" */
 const FIRST_ITEMS = 6;
-
-/** The annular sector from `from` to `to` (radians, clockwise from the top) */
-function sector(from: number, to: number) {
-  const c = SIZE / 2;
-  const at = (r: number, a: number) => `${c + r * Math.cos(a)} ${c + r * Math.sin(a)}`;
-  const large = to - from > Math.PI ? 1 : 0;
-  return (
-    `M${at(OUTER, from)}A${OUTER} ${OUTER} 0 ${large} 1 ${at(OUTER, to)}` +
-    `L${at(INNER, to)}A${INNER} ${INNER} 0 ${large} 0 ${at(INNER, from)}Z`
-  );
-}
 
 /**
  * A picked slice in detail: the same money cut the other way (a category by who paid,
@@ -165,9 +150,7 @@ const Spending = () => {
     ...s,
     color:
       view === 'categories'
-        ? s.key === REST
-          ? 'var(--sf-series-rest)'
-          : `var(--sf-series-${i})`
+        ? categoryColor(s.key, i)
         : colorOf({ personId: s.key })?.fill ?? 'var(--sf-series-rest)',
   }));
   const focusKey = hovered ?? picked;
@@ -198,13 +181,7 @@ const Spending = () => {
   const describe = (s: Slice) =>
     `${s.label}, ${formatMoney(s.cents, currency)}, ${percentOf(s.cents, total)}%`;
 
-  // Each slice's angles, from the top and clockwise
-  let angle = -Math.PI / 2;
-  const arcs = colored.map((s) => {
-    const from = angle;
-    angle += (s.cents / total) * 2 * Math.PI;
-    return { ...s, from, to: angle };
-  });
+  const arcs = arcsOf(colored);
   const sliceProps = (s: (typeof arcs)[number]) => ({
     'className': classes.slice,
     'data-dim': focusKey != null && focusKey !== s.key ? '' : undefined,
@@ -234,21 +211,21 @@ const Spending = () => {
         <div className={classes.ringWrap}>
           <svg
             className={classes.ring}
-            viewBox={`0 0 ${SIZE} ${SIZE}`}
-            width={SIZE}
-            height={SIZE}
+            viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+            width={RING_SIZE}
+            height={RING_SIZE}
             role="group"
             aria-label={`Spending by ${VIEWS.find((v) => v.value === view)!.label.toLowerCase()}`}
           >
             {arcs.length === 1 ? (
               <circle
                 {...sliceProps(arcs[0])}
-                cx={SIZE / 2}
-                cy={SIZE / 2}
-                r={(OUTER + INNER) / 2}
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                r={(RING_OUTER + RING_INNER) / 2}
                 fill="none"
                 stroke={arcs[0].color}
-                strokeWidth={OUTER - INNER}
+                strokeWidth={RING_OUTER - RING_INNER}
               />
             ) : (
               arcs.map((s) => (

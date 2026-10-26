@@ -12,6 +12,8 @@ import { PersonName } from '../PersonAvatar';
 import classes from './ShareImage.module.css';
 import { toCents } from '@shared/rates';
 import { plural } from '../../../utils/text';
+import { byCategory, foldTail, percentOf } from '../../../split/spending';
+import { RING_INNER, RING_OUTER, RING_SIZE, arcsOf, categoryColor, sector } from '../balances/ring';
 
 interface ShareImageProps {
   name: string;
@@ -24,21 +26,31 @@ interface ShareImageProps {
 const WIDTH = 1080;
 const HEIGHT = 1350;
 
-// The settle-up summary as a 1080x1350 picture to post in a group chat. Drawn from a
-// hidden copy of the card, in the theme and accent on screen.
+/** The spending ring on the card, in pixels; drawn from the chart's own 160-unit box */
+const RING_PX = 280;
+
+// The settle-up summary as a 1080x1350 picture to post in a group chat: who pays who,
+// where the money went by category, then the items. Drawn from a hidden copy of the
+// card, in the theme and accent on screen.
 const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [showItems, setShowItems] = useState(true);
+  const [showSpending, setShowSpending] = useState(true);
   const [image, setImage] = useState<{ url: string; blob: Blob } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const byId = new Map(people.map((p) => [p.id, p]));
   const range = dateRange(items);
+  const spending = arcsOf(
+    foldTail(byCategory(items)).map((s, i) => ({ ...s, color: categoryColor(s.key, i) })),
+  );
 
-  // If everything doesn't fit, the item list goes first
+  // If everything doesn't fit, the item list goes first, then the spending
   useLayoutEffect(() => {
     const card = cardRef.current;
-    if (card && showItems && card.scrollHeight > HEIGHT) setShowItems(false);
-  }, [showItems]);
+    if (card == null || card.scrollHeight <= HEIGHT) return;
+    if (showItems) setShowItems(false);
+    else if (showSpending) setShowSpending(false);
+  }, [showItems, showSpending]);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,7 +72,7 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [showItems]);
+  }, [showItems, showSpending]);
 
   const fileName = `${name.replace(/[^\w-]+/g, '-').toLowerCase() || 'split'}.png`;
 
@@ -158,6 +170,65 @@ const ShareImage = ({ name, currency, people, items, totals }: ShareImageProps) 
               />
             ))}
           </div>
+
+          {showSpending && spending.length > 0 && (
+            <>
+              <div className={classes.heading}>Spending</div>
+              <div className={classes.spending}>
+                <div className={classes.ring}>
+                  <svg
+                    viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+                    width={RING_PX}
+                    height={RING_PX}
+                  >
+                    {spending.length === 1 ? (
+                      <circle
+                        cx={RING_SIZE / 2}
+                        cy={RING_SIZE / 2}
+                        r={(RING_OUTER + RING_INNER) / 2}
+                        style={{ fill: 'none', stroke: spending[0].color }}
+                        strokeWidth={RING_OUTER - RING_INNER}
+                      />
+                    ) : (
+                      spending.map((s) => (
+                        <path
+                          key={s.key}
+                          d={sector(s.from, s.to)}
+                          // Through style, so the picture takes the theme's colour
+                          style={{ fill: s.color, stroke: 'var(--sf-bg)' }}
+                          strokeWidth={1.5}
+                        />
+                      ))
+                    )}
+                  </svg>
+                  <div className={classes.ringCentre}>
+                    <span className={classes.ringTotal}>
+                      {formatMoney(totals.totalCents, currency)}
+                    </span>
+                    <span className={classes.ringSub}>{plural(items.length, 'item')}</span>
+                  </div>
+                </div>
+                <div className={classes.legend}>
+                  {spending.map((s) => (
+                    <div
+                      key={s.key}
+                      className={classes.legendRow}
+                    >
+                      <span
+                        className={classes.swatch}
+                        style={{ background: s.color }}
+                      />
+                      <span className={classes.legendLabel}>{s.label}</span>
+                      <span className={classes.legendAmount}>{formatMoney(s.cents, currency)}</span>
+                      <span className={classes.legendShare}>
+                        {percentOf(s.cents, totals.totalCents)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {showItems && items.length > 0 && (
             <>
