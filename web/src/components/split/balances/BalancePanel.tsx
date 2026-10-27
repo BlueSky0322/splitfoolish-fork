@@ -30,13 +30,13 @@ import { useSplitActions } from '../../../split/useSplit';
 import { useSplitPage } from '../SplitPageContext';
 
 /** Where you stand, in large type; until you've picked yourself, the total */
-export function BalanceHero({ size, prefix }: { size: number; prefix?: string }) {
+export function BalanceHero({ size }: { size: number }) {
   const { totals, currency, me, meta, status, openDialog } = useSplitPage();
   if (meta == null && status === 'loading') return <HeroSkeleton size={size} />;
   if (me == null) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="sf-muted text-[13px]">{prefix ? `${prefix} · total` : 'Total'}</div>
+        <div className="sf-muted text-[13px]">Total</div>
         <div
           className={classes.heroAmount}
           style={{ fontSize: size }}
@@ -55,17 +55,15 @@ export function BalanceHero({ size, prefix }: { size: number; prefix?: string })
   }
   const cents = totals.balances.get(me.id)?.balanceCents ?? 0;
   const label = !totals.hasItems
-    ? 'nothing spent yet'
+    ? 'Nothing spent yet'
     : cents > 0
-      ? "you're owed"
+      ? "You're owed"
       : cents < 0
-        ? 'you owe'
-        : "you're settled";
+        ? 'You owe'
+        : "You're settled";
   return (
     <div className="flex flex-col gap-1">
-      <div className="sf-muted text-[13px]">
-        {prefix ? `${prefix} · ${label}` : label.charAt(0).toUpperCase() + label.slice(1)}
-      </div>
+      <div className="sf-muted text-[13px]">{label}</div>
       <div
         className={`${classes.heroAmount} ${cents > 0 ? 'sf-positive' : cents < 0 ? 'sf-negative' : ''}`}
         style={{ fontSize: size }}
@@ -73,34 +71,6 @@ export function BalanceHero({ size, prefix }: { size: number; prefix?: string })
         {formatMoney(cents, currency)}
       </div>
     </div>
-  );
-}
-
-/** Where you stand in one line, for the phone's bar once the big figure scrolls away */
-export function BalanceLine() {
-  const { totals, currency, me } = useSplitPage();
-  if (me == null) {
-    return (
-      <span className={classes.balanceLine}>
-        <span className="sf-muted">Total</span> {formatMoney(totals.totalCents, currency)}
-      </span>
-    );
-  }
-  const cents = totals.balances.get(me.id)?.balanceCents ?? 0;
-  const label = !totals.hasItems
-    ? 'Nothing spent yet'
-    : cents > 0
-      ? "You're owed"
-      : cents < 0
-        ? 'You owe'
-        : 'Settled';
-  return (
-    <span className={classes.balanceLine}>
-      <span className="sf-muted">{label}</span>{' '}
-      <span className={cents > 0 ? 'sf-positive' : cents < 0 ? 'sf-negative' : ''}>
-        {formatMoney(cents, currency)}
-      </span>
-    </span>
   );
 }
 

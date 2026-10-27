@@ -40,10 +40,6 @@ interface PaymentMethodsProps {
   preferredId: string | null;
   /** Saves them in the background: the change shows straight away */
   onChange: (methods: PaymentMethod[], preferredId: string | null) => void;
-  /** On phones the list is one grouped card */
-  grouped: boolean;
-  /** Already inside a card: the list runs edge to edge without one of its own */
-  bare?: boolean;
 }
 
 /** A QR code picked on this device, ready to upload */
@@ -367,14 +363,8 @@ function MethodForm({
 }
 
 // The ways someone can pay you, one marked preferred. People who owe you see them
-// next to their transfer in Settle up.
-const PaymentMethods = ({
-  methods,
-  preferredId,
-  onChange,
-  grouped,
-  bare = false,
-}: PaymentMethodsProps) => {
+// next to their transfer in Settle up. Drawn inside a settings card, edge to edge.
+const PaymentMethods = ({ methods, preferredId, onChange }: PaymentMethodsProps) => {
   // A method's id, or 'new' while adding one
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -405,7 +395,7 @@ const PaymentMethods = ({
     ) : (
       methods.length < MAX_METHODS && (
         <UnstyledButton
-          className={grouped ? classes.addRow : classes.addLink}
+          className={classes.addRow}
           onClick={() => setEditing('new')}
         >
           <Plus size={16} />
@@ -415,13 +405,9 @@ const PaymentMethods = ({
     );
 
   return (
-    <div
-      className={
-        grouped ? `${classes.methodGroup} ${bare ? classes.bare : ''}` : 'flex flex-col gap-2'
-      }
-    >
+    <div className={classes.methodGroup}>
       <div
-        className={grouped ? 'contents' : 'flex flex-col gap-2'}
+        className="contents"
         role="radiogroup"
         aria-label="Preferred payment method"
       >
@@ -437,7 +423,7 @@ const PaymentMethods = ({
           ) : (
             <div
               key={m.id}
-              className={grouped ? classes.methodRow : classes.method}
+              className={classes.methodRow}
               data-selected={m.id === preferredId || undefined}
             >
               <UnstyledButton

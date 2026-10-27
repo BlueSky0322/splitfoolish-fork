@@ -258,12 +258,3 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-
-.balanceLine {
-  font-size: 15px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}

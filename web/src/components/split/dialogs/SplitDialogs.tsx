@@ -1,4 +1,3 @@
-import { BalanceHero } from '../balances/BalancePanel';
 import CurrenciesSheet from './CurrenciesSheet';
 import EndSplit, { EndSplitTitle } from './EndSplit';
 import ExportDialog from './ExportDialog';
@@ -12,10 +11,9 @@ import SplitMenuSheet from './SplitMenuSheet';
 import SplitSettings from './SplitSettings';
 import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import { Button } from '@mantine/core';
-import { type ReactNode, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
 import type { ItemInput, PaymentInput } from '../../../api';
-import type { SplitTotals } from '../../../split/derive';
 import type { SplitItem } from '../../../split/state';
 import { toApiItem } from '../../../split/state';
 import { useSplitState } from '../../../split/SplitStateContext';
@@ -27,18 +25,9 @@ import type { DeleteItems } from '../items/delete-items';
 import { canDeleteSplit, canEditSplitSettings } from '@shared/rules';
 import { atTimeNow } from '../../../utils/date-input';
 
-/** Under Settle up's title: how many transfers settle everyone */
-const settleNote = (totals: SplitTotals) => {
-  const n = totals.transfers.length;
-  if (n > 0) return `${n} ${n === 1 ? 'transfer clears' : 'transfers clear'} every balance`;
-  return totals.hasItems ? 'Everyone is settled up' : 'No items yet';
-};
-
 interface SplitDialogsProps {
   /** The one open, if any */
   dialog: Dialog | null;
-  /** The balances and transfers, shown in Settle up */
-  panel: ReactNode;
   deleteItems: DeleteItems;
   /** Shows only this person's items */
   onShowItems: (personId: string) => void;
@@ -56,7 +45,7 @@ const SheetTitle = ({ title, under }: { title: string; under?: string }) =>
   );
 
 // Everything the split page opens over itself
-const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsProps) => {
+const SplitDialogs = ({ dialog, deleteItems, onShowItems }: SplitDialogsProps) => {
   const {
     splitId,
     myEmail,
@@ -278,19 +267,6 @@ const SplitDialogs = ({ dialog, panel, deleteItems, onShowItems }: SplitDialogsP
         title={null}
       >
         {dialog?.kind === 'menu' && <SplitMenuSheet />}
-      </ResponsiveDialog>
-      <ResponsiveDialog
-        opened={dialog?.kind === 'settle'}
-        onClose={close}
-        title={
-          <BalanceHero
-            size={36}
-            prefix="Settle up"
-          />
-        }
-      >
-        <div className="sf-muted text-sm mb-4">{settleNote(totals)}</div>
-        {panel}
       </ResponsiveDialog>
       <ResponsiveDialog
         opened={dialog?.kind === 'share'}
