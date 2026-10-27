@@ -19,7 +19,7 @@ import { categoryIcon } from '../../../split/categories';
 import type { ItemGroup, SortDir, SortKey } from '../../../split/grouping';
 import { currencySymbol, formatAmount, formatMoney } from '../../../utils/money';
 import type { RowSelection } from './useItemSelection';
-import { useLongPress } from './useItemSelection';
+import { useLongPress } from '../../../hooks/useLongPress';
 import { RowCheck } from './ItemSelection';
 import PersonAvatar, { PersonName, PersonNames } from '../PersonAvatar';
 import { ForWhom, PaidBy } from './PaidBy';

@@ -1,5 +1,5 @@
-import type { PointerEvent, MouseEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useBackDismiss } from '../../../hooks/useBackDismiss';
 
 // Picking several items at once (see ItemSelection.tsx)
 
@@ -67,54 +67,6 @@ export function useItemSelection(order: string[]) {
   return { row, selected, active, count: selected.size, clear, start, selectAll };
 }
 
-const LONG_PRESS_MS = 450;
-const MOVE_SLOP_PX = 10;
-
-/**
- * A long press with a finger (not a mouse): calls onLongPress, and the click that
- * follows the release is swallowed so it doesn't also open the item
- */
-export function useLongPress(onLongPress: () => void) {
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const fired = useRef(false);
-
-  const cancel = () => {
-    clearTimeout(timer.current);
-    start.current = null;
-  };
-
-  return {
-    onPointerDown: (e: PointerEvent) => {
-      fired.current = false;
-      if (e.pointerType === 'mouse') return;
-      start.current = { x: e.clientX, y: e.clientY };
-      timer.current = setTimeout(() => {
-        fired.current = true;
-        navigator.vibrate?.(10);
-        onLongPress();
-      }, LONG_PRESS_MS);
-    },
-    onPointerMove: (e: PointerEvent) => {
-      const s = start.current;
-      if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > MOVE_SLOP_PX) cancel();
-    },
-    onPointerUp: cancel,
-    onPointerCancel: cancel,
-    onPointerLeave: cancel,
-    // Phones show a menu on a long press otherwise
-    onContextMenu: (e: MouseEvent) => {
-      if (start.current != null || fired.current) e.preventDefault();
-    },
-    /** True (once) when the click comes from the release of a long press */
-    consumeClick: () => {
-      const was = fired.current;
-      fired.current = false;
-      return was;
-    },
-  };
-}
-
 /**
  * Keys and buttons while picking items. Phones: the back button stops picking rather
  * than leaving the split. Computers: Esc lets go of the selection, and Delete removes
@@ -132,18 +84,9 @@ export function useSelectionKeys(
     handlers.current = { clear, remove };
   });
 
-  useEffect(() => {
-    if (isDesktop || !selecting) return;
-    window.history.pushState({ sfSelecting: true }, '');
-    const onBack = () => handlers.current.clear();
-    window.addEventListener('popstate', onBack);
-    return () => {
-      window.removeEventListener('popstate', onBack);
-      if ((window.history.state as { sfSelecting?: boolean } | null)?.sfSelecting) {
-        window.history.back();
-      }
-    };
-  }, [isDesktop, selecting]);
+  // A layer like a sheet's, so Back closes a sheet opened over the selection first. On
+  // tablets too, where sheets aren't layers but the selection still ends with Back.
+  useBackDismiss(!isDesktop && selecting, clear, { tablets: true });
 
   useEffect(() => {
     if (!isDesktop || !selecting) return;

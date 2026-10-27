@@ -35,13 +35,22 @@ import { forgetOfflineWork } from '../offline/sync';
 // once: wait longer than the default second for things to appear
 configure({ asyncUtilTimeout: 4000 });
 
-/** The screen tests run at: a computer, or a phone */
-let screenSize: 'desktop' | 'phone' = 'desktop';
+/** The screen tests run at: a computer, a tablet or a phone, and how wide each is */
+const WIDTHS = { desktop: 1280, tablet: 820, phone: 390 };
+let screenSize: keyof typeof WIDTHS = 'desktop';
+
+/** Whether a width query, say "(min-width: 64em)", holds at the screen's width */
+function matchesWidth(query: string) {
+  const m = /\((min|max)-width:\s*([\d.]+)(em|px)\)/.exec(query);
+  if (m == null) return false;
+  const px = Number(m[2]) * (m[3] === 'em' ? 16 : 1);
+  return m[1] === 'min' ? WIDTHS[screenSize] >= px : WIDTHS[screenSize] <= px;
+}
 
 // What jsdom doesn't have, and the app (or Mantine) uses
 function stubBrowser() {
   window.matchMedia = (query: string) => ({
-    matches: query.includes(screenSize === 'desktop' ? 'min-width' : 'max-width'),
+    matches: matchesWidth(query),
     media: query,
     onchange: null,
     addListener: () => {},
@@ -758,7 +767,7 @@ export function renderApp(
   { size = 'desktop' }: { size?: typeof screenSize } = {},
 ) {
   screenSize = size;
-  vi.stubGlobal('innerWidth', size === 'desktop' ? 1280 : 390);
+  vi.stubGlobal('innerWidth', WIDTHS[size]);
   vi.stubGlobal('fetch', vi.fn(serve(server)));
   window.history.replaceState(null, '', path);
   return render(createElement(Root));
