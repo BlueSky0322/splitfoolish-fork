@@ -23,14 +23,7 @@ import {
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useEffect, useId, useMemo, useState } from 'react';
-import {
-  MAX_ITEM_CENTS,
-  convertCents,
-  fitsItemCents,
-  isValidRate,
-  rateDay,
-  toCents,
-} from '@shared/rates';
+import { MAX_ITEM_CENTS, fitsItemCents, isValidRate, toCents } from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
 import { itemShares, MAX_SHARES } from '@shared/settle';
 import { MAX_COST, MAX_NAME_LENGTH, MAX_NOTES_LENGTH, type Person } from '@shared/types';
@@ -42,7 +35,6 @@ import { useSplitPage } from '../SplitPageContext';
 import { CATEGORIES, OTHER, categoryKey } from '../../../split/categories';
 import { ITEM_NAMES_KEY, suggestNames } from '../../../split/item-names';
 import { currencySymbol, formatMoney } from '../../../utils/money';
-import { evaluateSum } from '../../../utils/math';
 import {
   atTimeNow,
   fromDateInput,
@@ -50,8 +42,8 @@ import {
   keepTimeOf,
   toDateInput,
 } from '../../../utils/date-input';
-import { ConversionRow } from './ConversionRow';
-import { DayField } from './DayField';
+import { ConversionRow } from '../forms/ConversionRow';
+import { DayField } from '../forms/DayField';
 import { useIsDesktop, useIsMobile } from '../../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../../ui/CurrencySelect';
@@ -60,8 +52,8 @@ import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
 import { findLinks, plural } from '../../../utils/text';
-import { useRate } from '../../../hooks/useRate';
-import { buildItemInput, chooseRate, exactCents } from '../../../split/item-input';
+import { buildItemInput, exactCents } from '../../../split/item-input';
+import { useAmountConversion } from '../../../split/useAmountConversion';
 
 interface ItemFormProps {
   /** Editing this item; adding a new one when absent */
@@ -117,19 +109,7 @@ const ItemForm = ({
   // Phones: the sheet's header takes Save and the menu (see DialogHeaderSlot)
   const headerSlot = useContext(DialogHeaderSlot);
   const formId = useId();
-  // Items in another currency are edited as they were typed, in that currency
   const original = item?.original ?? null;
-  const [expression, setExpression] = useState(
-    original ? String(original.amount) : item ? String(item.cost) : initialAmount ?? '',
-  );
-  const [entryCurrency, setEntryCurrency] = useState(
-    original?.currency ?? (item ? currency : initialCurrency ?? currency),
-  );
-  const foreign = entryCurrency !== currency;
-  const [ownRateChosen, setOwnRateChosen] = useState(original?.rateSource === 'manual');
-  const [ownRate, setOwnRate] = useState<number | ''>(
-    original?.rateSource === 'manual' ? original.rate ?? '' : '',
-  );
   const [name, setName] = useState(item?.name ?? '');
   const [payerId, setPayerId] = useState<string | null>(
     item?.payer.id ?? me?.id ?? people[0]?.id ?? null,
@@ -162,6 +142,28 @@ const ItemForm = ({
     chosenDay != null && dayText !== (item ? ownDayText : toDateInput(new Date()))
       ? chosenDay
       : null;
+  // When it was paid, which decides the rate for the preview. A saved item moved to
+  // another day keeps its time of day, as Move to a day does.
+  const paidAt = item
+    ? newDay
+      ? keepTimeOf(newDay, item.createdAt)
+      : item.createdAt
+    : chosenDay
+      ? atTimeNow(chosenDay)
+      : undefined;
+  // Items in another currency are edited as they were typed, in that currency. An edit
+  // keeps the rate the item was recorded with, a new amount included; a new item, or a
+  // new currency, takes the rate on the day it was paid. The server converts again
+  // when saving, the same way.
+  const conversion = useAmountConversion({
+    currency,
+    original,
+    initialExpression: item ? String(item.cost) : initialAmount ?? '',
+    initialCurrency: item ? currency : initialCurrency ?? currency,
+    paidAt,
+  });
+  const { expression, setExpression, entryCurrency, setEntryCurrency, foreign } = conversion;
+  const { ownRateChosen, ownRate, enteredCents, rate, costCents } = conversion;
   // Names used before, in any of your splits, suggested as you type
   const pastNames = useQuery({
     queryKey: ITEM_NAMES_KEY,
@@ -199,45 +201,8 @@ const ItemForm = ({
     onDirtyChange?.(unsaved);
   }, [onDirtyChange, unsaved]);
 
-  /** The cost as typed: a number or a sum like "30*3"; null while it doesn't work out */
-  const cost = useMemo(() => evaluateSum(expression), [expression]);
-  /** The amount as typed, in the currency it was paid in */
-  const enteredCents = cost == null || cost < 0 ? null : toCents(cost);
+  const cost = conversion.amount;
   const chosen = people.filter((p) => included.has(p.id));
-
-  // The rate for the preview. An edit keeps the rate the item was recorded with, a new
-  // amount included; a new item, or a new currency, takes the rate on the day it was
-  // paid (today, for a new one). The server converts again when saving, the same way.
-  // A saved item moved to another day keeps its time of day, as Move to a day does.
-  const paidAt = item
-    ? newDay
-      ? keepTimeOf(newDay, item.createdAt)
-      : item.createdAt
-    : chosenDay
-      ? atTimeNow(chosenDay)
-      : undefined;
-  const fetchedRate = useRate(entryCurrency, currency, {
-    enabled: foreign && !ownRateChosen,
-    at: paidAt,
-  });
-  const { rate, source: rateSource } = chooseRate({
-    foreign,
-    entryCurrency,
-    enteredCents,
-    ownRateChosen,
-    ownRate,
-    original,
-    fetched: fetchedRate.data,
-  });
-  /** The amount in the split's currency; unknown in another currency until there's a rate */
-  const costCents = enteredCents == null || rate == null ? null : convertCents(enteredCents, rate);
-
-  /** Under the amount in another currency: what it comes to, or why that isn't known yet */
-  const conversionNote = () => {
-    if (costCents != null) return `≈ ${formatMoney(costCents, currency)}`;
-    if (fetchedRate.isError) return 'Converted when saved';
-    return enteredCents == null ? '' : 'Getting the rate…';
-  };
 
   // What each person's part comes to, shown next to them
   // A handful of people: cheap to work out on every change
@@ -418,23 +383,9 @@ const ItemForm = ({
       {tried && problems.cost && <div className={classes.error}>{problems.cost}</div>}
       {foreign && (
         <ConversionRow
-          entryCurrency={entryCurrency}
-          currency={currency}
-          ownRateChosen={ownRateChosen}
-          ownRate={ownRate}
-          onOwnRate={setOwnRate}
+          {...conversion.view}
           rateError={tried ? problems.rate : null}
-          costCents={costCents}
-          note={conversionNote()}
           compact={isMobile}
-          rate={rate}
-          rateSource={rateSource}
-          paidBefore={paidAt != null && rateDay(paidAt) < rateDay(Date.now())}
-          onChooseOwn={() => {
-            setOwnRateChosen(true);
-            if (ownRate === '' && rate != null) setOwnRate(rate);
-          }}
-          onUseLive={() => setOwnRateChosen(false)}
         />
       )}
 

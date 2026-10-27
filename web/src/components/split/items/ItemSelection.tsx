@@ -6,7 +6,7 @@ import ResponsiveDialog from '../../ui/ResponsiveDialog';
 import classes from './ItemSelection.module.css';
 import { plural } from '../../../utils/text';
 import { fromDateInput, isPastDay, toDateInput } from '../../../utils/date-input';
-import { DayField } from './DayField';
+import { DayField } from '../forms/DayField';
 
 // Picking several items at once to delete them or move them to another day. Phones
 // start with a long press on an item; computers with the checkbox that shows on hover.
