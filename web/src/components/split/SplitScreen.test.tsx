@@ -476,15 +476,16 @@ describe('the split page', () => {
     await user.click(await screen.findByText('Dinner'));
     const detail = await screen.findByRole('dialog');
     await user.click(within(detail).getByRole('button', { name: 'Ann paid back' }));
-    // Her part of the dinner, for the dinner, to Ryan who paid
+    // Her part of the dinner, for the dinner, to Ryan who paid: 45, but she owes only 30
+    // overall (she paid for the taxi), so 30
     const save = await screen.findByRole('button', { name: 'Record payment' });
     const form = save.closest('form')!;
-    expect(within(form).getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '45.00');
+    expect(within(form).getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '30.00');
     expect(within(form).getByText('For Dinner')).toBeTruthy();
     await user.click(save);
     await waitFor(() =>
       expect(server.splits.get('trip')!.payments).toMatchObject([
-        { fromId: 'ann', toId: 'me', amount: 45, itemId: 'dinner' },
+        { fromId: 'ann', toId: 'me', amount: 30, itemId: 'dinner' },
       ]),
     );
 
@@ -498,6 +499,77 @@ describe('the split page', () => {
     await user.click(screen.getByRole('button', { name: 'Back to Trip' }));
     await waitFor(() => expect(window.location.search).toBe('?s=trip'));
     expect(await screen.findByText('Dinner')).toBeTruthy();
+  });
+
+  test('Paid back is offered only to someone who still owes money, and becomes a tag once paid', async () => {
+    // Ryan paid 90 for dinner, Ann 20 for the taxi: Ryan is owed 35 overall, Ann owes 35
+    const owed = () =>
+      splitDetail('trip', [
+        item({ id: 'dinner', name: 'Dinner', cost: 90 }),
+        item({ id: 'taxi', name: 'Taxi', cost: 20, payerId: 'ann' }),
+      ]);
+    const server = fakeServer(owed());
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    const open = async (name: string) => {
+      await user.click(await screen.findByText(name));
+      return within(await screen.findByRole('dialog'));
+    };
+    const close = async () => {
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    };
+
+    // Ryan's 10 of the taxi is already in what he's owed: nothing to pay back
+    const taxi = await open('Taxi');
+    expect(taxi.getByRole('list', { name: "Each person's part" }).textContent).toContain('Ryan');
+    expect(taxi.queryByRole('button', { name: /paid back$/ })).toBeNull();
+    await close();
+
+    // Ann's 45 of the dinner, up to the 35 she owes
+    await user.click((await open('Dinner')).getByRole('button', { name: 'Ann paid back' }));
+    const save = await screen.findByRole('button', { name: 'Record payment' });
+    expect(within(save.closest('form')!).getByRole('textbox', { name: 'Amount' })).toHaveProperty(
+      'value',
+      '35.00',
+    );
+    await user.click(save);
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.payments).toMatchObject([{ fromId: 'ann', amount: 35 }]),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Settled now: her part says it was paid back, with nothing more to record
+    const parts = (await open('Dinner')).getByRole('list', { name: "Each person's part" });
+    const ann = within(parts)
+      .getAllByRole('listitem')
+      .find((li) => li.textContent?.includes('Ann'))!;
+    expect(within(ann).getByText('Paid back')).toBeTruthy();
+    expect(within(ann).queryByRole('button')).toBeNull();
+  });
+
+  test("on a computer, Record payment is in an item's menu only while someone on it owes money", async () => {
+    renderApp(
+      fakeServer(
+        splitDetail('trip', [
+          item({ id: 'dinner', name: 'Dinner', cost: 90 }),
+          item({ id: 'taxi', name: 'Taxi', cost: 20, payerId: 'ann' }),
+        ]),
+      ),
+      '/?s=trip',
+    );
+    const user = userEvent.setup();
+    const menuOf = async (name: string) => {
+      await user.click(await screen.findByText(name));
+      await user.click(within(await screen.findByRole('dialog')).getByLabelText('More actions'));
+      return (await screen.findAllByRole('menuitem')).map((m) => m.textContent);
+    };
+    // Only Ryan shares the taxi with Ann who paid, and he is owed money
+    expect(await menuOf('Taxi')).not.toContain('Record payment');
+    await user.keyboard('{Escape}');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await menuOf('Dinner')).toContain('Record payment');
   });
 
   test('web addresses in notes open as links: in the item sheet on a phone, from the form on desktop', async () => {

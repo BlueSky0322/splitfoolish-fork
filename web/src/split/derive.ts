@@ -52,6 +52,28 @@ export function computeTotals(
   };
 }
 
+/**
+ * Someone's part of an item paid back to whoever paid for it: what they've already paid
+ * back for it, and what they still could. That's their part less what they've paid back,
+ * and never more than they owe overall: balances are net, so someone who is settled or
+ * owed money has nothing to pay back, however much their part was.
+ */
+export function payBack(
+  item: SplitItem,
+  personId: string,
+  totals: SplitTotals,
+  payments: SplitPayment[],
+) {
+  const partCents = totals.sharesByItem.get(item.id)?.get(personId) ?? 0;
+  const paidCents = payments
+    .filter((p) => p.itemId === item.id && p.from.id === personId && p.to.id === item.payer.id)
+    .reduce((sum, p) => sum + toCents(p.amount), 0);
+  const owesCents = Math.max(0, -(totals.balances.get(personId)?.balanceCents ?? 0));
+  const dueCents =
+    personId === item.payer.id ? 0 : Math.max(0, Math.min(partCents - paidCents, owesCents));
+  return { paidCents, dueCents };
+}
+
 /** The person in the bill who is this account, if one is linked */
 export const findMe = (people: Person[], email: string | null | undefined) =>
   email == null ? null : people.find((p) => p.memberEmail === email) ?? null;
