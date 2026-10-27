@@ -537,13 +537,11 @@ const ConvertPage = () => {
         allowDeselect={false}
         disabled={splitOptions.length === 0}
         className="min-w-0 flex-1"
-        size={isDesktop ? 'sm' : 'md'}
       />
       <Button
         leftSection={<Plus size={16} />}
         onClick={addAsItem}
         disabled={chosenSplit == null || amount == null || amount === 0}
-        size={isDesktop ? 'sm' : 'md'}
       >
         Add as item
       </Button>

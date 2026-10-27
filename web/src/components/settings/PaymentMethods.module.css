@@ -15,19 +15,6 @@
   color: var(--sf-text-muted);
 }
 
-/* Payment methods, as separate cards */
-.method {
-  display: flex;
-  align-items: center;
-  border-radius: 8px;
-  background: var(--sf-surface);
-  box-shadow: var(--sf-shadow-sm);
-}
-
-.method[data-selected] {
-  box-shadow: 0 0 0 1px var(--sf-accent);
-}
-
 .methodMain {
   flex: 1;
   min-width: 0;
@@ -80,16 +67,6 @@
   color: var(--sf-text);
 }
 
-.addLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  padding: 4px 6px;
-  font-size: 14px;
-  color: var(--sf-accent);
-}
-
 .methodForm {
   display: flex;
   flex-direction: column;
@@ -100,14 +77,13 @@
   box-shadow: 0 0 0 1px var(--sf-accent);
 }
 
-/* Phones: one grouped card */
+/* The methods inside their settings card, rows divided from the card's heading and
+   from each other */
 .methodGroup {
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
-  background: var(--sf-surface);
-  box-shadow: var(--sf-shadow-sm);
   overflow: hidden;
+  border-top: 1px solid var(--sf-divider);
 }
 
 .methodRow {
@@ -213,12 +189,4 @@
   border-radius: 8px;
   background: #f3f4f8;
   object-fit: contain;
-}
-
-/* Inside a settings card: no card of its own, rows divided from the card's heading */
-.methodGroup.bare {
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  border-top: 1px solid var(--sf-divider);
 }

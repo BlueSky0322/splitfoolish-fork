@@ -38,8 +38,6 @@ const PaymentsSection = ({ track }: { track: Track }) => {
           methods={profile.paymentMethods}
           preferredId={profile.preferredPaymentMethodId}
           onChange={save}
-          grouped
-          bare
         />
       </SettingsCard>
 

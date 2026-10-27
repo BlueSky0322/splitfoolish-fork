@@ -20,7 +20,6 @@ export type Dialog =
   /** An item as it stands, on phones, with Edit to open the form */
   | { kind: 'item'; itemId: string }
   | { kind: 'people'; personId?: string }
-  | { kind: 'settle' }
   | { kind: 'share' }
   /** Saving the split as a CSV or a PDF */
   | { kind: 'export' }

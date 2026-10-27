@@ -300,7 +300,6 @@ const SplitScreen = ({
     dialogs: (
       <SplitDialogs
         dialog={dialog}
-        panel={panel}
         deleteItems={deleteItems}
         onShowItems={setPersonFilter}
       />

@@ -215,11 +215,6 @@
   font-size: 32px;
 }
 
-.form[data-phone] .conversion {
-  margin-top: -12px;
-  font-size: 12px;
-}
-
 .form[data-phone] .pill {
   min-height: 40px;
   padding-right: 14px;
