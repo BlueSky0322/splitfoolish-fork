@@ -118,9 +118,18 @@ typed, returned as data.
   and transfers always cover every expense, whatever the page. Each call reads the
   split as saved at that moment; if it changes between pages, later pages can shift.
 - **A cheap re-read:** every split has an `updatedAt` (`list_splits`, and `get_split`'s
-  `split`), which moves with every change to it, photos included. Send it back as
-  `get_split`'s `ifUnchangedSince` and, when nothing has changed, the answer is only
-  `{ unchanged: true, updatedAt }`, decided before the bill is read.
+  `split`), which moves forward with every change to its bill, settings or photos, by
+  at least a millisecond each time. `get_split`'s `split.readVersion` also changes when
+  anything else in the answer does: your archive or role, who in the bill has an
+  account, and the display names linked people go by. Send it back as `ifReadVersion`
+  and, when nothing has changed, the answer is only `{ unchanged: true, updatedAt,
+readVersion }`, decided from the split, your membership and its people before the
+  bill is read; a former member gets `not_found`. The older `ifUnchangedSince` is still
+  accepted but always answers in full, since a time alone can't show that nothing else
+  changed.
+- **Lists in a fixed order:** `list_splits` pages through your own order, then the
+  latest changed first, then by id, so splits that tie still come in the same order
+  on every page.
 - **People by name in answers.** An expense says `payer` and `participants` by name,
   with `shares` and `exact` keyed by name; a balance says `person`, a transfer `from`
   and `to`, and `routePaymentsThrough` is a name. Names are unique in a split, so a

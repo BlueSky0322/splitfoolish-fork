@@ -86,9 +86,16 @@ export const ID_PATTERN = new RegExp(`^${ID_CHARS}$`);
 /** The path of one split, which the routes under it extend */
 export const SPLIT_PATH = `/splits/:id${ID_PARAM}`;
 
-/** Marks a split as just changed, for the order of My splits */
+/**
+ * How a split is marked as changed, for a statement that changes more of it; binds now.
+ * The time only moves forward, by at least a millisecond, so two changes in the same
+ * millisecond (or on servers whose clocks differ a little) still read as two versions.
+ */
+export const NEXT_UPDATED_AT = 'updated_at = max(updated_at + 1, ?)';
+
+/** Marks a split as just changed, for the order of My splits and for an agent's re-read */
 export const touchSplitStatement = (db: D1Database, splitId: string) =>
-  db.prepare('UPDATE splits SET updated_at = ? WHERE id = ?').bind(Date.now(), splitId);
+  db.prepare(`UPDATE splits SET ${NEXT_UPDATED_AT} WHERE id = ?`).bind(Date.now(), splitId);
 
 /** Runs groups of statements in one batch, and hands back each group's results */
 export async function batchGroups(

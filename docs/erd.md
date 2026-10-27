@@ -37,7 +37,7 @@ erDiagram
         text converting_from "while items are converted to a new currency"
         int converting_since
         int created_at
-        int updated_at
+        int updated_at "moves forward on every change, at least 1ms"
     }
     split_members {
         text split_id PK, FK
