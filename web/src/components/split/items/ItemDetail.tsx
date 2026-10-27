@@ -3,7 +3,9 @@ import { CalendarBlank, Copy, PencilSimple, Trash } from '@phosphor-icons/react'
 import { useState } from 'react';
 import { toCents } from '@shared/rates';
 import { attachmentUrl } from '../../../api';
+import type { Person } from '@shared/types';
 import { categoryIcon, categoryLabel } from '../../../split/categories';
+import { payBack } from '../../../split/derive';
 import type { SplitItem } from '../../../split/state';
 import { formatAmount, formatMoney } from '../../../utils/money';
 import { SOURCE_LABELS } from '../../../utils/rate-labels';
@@ -23,9 +25,43 @@ const shortDate = (at: number) =>
   new Date(at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
 /**
+ * Paid back, by someone's part of an item: a button to record it while they still owe
+ * money, prefilled with what's left of their part up to what they owe, or a tag once
+ * they've paid it. Nothing for whoever paid for it, or for someone settled or owed money.
+ */
+function PayBack({ item, person }: { item: SplitItem; person: Person }) {
+  const { totals, openDialog } = useSplitPage();
+  const { payments } = useSplitState().state;
+  const { paidCents, dueCents } = payBack(item, person.id, totals, payments);
+  if (dueCents > 0) {
+    return (
+      <Button
+        variant="subtle"
+        size="compact-xs"
+        aria-label={`${person.name} paid back`}
+        onClick={() =>
+          openDialog({
+            kind: 'payment',
+            prefill: {
+              fromId: person.id,
+              toId: item.payer.id,
+              amountCents: dueCents,
+              itemId: item.id,
+            },
+          })
+        }
+      >
+        Paid back
+      </Button>
+    );
+  }
+  return paidCents > 0 ? <span className="sf-tag">Paid back</span> : null;
+}
+
+/**
  * Phones: an item as it stands (10l). The amount and how it was converted, its category,
  * date and payer, what each person's part comes to (with Paid back, to record that they
- * paid it), the payments that settled it, and its receipts. Duplicate, Delete and Edit
+ * paid it, while they still owe money), the payments that settled it, and its receipts. Duplicate, Delete and Edit
  * sit at the bottom; Edit opens the form.
  */
 const ItemDetail = ({
@@ -87,26 +123,10 @@ const ItemDetail = ({
               size={30}
             />
             <span className={classes.name}>{p.name}</span>
-            {p.id !== item.payer.id && (
-              <Button
-                variant="subtle"
-                size="compact-xs"
-                aria-label={`${p.name} paid back`}
-                onClick={() =>
-                  openDialog({
-                    kind: 'payment',
-                    prefill: {
-                      fromId: p.id,
-                      toId: item.payer.id,
-                      amountCents: parts?.get(p.id) ?? 0,
-                      itemId: item.id,
-                    },
-                  })
-                }
-              >
-                Paid back
-              </Button>
-            )}
+            <PayBack
+              item={item}
+              person={p}
+            />
             <span className={classes.partAmount}>
               {formatAmount(parts?.get(p.id) ?? 0, currency)}
             </span>
