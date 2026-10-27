@@ -28,7 +28,7 @@ import { photoFileName, usePhotoDownload } from '../../../split/photo-download';
 import { useSplitState } from '../../../split/SplitStateContext';
 import Fab from '../../ui/Fab';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
-import { useLongPress } from '../items/useItemSelection';
+import { useLongPress } from '../../../hooks/useLongPress';
 import bar from '../items/ItemSelection.module.css';
 import PillMenu from '../PillMenu';
 import { useSplitPage } from '../SplitPageContext';

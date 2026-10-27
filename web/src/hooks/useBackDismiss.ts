@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useIsMobile } from './useBreakpoints';
+import { useIsDesktop, useIsMobile } from './useBreakpoints';
 
 // On phones, Back (the Android gesture, the iOS edge swipe) closes whatever is open on
 // top before it leaves the page: each sheet, menu or dialog adds a history entry when it
@@ -79,16 +79,22 @@ function popClosed() {
 if (typeof window !== 'undefined') window.addEventListener('popstate', onPopState);
 
 /**
- * Lets Back close this layer while `opened` (phones only). `onBack` closes it, or
- * returns false to keep it open.
+ * Lets Back close this layer while `opened` (phones only, or tablets too with
+ * `tablets`). `onBack` closes it, or returns false to keep it open.
  */
-export function useBackDismiss(opened: boolean, onBack: () => boolean | void) {
+export function useBackDismiss(
+  opened: boolean,
+  onBack: () => boolean | void,
+  { tablets = false }: { tablets?: boolean } = {},
+) {
   const isMobile = useIsMobile();
+  const isDesktop = useIsDesktop();
+  const active = tablets ? !isDesktop : isMobile;
   const latest = useRef(onBack);
   latest.current = onBack;
 
   useEffect(() => {
-    if (!opened || !isMobile) return;
+    if (!opened || !active) return;
     const layer: Layer = { id: nextId++, onBack: () => latest.current() };
     layers.push(layer);
     if (selfBack > 0) waiting.push(layer.id);
@@ -111,5 +117,5 @@ export function useBackDismiss(opened: boolean, onBack: () => boolean | void) {
       const steps = popClosed();
       if (steps > 0) goBack(steps);
     };
-  }, [opened, isMobile]);
+  }, [opened, active]);
 }

@@ -561,7 +561,10 @@ what Back does.
 - [hooks/useBreakpoints.ts](../web/src/hooks/useBreakpoints.ts): `useIsMobile` (under
   768px) and `useIsDesktop` (1024px and up).
 - [hooks/useBackDismiss.ts](../web/src/hooks/useBackDismiss.ts): Back closes the top
-  sheet on phones.
+  sheet on phones. Picked items are a layer too, on tablets as well (`tablets`), so a
+  sheet opened over them closes first and the next Back stops picking.
+- [hooks/useLongPress.ts](../web/src/hooks/useLongPress.ts): a finger held on an item or
+  photo starts picking; a press cut short, or whose row goes away, does nothing.
 
 **Parts.**
 
@@ -583,8 +586,8 @@ what Back does.
 
 **Invariants.**
 
-- Sheets and dialogs never push history entries themselves; they open through
-  `ResponsiveDialog` or `useBackDismiss`, so Back closes the top one first.
+- Sheets, dialogs and selections never push history entries themselves; they open
+  through `ResponsiveDialog` or `useBackDismiss`, so Back closes the top one first.
 - The split's tabs on phones are not history entries, so Back leaves the split rather
   than stepping through tabs.
 - Keyboard shortcuts never fire while typing in a field or inside a dialog.

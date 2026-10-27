@@ -779,6 +779,64 @@ describe('the split page', () => {
     expect(screen.queryByText(readsAs('Ann pays Ryan'))).toBeNull();
   });
 
+  test('on a phone, Back closes a sheet opened over picked items first, then stops picking', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    fireEvent.pointerDown(await screen.findByText('Taxi'), {
+      pointerType: 'touch',
+      clientX: 50,
+      clientY: 300,
+    });
+    const bar = await screen.findByRole('toolbar', { name: 'Selected items' });
+    await user.click(within(bar).getByRole('button', { name: 'Change date' }));
+    await screen.findByRole('dialog');
+
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const still = screen.getByRole('toolbar', { name: 'Selected items' });
+    expect(within(still).getByText('1 selected')).toBeTruthy();
+
+    act(() => window.history.back());
+    await waitFor(() =>
+      expect(screen.queryByRole('toolbar', { name: 'Selected items' })).toBeNull(),
+    );
+    expect(window.location.search).toBe('?s=trip');
+    expect(screen.getByText('Taxi')).toBeTruthy();
+  });
+
+  test('on a tablet, Back stops picking items and stays on the split', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'tablet' });
+    fireEvent.pointerDown(await screen.findByText('Taxi'), {
+      pointerType: 'touch',
+      clientX: 50,
+      clientY: 300,
+    });
+    await screen.findByRole('toolbar', { name: 'Selected items' });
+    act(() => window.history.back());
+    await waitFor(() =>
+      expect(screen.queryByRole('toolbar', { name: 'Selected items' })).toBeNull(),
+    );
+    expect(window.location.search).toBe('?s=trip');
+    expect(screen.getByText('Taxi')).toBeTruthy();
+  });
+
+  test('a long press cut short by leaving the split picks nothing later', async () => {
+    renderApp(fakeServer(trip()), '/?s=trip', { size: 'phone' });
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true });
+    onTestFinished(() => {
+      delete (navigator as { vibrate?: unknown }).vibrate;
+    });
+    const taxi = await screen.findByText('Taxi');
+    vi.useFakeTimers();
+    fireEvent.pointerDown(taxi, { pointerType: 'touch', clientX: 50, clientY: 300 });
+    // The finger is still down when the page goes away
+    cleanup();
+    vi.advanceTimersByTime(1000);
+    vi.useRealTimers();
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+
   test('on a computer, sorts items from the toolbar, either way round', async () => {
     renderApp(fakeServer(trip()), '/?s=trip');
     const user = userEvent.setup();
