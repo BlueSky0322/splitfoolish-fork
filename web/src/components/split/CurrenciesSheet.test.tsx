@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test } from 'vitest';
 import type { ItemOriginal } from '@shared/types';
@@ -92,5 +92,43 @@ describe('the item form, for an item paid in another currency', () => {
     expect(await form.findByText(`≈ ${formatMoney(6000, 'MYR')}`)).toBeTruthy();
     await user.click(form.getByRole('button', { name: 'Use my own rate' }));
     expect(form.getByRole('button', { name: "Use that day's rate" })).toBeTruthy();
+  });
+});
+
+describe('paying back an item paid in another currency', () => {
+  test("is offered in that currency at the item's rate, and saved with that rate", async () => {
+    const server = fakeServer(
+      paidIn([{ currency: 'JPY', amount: 1000, rate: 0.03, rateSource: 'frankfurter' }, oct(9)]),
+    );
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Ramen 1'));
+    await user.click(within(await screen.findByRole('dialog')).getByLabelText('More actions'));
+    await user.click(await screen.findByRole('menuitem', { name: 'Record payment' }));
+    const form = within(await screen.findByRole('dialog', { name: /payment/i }));
+    // Ann's half, RM 15.00, is 500 yen at the rate Ramen 1 was paid at
+    await user.click(form.getByRole('button', { name: /^In JPY, at the rate Ramen 1/ }));
+    expect(form.getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '500.00');
+    expect(form.getByText(`≈ ${formatMoney(1500, 'MYR')}`)).toBeTruthy();
+    expect(form.getByRole('textbox', { name: 'How much 1 JPY is in MYR' })).toHaveProperty(
+      'value',
+      '0.03',
+    );
+
+    await user.click(form.getByRole('button', { name: 'Record payment' }));
+    await waitFor(() =>
+      expect(server.sent.at(-1)?.changes).toEqual([
+        {
+          op: 'addPayment',
+          payment: expect.objectContaining({
+            fromId: 'ann',
+            toId: 'me',
+            amount: 15,
+            itemId: 'i0',
+            original: { currency: 'JPY', amount: 500, rate: 0.03, rateSource: 'manual' },
+          }),
+        },
+      ]),
+    );
   });
 });

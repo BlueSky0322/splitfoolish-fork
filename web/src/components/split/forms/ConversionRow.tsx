@@ -1,5 +1,5 @@
 import { NumberInput, UnstyledButton } from '@mantine/core';
-import type { RateSource } from '@shared/rates';
+import type { ConversionView } from '../../../split/useAmountConversion';
 import { formatMoney } from '../../../utils/money';
 import { SOURCE_LABELS, describeRate } from '../../../utils/rate-labels';
 import classes from './ConversionRow.module.css';
@@ -23,23 +23,10 @@ export function ConversionRow({
   compact,
   onChooseOwn,
   onUseLive,
-}: {
+}: ConversionView & {
   /** Phones: one line, "≈ RM 89.10 at 0.0297, Wise" */
   compact?: boolean;
-  entryCurrency: string;
-  currency: string;
-  ownRateChosen: boolean;
-  ownRate: number | '';
-  onOwnRate: (rate: number | '') => void;
   rateError: string | null | undefined;
-  costCents: number | null;
-  note: string;
-  rate: number | null;
-  rateSource: RateSource | null;
-  /** Paid before today, so it goes back to that day's rate rather than the live one */
-  paidBefore: boolean;
-  onChooseOwn: () => void;
-  onUseLive: () => void;
 }) {
   return (
     <div className={classes.conversion}>

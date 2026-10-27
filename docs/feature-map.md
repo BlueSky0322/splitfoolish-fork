@@ -122,8 +122,12 @@ it current.
   [SplitPageContext](../web/src/components/split/SplitPageContext.tsx) and the bill from
   [SplitStateContext](../web/src/split/SplitStateContext.tsx).
 - Form logic: [split/item-input.ts](../web/src/split/item-input.ts) and
-  [split/bill-rules.ts](../web/src/split/bill-rules.ts). The form's date uses
-  [DayField](../web/src/components/split/items/DayField.tsx), as Move to a day does: a new
+  [split/bill-rules.ts](../web/src/split/bill-rules.ts). The amount, its currency and
+  rate are [split/useAmountConversion.ts](../web/src/split/useAmountConversion.ts), shared
+  with the payment form and shown by
+  [ConversionRow](../web/src/components/split/forms/ConversionRow.tsx); each form keeps
+  its own rules for the amount. The form's date uses
+  [DayField](../web/src/components/split/forms/DayField.tsx), as Move to a day does: a new
   item goes on the day picked at the time it is now (from a day's heading, that day:
   `openDialog({ kind: 'add', day })`), and an edit to another day keeps its time of day
   (`updateItem(id, input, { day })` queues the date before the edit, so the server

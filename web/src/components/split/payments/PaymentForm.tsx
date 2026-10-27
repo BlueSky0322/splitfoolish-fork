@@ -1,14 +1,13 @@
 import { ActionIcon, Button, Select, Textarea, UnstyledButton } from '@mantine/core';
 import { X } from '@phosphor-icons/react';
-import { useMemo, useState } from 'react';
-import { convertCents, fitsItemCents, isValidRate, rateDay, toCents } from '@shared/rates';
+import { useState } from 'react';
+import { fitsItemCents, isValidRate, toCents } from '@shared/rates';
 import { MAX_COST, MAX_NOTES_LENGTH } from '@shared/types';
 import type { PaymentInput } from '../../../api';
-import { useRate } from '../../../hooks/useRate';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
-import { chooseRate } from '../../../split/item-input';
 import type { SplitPayment } from '../../../split/state';
 import { useSplitState } from '../../../split/SplitStateContext';
+import { useAmountConversion } from '../../../split/useAmountConversion';
 import {
   atTimeNow,
   fromDateInput,
@@ -16,11 +15,9 @@ import {
   keepTimeOf,
   toDateInput,
 } from '../../../utils/date-input';
-import { evaluateSum } from '../../../utils/math';
-import { formatMoney } from '../../../utils/money';
 import CurrencySelect from '../../ui/CurrencySelect';
-import { ConversionRow } from '../items/ConversionRow';
-import { DayField } from '../items/DayField';
+import { ConversionRow } from '../forms/ConversionRow';
+import { DayField } from '../forms/DayField';
 import type { PaymentPrefill } from '../SplitPageContext';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './Payments.module.css';
@@ -52,21 +49,6 @@ const PaymentForm = ({
   const [toId, setToId] = useState<string | null>(
     payment?.to.id ?? prefill?.toId ?? people.find((p) => p.id !== fromId)?.id ?? null,
   );
-  const [expression, setExpression] = useState(
-    original
-      ? String(original.amount)
-      : payment
-        ? String(payment.amount)
-        : prefill?.amountCents != null
-          ? (prefill.amountCents / 100).toFixed(2)
-          : '',
-  );
-  const [entryCurrency, setEntryCurrency] = useState(original?.currency ?? currency);
-  const foreign = entryCurrency !== currency;
-  const [ownRateChosen, setOwnRateChosen] = useState(original?.rateSource === 'manual');
-  const [ownRate, setOwnRate] = useState<number | ''>(
-    original?.rateSource === 'manual' ? original.rate ?? '' : '',
-  );
   const [dayText, setDayText] = useState(() =>
     toDateInput(new Date(payment?.createdAt ?? Date.now())),
   );
@@ -75,8 +57,6 @@ const PaymentForm = ({
   const [tried, setTried] = useState(false);
   const item = itemId == null ? null : items.find((i) => i.id === itemId);
 
-  const amount = useMemo(() => evaluateSum(expression), [expression]);
-  const enteredCents = amount == null || amount < 0 ? null : toCents(amount);
   const chosenDay = isPastDay(dayText) ? fromDateInput(dayText) : null;
   // When it was paid, which decides the rate; a saved payment keeps its time of day
   const paidAt =
@@ -85,32 +65,19 @@ const PaymentForm = ({
       : payment
         ? keepTimeOf(chosenDay, payment.createdAt)
         : atTimeNow(chosenDay);
-  const fetchedRate = useRate(entryCurrency, currency, {
-    enabled: foreign && !ownRateChosen,
-    at: paidAt,
-  });
-  const { rate, source: rateSource } = chooseRate({
-    foreign,
-    entryCurrency,
-    enteredCents,
-    ownRateChosen,
-    ownRate,
+  const conversion = useAmountConversion({
+    currency,
     original,
-    fetched: fetchedRate.data,
+    initialExpression: payment
+      ? String(payment.amount)
+      : prefill?.amountCents != null
+        ? (prefill.amountCents / 100).toFixed(2)
+        : '',
+    initialCurrency: currency,
+    paidAt,
   });
-  const amountCents =
-    enteredCents == null
-      ? null
-      : foreign
-        ? rate == null
-          ? null
-          : convertCents(enteredCents, rate)
-        : enteredCents;
-  const conversionNote = () => {
-    if (amountCents != null) return `≈ ${formatMoney(amountCents, currency)}`;
-    if (fetchedRate.isError) return 'Converted when saved';
-    return enteredCents == null ? '' : 'Getting the rate…';
-  };
+  const { expression, setExpression, entryCurrency, setEntryCurrency, foreign } = conversion;
+  const { ownRateChosen, ownRate, enteredCents, costCents: amountCents } = conversion;
 
   // Paying back a yen dinner in yen: the part in that currency, at the item's own rate,
   // so what it comes to in the split's currency is the part exactly
@@ -118,8 +85,8 @@ const PaymentForm = ({
   const inItemCurrency = () => {
     if (itemCurrency == null || enteredCents == null) return;
     setEntryCurrency(itemCurrency.currency);
-    setOwnRateChosen(true);
-    setOwnRate(itemCurrency.rate!);
+    conversion.setOwnRateChosen(true);
+    conversion.setOwnRate(itemCurrency.rate!);
     setExpression((enteredCents / itemCurrency.rate! / 100).toFixed(2));
   };
 
@@ -220,23 +187,9 @@ const PaymentForm = ({
       {tried && problems.amount && <div className={classes.error}>{problems.amount}</div>}
       {foreign && (
         <ConversionRow
-          entryCurrency={entryCurrency}
-          currency={currency}
-          ownRateChosen={ownRateChosen}
-          ownRate={ownRate}
-          onOwnRate={setOwnRate}
+          {...conversion.view}
           rateError={tried ? problems.rate : null}
-          costCents={amountCents}
-          note={conversionNote()}
           compact={isMobile}
-          rate={rate}
-          rateSource={rateSource}
-          paidBefore={paidAt != null && rateDay(paidAt) < rateDay(Date.now())}
-          onChooseOwn={() => {
-            setOwnRateChosen(true);
-            if (ownRate === '' && rate != null) setOwnRate(rate);
-          }}
-          onUseLive={() => setOwnRateChosen(false)}
         />
       )}
       {!foreign && itemCurrency && enteredCents != null && (
