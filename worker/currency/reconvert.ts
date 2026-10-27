@@ -7,6 +7,7 @@
 import type { RateSource } from '../../shared/rates';
 import { convertCents, convertParts, fitsItemCents, rateDay } from '../../shared/rates';
 import type { SplitMode } from '../../shared/settle';
+import { NEXT_UPDATED_AT } from '../app';
 import type { Rate } from './exchange-rates';
 
 /**
@@ -259,7 +260,7 @@ export async function reconvertSplit(
   statements.push(
     db
       .prepare(
-        `UPDATE splits SET converting_from = NULL, converting_since = NULL, updated_at = ?
+        `UPDATE splits SET converting_from = NULL, converting_since = NULL, ${NEXT_UPDATED_AT}
          WHERE id = ? AND currency = ? AND converting_since = ?`,
       )
       .bind(Date.now(), splitId, to, since),
@@ -279,7 +280,7 @@ async function undoCurrencyChange(db: D1Database, splitId: string, to: string, s
   const { meta } = await db
     .prepare(
       `UPDATE splits SET currency = converting_from, converting_from = NULL,
-         converting_since = NULL, updated_at = ?
+         converting_since = NULL, ${NEXT_UPDATED_AT}
        WHERE id = ? AND currency = ? AND converting_since = ?`,
     )
     .bind(Date.now(), splitId, to, since)

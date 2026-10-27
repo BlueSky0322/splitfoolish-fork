@@ -643,8 +643,10 @@ retry receipt saved alongside. Photos go through `addAttachment` in
   [mcp/tools.ts](../worker/mcp/tools.ts). Reads reuse `listSplitSummaries` (a page
   at a time), `contentStatements`, `listAttachmentsStatement` and `shared/settle.ts`;
   rates come from `getRate` with the account's preference, as for the API. A
-  `get_split` with `ifUnchangedSince` reads only the split's `updated_at` (as a
-  member) before deciding whether to read the bill.
+  `get_split` with `ifReadVersion` reads only the split row, the caller's membership
+  and the people with their display names (`peopleStatement`) before deciding whether
+  to read the bill; the full answer's `readVersion` is hashed from the same rows of its
+  own read, so the two always agree.
 - Receipts: [mcp/receipts.ts](../worker/mcp/receipts.ts) and the `mcp_receipts` table
   ([0019](../migrations/0019_mcp_receipts.sql)), deleted with their split
   (`splits/lifecycle.ts`).
@@ -697,6 +699,12 @@ receipt → the split's room tells open apps.
   and they never accept an OAuth token.
 - Answers leave out share links, invitations, emails and payment details; a photo says
   only whether this account added it.
+- `get_split` answers `unchanged` only when its `readVersion` is the one sent, and that
+  version covers every field of the answer: the bill through `updated_at` (which only
+  moves forward), the caller's role and archive, and each person's id, account and
+  shown name. A time alone (`ifUnchangedSince`) never answers `unchanged`.
+- Split lists end their order on the split's id, so a page is the same rows every time
+  for the same data.
 - Grants are kept under the account they were made for, so listing and disconnecting
   reach only the signed-in account's own; an id that isn't theirs changes nothing.
   Disconnecting ends the grant's access and refresh tokens at once.

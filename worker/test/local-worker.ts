@@ -8,7 +8,7 @@
 
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import {
   type IncomingMessage,
   type ServerResponse,
@@ -115,6 +115,11 @@ export interface LocalWorker {
   rates: FakeRates;
   /** Where it's listening, e.g. http://127.0.0.1:1234 */
   base: string;
+  /**
+   * Runs one statement on the Worker's database itself, for a state the API can't make
+   * on cue (two splits changed in the same millisecond); answers its rows
+   */
+  sql: (statement: string, ...params: (string | number | null)[]) => Promise<unknown[]>;
   /** Stops the Worker and the fake services, then deletes the database */
   stop: () => Promise<void>;
 }
@@ -427,11 +432,25 @@ export async function startLocalWorker(): Promise<LocalWorker> {
             : JSON.stringify(body),
       });
 
+    // The database wrangler keeps for the Worker; it sees writes made here straight away
+    const sql: LocalWorker['sql'] = async (statement, ...params) => {
+      const { DatabaseSync } = await import('node:sqlite');
+      const dir = join(persist, 'v3', 'd1', 'miniflare-D1DatabaseObject');
+      const file = readdirSync(dir).find((f) => f.endsWith('.sqlite') && f !== 'metadata.sqlite');
+      const db = new DatabaseSync(join(dir, file!));
+      try {
+        return db.prepare(statement).all(...params);
+      } finally {
+        db.close();
+      }
+    };
+
     return {
       stop,
       rates,
       base,
       raw,
+      sql,
       call: async (who, method, path, body, headers) => {
         const res = await raw(who, method, path, body, headers);
         const text = await res.text();

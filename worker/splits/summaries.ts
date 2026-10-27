@@ -14,12 +14,19 @@ export interface SplitPage {
   offset: number;
 }
 
+/**
+ * Someone's splits in their own order (s for splits, m for their membership): as they
+ * dragged them, then the latest changed first, then by id, so splits that tie on both
+ * still come in the same order every time and a page never repeats or skips one
+ */
+export const SPLIT_ORDER = 'm.sort_position IS NOT NULL, m.sort_position, s.updated_at DESC, s.id';
+
 // The splits a read is about, in the person's order: those they belong to, or a page of
 // them. Every bill query joins this, so only the bills on the page are read.
 const PAGE_OF_SPLITS = `page AS (
   SELECT s.id FROM splits s JOIN split_members m ON m.split_id = s.id
   WHERE m.email = ?1
-  ORDER BY m.sort_position IS NOT NULL, m.sort_position, s.updated_at DESC
+  ORDER BY ${SPLIT_ORDER}
   LIMIT ?2 OFFSET ?3)`;
 
 /** Adds `row` to the list kept under `key`, starting one if there is none */
@@ -50,7 +57,7 @@ export async function listSplitSummaries(
          (SELECT version FROM split_pictures WHERE split_id = s.id) AS pictureVersion
        FROM page JOIN splits s ON s.id = page.id
        JOIN split_members m ON m.split_id = s.id AND m.email = ?1
-       ORDER BY m.sort_position IS NOT NULL, m.sort_position, s.updated_at DESC`,
+       ORDER BY ${SPLIT_ORDER}`,
     ),
     paged(
       `SELECT i.id, i.split_id AS splitId, i.cost_cents AS costCents, i.payer_id AS payerId,

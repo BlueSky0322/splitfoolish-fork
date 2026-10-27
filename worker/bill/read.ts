@@ -5,6 +5,17 @@ import type { RateSource } from '../../shared/rates';
 import type { SplitMode } from '../../shared/settle';
 import type { Item, Payment, Person } from '../../shared/types';
 
+/** A split's people in their order, each as { id, name, memberEmail } */
+export const peopleStatement = (db: D1Database, splitId: string) =>
+  db
+    .prepare(
+      // Someone linked to an account goes by that account's display name, if they set one
+      `SELECT p.id, coalesce(pr.display_name, p.name) AS name, p.member_email AS memberEmail
+       FROM people p LEFT JOIN profiles pr ON pr.email = p.member_email
+       WHERE p.split_id = ? ORDER BY p.position, p.rowid`,
+    )
+    .bind(splitId);
+
 /** How many statements contentStatements makes, for callers that batch them with others */
 export const CONTENT_STATEMENTS = 4;
 
@@ -13,14 +24,7 @@ export const CONTENT_STATEMENTS = 4;
  * to assembleContent
  */
 export const contentStatements = (db: D1Database, splitId: string) => [
-  db
-    .prepare(
-      // Someone linked to an account goes by that account's display name, if they set one
-      `SELECT p.id, coalesce(pr.display_name, p.name) AS name, p.member_email AS memberEmail
-       FROM people p LEFT JOIN profiles pr ON pr.email = p.member_email
-       WHERE p.split_id = ? ORDER BY p.position, p.rowid`,
-    )
-    .bind(splitId),
+  peopleStatement(db, splitId),
   db
     .prepare(
       `SELECT id, name, cost_cents AS costCents, payer_id AS payerId, split_mode AS splitMode,

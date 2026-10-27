@@ -727,71 +727,107 @@ describe('the tools', () => {
     expect(rest.nextOffset).toBeNull();
   });
 
-  it('answer a re-read with only "unchanged" until something changes, photos included', async () => {
-    const alice = person('alice');
-    const split = await trip(alice);
-    const { access } = await grant(alice, [READ, WRITE]);
-    const client = await connect(access);
+  it('answer a re-read with only "unchanged" until anything in the answer changes', async () => {
+    const [alice, bob] = [person('alice'), person('bob')];
+    const split = await trip(alice, bob);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const bobs = await connect((await grant(bob, [READ])).access);
+    const read = (version?: string, c = client) =>
+      tool(c, 'get_split', { splitId: split.id, ifReadVersion: version });
+    /** Reads it again from the version last seen: a full answer, with a new version */
+    const changes = async (from: Answer) => {
+      const next = await read(from.split.readVersion);
+      expect(next, 'should have changed').not.toHaveProperty('unchanged');
+      expect(next.split.readVersion).not.toBe(from.split.readVersion);
+      return next;
+    };
 
-    const first = await tool(client, 'get_split', { splitId: split.id });
+    const first = await read();
     expect(first.error, JSON.stringify(first)).toBeUndefined();
-    const seen: string = first.split.updatedAt;
-    expect(seen).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    // The same version list_splits shows
-    const all = await tool(client, 'list_splits', {});
-    const listed = all.splits.find((s: { id: string }) => s.id === split.id);
-    expect(listed, JSON.stringify(all)).toBeDefined();
-    expect(listed.updatedAt).toBe(seen);
+    expect(first.split.readVersion).toMatch(/^[\w-]{16}$/);
+    // The same updatedAt list_splits shows
+    const listed = (await tool(client, 'list_splits', {})).splits.find(
+      (s: { id: string }) => s.id === split.id,
+    );
+    expect(listed.updatedAt).toBe(first.split.updatedAt);
 
     // Nothing has changed: a few bytes, not the split
-    expect(await tool(client, 'get_split', { splitId: split.id, ifUnchangedSince: seen })).toEqual({
+    expect(await read(first.split.readVersion)).toEqual({
       unchanged: true,
-      updatedAt: seen,
+      updatedAt: first.split.updatedAt,
+      readVersion: first.split.readVersion,
     });
-    // An older version, or one in another shape, reads the whole split
+    // An unknown version, or the older time-based form, reads the whole split
+    expect(await read('not-a-version')).toMatchObject({ split: { id: split.id } });
     expect(
-      await tool(client, 'get_split', { splitId: split.id, ifUnchangedSince: '2000-01-01' }),
-    ).toMatchObject({ split: { updatedAt: seen } });
+      await tool(client, 'get_split', { splitId: split.id, ifUnchangedSince: listed.updatedAt }),
+    ).toMatchObject({ split: { readVersion: first.split.readVersion } });
 
-    // A change makes the next re-read a full one, with the new version
-    await new Promise((r) => setTimeout(r, 5));
-    await tool(client, 'add_expense', {
+    // Two changes straight after one another are two versions, with time moving forward
+    const add = (requestId: string) =>
+      tool(client, 'add_expense', {
+        splitId: split.id,
+        currency: 'MYR',
+        requestId,
+        name: 'Tea',
+        cost: 3,
+        payerId: 'me',
+        participantIds: ['everyone'],
+      });
+    await add('reread-0001');
+    const one = await changes(first);
+    await add('reread-0002');
+    const two = await changes(one);
+    expect(two.expenses).toHaveLength(2);
+    expect(two.split.updatedAt > one.split.updatedAt).toBe(true);
+
+    // A payment, and a photo added and removed
+    await tool(client, 'record_payment', {
       splitId: split.id,
       currency: 'MYR',
-      requestId: 'reread-0001',
-      name: 'Tea',
-      cost: 3,
-      payerId: 'me',
-      participantIds: ['everyone'],
+      requestId: 'reread-0003',
+      from: 'Bob',
+      to: 'me',
+      amount: 1,
     });
-    const changed = await tool(client, 'get_split', { splitId: split.id, ifUnchangedSince: seen });
-    expect(changed.expenses).toHaveLength(1);
-    expect(changed.split.updatedAt > seen).toBe(true);
-
-    // A photo is a change too
+    const paid = await changes(two);
+    expect(paid.payments).toHaveLength(1);
     const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
-    await new Promise((r) => setTimeout(r, 5));
     const added = await api.call(alice, 'POST', `/api/splits/${split.id}/attachments`, jpeg, {
       'Content-Type': 'image/jpeg',
     });
     expect(added.status).toBe(201);
-    const after = await tool(client, 'get_split', {
-      splitId: split.id,
-      ifUnchangedSince: changed.split.updatedAt,
-    });
-    expect(after.photos).toHaveLength(1);
-    expect(after.split.updatedAt > changed.split.updatedAt).toBe(true);
-    // Removing it is one more
-    const removed = await api.call(alice, 'POST', `/api/splits/${split.id}/attachments/remove`, {
+    const pictured = await changes(paid);
+    expect(pictured.photos).toHaveLength(1);
+    await api.call(alice, 'POST', `/api/splits/${split.id}/attachments/remove`, {
       ids: [added.data.id],
     });
-    expect(removed.status).toBe(200);
+    const unpictured = await changes(pictured);
+
+    // Archiving it, and back, though the split itself didn't change
+    await api.call(alice, 'PUT', '/api/archived', { id: split.id, archived: true });
+    const archived = await changes(unpictured);
+    expect(archived.split).toMatchObject({ archived: true, updatedAt: unpictured.split.updatedAt });
+    await api.call(alice, 'PUT', '/api/archived', { id: split.id, archived: false });
+    const restored = await changes(archived);
+    expect(restored.split.archived).toBe(false);
+
+    // Bob, linked to his account, takes a display name: the bill shows it at once
+    const named = await api.call(bob, 'PATCH', '/api/me', { displayName: 'Robert' });
+    expect(named.status).toBe(200);
+    const renamed = await changes(restored);
+    expect(renamed.people.map((p: { name: string }) => p.name)).toContain('Robert');
+
+    // Removed from the split, Bob's re-read is refused, however recent his version
+    const bobsView = await read(undefined, bobs);
+    expect(bobsView.split.readVersion).toEqual(expect.any(String));
+    await api.call(alice, 'DELETE', `/api/splits/${split.id}/members/${encodeURIComponent(bob)}`);
+    expect((await read(bobsView.split.readVersion, bobs)).error?.code).toBe('not_found');
+    // And for Alice, Bob is a guest now
+    const unlinked = await changes(renamed);
     expect(
-      await tool(client, 'get_split', {
-        splitId: split.id,
-        ifUnchangedSince: after.split.updatedAt,
-      }),
-    ).not.toHaveProperty('unchanged');
+      unlinked.people.every((p: { hasAccount: boolean; name: string }) => p.name !== 'Robert'),
+    ).toBe(true);
   });
 
   it('keep to the bill’s rules and the split’s currency', async () => {
@@ -1614,6 +1650,33 @@ describe('new splits', () => {
     expect(firstPage).toMatchObject({ splits: [all[0]], total: 2, nextOffset: 1 });
     const lastPage = await tool(client, 'list_splits', { limit: 1, offset: 1 });
     expect(lastPage).toMatchObject({ splits: [all[1]], total: 2, nextOffset: null });
+
+    // Changed in the same millisecond and neither placed by hand, the two still come in
+    // one order (by id), the same on every page, each page with only its own split's money
+    const spent = await tool(client, 'add_expense', {
+      splitId: made.splitId,
+      currency: 'IDR',
+      requestId: 'bali-spend01',
+      name: 'Boat',
+      cost: 50000,
+      payerId: 'me',
+      participantIds: ['everyone'],
+    });
+    expect(spent.error, JSON.stringify(spent)).toBeUndefined();
+    const ids = all.map((s: { id: string }) => s.id).sort();
+    await api.sql('UPDATE splits SET updated_at = 1800000000000 WHERE id IN (?, ?)', ...ids);
+    const tied = (await tool(client, 'list_splits', {})).splits;
+    expect(tied.map((s: { id: string }) => s.id)).toEqual(ids);
+    const pages = [0, 1].map((offset) => tool(client, 'list_splits', { limit: 1, offset }));
+    for (const [i, page] of (await Promise.all(pages)).entries()) {
+      expect(page).toMatchObject({ splits: [tied[i]], total: 2 });
+      expect(page.splits[0].totalCents).toBe(page.splits[0].id === made.splitId ? 5000000 : 0);
+    }
+    expect(await tool(client, 'list_splits', { limit: 1, offset: 2 })).toMatchObject({
+      splits: [],
+      total: 2,
+      nextOffset: null,
+    });
 
     const read = await tool(client, 'get_split', { splitId: made.splitId });
     expect(read.split).toMatchObject({ name: 'Bali', currency: 'IDR', role: 'owner' });
