@@ -480,6 +480,10 @@ method through a profile change.
 - Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) (the
   orders and kinds shown, the same on phones and computers) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
+- What both Photos tabs show:
+  [usePhotoGallery](../web/src/components/split/photos/usePhotoGallery.ts) (the days in
+  order, each photo's place for the viewer, counts, queued and picked photos, removing
+  with a question first). Each tab keeps its own layout and way of picking.
 - Choosing photos to add: [usePhotoPicker](../web/src/components/split/photos/usePhotoPicker.tsx)
   (the camera or the library) and, on phones and tablets,
   [AddPhotosSheet](../web/src/components/split/photos/AddPhotosSheet.tsx) to pick

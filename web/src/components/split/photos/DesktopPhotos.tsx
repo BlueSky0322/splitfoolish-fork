@@ -13,19 +13,10 @@ import {
   UploadSimple,
   X,
 } from '@phosphor-icons/react';
-import { type DragEvent, useMemo, useRef, useState } from 'react';
+import { type DragEvent, useRef, useState } from 'react';
 import { attachmentUrl } from '../../../api';
-import {
-  DEFAULT_PHOTO_VIEW,
-  type PhotoFilter,
-  type PhotoSortDir,
-  type PhotoSortKey,
-  type PhotoView,
-  photoCounts,
-  photoDays,
-} from '../../../split/photo-days';
+import type { PhotoFilter, PhotoSortDir, PhotoSortKey } from '../../../split/photo-days';
 import { usePhotoDownload } from '../../../split/photo-download';
-import { useSplitState } from '../../../split/SplitStateContext';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
 import UserAvatar from '../../common/UserAvatar';
 import { useSplitPage } from '../SplitPageContext';
@@ -33,7 +24,7 @@ import classes from './DesktopPhotos.module.css';
 import { timeLabel, useAddedBy } from './added-by';
 import PhotoDetails from './PhotoDetails';
 import QueuedPhotoTile from './QueuedPhotoTile';
-import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
+import { usePhotoGallery } from './usePhotoGallery';
 import { usePhotoPicker } from './usePhotoPicker';
 
 /** Every row of photos is this tall; each photo is as wide as its shape makes it */
@@ -56,10 +47,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 // receipts, by day in rows that keep each photo's shape. Choose which to show and in
 // what order, select some to download or remove, and drop files on it to add them.
 const DesktopPhotos = () => {
-  const { splitId, meta, photos, canRemovePhoto, openDialog } = useSplitPage();
-  const { items } = useSplitState().state;
+  const { splitId, meta, photos, openDialog } = useSplitPage();
   const addedBy = useAddedBy();
-  const [view, setView] = useState<PhotoView>(DEFAULT_PHOTO_VIEW);
   const [open, setOpen] = useState<number | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -71,22 +60,11 @@ const DesktopPhotos = () => {
   // Width over height of each photo, once it has loaded
   const [shapes, setShapes] = useState<Map<string, number>>(new Map());
 
-  const all = useMemo(() => meta?.attachments ?? [], [meta?.attachments]);
-  const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
-  const days = useMemo(
-    () => photoDays(all, new Map(items.map((i) => [i.id, i.createdAt])), view),
-    [all, items, view],
-  );
-  const counts = photoCounts(all);
-  const shown = days.flatMap((d) => d.photos);
-  const queued = photos.queuedOf(null);
-  const picker = usePhotoPicker((files) => void photos.upload(files, null));
+  const gallery = usePhotoGallery(selected);
+  const { view, setView, all, days, shown, counts, itemById, queued, chosen, confirm } = gallery;
+  const picker = usePhotoPicker(gallery.add);
   // Nothing at all yet: the whole tab is a place to add the first photos
   const empty = all.length === 0 && queued.length === 0;
-
-  // Selected photos still there (one removed elsewhere drops out)
-  const chosen = shown.filter((p) => selected.has(p.id));
-  const canRemoveAll = chosen.length > 0 && chosen.every(canRemovePhoto);
 
   const toggle = (ids: string[], on: boolean) =>
     setSelected((s) => {
@@ -102,11 +80,8 @@ const DesktopPhotos = () => {
     setSelected(new Set());
   };
 
-  const { confirm, dialog: confirmDialog } = useConfirmRemovePhotos();
   const viewer: ViewerPhoto[] = shown.map((photo) => {
-    const onRemove = canRemovePhoto(photo)
-      ? () => confirm(1, () => photos.remove(photo))
-      : undefined;
+    const onRemove = gallery.removerOf(photo);
     const item = photo.itemId ? itemById.get(photo.itemId) ?? null : null;
     return {
       key: photo.id,
@@ -141,7 +116,7 @@ const DesktopPhotos = () => {
     dragDepth.current = 0;
     setDragging(0);
     const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
-    if (files.length > 0) void photos.upload(files, null);
+    if (files.length > 0) gallery.add(files);
   };
 
   return (
@@ -184,14 +159,14 @@ const DesktopPhotos = () => {
           </Button>
           <Tooltip
             label="You can only remove photos you added"
-            disabled={canRemoveAll || chosen.length === 0}
+            disabled={gallery.canRemoveChosen || chosen.length === 0}
           >
             <Button
               variant="default"
               size="xs"
               className="sf-danger-outline"
               leftSection={<Trash size={14} />}
-              disabled={!canRemoveAll}
+              disabled={!gallery.canRemoveChosen}
               onClick={() =>
                 confirm(chosen.length, () => {
                   void photos.removeMany(chosen);
@@ -406,7 +381,7 @@ const DesktopPhotos = () => {
                 const item = photo.itemId ? itemById.get(photo.itemId) : null;
                 const who = addedBy(photo.uploadedBy);
                 const picked = selected.has(photo.id);
-                const index = shown.indexOf(photo);
+                const index = gallery.indexOf.get(photo.id)!;
                 return (
                   <div
                     key={photo.id}
@@ -482,7 +457,7 @@ const DesktopPhotos = () => {
         index={open}
         onIndexChange={setOpen}
       />
-      {confirmDialog}
+      {gallery.confirmDialog}
     </div>
   );
 };
@@ -499,25 +474,14 @@ const FilterLabel = ({ label, count }: { label: string; count: number }) => (
 /** The page's main button on the Photos tab: picks photos to add to the split */
 export function AddPhotosButton({ disabled, miw }: { disabled?: boolean; miw?: number }) {
   const { photos } = useSplitPage();
-  const picker = useRef<HTMLInputElement>(null);
+  const picker = usePhotoPicker((files) => void photos.upload(files, null));
   return (
     <>
-      <input
-        ref={picker}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          e.target.value = '';
-          if (files.length > 0) void photos.upload(files, null);
-        }}
-      />
+      {picker.inputs}
       <Button
         miw={miw}
         leftSection={<UploadSimple size={16} />}
-        onClick={() => picker.current?.click()}
+        onClick={picker.chooseFromLibrary}
         disabled={disabled}
       >
         Add photos
