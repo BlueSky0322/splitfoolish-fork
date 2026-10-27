@@ -12,20 +12,11 @@ import {
   X,
 } from '@phosphor-icons/react';
 import type { Attachment } from '@shared/api';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { attachmentUrl } from '../../../api';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
-import {
-  DEFAULT_PHOTO_VIEW,
-  PHONE_PHOTO_SORTS,
-  PHOTO_FILTERS,
-  type PhotoFilter,
-  type PhotoView,
-  photoCounts,
-  photoDays,
-} from '../../../split/photo-days';
+import { PHONE_PHOTO_SORTS, PHOTO_FILTERS, type PhotoFilter } from '../../../split/photo-days';
 import { photoFileName, usePhotoDownload } from '../../../split/photo-download';
-import { useSplitState } from '../../../split/SplitStateContext';
 import Fab from '../../ui/Fab';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
 import { useLongPress } from '../../../hooks/useLongPress';
@@ -34,7 +25,7 @@ import PillMenu from '../PillMenu';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './PhotosTab.module.css';
 import QueuedPhotoTile from './QueuedPhotoTile';
-import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
+import { usePhotoGallery } from './usePhotoGallery';
 import type { PhotoSelection } from './usePhotoSelection';
 import { usePhotoPicker } from './usePhotoPicker';
 import AddPhotosSheet from './AddPhotosSheet';
@@ -88,45 +79,24 @@ function PhotoTile({
 // computer's Photos tab does. A long press picks photos, to download or remove
 // them together.
 const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
-  const { splitId, meta, photos, canRemovePhoto } = useSplitPage();
+  const { splitId, meta, photos } = useSplitPage();
   // Phones save each photo as usual; a tablet gets one zip, as a computer does
   const saving = usePhotoDownload(splitId, meta?.name ?? '', { zip: !useIsMobile() });
-  const { items } = useSplitState().state;
   const [open, setOpen] = useState<number | null>(null);
-  const [view, setView] = useState<PhotoView>(DEFAULT_PHOTO_VIEW);
-  const queued = photos.queuedOf(null);
-  const picker = usePhotoPicker((files) => void photos.upload(files, null));
-
-  const all = useMemo(() => meta?.attachments ?? [], [meta?.attachments]);
-  const days = useMemo(
-    () => photoDays(all, new Map(items.map((i) => [i.id, i.createdAt])), view),
-    [all, items, view],
-  );
-  // The photos shown, in order: what the viewer steps through and All picks
-  const shown = days.flatMap((d) => d.photos);
-  // Where each day's photos start among them
-  const startOf = new Map<string, number>();
-  let start = 0;
-  for (const day of days) {
-    startOf.set(day.key, start);
-    start += day.photos.length;
-  }
-  const counts = photoCounts(all);
+  const gallery = usePhotoGallery(pick.selected);
+  // shown: the photos in order, what the viewer steps through and All picks
+  const { view, setView, all, days, shown, counts, itemById, queued, chosen, confirm } = gallery;
+  const picker = usePhotoPicker(gallery.add);
   const sort =
     PHONE_PHOTO_SORTS.find((o) => o.sortKey === view.sortKey && o.sortDir === view.sortDir) ??
     PHONE_PHOTO_SORTS[0];
   const filter = PHOTO_FILTERS.find((f) => f.filter === view.filter) ?? PHOTO_FILTERS[0];
-  const nameOf = new Map(items.map((i) => [i.id, i.name]));
-  const { confirm, dialog: confirmDialog } = useConfirmRemovePhotos();
   const viewer: ViewerPhoto[] = shown.map((photo) => ({
     key: photo.id,
     src: attachmentUrl(splitId, photo.id),
-    onRemove: canRemovePhoto(photo) ? () => confirm(1, () => photos.remove(photo)) : undefined,
+    onRemove: gallery.removerOf(photo),
     fileName: photoFileName(photo),
   }));
-  // Picked photos still there (one removed elsewhere drops out)
-  const chosen = shown.filter((p) => pick.selected.has(p.id));
-  const canRemoveAll = chosen.length > 0 && chosen.every(canRemovePhoto);
 
   return (
     <div className={classes.tab}>
@@ -172,7 +142,7 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
               size={44}
               aria-label={chosen.length === 1 ? 'Remove photo' : 'Remove photos'}
               className={bar.danger}
-              disabled={!canRemoveAll}
+              disabled={!gallery.canRemoveChosen}
               onClick={() =>
                 confirm(chosen.length, () => {
                   void photos.removeMany(chosen);
@@ -267,14 +237,14 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
         <section key={day.key}>
           <h2 className={classes.day}>{day.label}</h2>
           <div className={classes.grid}>
-            {day.photos.map((photo, i) => (
+            {day.photos.map((photo) => (
               <PhotoTile
                 key={photo.id}
                 photo={photo}
-                label={photo.itemId ? nameOf.get(photo.itemId) : null}
+                label={photo.itemId ? itemById.get(photo.itemId)?.name : null}
                 picking={pick.active}
                 picked={pick.selected.has(photo.id)}
-                onOpen={() => setOpen(startOf.get(day.key)! + i)}
+                onOpen={() => setOpen(gallery.indexOf.get(photo.id)!)}
                 onToggle={() => pick.toggle(photo.id)}
               />
             ))}
@@ -286,7 +256,7 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
         index={open}
         onIndexChange={setOpen}
       />
-      {confirmDialog}
+      {gallery.confirmDialog}
     </div>
   );
 };
