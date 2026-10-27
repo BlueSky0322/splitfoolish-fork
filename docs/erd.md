@@ -257,9 +257,9 @@ erDiagram
 ## Indexes
 
 Every index, and the query it is for. The primary keys above serve lookups by id. A
-split's people, items, photos and receipts are read by `split_id` in the order shown;
-SQLite reads an index in its own order, so the sort costs nothing, and `rowid`, the
-tie-breaker, is the implied last key of every index.
+split's people, items, payments, photos and receipts are read by `split_id` in the order
+shown; SQLite reads an index in its own order, so the sort costs nothing, and `rowid`,
+the tie-breaker, is the implied last key of every index.
 
 | Index                                                    | Serves                                                       |
 | -------------------------------------------------------- | ------------------------------------------------------------ |
@@ -271,7 +271,8 @@ tie-breaker, is the implied last key of every index.
 | `items_by_split_position`                                | A split's items in order; the next position for a new one    |
 | `items_by_payer`                                         | Removing a person: what they paid for                        |
 | `item_participants_by_person`                            | Removing a person: the items they share                      |
-| `payments_by_split`, `_by_from`, `_by_to`, `_by_item`    | A split's payments; whether a person or item has any         |
+| `payments_by_split_created_at`                           | A split's payments in the order they were paid               |
+| `payments_by_from`, `_by_to`, `_by_item`                 | Removing a person or item: whether it has any payments       |
 | `attachments_by_split_created_at`                        | A split's photos, oldest first                               |
 | `attachments_by_item`                                    | An item's receipts, and deleting them with it                |
 | `payment_methods_by_email` (email, position)             | Someone's payment methods in order                           |
