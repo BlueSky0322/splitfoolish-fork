@@ -4,6 +4,7 @@ import {
   MAX_PHOTOS_REMOVED,
   PHOTO_ID_PARAM,
 } from '@shared/api';
+import type { LinkPreview } from '@shared/links';
 import type {
   AcceptResult,
   ArchiveBody,
@@ -163,6 +164,9 @@ export const api = {
   listSplits: () => request<SplitList>('GET', '/api/splits'),
   /** Names of items in your splits, most recent first, with the category last given */
   listItemNames: () => request<ItemNames>('GET', '/api/item-names'),
+  /** What a Google Maps link in notes shows as a card */
+  linkPreview: (url: string) =>
+    request<LinkPreview>('GET', `/api/link-preview?url=${encodeURIComponent(url)}`),
   /** Your own order for your splits: every id, first to last */
   reorderSplits: (ids: string[]) =>
     request<Ok>('PUT', '/api/splits/order', { ids } satisfies SplitOrderBody),

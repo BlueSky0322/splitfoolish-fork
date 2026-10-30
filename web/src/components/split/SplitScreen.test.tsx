@@ -607,6 +607,62 @@ describe('the split page', () => {
     expect(chip.getAttribute('target')).toBe('_blank');
   });
 
+  test('Google Maps links in notes show as cards with the place, on a phone and on desktop', async () => {
+    const APW = 'https://maps.app.goo.gl/apw123';
+    const OTHER = 'https://maps.app.goo.gl/unknown';
+    const server = () => {
+      const s = fakeServer(
+        splitDetail('trip', [
+          item({
+            id: 'coffee',
+            name: 'Coffee',
+            cost: 30,
+            notes: `Met at ${APW} then ${OTHER}, menu at https://example.com/menu`,
+          }),
+        ]),
+      );
+      s.linkPreviews.set(APW, {
+        title: 'A Place Where - APW',
+        address: '29, Jalan Riong, Bangsar, 59100 Kuala Lumpur',
+        detail: null,
+        image: 'https://lh5.googleusercontent.com/p/apw',
+        site: 'maps.app.goo.gl',
+      });
+      return s;
+    };
+    const user = userEvent.setup();
+    const cardsIn = async (where: HTMLElement) => {
+      // The place once Google has said what it is; a link it says nothing about stays a pin
+      const card = await within(where).findByRole('link', {
+        name: 'A Place Where - APW, on Google Maps',
+      });
+      expect(card.getAttribute('href')).toBe(APW);
+      expect(card.getAttribute('target')).toBe('_blank');
+      expect(within(card).getByText('29, Jalan Riong, Bangsar, 59100 Kuala Lumpur')).toBeTruthy();
+      expect(card.querySelector('img')!.getAttribute('src')).toBe(
+        'https://lh5.googleusercontent.com/p/apw',
+      );
+      const plain = within(where).getByRole('link', { name: 'Open in Google Maps' });
+      expect(plain.getAttribute('href')).toBe(OTHER);
+    };
+
+    renderApp(server(), '/?s=trip', { size: 'phone' });
+    await user.click(await screen.findByText('Coffee'));
+    const sheet = await screen.findByRole('dialog');
+    await cardsIn(sheet);
+    // Other addresses stay links in the text
+    expect(within(sheet).getByRole('link', { name: 'https://example.com/menu' })).toBeTruthy();
+
+    // Desktop: the cards under the notes, and only the other address in the list of links
+    cleanup();
+    renderApp(server(), '/?s=trip');
+    await user.click(await screen.findByText('Coffee'));
+    const form = await screen.findByRole('dialog');
+    await cardsIn(form);
+    expect(within(form).queryByRole('link', { name: APW })).toBeNull();
+    expect(within(form).getByRole('link', { name: 'https://example.com/menu' })).toBeTruthy();
+  });
+
   test('the owner links a guest to a member, taking the account off the person it joined as', async () => {
     // Ann joined under her account after the owner had added her as a guest
     const detail = splitDetail('trip', [item({ id: 'dinner', name: 'Dinner', cost: 90 })]);

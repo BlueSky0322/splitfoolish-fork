@@ -27,6 +27,7 @@ import {
 import { convertCents, convertParts, rateDay, toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
+import { type LinkPreview, isMapsLink } from '@shared/links';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
 import { forgetOfflineWork } from '../offline/sync';
@@ -149,6 +150,8 @@ export interface FakeServer {
   sent: { splitId: string; changes: Change[] }[];
   /** Every photo the app uploaded and the server kept, in the order they arrived */
   uploads: { splitId: string; itemId: string | null; image: Blob }[];
+  /** What Google says about each Maps link; any other Maps link has nothing to show */
+  linkPreviews: Map<string, Omit<LinkPreview, 'url'>>;
   /**
    * The next save of the profile, a split's changes or its settings, the next photo
    * upload, or the next agent disconnected, answers with this status
@@ -567,6 +570,16 @@ function answerNow(server: FakeServer) {
       return json({ id: split.id });
     }
     if (path === '/api/item-names') return json({ names: [] });
+    if (path === '/api/link-preview') {
+      const link = url.searchParams.get('url') ?? '';
+      if (!isMapsLink(link)) return json({ error: 'Only Google Maps links have a card' }, 400);
+      const known = server.linkPreviews.get(link);
+      const site = new URL(link).hostname.replace(/^www\./, '');
+      const preview: LinkPreview = known
+        ? { url: link, ...known }
+        : { url: link, title: null, address: null, detail: null, image: null, site };
+      return json(preview);
+    }
     if (path === '/api/archived' && method === 'PUT') {
       const { id, archived } = body as { id: string; archived: boolean };
       if (archived) server.archived.add(id);
@@ -753,6 +766,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     loseNext: {},
     receipts: new Map(),
     uploads: [],
+    linkPreviews: new Map(),
     failNext: {},
     archived: new Set(),
     agents: [],
