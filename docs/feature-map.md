@@ -138,7 +138,9 @@ it current.
   ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
   the item sheet and the form; several side by side, to swipe). In the item sheet's text
   a Maps link reads as its place's name (`MapsLinkName`); the item form, where notes are
-  typed, lists their addresses as chips under them, Maps links by their place's name. A share.google link goes on to
+  typed, lists their addresses as chips under them, Maps links by their place's name;
+  the list's line of notes shows them the same way as text (`MapsLinkLabel`), since the
+  row opens the item. A share.google link goes on to
   Google Search, which is never fetched: the address it redirects to names the place
   (marked `sh/x/loc`), but not where it is, so its card has no map and the form searches
   its name rather than taking it as the item's place. A place page's own map (its

@@ -37,7 +37,6 @@ const usePreview = (url: string) => useQuery(linkPreviewQuery(url));
 
 /** A Maps link in the notes' text: the place's name with a pin, else its address, short */
 export function MapsLinkName({ url, className }: { url: string; className?: string }) {
-  const title = usePreview(url).data?.title ?? unnamed(url);
   return (
     <a
       className={className ?? classes.name}
@@ -47,6 +46,19 @@ export function MapsLinkName({ url, className }: { url: string; className?: stri
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
     >
+      <MapsLinkLabel url={url} />
+    </a>
+  );
+}
+
+/**
+ * The place a Maps link names, with a pin, as text: inside something that opens on its
+ * own (an item's row), where the link can't be one
+ */
+export function MapsLinkLabel({ url }: { url: string }) {
+  const title = usePreview(url).data?.title ?? unnamed(url);
+  return (
+    <>
       {title != null && (
         <MapPin
           size={14}
@@ -55,7 +67,7 @@ export function MapsLinkName({ url, className }: { url: string; className?: stri
         />
       )}
       {title ?? shortLink(url)}
-    </a>
+    </>
   );
 }
 
