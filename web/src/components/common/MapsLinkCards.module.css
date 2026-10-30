@@ -37,11 +37,23 @@
   overflow-wrap: anywhere;
 }
 
+/* A known place: its name on the pin's red wash, apart from people's coloured names */
+.name[data-place] {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--sf-place-tint);
+  color: var(--sf-text);
+  /* Wrapped onto a second line, each line keeps its own rounded ends */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .name:hover {
   text-decoration: underline;
 }
 
 .namePin {
+  color: var(--sf-place);
   display: inline-block;
   vertical-align: -2px;
   margin-right: 2px;
@@ -79,8 +91,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--sf-accent);
-  background: color-mix(in srgb, var(--sf-accent) 10%, transparent);
+  color: var(--sf-place);
+  background: var(--sf-place-tint);
 }
 
 .text {

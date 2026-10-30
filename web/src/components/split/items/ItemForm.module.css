@@ -281,3 +281,13 @@
   background: var(--sf-accent-tint);
   text-decoration: none;
 }
+
+/* A place: its name on the pin's red wash, apart from the other links and people */
+.placeLink[data-place] {
+  background: var(--sf-place-tint);
+  color: var(--sf-text);
+}
+
+.placeLink[data-place]:hover {
+  background: color-mix(in srgb, var(--sf-place) 22%, transparent);
+}

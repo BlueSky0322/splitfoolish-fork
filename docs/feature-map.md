@@ -139,8 +139,10 @@ it current.
   the item sheet and the form; several side by side, to swipe). In the item sheet's text
   a Maps link reads as its place's name (`MapsLinkName`); the item form, where notes are
   typed, lists their addresses as chips under them, Maps links by their place's name;
-  the list's line of notes shows them the same way as text (`MapsLinkLabel`), since the
-  row opens the item. A share.google link goes on to
+  the list's line of notes shows them the same way, each opening its link above the row
+  that opens the item (the name's button reaches across the row). A known place is drawn
+  in the place colour, a map pin's red (`--sf-place`), apart from people's colours and
+  the accent; anything else as a link. A share.google link goes on to
   Google Search, which is never fetched: the address it redirects to names the place
   (marked `sh/x/loc`), but not where it is, so its card has no map and the form searches
   its name rather than taking it as the item's place. A place page's own map (its

@@ -15,6 +15,8 @@
   --sf-person-3-text: #da6891;
   --sf-person-4-text: #9085e9;
   --sf-person-5-text: #de6f42;
+  /* Places: the red of a map's pin, apart from people's colours and the accent */
+  --sf-place: #f2555a;
   --sf-shadow-sm: 0 0 0 1px #3f424d;
   --sf-shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
   --sf-shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
@@ -41,6 +43,7 @@
   --sf-person-3-text: #b1436b;
   --sf-person-4-text: #6961aa;
   --sf-person-5-text: #b44a20;
+  --sf-place: #d6383e;
   --sf-shadow-sm: 0 0 0 1px #cfd3e5;
   --sf-shadow-md: 0 0 0 1px #b2b6ca, 0 6px 18px rgba(30, 32, 43, 0.12);
   --sf-shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(30, 32, 43, 0.18);
@@ -68,6 +71,8 @@
   /* The spending chart's "everything else" slice: a quiet gray, never a hue */
   --sf-series-rest: color-mix(in srgb, var(--sf-text) 30%, transparent);
   --sf-avatar: color-mix(in srgb, var(--sf-accent) 24%, var(--sf-surface));
+  /* A place's chip: its name in the text's colour on a wash of the pin's red */
+  --sf-place-tint: color-mix(in srgb, var(--sf-place) 14%, transparent);
   /* People's colours (split/person-colors.ts): blue, amber, aqua and pink stay apart
      side by side, then violet and orange. Avatar fills, the same in both themes, each
      with the dark ink at 4.5:1 or more; names use the -text shades above. */

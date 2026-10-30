@@ -118,7 +118,7 @@ export function PlaceField({
                 ) : (
                   <Crosshair
                     size={16}
-                    className={classes.pin}
+                    className={classes.here}
                   />
                 )}
                 <span className={classes.optionName}>Use my current location</span>

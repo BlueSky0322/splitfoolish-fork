@@ -18,10 +18,16 @@
   min-height: 36px;
   padding: 0 4px 0 12px;
   border-radius: 999px;
-  border: 1px solid var(--sf-divider);
+  background: var(--sf-place-tint);
 }
 
 .pin {
+  flex: none;
+  color: var(--sf-place);
+}
+
+/* Where the phone is: not a place yet */
+.here {
   flex: none;
   color: var(--sf-accent);
 }
