@@ -70,6 +70,7 @@ export const toClientItem = (item: ApiItem, people: Person[]): SplitItem | null 
     notes: item.notes,
     createdAt: item.createdAt,
     original: item.original,
+    place: item.place,
   };
 };
 
@@ -110,6 +111,7 @@ export const toApiItem = (item: SplitItem): ApiItem => ({
   notes: item.notes,
   createdAt: item.createdAt,
   original: item.original,
+  place: item.place,
 });
 
 export const splitReducer: ImmerReducer<SplitState, SplitAction> = (draft, action) => {

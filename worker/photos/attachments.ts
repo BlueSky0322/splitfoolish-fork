@@ -1,6 +1,7 @@
 // Photos on a split: receipts on its items, and photos of the whole split. They are
 // deleted together with their item or split.
 
+import { type Place, isPosition, toPlace } from '../../shared/places';
 import { type Attachment, isRowId, MAX_PHOTO_BYTES, PHOTO_ID_PARAM } from '../../shared/api';
 import type { Actor } from '../../shared/rules';
 import { canRemovePhoto } from '../../shared/rules';
@@ -17,25 +18,36 @@ export const photosPerSplit = (env: { PHOTOS_PER_SPLIT?: string }) =>
 
 const full = (limit: number) => fail(`A split can have up to ${limit} photos`, 409);
 
+/** A photo's details as the API shows them, with its place as two columns */
+const COLUMNS = `id, item_id AS itemId, size, content_type AS contentType,
+  uploaded_by AS uploadedBy, created_at AS createdAt, place_lat AS placeLat, place_lng AS placeLng`;
+
+type AttachmentRow = Omit<Attachment, 'place'> & {
+  placeLat: number | null;
+  placeLng: number | null;
+};
+
+const toAttachment = ({ placeLat, placeLng, ...rest }: AttachmentRow): Attachment => ({
+  ...rest,
+  place: placeLat == null || placeLng == null ? null : { lat: placeLat, lng: placeLng, name: null },
+});
+
 export const listAttachmentsStatement = (db: D1Database, splitId: string) =>
   db
-    .prepare(
-      `SELECT id, item_id AS itemId, size, content_type AS contentType, uploaded_by AS uploadedBy,
-       created_at AS createdAt
-       FROM attachments WHERE split_id = ? ORDER BY created_at`,
-    )
+    .prepare(`SELECT ${COLUMNS} FROM attachments WHERE split_id = ? ORDER BY created_at`)
     .bind(splitId);
 
-export const assembleAttachments = (result: D1Result) => result.results as Attachment[];
+export const assembleAttachments = (result: D1Result) =>
+  (result.results as AttachmentRow[]).map(toAttachment);
 
 const attachmentByIdStatement = (db: D1Database, id: string) =>
-  db
-    .prepare(
-      `SELECT id, split_id AS splitId, item_id AS itemId, size, content_type AS contentType,
-       uploaded_by AS uploadedBy, created_at AS createdAt
-       FROM attachments WHERE id = ?`,
-    )
-    .bind(id);
+  db.prepare(`SELECT ${COLUMNS}, split_id AS splitId FROM attachments WHERE id = ?`).bind(id);
+
+/** One photo by id, with the split it's in; null when there's none */
+const attachmentById = async (db: D1Database, id: string) => {
+  const row = await attachmentByIdStatement(db, id).first<AttachmentRow & { splitId: string }>();
+  return row == null ? null : { ...toAttachment(row), splitId: row.splitId };
+};
 
 /**
  * A photo sent again with the id it was first sent with (its answer was lost, say): the
@@ -66,6 +78,15 @@ export function uploadAttachment(
   // Chosen by the app, so sending a photo again never adds it twice
   const id = params.get(PHOTO_ID_PARAM);
   if (id != null && !isRowId(id)) return fail('That photo id is not valid', 400);
+  // Where it was taken, read on the device before it was shrunk: both or neither
+  const [lat, lng] = [params.get('lat'), params.get('lng')];
+  let place: Place | null = null;
+  if (lat != null || lng != null) {
+    if (lat == null || lng == null || !isPosition(Number(lat), Number(lng))) {
+      return fail('Where a photo was taken is a latitude and longitude', 400);
+    }
+    place = toPlace(Number(lat), Number(lng));
+  }
   return addAttachment(
     db,
     splitId,
@@ -75,6 +96,7 @@ export function uploadAttachment(
     () => readImage(req, MAX_PHOTO_BYTES),
     [],
     limit,
+    place,
   );
 }
 
@@ -95,14 +117,16 @@ export async function addAttachment(
   read: () => Promise<Image | Response>,
   alongside: D1PreparedStatement[] = [],
   limit = MAX_PHOTOS_PER_SPLIT,
+  place: Place | null = null,
 ) {
   const [count, item, existing] = await db.batch<{ n?: number; id?: string }>([
     db.prepare('SELECT count(*) AS n FROM attachments WHERE split_id = ?').bind(splitId),
     db.prepare('SELECT id FROM items WHERE id = ? AND split_id = ?').bind(itemId ?? '', splitId),
     attachmentByIdStatement(db, id ?? ''),
   ]);
+  const found = existing.results[0] as (AttachmentRow & { splitId: string }) | undefined;
   const again = alreadyUploaded(
-    existing.results[0] as (Attachment & { splitId: string }) | undefined,
+    found && { ...toAttachment(found), splitId: found.splitId },
     splitId,
     itemId,
     email,
@@ -123,6 +147,7 @@ export async function addAttachment(
     contentType: image.contentType,
     uploadedBy: email,
     createdAt: Date.now(),
+    place,
   };
   try {
     // Details and bytes are saved together or not at all, and only while the sender is
@@ -133,8 +158,9 @@ export async function addAttachment(
         .prepare(
           // Only while the split has room: when it's full nothing is added here, and the
           // bytes below then have no photo to belong to, so the whole batch is refused
-          `INSERT INTO attachments (id, split_id, item_id, content_type, size, uploaded_by, created_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?
+          `INSERT INTO attachments
+             (id, split_id, item_id, content_type, size, uploaded_by, created_at, place_lat, place_lng)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
            WHERE (SELECT count(*) FROM attachments WHERE split_id = ?) < ?`,
         )
         .bind(
@@ -145,6 +171,8 @@ export async function addAttachment(
           attachment.size,
           email,
           attachment.createdAt,
+          place?.lat ?? null,
+          place?.lng ?? null,
           splitId,
           limit,
         ),
@@ -161,9 +189,7 @@ export async function addAttachment(
     if (isConstraintError(err)) {
       // The same photo, sent twice at once: the other request saved it
       if (id != null) {
-        const saved = await attachmentByIdStatement(db, id).first<
-          Attachment & { splitId: string }
-        >();
+        const saved = await attachmentById(db, id);
         const again = alreadyUploaded(saved ?? undefined, splitId, itemId, email);
         if (again) return again;
       }
@@ -205,7 +231,7 @@ export async function serveAttachment(
 
 /** One of this split's photos, as listed; null when there's no such photo in it */
 export const findAttachment = async (db: D1Database, splitId: string, id: string) => {
-  const found = await attachmentByIdStatement(db, id).first<Attachment & { splitId: string }>();
+  const found = await attachmentById(db, id);
   if (found == null || found.splitId !== splitId) return null;
   const { splitId: _, ...attachment } = found;
   return attachment;

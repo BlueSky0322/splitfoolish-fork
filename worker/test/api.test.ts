@@ -420,6 +420,69 @@ describe('changing a split', () => {
     expect((await change(owner, id, { op: 'updateItem', item: item('   ') })).status).toBe(200);
     expect(await notesOf()).toBeNull();
   });
+
+  it('keeps where an item was paid for and a photo taken, which an older app leaves as it is', async () => {
+    const owner = person('owner');
+    const { id } = await splitWith(owner);
+    const a = hex();
+    const itemId = hex();
+    await change(owner, id, { op: 'addPerson', id: a, name: 'A' });
+    const item = (place?: unknown) => ({
+      id: itemId,
+      name: 'Bait',
+      cost: 12,
+      payerId: a,
+      participantIds: [a],
+      ...(place !== undefined && { place }),
+    });
+    const placeOf = async () =>
+      (await api.call(owner, 'GET', `/api/splits/${id}`)).data.items[0].place;
+
+    // Kept to 5 decimal places, with a name trimmed
+    const there = { lat: 3.340171, lng: 101.250502, name: ' Truz Tackles ' };
+    expect((await change(owner, id, { op: 'addItem', item: item(there) })).status).toBe(200);
+    const kept = { lat: 3.34017, lng: 101.2505, name: 'Truz Tackles' };
+    expect(await placeOf()).toEqual(kept);
+    // An app from before places sends none: the item keeps its own
+    expect((await change(owner, id, { op: 'updateItem', item: item() })).status).toBe(200);
+    expect(await placeOf()).toEqual(kept);
+    // Off the map, half a place or a name too long are refused, changing nothing
+    for (const wrong of [
+      { lat: 91, lng: 0, name: null },
+      { lat: 3.3, name: null },
+      { lat: 3.3, lng: 101.2, name: 'x'.repeat(121) },
+    ]) {
+      expect((await change(owner, id, { op: 'updateItem', item: item(wrong) })).status).toBe(409);
+    }
+    expect(await placeOf()).toEqual(kept);
+    // Null takes it off
+    expect((await change(owner, id, { op: 'updateItem', item: item(null) })).status).toBe(200);
+    expect(await placeOf()).toBeNull();
+
+    // A photo says where it was taken when it was sent with one, both or neither
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(7)]);
+    const send = (query: string) =>
+      api.call(owner, 'POST', `/api/splits/${id}/attachments?${query}`, jpeg, {
+        'Content-Type': 'image/jpeg',
+      });
+    const taken = await send(`itemId=${itemId}&lat=3.340171&lng=101.250502`);
+    expect(taken.status).toBe(201);
+    expect(taken.data.place).toEqual({ lat: 3.34017, lng: 101.2505, name: null });
+    expect((await send(`lat=3.3`)).status).toBe(400);
+    expect((await send(`lat=95&lng=10`)).status).toBe(400);
+    const plain = await send('');
+    expect(plain.data.place).toBeNull();
+    const listed = (await api.call(owner, 'GET', `/api/splits/${id}`)).data.attachments;
+    expect(listed.map((p: { place: unknown }) => p.place)).toEqual([
+      { lat: 3.34017, lng: 101.2505, name: null },
+      null,
+    ]);
+
+    // Saving them is on until the account turns it off
+    expect((await api.call(owner, 'GET', '/api/me')).data.settings.savePlaces).toBe(true);
+    await api.call(owner, 'PATCH', '/api/me', { settings: { savePlaces: false } });
+    expect((await api.call(owner, 'GET', '/api/me')).data.settings.savePlaces).toBe(false);
+  });
 });
 
 describe('share link invites', () => {

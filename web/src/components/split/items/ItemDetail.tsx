@@ -14,6 +14,7 @@ import { MapsLinkCards } from '../../common/MapsLinkCards';
 import PhotoViewer from '../../ui/PhotoViewer';
 import PersonAvatar from '../PersonAvatar';
 import { PaidBy } from './PaidBy';
+import { PlaceLink } from '../PlaceLink';
 import { useSplitPage } from '../SplitPageContext';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { useSplitActions } from '../../../split/useSplit';
@@ -110,6 +111,7 @@ const ItemDetail = ({
           <PaidBy item={item} />
         </span>
       </div>
+      {item.place && <PlaceLink place={item.place} />}
       <ul
         className={classes.parts}
         aria-label="Each person's part"

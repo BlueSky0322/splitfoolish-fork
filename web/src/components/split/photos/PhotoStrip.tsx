@@ -1,3 +1,4 @@
+import type { PhotoSource } from '../../../split/photo-places';
 import { ActionIcon, Loader, UnstyledButton } from '@mantine/core';
 import { Camera, CloudSlash, X } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
@@ -25,7 +26,7 @@ interface PhotoStripProps {
    */
   queued?: QueuedPhoto[];
   canRemove: (photo: Attachment) => boolean;
-  onAdd: (files: File[]) => void;
+  onAdd: (files: File[], from: PhotoSource) => void;
   onRemove: (photo: Attachment) => void;
   onRemovePending?: (file: File) => void;
   onRemoveQueued?: (photo: QueuedPhoto) => void;

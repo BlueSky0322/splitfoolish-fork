@@ -12,6 +12,7 @@ import UserAvatar from '../../common/UserAvatar';
 import { PersonName } from '../PersonAvatar';
 import { useSplitPage } from '../SplitPageContext';
 import { timeLabel, useAddedBy } from './added-by';
+import { PlaceLink } from '../PlaceLink';
 import classes from './PhotoDetails.module.css';
 
 // About the photo open in the viewer on a computer: who added it and when, and for a
@@ -68,6 +69,14 @@ const PhotoDetails = ({
                 <dd>{formatMoney(myShare, currency)}</dd>
               </div>
             )}
+            {photo.place && (
+              <div>
+                <dt>Taken at</dt>
+                <dd>
+                  <PlaceLink place={photo.place} />
+                </dd>
+              </div>
+            )}
             <div>
               <dt>Added by</dt>
               <dd className={classes.who}>
@@ -108,6 +117,14 @@ const PhotoDetails = ({
               <dt>In</dt>
               <dd>{meta?.name}</dd>
             </div>
+            {photo.place && (
+              <div>
+                <dt>Taken at</dt>
+                <dd>
+                  <PlaceLink place={photo.place} />
+                </dd>
+              </div>
+            )}
             <div>
               <dt>File</dt>
               <dd>{fileLabel(photo)}</dd>

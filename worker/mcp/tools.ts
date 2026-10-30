@@ -36,6 +36,7 @@ import {
   addAttachment,
   deleteAttachments,
   findAttachment,
+  assembleAttachments,
   listAttachmentsStatement,
   moveAttachment,
   photosPerSplit,
@@ -247,6 +248,7 @@ const photoOut = (a: Attachment, email: string) => ({
   size: a.size,
   addedByYou: a.uploadedBy === email,
   addedAt: new Date(a.createdAt).toISOString(),
+  ...(a.place != null && { place: { lat: a.place.lat, lng: a.place.lng } }),
 });
 
 /** People by name in answers: the name, which is unique in a split, or the id of someone gone */
@@ -285,6 +287,7 @@ const expenseOut = (i: Item, photos: ReturnType<typeof photoOut>[], nameOf: Name
   ...(i.exact != null && { exact: byName(i.exact, nameOf) }),
   ...(i.category != null && { category: i.category }),
   ...(i.notes != null && { notes: i.notes }),
+  ...(i.place != null && { place: i.place }),
   addedAt: new Date(i.createdAt).toISOString(),
   // Paid in another currency: what was typed, and the rate it was converted at
   ...(i.original != null && {
@@ -347,7 +350,8 @@ async function loadSplit(
   const extra = rest.slice(CONTENT_STATEMENTS);
   const earlier =
     want.receipt != null ? (extra.shift()?.results[0] as Receipt | undefined) ?? null : null;
-  const attachments = want.photos ? ((extra.shift()?.results ?? []) as Attachment[]) : [];
+  const photosRead = want.photos ? extra.shift() : undefined;
+  const attachments = photosRead ? assembleAttachments(photosRead) : [];
   const m = member.results[0] as Member | undefined;
   const row = split.results[0] as SplitRow | undefined;
   return {

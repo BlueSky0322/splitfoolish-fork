@@ -57,6 +57,7 @@ export function toCsv(rows: ExportRows): string {
       'Split mode',
       ...rows.people,
       'Notes',
+      'Location',
     ]),
     ...rows.items.map((i) => [
       text(isoDate(i.createdAt)),
@@ -71,6 +72,7 @@ export function toCsv(rows: ExportRows): string {
       text(MODES[i.splitMode]),
       ...i.shares.map(amount),
       text(i.notes),
+      text(i.place),
     ]),
     [],
     header(['Person', 'Paid', 'Share', 'Balance']),

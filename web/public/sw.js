@@ -71,7 +71,8 @@ const LOCK_PREFIX = 'sf-outbox:';
 const USER_KEY = 'sf-user';
 /**
  * PHOTO_PREFIX in web/src/offline/photo-queue.ts; entries there are { email, value } with
- * value { id, splitId, itemId, createdAt, type, bytes }
+ * value { id, splitId, itemId, createdAt, type, bytes, place? }, place being where it was
+ * taken ({ lat, lng }) as api.uploadAttachment sends it
  */
 const PHOTO_PREFIX = 'photo:';
 /** The lock photo-queue.ts takes for a photo while sending it */
@@ -566,9 +567,13 @@ async function flushOfflineChanges() {
         async () => {
           const entry = await read(key);
           if (!mine(entry)) return;
-          const { splitId, itemId, type, bytes } = entry.value;
+          const { splitId, itemId, type, bytes, place } = entry.value;
           const query = new URLSearchParams({ [PHOTO_ID_PARAM]: id });
           if (itemId != null) query.set('itemId', itemId);
+          if (typeof place?.lat === 'number' && typeof place?.lng === 'number') {
+            query.set('lat', String(place.lat));
+            query.set('lng', String(place.lng));
+          }
           await post(
             `/api/splits/${encodeURIComponent(splitId)}/attachments?${query}`,
             new Blob([bytes], { type }),

@@ -271,7 +271,7 @@ export default PhotosTab;
  */
 export function AddPhotosFab() {
   const { meta, photos } = useSplitPage();
-  const picker = usePhotoPicker((files) => void photos.upload(files, null));
+  const picker = usePhotoPicker((files, from) => void photos.upload(files, null, from));
   const [open, setOpen] = useState(false);
   if ((meta?.attachments.length ?? 0) === 0 && photos.queuedOf(null).length === 0) return null;
   return (

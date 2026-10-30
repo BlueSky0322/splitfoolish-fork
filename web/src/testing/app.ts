@@ -27,6 +27,7 @@ import {
 import { convertCents, convertParts, rateDay, toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
+import { type Place, isPosition, toPlace } from '@shared/places';
 import { type LinkPreview, isMapsLink } from '@shared/links';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
@@ -149,7 +150,9 @@ export interface FakeServer {
   /** Every batch of changes the app sent, by split */
   sent: { splitId: string; changes: Change[] }[];
   /** Every photo the app uploaded and the server kept, in the order they arrived */
-  uploads: { splitId: string; itemId: string | null; image: Blob }[];
+  uploads: { splitId: string; itemId: string | null; image: Blob; place: Place | null }[];
+  /** What OpenStreetMap calls a spot, by "lat,lng" to 4 places; any other has no name */
+  placeNames: Map<string, string>;
   /** What Google says about each Maps link; any other Maps link has nothing to show */
   linkPreviews: Map<string, Omit<LinkPreview, 'url'>>;
   /**
@@ -570,6 +573,15 @@ function answerNow(server: FakeServer) {
       return json({ id: split.id });
     }
     if (path === '/api/item-names') return json({ names: [] });
+    if (path === '/api/place-name') {
+      const [lat, lng] = [url.searchParams.get('lat'), url.searchParams.get('lng')];
+      if (lat == null || lng == null || !isPosition(+lat, +lng)) {
+        return json({ error: 'Give lat and lng as a position on the map' }, 400);
+      }
+      return json({
+        name: server.placeNames.get(`${(+lat).toFixed(4)},${(+lng).toFixed(4)}`) ?? null,
+      });
+    }
     if (path === '/api/link-preview') {
       const link = url.searchParams.get('url') ?? '';
       if (!isMapsLink(link)) return json({ error: 'Only Google Maps links have a card' }, 400);
@@ -656,7 +668,13 @@ function answerNow(server: FakeServer) {
         return json({ error: 'No photo was sent' }, 400);
       }
       if (image.size > MAX_PHOTO_BYTES) return json({ error: 'That photo is too large' }, 413);
-      server.uploads.push({ splitId: split.id, itemId, image });
+      // Where it was taken: both or neither, on the map, kept to 5 places
+      const [lat, lng] = [url.searchParams.get('lat'), url.searchParams.get('lng')];
+      if ((lat != null || lng != null) && !(lat != null && lng != null && isPosition(+lat, +lng))) {
+        return json({ error: 'Where a photo was taken is a latitude and longitude' }, 400);
+      }
+      const place = lat != null && lng != null ? toPlace(+lat, +lng) : null;
+      server.uploads.push({ splitId: split.id, itemId, image, place });
       const added: Attachment = {
         id: photoId ?? `photo-${server.uploads.length}`,
         itemId,
@@ -664,6 +682,7 @@ function answerNow(server: FakeServer) {
         contentType: 'image/jpeg',
         uploadedBy: server.me.email,
         createdAt: Date.now(),
+        place,
       };
       split.attachments.push(added);
       return json(added, 201);
@@ -766,6 +785,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     loseNext: {},
     receipts: new Map(),
     uploads: [],
+    placeNames: new Map(),
     linkPreviews: new Map(),
     failNext: {},
     archived: new Set(),

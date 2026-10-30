@@ -2,6 +2,7 @@
 // them, so a field changed on one side fails to compile on the other. The split's bill
 // itself (people, items, changes) is in types.ts.
 
+import type { Place } from './places';
 import type { PaymentMethod } from './payments';
 import type { RateSource } from './rates';
 import type { Change, Item, Payment, Person, Role } from './types';
@@ -38,6 +39,8 @@ export interface Settings {
   itemsGroupBy: (typeof ITEMS_GROUPS)[number];
   itemsSortKey: (typeof ITEMS_SORT_KEYS)[number];
   itemsSortDir: (typeof SORT_DIRS)[number];
+  /** Keep where photos are taken and items paid for */
+  savePlaces: boolean;
 }
 
 /** Settings before anyone changes them */
@@ -53,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   itemsSortKey: 'date',
   // Newest items first
   itemsSortDir: 'desc',
+  savePlaces: true,
 };
 
 /** The signed-in account: what others see of it, and its private settings */
@@ -111,6 +115,11 @@ export interface Attachment {
   contentType: string;
   uploadedBy: string;
   createdAt: number;
+  /**
+   * Where it was taken, when the phone or the photo said; its name is null. Missing from
+   * copies a device kept from before places.
+   */
+  place?: Place | null;
 }
 
 /** An invite or request to join a split, as its owner sees it */

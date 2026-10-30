@@ -1,0 +1,25 @@
+.place {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 14px;
+  color: var(--sf-text);
+  text-decoration: none;
+}
+
+.place:hover .label {
+  text-decoration: underline;
+}
+
+.pin {
+  flex: none;
+  color: var(--sf-accent);
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -22,7 +22,7 @@ import {
   Trash,
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useContext, useEffect, useId, useMemo, useState } from 'react';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { MAX_ITEM_CENTS, fitsItemCents, isValidRate, toCents } from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
 import { itemShares, MAX_SHARES } from '@shared/settle';
@@ -44,6 +44,12 @@ import {
 } from '../../../utils/date-input';
 import { ConversionRow } from '../forms/ConversionRow';
 import { DayField } from '../forms/DayField';
+import { PlaceField } from '../forms/PlaceField';
+import { type Place, toPlace } from '@shared/places';
+import type { Position } from '../../../utils/here';
+import { type PhotoSource, locatePhotos } from '../../../split/photo-places';
+import { useProfile } from '../../../profile/ProfileContext';
+import { lookUpPlaceName } from '../../../split/place-names';
 import { useIsDesktop, useIsMobile } from '../../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../../ui/CurrencySelect';
@@ -69,7 +75,13 @@ interface ItemFormProps {
    * Photos picked for a new item are uploaded once it's added. day: the day picked when
    * it isn't the item's own (a new item's is today); null when it's unchanged.
    */
-  onSave: (input: ItemInput, newPhotos: File[], day: Date | null) => boolean;
+  onSave: (
+    input: ItemInput,
+    newPhotos: File[],
+    day: Date | null,
+    /** Where each new photo was taken, as found when it was picked */
+    newPhotoPlaces: (Position | null)[],
+  ) => boolean;
   onDelete?: () => void;
   /** Adds a copy of the item being edited, keeping its date or as of today */
   onDuplicate?: (keepDate: boolean) => void;
@@ -105,6 +117,40 @@ const ItemForm = ({
   const photos = item ? splitPhotos.photosOf(item.id) : [];
   const queued = item ? splitPhotos.queuedOf(item.id) : [];
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
+  const [newPhotoPlaces, setNewPhotoPlaces] = useState(() => new Map<File, Position | null>());
+  const [place, setPlace] = useState<Place | null>(item?.place ?? null);
+  const savePlaces = useProfile().profile?.settings.savePlaces ?? true;
+  // A place set here is saved with its name, once OpenStreetMap says what's there
+  const changePlace = (next: Place | null) => {
+    setPlace(next);
+    if (next == null || next.name != null) return;
+    void lookUpPlaceName(next.lat, next.lng).then((name) => {
+      if (name == null) return;
+      setPlace((now) =>
+        now?.lat === next.lat && now.lng === next.lng && now.name == null ? { ...now, name } : now,
+      );
+    });
+  };
+  // A receipt that says where it was taken fills in an item that doesn't say yet (as it
+  // is when the photo's place is known, which can be a few seconds after picking it)
+  const placeNow = useRef(place);
+  placeNow.current = place;
+  const placeFrom = (found: Position | null) => {
+    if (found && placeNow.current == null) changePlace(toPlace(found.lat, found.lng));
+  };
+  const addPhotos = (files: File[], from: PhotoSource) => {
+    if (item) {
+      void splitPhotos.upload(files, item.id, from).then(placeFrom);
+      return;
+    }
+    // A new item's photos wait for it to be added; where they were taken is found now
+    setNewPhotos((p) => [...p, ...files]);
+    if (!savePlaces) return;
+    void locatePhotos(files, from).then((found) => {
+      setNewPhotoPlaces((was) => new Map([...was, ...files.map((f, i) => [f, found[i]] as const)]));
+      placeFrom(found.find((p) => p != null) ?? null);
+    });
+  };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isDesktop = useIsDesktop();
   const isMobile = useIsMobile();
@@ -195,6 +241,7 @@ const ItemForm = ({
     notes,
     newPhotos.length,
     dayText,
+    place,
   ]);
   const [initialSnapshot] = useState(snapshot);
   const unsaved =
@@ -277,9 +324,11 @@ const ItemForm = ({
         exact,
         category,
         notes,
+        place,
       }),
       newPhotos,
       newDay,
+      newPhotos.map((f) => newPhotoPlaces.get(f) ?? null),
     );
   };
 
@@ -438,6 +487,10 @@ const ItemForm = ({
         }
         highlighted={initialDay != null}
       />
+      <PlaceField
+        place={place}
+        onChange={changePlace}
+      />
 
       {!isMobile && categorySelect}
 
@@ -587,9 +640,7 @@ const ItemForm = ({
           pending={newPhotos}
           queued={queued}
           canRemove={canRemovePhoto}
-          onAdd={(files) =>
-            item ? splitPhotos.upload(files, item.id) : setNewPhotos((p) => [...p, ...files])
-          }
+          onAdd={addPhotos}
           onRemove={splitPhotos.remove}
           onRemovePending={(file) => setNewPhotos((p) => p.filter((f) => f !== file))}
           onRemoveQueued={splitPhotos.removeQueued}

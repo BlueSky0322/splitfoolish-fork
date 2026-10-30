@@ -1,3 +1,4 @@
+import type { Place } from '@shared/places';
 import type { RateSource } from '@shared/rates';
 import {
   convertParts,
@@ -71,6 +72,8 @@ export interface ItemFields {
   exact: Record<string, number | ''>;
   category: string | null;
   notes: string;
+  /** Where it was paid for; null for nowhere */
+  place: Place | null;
 }
 
 /**
@@ -110,6 +113,7 @@ export function buildItemInput(f: ItemFields): ItemInput {
           : typedExact,
     category: f.category,
     notes: f.notes.trim() === '' ? null : f.notes.trim(),
+    place: f.place,
     original: f.foreign
       ? {
           currency: f.entryCurrency,
