@@ -137,9 +137,8 @@ it current.
   as cards with the place's picture, name and address
   ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
   the item sheet and the form; several side by side, to swipe). In the item sheet's text
-  a Maps link reads as its place's name (`MapsLinkName`); the item form shows notes with
-  links the same way until they're edited (Edit notes, or a click on them), and again
-  once left. A share.google link goes on to
+  a Maps link reads as its place's name (`MapsLinkName`); the item form, where notes are
+  typed, lists their addresses as chips under them, Maps links by their place's name. A share.google link goes on to
   Google Search, which is never fetched: the address it redirects to names the place
   (marked `sh/x/loc`), but not where it is, so its card has no map and the form searches
   its name rather than taking it as the item's place. A place page's own map (its
@@ -149,8 +148,11 @@ it current.
   within Google Maps (`isMapsLink` in [shared/links.ts](../shared/links.ts)) and keeping
   each a week; a page that says nothing names the place from the link, else the card is
   a pin. A dropped pin (a shared position, which Google's page names nothing) is named
-  by OpenStreetMap (`placeName`, below) and the card shows a small map of it
-  ([MiniMap](../web/src/components/ui/MiniMap.tsx)) from the `position` the link gives.
+  as Google Maps names one, its plus code in its town ("VRP3+RQ Bagan Datuk, Perak",
+  the town from OpenStreetMap, `placeArea`), and the card shows a small map of it
+  ([MiniMap](../web/src/components/ui/MiniMap.tsx)). Where the link itself says the
+  position (`positionInLink` in shared/links.ts, which the Worker reads too), the app
+  shows the map and full plus code before the Worker answers, or offline.
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
@@ -536,7 +538,9 @@ method through a profile change.
   Remove location, or searches as it's typed (`usePlaceSearch`, 300 ms after the last
   key, near the phone or the split's latest place) and offers Use my current location.
   A Maps link pasted into it is offered as its exact place when the link says where,
-  else its name is searched for.
+  else its name is searched for. A plus code typed into it is found by the Worker, not
+  Photon (which doesn't know them): a full one alone, a short one near the town typed
+  after it, else near the person (`readPlusCode`, `plusCodePosition`).
   The search is komoot's Photon through the Worker (`GET /api/place-search`,
   [worker/places/search.ts](../worker/places/search.ts), kept a week per search and
   area): OpenStreetMap's own search forbids searching as people type. Photon busy, down

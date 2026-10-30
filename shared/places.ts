@@ -77,6 +77,54 @@ export function plusCode(lat: number, lng: number) {
 export const plusCodeLabel = (lat: number, lng: number, town: string | null = null) =>
   town ? `${plusCode(lat, lng).slice(4)} ${town}` : plusCode(lat, lng);
 
+/** A plus code as typed, full (6PM2VRJ3+MG) or short (VRJ3+MG), then a town if any */
+const PLUS_CODE_TYPED =
+  /^\s*((?:[23456789CFGHJMPQRVWX]{2}){2,4}\+[23456789CFGHJMPQRVWX]{2})(?:[\s,]+(.*))?$/i;
+
+/** A plus code someone typed: the code, whether it's whole, and the town after it */
+export function readPlusCode(text: string) {
+  const found = PLUS_CODE_TYPED.exec(text);
+  if (found == null) return null;
+  const code = found[1].toUpperCase();
+  return { code, full: code.indexOf('+') === 8, town: found[2]?.trim() || null };
+}
+
+/** The middle of a full 10-character plus code's box */
+function decodeFull(code: string) {
+  const digits = code.replace('+', '');
+  let [lat, lng, step] = [-90, -180, 20];
+  for (let i = 0; i < 10; i += 2) {
+    lat += PLUS_CODE_DIGITS.indexOf(digits[i]) * step;
+    lng += PLUS_CODE_DIGITS.indexOf(digits[i + 1]) * step;
+    if (i < 8) step /= 20;
+  }
+  return { lat: lat + step / 2, lng: lng + step / 2 };
+}
+
+/**
+ * Where a plus code is: a full one by itself, a short one (VRJ3+MG) as the nearest such
+ * box to `near` (the town it was given with, or where the person is), as Open Location
+ * Code recovers them. Null for a short code with nothing to go by.
+ */
+export function plusCodePosition(code: string, near: { lat: number; lng: number } | null) {
+  const missing = 8 - code.indexOf('+');
+  if (missing === 0) {
+    const at = decodeFull(code);
+    return { lat: roundCoord(at.lat), lng: roundCoord(at.lng) };
+  }
+  if (near == null) return null;
+  // The digits the short code leaves out are the nearby place's, then the nearest box of
+  // that size around it is taken, across a line if that's closer
+  const at = decodeFull(plusCode(near.lat, near.lng).slice(0, missing) + code);
+  const size = 20 ** (2 - missing / 2);
+  let { lat, lng } = at;
+  if (near.lat + size / 2 < lat && lat - size >= -90) lat -= size;
+  else if (near.lat - size / 2 > lat && lat + size <= 90) lat += size;
+  if (near.lng + size / 2 < lng) lng -= size;
+  else if (near.lng - size / 2 > lng) lng += size;
+  return { lat: roundCoord(lat), lng: roundCoord(((((lng + 180) % 360) + 360) % 360) - 180) };
+}
+
 /** What a place is called: its name, or its plus code when nothing's known */
 export const placeLabel = (place: Place) => place.name ?? plusCodeLabel(place.lat, place.lng);
 

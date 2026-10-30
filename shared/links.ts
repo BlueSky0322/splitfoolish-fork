@@ -1,3 +1,5 @@
+import { isPosition, roundCoord } from './places';
+
 // Links in notes: the web addresses typed in them, and the Google Maps ones the app shows
 // as cards with the place's name, address and picture (the Worker fetches what the card
 // shows), and that give an item its place.
@@ -86,3 +88,40 @@ export const mapsLinksIn = (text: string) =>
       findLinks(text).flatMap((p) => (p.href != null && isMapsLink(p.href) ? [p.href] : [])),
     ),
   ].slice(0, MAX_MAPS_LINKS);
+
+/** A decimal coordinate in an address: 3.881664, -95.6, 101 */
+const COORD = String.raw`(-?\d{1,3}(?:\.\d+)?)`;
+/** Two of them as a shared position writes them: "3.88,100.80", "3.88,+100.80", "3.88, 100.80" */
+const PAIR = String.raw`${COORD}(?:,|%2C)(?:\+|%20|\s)*${COORD}`;
+/** A dropped pin: a position shared on its own, which names no place */
+const PIN_FORMS = [
+  // ?q=3.881664,100.803786, or ?query=… (api=1 links)
+  new RegExp(String.raw`[?&](?:q|query)=${PAIR}(?:&|#|$)`),
+  // A search for, or place at, a position: /maps/search/3.887047,+100.804389
+  new RegExp(String.raw`/maps/(?:search|place)/${PAIR}(?:[/?#]|$)`),
+];
+const POSITION_FORMS = [
+  ...PIN_FORMS,
+  // A place's own pin: !3d3.12!4d101.6
+  new RegExp(String.raw`!3d${COORD}!4d${COORD}`),
+  // The map's centre: /@3.12,101.6,17z
+  new RegExp(String.raw`/@${COORD},${COORD}`),
+];
+
+/**
+ * Where on the map a Maps address points, when the address itself says (a dropped pin,
+ * a place's pin, the map's centre); null when it doesn't (a short link, until followed).
+ * With `pinOnly`, only a dropped pin's: a place's link names it, which its card shows.
+ */
+export function positionInLink(
+  address: string,
+  { pinOnly = false } = {},
+): { lat: number; lng: number } | null {
+  for (const form of pinOnly ? PIN_FORMS : POSITION_FORMS) {
+    const found = form.exec(address);
+    if (found == null) continue;
+    const [lat, lng] = [Number(found[1]), Number(found[2])];
+    return isPosition(lat, lng) ? { lat: roundCoord(lat), lng: roundCoord(lng) } : null;
+  }
+  return null;
+}

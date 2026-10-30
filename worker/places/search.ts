@@ -6,9 +6,13 @@
 // else: OpenStreetMap's own search forbids searching as people type.
 
 import {
+  MAX_PLACE_NAME_LENGTH,
   MAX_PLACE_SEARCH_LENGTH,
   type PlaceSuggestion,
   isPosition,
+  plusCodeLabel,
+  plusCodePosition,
+  readPlusCode,
   roundCoord,
 } from '../../shared/places';
 import { readBody } from '../http';
@@ -151,6 +155,9 @@ export async function searchPlaces(
 ): Promise<PlaceSuggestion[] | null> {
   const words = text.trim().replace(/\s+/g, ' ').slice(0, MAX_PLACE_SEARCH_LENGTH);
   if (words.length < 2) return [];
+  // A plus code is found here: Photon and OpenStreetMap don't know them
+  const typed = readPlusCode(words);
+  if (typed) return findPlusCode(typed, near, ctx, { base, country });
   // Searches from about the same area (some 10 km) share their answer
   const area = near == null ? null : [near.lat.toFixed(1), near.lng.toFixed(1)];
   const within = (area && (await countryAt(area, ctx, base))) ?? country?.toUpperCase() ?? null;
@@ -186,4 +193,27 @@ export async function searchPlaces(
     ),
   );
   return found;
+}
+
+/**
+ * Where a typed plus code is: a full one by itself; a short one near the town typed after
+ * it (found by name), else near the person. Named as typed, else by its full code.
+ */
+async function findPlusCode(
+  typed: NonNullable<ReturnType<typeof readPlusCode>>,
+  near: { lat: number; lng: number } | null,
+  ctx: Ctx,
+  options: { base?: string; country?: string | null },
+): Promise<PlaceSuggestion[] | null> {
+  let around = near;
+  if (!typed.full && typed.town) {
+    const town = await searchPlaces(typed.town, near, ctx, options);
+    if (town == null) return null;
+    around = town[0] ?? near;
+  }
+  const at = plusCodePosition(typed.code, around);
+  if (at == null) return [];
+  const name =
+    typed.town && !typed.full ? `${typed.code} ${typed.town}` : plusCodeLabel(at.lat, at.lng);
+  return [{ ...at, name: name.slice(0, MAX_PLACE_NAME_LENGTH), address: 'Plus code' }];
 }

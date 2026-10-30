@@ -217,8 +217,8 @@ describe('places', () => {
     const PIN = 'https://goo.gl/maps/pin123';
     const SHARED = 'https://share.google/P2KCOX2QH6QhNjrIb';
     server.linkPreviews.set(PIN, {
-      title: 'Bagan Datuk, Perak',
-      address: 'Dropped pin',
+      title: 'VRJ3+MG Bagan Datuk, Perak',
+      address: null,
       detail: null,
       image: null,
       site: 'goo.gl',
@@ -251,25 +251,42 @@ describe('places', () => {
     await user.clear(search);
     await user.paste(PIN);
     await user.click(
-      await form.findByRole('button', { name: /^Bagan Datuk, Perak\s*From the link/ }),
+      await form.findByRole('button', { name: /^VRJ3\+MG Bagan Datuk, Perak\s*From the link/ }),
     );
-    expect(form.getByRole('link', { name: 'Bagan Datuk, Perak' })).toBeTruthy();
+    expect(form.getByRole('link', { name: 'VRJ3+MG Bagan Datuk, Perak' })).toBeTruthy();
     await user.click(form.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(server.splits.get('trip')!.items[0].place).toEqual({
         lat: 3.88166,
         lng: 100.80379,
-        name: 'Bagan Datuk, Perak',
+        name: 'VRJ3+MG Bagan Datuk, Perak',
       }),
     );
+  });
+
+  test("a link that says where it points shows its map and plus code, before it's named or when it can't be", async () => {
+    // The Worker has nothing to say about it (offline, say)
+    const PIN = 'https://maps.google.com/?q=3.88166,100.80379&entry=gps';
+    const server = fakeServer(
+      splitDetail('trip', [item({ id: 'park', name: 'Parking', cost: 5, notes: `At ${PIN}` })]),
+    );
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Parking'));
+    const sheet = within(await screen.findByRole('dialog'));
+    const card = await sheet.findByRole('link', { name: '6PM2VRJ3+MG, on Google Maps' });
+    expect([...card.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
+      'https://tile.openstreetmap.org/16/51118/32060.png',
+    );
+    expect(sheet.getByRole('link', { name: '6PM2VRJ3+MG' }).getAttribute('href')).toBe(PIN);
   });
 
   test('with Record my location off, the phone is never asked, but a receipt or a Maps link still gives a place', async () => {
     const server = fakeServer(trip());
     const PIN = 'https://goo.gl/maps/pin123';
     server.linkPreviews.set(PIN, {
-      title: 'Bagan Datuk, Perak',
-      address: 'Dropped pin',
+      title: 'VRJ3+MG Bagan Datuk, Perak',
+      address: null,
       detail: null,
       image: null,
       site: 'goo.gl',
@@ -294,14 +311,22 @@ describe('places', () => {
       photo('ticket.jpg'),
     ]);
     // A Maps link in the notes gives the item its place, named as its card is
-    await user.type(form.getByRole('textbox', { name: 'Notes' }), `Parked at ${PIN} `);
-    expect(await form.findByRole('link', { name: 'Bagan Datuk, Perak' })).toBeTruthy();
+    await user.click(form.getByRole('textbox', { name: 'Notes' }));
+    await user.paste(`Parked at ${PIN}`);
+    // The location, opening in Maps (the link's own chip, under the notes, has the name too)
+    await waitFor(() =>
+      expect(
+        form
+          .getAllByRole('link', { name: 'VRJ3+MG Bagan Datuk, Perak' })
+          .map((a) => a.getAttribute('title')),
+      ).toEqual([PIN, 'Open in Maps']),
+    );
     await user.click(form.getByRole('button', { name: /^(Add|Add item)$/ }));
     await waitFor(() =>
       expect(server.splits.get('trip')!.items.find((i) => i.name === 'Parking')?.place).toEqual({
         lat: 3.88166,
         lng: 100.80379,
-        name: 'Bagan Datuk, Perak',
+        name: 'VRJ3+MG Bagan Datuk, Perak',
       }),
     );
     await waitFor(() => expect(server.uploads).toHaveLength(1));

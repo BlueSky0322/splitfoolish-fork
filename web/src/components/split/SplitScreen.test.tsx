@@ -595,30 +595,18 @@ describe('the split page', () => {
     expect(link.getAttribute('rel')).toContain('noopener');
     expect(sheet.textContent).toContain(', booked under Ryan');
 
-    // Desktop reads notes in the form: as on the item, until they're edited, then the
-    // text as typed; once left, read again
+    // Desktop opens the form: the notes as typed, and their addresses as chips under them
     cleanup();
-    const server = fakeServer(noted());
-    renderApp(server, '/?s=trip');
+    renderApp(fakeServer(noted()), '/?s=trip');
     await user.click(await screen.findByText('Dinner'));
     const form = within(await screen.findByRole('dialog'));
-    expect(form.queryByRole('textbox', { name: 'Notes' })).toBeNull();
+    expect(form.getByRole('textbox', { name: 'Notes' })).toHaveProperty(
+      'value',
+      'Menu at https://example.com/menu, booked under Ryan',
+    );
     const chip = form.getByRole('link', { name: 'example.com/menu' });
     expect(chip.getAttribute('href')).toBe('https://example.com/menu');
     expect(chip.getAttribute('target')).toBe('_blank');
-    await user.click(form.getByRole('button', { name: 'Edit notes' }));
-    const notes = form.getByRole('textbox', { name: 'Notes' });
-    expect(notes).toHaveProperty('value', 'Menu at https://example.com/menu, booked under Ryan');
-    expect(document.activeElement).toBe(notes);
-    await user.type(notes, ', table 4');
-    await user.click(form.getByRole('textbox', { name: 'What it was for' }));
-    expect(form.getByText(/booked under Ryan, table 4/)).toBeTruthy();
-    await user.click(form.getByRole('button', { name: 'Save' }));
-    await waitFor(() =>
-      expect(server.splits.get('trip')!.items[0].notes).toBe(
-        'Menu at https://example.com/menu, booked under Ryan, table 4',
-      ),
-    );
   });
 
   test('Google Maps links in notes show as cards with the place, on a phone and on desktop', async () => {
@@ -649,8 +637,8 @@ describe('the split page', () => {
       });
       // A dropped pin: named by OpenStreetMap, with no picture of its own
       s.linkPreviews.set(PIN, {
-        title: 'Jalan Sungai Besar, Sabak Bernam',
-        address: 'Dropped pin',
+        title: 'VRJ3+MG Bagan Datuk, Perak',
+        address: null,
         detail: null,
         image: null,
         site: 'goo.gl',
@@ -682,10 +670,11 @@ describe('the split page', () => {
       expect(plain.getAttribute('href')).toBe(OTHER);
       // The pin shows a small map of where it is, centred on its tile
       const pin = within(where).getByRole('link', {
-        name: 'Jalan Sungai Besar, Sabak Bernam, on Google Maps',
+        name: 'VRJ3+MG Bagan Datuk, Perak, on Google Maps',
       });
       expect(pin.getAttribute('href')).toBe(PIN);
-      expect(within(pin).getByText('Dropped pin')).toBeTruthy();
+      // Its name and where the link goes, nothing between
+      expect(pin.textContent).toBe('© OpenStreetMapVRJ3+MG Bagan Datuk, Perakgoo.gl');
       expect(within(pin).getByText('© OpenStreetMap')).toBeTruthy();
       expect([...pin.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
         'https://tile.openstreetmap.org/16/51118/32060.png',
@@ -709,20 +698,24 @@ describe('the split page', () => {
     // In the text, a Maps link reads as its place, other addresses as where they go
     const notes = sheet.querySelector('p')!;
     expect(notes.textContent).toBe(
-      'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at Jalan Sungai Besar, Sabak Bernam, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
+      'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at VRJ3+MG Bagan Datuk, Perak, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
     );
     expect(
       within(notes).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),
     ).toBe(APW);
     expect(within(notes).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
 
-    // Desktop: the cards under the notes, and only the other address in the list of links
+    // Desktop: the cards under the notes, and every address as a chip, a Maps link by its
+    // place's name
     cleanup();
     renderApp(server(), '/?s=trip');
     await user.click(await screen.findByText('Coffee'));
     const form = await screen.findByRole('dialog');
     await cardsIn(form);
     expect(within(form).queryByRole('link', { name: APW })).toBeNull();
+    expect(
+      within(form).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),
+    ).toBe(APW);
     expect(within(form).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
   });
 

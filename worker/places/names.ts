@@ -38,19 +38,27 @@ export function nameOf(found: Found, at?: { lat: number; lng: number }): string 
     : `${name.slice(0, MAX_PLACE_NAME_LENGTH - 1)}…`;
 }
 
-/** The name OpenStreetMap has for a spot, or null when it has none or can't be asked */
-export async function placeName(
+/** The town (or district) and state a spot is in: "Bagan Datuk, Perak" */
+export function areaOf(found: Found): string | null {
+  const a = found.address ?? {};
+  const town = a.city ?? a.town ?? a.village ?? a.municipality ?? a.district ?? a.county;
+  const parts = [town, a.state].filter((p, i, all): p is string => !!p && all.indexOf(p) === i);
+  return parts.join(', ') || null;
+}
+
+/** What OpenStreetMap says about a spot: its name and its area, or null when it can't be asked */
+async function lookUp(
   lat: number,
   lng: number,
   ctx: { waitUntil: (p: Promise<unknown>) => void },
-): Promise<string | null> {
+): Promise<{ name: string | null; area: string | null } | null> {
   // Nearby spots share a name: a phone's fix moves by a few metres between tries
   const [la, ln] = [lat.toFixed(4), lng.toFixed(4)];
-  // v2: spots known only by their area are named by their plus code
-  const key = new Request(`https://place-names.splitfoolish/v2/${la},${ln}`);
+  // v3: the area kept beside the name, for dropped pins named by their plus code
+  const key = new Request(`https://place-names.splitfoolish/v3/${la},${ln}`);
   const cache = (caches as unknown as { default: Cache }).default;
   const kept = await cache.match(key);
-  if (kept) return (await kept.json<{ name: string | null }>()).name;
+  if (kept) return kept.json<{ name: string | null; area: string | null }>();
 
   let found: Found;
   try {
@@ -65,14 +73,28 @@ export async function placeName(
   } catch {
     return null;
   }
-  const name = nameOf(found, { lat, lng });
+  const known = { name: nameOf(found, { lat, lng }), area: areaOf(found) };
   ctx.waitUntil(
     cache.put(
       key,
-      new Response(JSON.stringify({ name }), {
+      new Response(JSON.stringify(known), {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${KEEP_S}` },
       }),
     ),
   );
-  return name;
+  return known;
 }
+
+/** The name OpenStreetMap has for a spot, or null when it has none or can't be asked */
+export const placeName = async (
+  lat: number,
+  lng: number,
+  ctx: { waitUntil: (p: Promise<unknown>) => void },
+) => (await lookUp(lat, lng, ctx))?.name ?? null;
+
+/** The town and state a spot is in, or null when OpenStreetMap doesn't say */
+export const placeArea = async (
+  lat: number,
+  lng: number,
+  ctx: { waitUntil: (p: Promise<unknown>) => void },
+) => (await lookUp(lat, lng, ctx))?.area ?? null;
