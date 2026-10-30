@@ -41,16 +41,19 @@ export function toSuggestion(feature: PhotonFeature): PlaceSuggestion | null {
   const p = feature.properties ?? {};
   const text = (key: string) => (typeof p[key] === 'string' && p[key].trim()) || undefined;
   const street = [text('street'), text('housenumber')].filter(Boolean).join(' ') || undefined;
-  const name = nameOf({
-    name: text('name'),
-    address: {
-      road: street,
-      suburb: text('district') ?? text('locality'),
-      city: text('city'),
-      county: text('county'),
-      state: text('state'),
+  const name = nameOf(
+    {
+      name: text('name'),
+      address: {
+        road: street,
+        suburb: text('district') ?? text('locality'),
+        city: text('city'),
+        county: text('county'),
+        state: text('state'),
+      },
     },
-  });
+    { lat: lat as number, lng: lng as number },
+  );
   if (name == null) return null;
   // Everything about where it is that its name doesn't already say
   const parts = [street, text('district'), text('city'), text('state'), text('country')].filter(

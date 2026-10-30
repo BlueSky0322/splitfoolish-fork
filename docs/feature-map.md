@@ -546,12 +546,12 @@ method through a profile change.
   Places are checked the same way on both sides ([shared/places.ts](../shared/places.ts)).
   Names come from OpenStreetMap through the Worker (`GET /api/place-name`,
   [worker/places/names.ts](../worker/places/names.ts): the spot's name, else its road,
-  then its town; an unnamed country road its district and state; kept a month per spot
-  of about 11 m).
+  then its town; a spot known only by its area, its plus code there as Google Maps
+  writes it, "VRJ3+MG Bagan Datuk, Perak" (`plusCodeLabel`, Open Location Code computed
+  in `shared/places.ts`); kept a month per spot of about 11 m).
   [split/place-names.ts](../web/src/split/place-names.ts) names a place set in the form,
   so the item is saved with it, and names any other place for showing it; until then, or
-  offline, or where OpenStreetMap has no name, its position shows as Google Maps writes
-  a dropped pin (`coordsLabel`, 3°52'54.0"N 100°48'13.6"E).
+  offline, or where OpenStreetMap has nothing, its full plus code shows ("6PM2VRJ3+MG").
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
   in the item form, with a spinner on their way up or marked as waiting.

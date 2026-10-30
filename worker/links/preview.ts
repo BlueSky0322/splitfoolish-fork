@@ -6,7 +6,7 @@
 // bounded size and time, and kept a week per link.
 
 import { type LinkPreview, isMapsLink } from '../../shared/links';
-import { coordsLabel, isPosition, roundCoord } from '../../shared/places';
+import { isPosition, plusCodeLabel, roundCoord } from '../../shared/places';
 import { readBody } from '../http';
 import { placeName } from '../places/names';
 
@@ -26,7 +26,8 @@ export async function linkPreview(
   address: string,
   ctx: { waitUntil: (p: Promise<unknown>) => void },
 ): Promise<LinkPreview> {
-  const key = new Request(`https://link-preview.splitfoolish/${encodeURIComponent(address)}`);
+  // v2: pins named by their plus code where OpenStreetMap knows only the area
+  const key = new Request(`https://link-preview.splitfoolish/v2/${encodeURIComponent(address)}`);
   const cache = (caches as unknown as { default: Cache }).default;
   const kept = await cache.match(key);
   if (kept) return kept.json<LinkPreview>();
@@ -63,8 +64,9 @@ export async function fetchPreview(
   const name = await nameAt(lat, lng).catch(() => null);
   return {
     ...found,
-    title: name ?? 'Dropped pin',
-    address: name ? 'Dropped pin' : coordsLabel(lat, lng),
+    // Where OpenStreetMap knows nothing, its plus code
+    title: name ?? plusCodeLabel(lat, lng),
+    address: 'Dropped pin',
   };
 }
 

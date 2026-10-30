@@ -129,7 +129,7 @@ describe('places', () => {
     expect(form.getByRole('button', { name: 'Use my current location' })).toBeTruthy();
   });
 
-  test('Use my current location sets one (where OpenStreetMap has no name, its position as Google Maps writes it), Remove location takes it off, and a refusal says why', async () => {
+  test('Use my current location sets one (where OpenStreetMap has no name, its plus code), Remove location takes it off, and a refusal says why', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();
@@ -138,7 +138,7 @@ describe('places', () => {
     // An item being edited isn't given where the phone is by itself
     expect(asked).not.toHaveBeenCalled();
     await user.click(form.getByRole('button', { name: 'Use my current location' }));
-    expect(await form.findByRole('link', { name: `3°20'24.6"N 101°15'01.8"E` })).toBeTruthy();
+    expect(await form.findByRole('link', { name: '6PM387R2+36' })).toBeTruthy();
     await user.click(form.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(server.splits.get('trip')!.items[0].place).toEqual(KEPT));
 

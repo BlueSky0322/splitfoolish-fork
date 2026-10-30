@@ -31,13 +31,14 @@ describe("a place's name", () => {
     expect(nameOf({ address: { road: 'Jalan Riong', town: 'Bangsar' } })).toBe(
       'Jalan Riong, Bangsar',
     );
-    // An unnamed road in the country: its district and state
-    expect(
-      nameOf({
-        name: '',
-        address: { district: 'Bagan Datuk', state: 'Perak', postcode: '36200' },
-      }),
-    ).toBe('Bagan Datuk, Perak');
+    // Known only by its area (an unnamed road in the country): its plus code there, as
+    // Google Maps writes it; the area alone where the position isn't given
+    const area = {
+      name: '',
+      address: { district: 'Bagan Datuk', state: 'Perak', postcode: '36200' },
+    };
+    expect(nameOf(area, { lat: 3.88166, lng: 100.80379 })).toBe('VRJ3+MG Bagan Datuk, Perak');
+    expect(nameOf(area)).toBe('Bagan Datuk, Perak');
     expect(nameOf({ address: { road: 'Jalan Sungai Nipah', state: 'Perak' } })).toBe(
       'Jalan Sungai Nipah, Perak',
     );
