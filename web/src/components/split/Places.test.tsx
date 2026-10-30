@@ -281,7 +281,7 @@ describe('places', () => {
     expect(sheet.getByRole('link', { name: '6PM2VRJ3+MG' }).getAttribute('href')).toBe(PIN);
   });
 
-  test('in the list, notes show a Maps link as its place with a pin, and other links short, on a phone and desktop', async () => {
+  test('in the list, notes show a Maps link as its place with a pin and other links short, each opening, on a phone and desktop', async () => {
     const PIN = 'https://maps.app.goo.gl/y8F94Y1RPVDjz7ci8';
     const server = () => {
       const s = fakeServer(
@@ -308,15 +308,22 @@ describe('places', () => {
       cleanup();
       renderApp(server(), '/?s=trip', { size });
       const name = await screen.findByText('Homestay');
-      const row = name.closest('button')!;
+      const row = name.closest<HTMLElement>('[role="listitem"]')!;
       await waitFor(() =>
         expect(row.textContent).toContain(
           'Here VRP3+RQ Bagan Datuk, Perak · menu example.com/menu',
         ),
       );
-      // The row opens the item: nothing in it is a link of its own
-      expect(within(row).queryAllByRole('link')).toEqual([]);
-      expect(within(row).getByText('VRP3+RQ Bagan Datuk, Perak').querySelector('svg')).toBeTruthy();
+      // Each opens where it goes, over the row that opens the item
+      const place = within(row).getByRole('link', { name: 'VRP3+RQ Bagan Datuk, Perak' });
+      expect(place.getAttribute('href')).toBe(PIN);
+      expect(place.getAttribute('target')).toBe('_blank');
+      expect(place.querySelector('svg')).toBeTruthy();
+      expect(within(row).getByRole('link', { name: 'example.com/menu' }).getAttribute('href')).toBe(
+        'https://example.com/menu',
+      );
+      // and the row itself still opens it: its name's button reaches across it
+      expect(within(row).getByRole('button', { name: 'Homestay' })).toBeTruthy();
     }
   });
 

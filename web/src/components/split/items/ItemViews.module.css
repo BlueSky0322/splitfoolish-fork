@@ -142,10 +142,28 @@
   white-space: nowrap;
 }
 
-/* A Maps link in them: its place, in the accent, with a pin */
-.notePlace {
+/* A link in them, above the row so a tap opens it: a Maps link as its place with a pin,
+   others by where they go */
+.notePlace,
+.noteLink {
+  position: relative;
+  z-index: 1;
   color: var(--sf-accent);
+  text-decoration: none;
+}
+
+/* A place: its name on the pin's red wash, apart from people's coloured names */
+.notePlace[data-place] {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--sf-place-tint);
+  color: var(--sf-text);
   font-weight: 500;
+}
+
+.notePlace:hover,
+.noteLink:hover {
+  text-decoration: underline;
 }
 
 .notePlace svg {
@@ -203,6 +221,8 @@
 
 /* A button whose click area covers its whole row */
 .stretched {
+  display: block;
+  width: 100%;
   text-align: left;
 }
 

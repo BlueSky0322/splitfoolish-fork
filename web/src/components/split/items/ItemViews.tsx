@@ -29,7 +29,7 @@ import { toCents } from '@shared/rates';
 import { plural, shortLink } from '../../../utils/text';
 import { isMapsLink } from '@shared/links';
 import LinkedText from '../../ui/LinkedText';
-import { MapsLinkLabel } from '../../common/MapsLinkCards';
+import { MapsLinkName } from '../../common/MapsLinkCards';
 
 interface ItemViewProps {
   groups: ItemGroup[];
@@ -251,7 +251,10 @@ export function ItemCards({
               />
             </div>
           )}
-          <div className={classes.itemCard}>
+          <div
+            className={classes.itemCard}
+            role="list"
+          >
             {group.items.map((item) => {
               const share = myShare(item);
               const Icon = categoryIcon(item.category);
@@ -259,6 +262,7 @@ export function ItemCards({
                 <div
                   key={item.id}
                   className={classes.itemRow}
+                  role="listitem"
                   data-selected={selection?.selected.has(item.id) || undefined}
                 >
                   <CheckSlot
@@ -278,31 +282,42 @@ export function ItemCards({
                       />
                     )
                   )}
-                  {/* The whole row opens the item; edit and delete sit above it */}
-                  <ItemButton
-                    id={item.id}
-                    selection={selection}
-                    className={`${classes.itemText} ${classes.stretched}`}
-                    onOpen={() => onEdit(item)}
-                  >
-                    <div className={classes.itemName}>
-                      {item.name}
-                      <PhotoBadge count={photoCounts.get(item.id)} />
-                    </div>
+                  <div className={classes.itemText}>
+                    {/* The whole row opens the item (the name's button reaches over it);
+                        edit, delete and the links in the notes sit above it */}
+                    <ItemButton
+                      id={item.id}
+                      selection={selection}
+                      className={classes.stretched}
+                      onOpen={() => onEdit(item)}
+                    >
+                      <div className={classes.itemName}>
+                        {item.name}
+                        <PhotoBadge count={photoCounts.get(item.id)} />
+                      </div>
+                    </ItemButton>
                     {item.notes && (
-                      // One line of the notes, its line breaks run together, a Maps
-                      // link as its place with a pin and others short (the row opens
-                      // the item, so they aren't links here)
+                      // One line of the notes, its line breaks run together: a Maps
+                      // link as its place with a pin, others short, each opening
                       <div className={classes.itemNotes}>
                         <LinkedText
                           text={item.notes.replace(/\s*\n+\s*/g, ' · ')}
                           renderLink={(href) =>
                             isMapsLink(href) ? (
-                              <span className={classes.notePlace}>
-                                <MapsLinkLabel url={href} />
-                              </span>
+                              <MapsLinkName
+                                url={href}
+                                className={classes.notePlace}
+                              />
                             ) : (
-                              shortLink(href)
+                              <a
+                                className={classes.noteLink}
+                                href={href}
+                                title={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {shortLink(href)}
+                              </a>
                             )
                           }
                         />
@@ -319,7 +334,7 @@ export function ItemCards({
                             </>
                           )}
                     </div>
-                  </ItemButton>
+                  </div>
                   {!mobile && share != null && (
                     <span className={classes.itemShare}>
                       Your share {formatMoney(share, currency)}

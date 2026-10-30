@@ -667,7 +667,7 @@ const ItemForm = ({
               <MapsLinkName
                 key={href}
                 url={href}
-                className={classes.link}
+                className={`${classes.link} ${classes.placeLink}`}
               />
             ) : (
               <a

@@ -59,13 +59,13 @@ describe('the split page', () => {
       ]),
     );
     renderApp(server, '/?s=trip');
-    const gift = (await screen.findByText('Gift')).closest('button')!;
+    const gift = (await screen.findByText('Gift')).closest<HTMLElement>('[role="listitem"]')!;
     expect(within(gift).getByText(readsAs('Ryan paid for Ann'))).toBeTruthy();
-    const socks = screen.getByText('Socks').closest('button')!;
+    const socks = screen.getByText('Socks').closest<HTMLElement>('[role="listitem"]')!;
     expect(within(socks).getByText(readsAs("Ryan's own"))).toBeTruthy();
     expect(within(socks).queryByText(/between|paid for/)).toBeNull();
     // Shared ones say how
-    const taxi = screen.getByText('Taxi').closest('button')!;
+    const taxi = screen.getByText('Taxi').closest<HTMLElement>('[role="listitem"]')!;
     expect(within(taxi).queryByText(readsAs(/paid for/))).toBeNull();
   });
 
@@ -76,17 +76,17 @@ describe('the split page', () => {
         item({ id: 'socks', name: 'Socks', cost: 15, participantIds: ['me'] }),
       ]);
     renderApp(fakeServer(items()), '/?s=trip');
-    const giftRow = (await screen.findByText('Gift')).closest('button')!.parentElement!;
+    const giftRow = (await screen.findByText('Gift')).closest<HTMLElement>('[role="listitem"]')!;
     expect(within(giftRow).queryByText(/Your share/)).toBeNull();
-    const socksRow = screen.getByText('Socks').closest('button')!.parentElement!;
+    const socksRow = screen.getByText('Socks').closest<HTMLElement>('[role="listitem"]')!;
     expect(within(socksRow).getByText(/^Your share RM\s?15\.00$/)).toBeTruthy();
 
     // Phones: no ", yours 0.00" on someone else's item
     cleanup();
     renderApp(fakeServer(items()), '/?s=trip', { size: 'phone' });
-    const gift = (await screen.findByText('Gift')).closest('button')!;
+    const gift = (await screen.findByText('Gift')).closest<HTMLElement>('[role="listitem"]')!;
     expect(gift.textContent).not.toMatch(/yours/);
-    const socks = screen.getByText('Socks').closest('button')!;
+    const socks = screen.getByText('Socks').closest<HTMLElement>('[role="listitem"]')!;
     expect(socks.textContent).toMatch(/yours 15\.00/);
 
     // The table leaves the cell empty, with nothing in its place

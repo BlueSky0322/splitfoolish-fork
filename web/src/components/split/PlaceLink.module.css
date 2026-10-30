@@ -32,7 +32,7 @@
 
 .pin {
   flex: none;
-  color: var(--sf-accent);
+  color: var(--sf-place);
 }
 
 .label {
