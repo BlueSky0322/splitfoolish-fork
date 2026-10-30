@@ -2,6 +2,7 @@ import { ActionIcon, Button, Menu, UnstyledButton } from '@mantine/core';
 import { CalendarBlank, Copy, PencilSimple, Trash } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { toCents } from '@shared/rates';
+import { isMapsLink } from '@shared/links';
 import { attachmentUrl } from '../../../api';
 import type { Person } from '@shared/types';
 import { categoryIcon, categoryLabel } from '../../../split/categories';
@@ -10,7 +11,7 @@ import type { SplitItem } from '../../../split/state';
 import { formatAmount, formatMoney } from '../../../utils/money';
 import { SOURCE_LABELS } from '../../../utils/rate-labels';
 import LinkedText from '../../ui/LinkedText';
-import { MapsLinkCards } from '../../common/MapsLinkCards';
+import { MapsLinkCards, MapsLinkName } from '../../common/MapsLinkCards';
 import PhotoViewer from '../../ui/PhotoViewer';
 import PersonAvatar from '../PersonAvatar';
 import { PaidBy } from './PaidBy';
@@ -111,7 +112,12 @@ const ItemDetail = ({
           <PaidBy item={item} />
         </span>
       </div>
-      {item.place && <PlaceLink place={item.place} />}
+      {item.place && (
+        <PlaceLink
+          place={item.place}
+          map
+        />
+      )}
       <ul
         className={classes.parts}
         aria-label="Each person's part"
@@ -153,7 +159,10 @@ const ItemDetail = ({
       )}
       {item.notes && (
         <p className={classes.notes}>
-          <LinkedText text={item.notes} />
+          <LinkedText
+            text={item.notes}
+            renderLink={(href) => (isMapsLink(href) ? <MapsLinkName url={href} /> : null)}
+          />
         </p>
       )}
       <MapsLinkCards text={item.notes} />

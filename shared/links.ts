@@ -13,6 +13,8 @@ export interface LinkPreview {
   image: string | null;
   /** Where the link goes, as shown under the card ("maps.app.goo.gl") */
   site: string;
+  /** Where on the map, when the link says (a dropped pin always does), for a small map */
+  position: { lat: number; lng: number } | null;
 }
 
 /** google.com, google.com.my, google.co.uk and the like */

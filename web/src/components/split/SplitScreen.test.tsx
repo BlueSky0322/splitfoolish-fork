@@ -572,7 +572,7 @@ describe('the split page', () => {
     expect(await menuOf('Dinner')).toContain('Record payment');
   });
 
-  test('web addresses in notes open as links: in the item sheet on a phone, from the form on desktop', async () => {
+  test('web addresses in notes open as short links: in the item sheet on a phone, from the form on desktop', async () => {
     const noted = () =>
       splitDetail('trip', [
         item({
@@ -586,7 +586,9 @@ describe('the split page', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByText('Dinner'));
     const sheet = await screen.findByRole('dialog');
-    const link = within(sheet).getByRole('link', { name: 'https://example.com/menu' });
+    // Read as where it goes, without https://
+    const link = within(sheet).getByRole('link', { name: 'example.com/menu' });
+    expect(sheet.textContent).not.toContain('https://');
     // The address alone, not the comma after it, in a new tab
     expect(link.getAttribute('href')).toBe('https://example.com/menu');
     expect(link.getAttribute('target')).toBe('_blank');
@@ -602,7 +604,7 @@ describe('the split page', () => {
       'value',
       'Menu at https://example.com/menu, booked under Ryan',
     );
-    const chip = within(form).getByRole('link', { name: 'https://example.com/menu' });
+    const chip = within(form).getByRole('link', { name: 'example.com/menu' });
     expect(chip.getAttribute('href')).toBe('https://example.com/menu');
     expect(chip.getAttribute('target')).toBe('_blank');
   });
@@ -610,6 +612,7 @@ describe('the split page', () => {
   test('Google Maps links in notes show as cards with the place, on a phone and on desktop', async () => {
     const APW = 'https://maps.app.goo.gl/apw123';
     const OTHER = 'https://maps.app.goo.gl/unknown';
+    const PIN = 'https://goo.gl/maps/pin123';
     const server = () => {
       const s = fakeServer(
         splitDetail('trip', [
@@ -617,7 +620,7 @@ describe('the split page', () => {
             id: 'coffee',
             name: 'Coffee',
             cost: 30,
-            notes: `Met at ${APW} then ${OTHER}, menu at https://example.com/menu`,
+            notes: `Met at ${APW} then ${OTHER}, parked at ${PIN}, menu at https://example.com/menu`,
           }),
         ]),
       );
@@ -627,6 +630,16 @@ describe('the split page', () => {
         detail: null,
         image: 'https://lh5.googleusercontent.com/p/apw',
         site: 'maps.app.goo.gl',
+        position: { lat: 3.1297, lng: 101.6744 },
+      });
+      // A dropped pin: named by OpenStreetMap, with no picture of its own
+      s.linkPreviews.set(PIN, {
+        title: 'Jalan Sungai Besar, Sabak Bernam',
+        address: 'Dropped pin',
+        detail: null,
+        image: null,
+        site: 'goo.gl',
+        position: { lat: 3.88166, lng: 100.80379 },
       });
       return s;
     };
@@ -644,14 +657,31 @@ describe('the split page', () => {
       );
       const plain = within(where).getByRole('link', { name: 'Open in Google Maps' });
       expect(plain.getAttribute('href')).toBe(OTHER);
+      // The pin shows a small map of where it is, centred on its tile
+      const pin = within(where).getByRole('link', {
+        name: 'Jalan Sungai Besar, Sabak Bernam, on Google Maps',
+      });
+      expect(pin.getAttribute('href')).toBe(PIN);
+      expect(within(pin).getByText('Dropped pin')).toBeTruthy();
+      expect(within(pin).getByText('© OpenStreetMap')).toBeTruthy();
+      expect([...pin.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
+        'https://tile.openstreetmap.org/16/51118/32060.png',
+      );
     };
 
     renderApp(server(), '/?s=trip', { size: 'phone' });
     await user.click(await screen.findByText('Coffee'));
     const sheet = await screen.findByRole('dialog');
     await cardsIn(sheet);
-    // Other addresses stay links in the text
-    expect(within(sheet).getByRole('link', { name: 'https://example.com/menu' })).toBeTruthy();
+    // In the text, a Maps link reads as its place, other addresses as where they go
+    const notes = sheet.querySelector('p')!;
+    expect(notes.textContent).toBe(
+      'Met at A Place Where - APW then Google Maps, parked at Jalan Sungai Besar, Sabak Bernam, menu at example.com/menu',
+    );
+    expect(
+      within(notes).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),
+    ).toBe(APW);
+    expect(within(notes).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
 
     // Desktop: the cards under the notes, and only the other address in the list of links
     cleanup();
@@ -660,7 +690,7 @@ describe('the split page', () => {
     const form = await screen.findByRole('dialog');
     await cardsIn(form);
     expect(within(form).queryByRole('link', { name: APW })).toBeNull();
-    expect(within(form).getByRole('link', { name: 'https://example.com/menu' })).toBeTruthy();
+    expect(within(form).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
   });
 
   test('the owner links a guest to a member, taking the account off the person it joined as', async () => {

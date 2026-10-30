@@ -57,7 +57,7 @@ import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
-import { findLinks, plural } from '../../../utils/text';
+import { findLinks, plural, shortLink } from '../../../utils/text';
 import { isMapsLink } from '@shared/links';
 import { MapsLinkCards } from '../../common/MapsLinkCards';
 import { buildItemInput, exactCents } from '../../../split/item-input';
@@ -620,9 +620,10 @@ const ItemForm = ({
               href={l.href}
               target="_blank"
               rel="noopener noreferrer"
+              title={l.href}
             >
               <ArrowSquareOut size={14} />
-              {l.text}
+              {shortLink(l.href!)}
             </a>
           ))}
         </div>

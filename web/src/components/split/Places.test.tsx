@@ -96,12 +96,16 @@ describe('places', () => {
       }),
     );
     await waitFor(() => expect(server.uploads.map((u) => u.place)).toEqual([KEPT]));
-    // The item says where, on its sheet
+    // The item says where on its sheet, with a small map of the spot
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await user.click(await screen.findByText('Bait'));
-    expect(
-      await screen.findByRole('link', { name: 'Truz Tackles, Kuala Selangor, open in Maps' }),
-    ).toBeTruthy();
+    const where = await screen.findByRole('link', {
+      name: 'Truz Tackles, Kuala Selangor, open in Maps',
+    });
+    expect(within(where).getByText('© OpenStreetMap')).toBeTruthy();
+    expect([...where.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
+      'https://tile.openstreetmap.org/16/51200/32159.png',
+    );
   });
 
   test('a photo from the library without a place keeps none, and the phone is not asked', async () => {

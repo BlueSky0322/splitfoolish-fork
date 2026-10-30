@@ -132,15 +132,19 @@ it current.
   `openDialog({ kind: 'add', day })`), and an edit to another day keeps its time of day
   (`updateItem(id, input, { day })` queues the date before the edit, so the server
   converts on the new day) ([utils/date-input.ts](../web/src/utils/date-input.ts)).
-- Notes: web addresses open as links ([LinkedText](../web/src/components/ui/LinkedText.tsx)),
-  and Google Maps links also show as cards with the place's picture, name and address
+- Notes: web addresses open as links, shown short ("example.com/menu",
+  [LinkedText](../web/src/components/ui/LinkedText.tsx)), and Google Maps links also show
+  as cards with the place's picture, name and address
   ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
-  the item sheet and the form). The Worker reads them from the tags Google's page has
+  the item sheet and the form; several side by side, to swipe). In the item sheet's text
+  a Maps link reads as its place's name (`MapsLinkName`). The Worker reads them from the tags Google's page has
   for link previews (`GET /api/link-preview`,
   [worker/links/preview.ts](../worker/links/preview.ts)), following redirects only
   within Google Maps (`isMapsLink` in [shared/links.ts](../shared/links.ts)) and keeping
   each a week; a page that says nothing names the place from the link, else the card is
-  a pin.
+  a pin. A dropped pin (a shared position, which Google's page names nothing) is named
+  by OpenStreetMap (`placeName`, below) and the card shows a small map of it
+  ([MiniMap](../web/src/components/ui/MiniMap.tsx)) from the `position` the link gives.
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
@@ -517,11 +521,14 @@ method through a profile change.
   keeps it beside the photo, never in the picture. An item that has no place takes its
   first located receipt's, in the form ([PlaceField](../web/src/components/split/forms/PlaceField.tsx),
   which also offers Use my location and Remove location); the item sheet and the photo
-  details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx)).
+  details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx);
+  the item sheet with a small map from OpenStreetMap's tiles,
+  [MiniMap](../web/src/components/ui/MiniMap.tsx)).
   Places are checked the same way on both sides ([shared/places.ts](../shared/places.ts)).
   Names come from OpenStreetMap through the Worker (`GET /api/place-name`,
   [worker/places/names.ts](../worker/places/names.ts): the spot's name, else its road,
-  then its town; kept a month per spot of about 11 m).
+  then its town; an unnamed country road its district and state; kept a month per spot
+  of about 11 m).
   [split/place-names.ts](../web/src/split/place-names.ts) names a place set in the form,
   so the item is saved with it, and names any other place for showing it; its position
   shows only until then, or offline.

@@ -4,7 +4,9 @@
 // reach anywhere else. Read in bounded size and time, and kept a week per link.
 
 import { type LinkPreview, isMapsLink } from '../../shared/links';
+import { isPosition, roundCoord } from '../../shared/places';
 import { readBody } from '../http';
+import { placeName } from '../places/names';
 
 /** Short links redirect once or twice before the place's page */
 const MAX_REDIRECTS = 5;
@@ -26,7 +28,7 @@ export async function linkPreview(
   const cache = (caches as unknown as { default: Cache }).default;
   const kept = await cache.match(key);
   if (kept) return kept.json<LinkPreview>();
-  const preview = await fetchPreview(address);
+  const preview = await fetchPreview(address, (lat, lng) => placeName(lat, lng, ctx));
   // A page that couldn't be read is tried again next time rather than kept
   if (preview.title != null) {
     ctx.waitUntil(
@@ -41,8 +43,30 @@ export async function linkPreview(
   return preview;
 }
 
-/** Looks the link up: follows its redirects within Google Maps, then reads the page's tags */
-export async function fetchPreview(address: string): Promise<LinkPreview> {
+/** What OpenStreetMap calls a spot (places/names.ts), for a pin Google gives no name */
+type NameAt = (lat: number, lng: number) => Promise<string | null>;
+
+/**
+ * Looks the link up: follows its redirects within Google Maps, then reads the page's
+ * tags. A dropped pin (a shared position, which Google's page names nothing) is named by
+ * `nameAt`, and shown as a pin.
+ */
+export async function fetchPreview(
+  address: string,
+  nameAt: NameAt = () => Promise.resolve(null),
+): Promise<LinkPreview> {
+  const found = await readPreview(address);
+  if (found.title != null || found.position == null) return found;
+  const { lat, lng } = found.position;
+  const name = await nameAt(lat, lng).catch(() => null);
+  return {
+    ...found,
+    title: name ?? 'Dropped pin',
+    address: name ? 'Dropped pin' : `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+  };
+}
+
+async function readPreview(address: string): Promise<LinkPreview> {
   const start = new URL(address);
   const empty: LinkPreview = {
     url: address,
@@ -51,6 +75,7 @@ export async function fetchPreview(address: string): Promise<LinkPreview> {
     detail: null,
     image: null,
     site: start.hostname.replace(/^www\./, ''),
+    position: null,
   };
   // The last Google Maps address on the way: where the page is fetched from, and what
   // names the place when the page can't be read
@@ -77,7 +102,7 @@ export async function fetchPreview(address: string): Promise<LinkPreview> {
   } catch {
     // Unreachable or too slow: what the address itself says is all there is
   }
-  const fromUrl = placeFromUrl(url);
+  const fromUrl = { ...placeFromUrl(url), position: positionFromUrl(url) };
   if (page == null || !page.ok) return { ...empty, ...fromUrl };
   const body = await readBody(page, MAX_PAGE_BYTES, FETCH_MS);
   if (typeof body === 'string') return { ...empty, ...fromUrl };
@@ -94,8 +119,26 @@ export async function fetchPreview(address: string): Promise<LinkPreview> {
     title: name.trim(),
     address: rest.join(' · ').trim() || fromUrl.address,
     detail: description != null && !GENERIC_DESCRIPTION.test(description) ? description : null,
-    image: image != null && /^https:\/\//.test(image) ? image : null,
+    // Google's map of nowhere in particular (the whole USA, for a page it can't place)
+    // says nothing; a small map of the position shows instead
+    image: image != null && /^https:\/\//.test(image) && !/staticmap/.test(image) ? image : null,
+    position: fromUrl.position,
   };
+}
+
+/**
+ * Where on the map a Maps address points, when it says: a shared position
+ * (?q=3.881664,100.803786), a place's pin (!3d…!4d…), or the map's centre (/@3.12,101.6,17z)
+ */
+export function positionFromUrl(url: URL): LinkPreview['position'] {
+  const number = String.raw`(-?\d{1,3}(?:\.\d+)?)`;
+  const found =
+    new RegExp(`^${number}\\s*,\\s*${number}$`).exec(url.searchParams.get('q')?.trim() ?? '') ??
+    new RegExp(`!3d${number}!4d${number}`).exec(url.pathname) ??
+    new RegExp(`/@${number},${number}`).exec(url.pathname);
+  if (found == null) return null;
+  const [lat, lng] = [Number(found[1]), Number(found[2])];
+  return isPosition(lat, lng) ? { lat: roundCoord(lat), lng: roundCoord(lng) } : null;
 }
 
 /**
