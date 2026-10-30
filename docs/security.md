@@ -35,6 +35,10 @@ app hack-proof, and the limits below are real.
   from the bytes.
 - A change sent again after its answer was lost counts once (change receipts, kept 90
   days).
+- Pages the Worker fetches for people: only Google Maps addresses, for the cards links
+  in notes show (`worker/links/preview.ts`). Every redirect must stay on Google Maps,
+  pages are read up to 1 MB within 5 seconds, and only signed-in people can ask. The
+  card's picture loads from Google in the viewer's browser, without a referrer.
 
 ## On the device
 

@@ -132,6 +132,15 @@ it current.
   `openDialog({ kind: 'add', day })`), and an edit to another day keeps its time of day
   (`updateItem(id, input, { day })` queues the date before the edit, so the server
   converts on the new day) ([utils/date-input.ts](../web/src/utils/date-input.ts)).
+- Notes: web addresses open as links ([LinkedText](../web/src/components/ui/LinkedText.tsx)),
+  and Google Maps links also show as cards with the place's picture, name and address
+  ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
+  the item sheet and the form). The Worker reads them from the tags Google's page has
+  for link previews (`GET /api/link-preview`,
+  [worker/links/preview.ts](../worker/links/preview.ts)), following redirects only
+  within Google Maps (`isMapsLink` in [shared/links.ts](../shared/links.ts)) and keeping
+  each a week; a page that says nothing names the place from the link, else the card is
+  a pin.
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and

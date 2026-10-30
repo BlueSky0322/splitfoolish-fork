@@ -52,6 +52,8 @@ import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
 import { findLinks, plural } from '../../../utils/text';
+import { isMapsLink } from '@shared/links';
+import { MapsLinkCards } from '../../common/MapsLinkCards';
 import { buildItemInput, exactCents } from '../../../split/item-input';
 import { useAmountConversion } from '../../../split/useAmountConversion';
 
@@ -130,7 +132,11 @@ const ItemForm = ({
   const [category, setCategory] = useState<string>(categoryKey(item?.category ?? null));
   const [categoryPicked, setCategoryPicked] = useState(item != null);
   const [notes, setNotes] = useState(item?.notes ?? '');
-  const links = useMemo(() => findLinks(notes).filter((p) => p.href != null), [notes]);
+  // Maps links show as cards under the notes; the rest as plain links
+  const links = useMemo(
+    () => findLinks(notes).filter((p) => p.href != null && !isMapsLink(p.href)),
+    [notes],
+  );
   // The day it was paid: an item's own, the day whose heading it was added from, or today
   const [ownDayText] = useState(() =>
     toDateInput(new Date(item?.createdAt ?? initialDay ?? Date.now())),
@@ -549,6 +555,7 @@ const ItemForm = ({
         }
         inputWrapperOrder={['label', 'input', 'description']}
       />
+      <MapsLinkCards text={notes} />
       {links.length > 0 && (
         // The addresses in the notes, to open from here: on desktop the form is where
         // an item's notes are read in full

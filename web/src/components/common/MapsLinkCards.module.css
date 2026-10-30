@@ -1,0 +1,80 @@
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A place: its picture on the left, then its name, address and where the link goes */
+.card {
+  display: flex;
+  align-items: stretch;
+  min-height: 88px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-divider);
+  color: var(--sf-text);
+  text-decoration: none;
+}
+
+.card:hover {
+  border-color: var(--sf-border);
+}
+
+.card[data-loading] {
+  opacity: 0.7;
+}
+
+.image,
+.pin {
+  flex: none;
+  width: 112px;
+  object-fit: cover;
+}
+
+.pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sf-accent);
+  background: color-mix(in srgb, var(--sf-accent) 10%, transparent);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.address,
+.detail {
+  font-size: 13px;
+  color: var(--sf-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.detail {
+  -webkit-line-clamp: 1;
+}
+
+.site {
+  font-size: 13px;
+  color: var(--sf-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
