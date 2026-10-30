@@ -3,6 +3,7 @@ import { MapPin, X } from '@phosphor-icons/react';
 import { type Place, mapsUrl, placeLabel, toPlace } from '@shared/places';
 import { useState } from 'react';
 import { currentPosition } from '../../../utils/here';
+import { usePlaceName } from '../../../split/place-names';
 import classes from './PlaceField.module.css';
 
 /**
@@ -17,6 +18,7 @@ export function PlaceField({
   place: Place | null;
   onChange: (place: Place | null) => void;
 }) {
+  const name = usePlaceName(place);
   const [finding, setFinding] = useState(false);
   const [failed, setFailed] = useState(false);
   const takeMine = async () => {
@@ -44,7 +46,7 @@ export function PlaceField({
             rel="noopener noreferrer"
             title="Open in Maps"
           >
-            {placeLabel(place)}
+            {placeLabel({ ...place, name })}
           </a>
           <ActionIcon
             variant="subtle"

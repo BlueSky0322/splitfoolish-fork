@@ -69,8 +69,9 @@ async function pickPhotos(
 const trip = () => splitDetail('trip', [item({ id: 'dinner', name: 'Dinner', cost: 80 })]);
 
 describe('places', () => {
-  test('a receipt taken with the camera keeps where the phone was, and its new item takes it', async () => {
+  test('a receipt taken with the camera keeps where the phone was, and its new item takes it, named', async () => {
     const server = fakeServer(trip());
+    server.placeNames.set('3.3402,101.2505', 'Truz Tackles, Kuala Selangor');
     renderApp(server, '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Add item' }));
@@ -81,22 +82,25 @@ describe('places', () => {
     await pickPhotos(user, await screen.findByRole('button', { name: /^Take photo/ }), [
       photo('receipt.jpg'),
     ]);
-    // The item's location fills in from the photo, opening in Maps
-    const shown = await form.findByRole('link', { name: '3.34017, 101.25050' });
+    // The item's location fills in from the photo, named by OpenStreetMap, opening in Maps
+    const shown = await form.findByRole('link', { name: 'Truz Tackles, Kuala Selangor' });
     expect(shown.getAttribute('href')).toBe(
       'https://www.google.com/maps/search/?api=1&query=3.34017,101.2505',
     );
     await user.click(form.getByRole('button', { name: /^(Add|Add item)$/ }));
 
     await waitFor(() =>
-      expect(server.splits.get('trip')!.items.find((i) => i.name === 'Bait')?.place).toEqual(KEPT),
+      expect(server.splits.get('trip')!.items.find((i) => i.name === 'Bait')?.place).toEqual({
+        ...KEPT,
+        name: 'Truz Tackles, Kuala Selangor',
+      }),
     );
     await waitFor(() => expect(server.uploads.map((u) => u.place)).toEqual([KEPT]));
     // The item says where, on its sheet
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await user.click(await screen.findByText('Bait'));
     expect(
-      await screen.findByRole('link', { name: '3.34017, 101.25050, open in Maps' }),
+      await screen.findByRole('link', { name: 'Truz Tackles, Kuala Selangor, open in Maps' }),
     ).toBeTruthy();
   });
 
@@ -120,7 +124,7 @@ describe('places', () => {
     expect(form.getByRole('button', { name: 'Use my location' })).toBeTruthy();
   });
 
-  test('Use my location sets one, Remove location takes it off, and a refusal says why', async () => {
+  test('Use my location sets one (where OpenStreetMap has no name, its position), Remove location takes it off, and a refusal says why', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();

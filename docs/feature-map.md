@@ -510,6 +510,12 @@ method through a profile change.
   which also offers Use my location and Remove location); the item sheet and the photo
   details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx)).
   Places are checked the same way on both sides ([shared/places.ts](../shared/places.ts)).
+  Names come from OpenStreetMap through the Worker (`GET /api/place-name`,
+  [worker/places/names.ts](../worker/places/names.ts): the spot's name, else its road,
+  then its town; kept a month per spot of about 11 m).
+  [split/place-names.ts](../web/src/split/place-names.ts) names a place set in the form,
+  so the item is saved with it, and names any other place for showing it; its position
+  shows only until then, or offline.
   Settings' Locations section turns saving them off for the account (`savePlaces`).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)

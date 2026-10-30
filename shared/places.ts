@@ -47,3 +47,8 @@ export const mapsUrl = ({ lat, lng }: Place) =>
 /** What a place is called: its name, or its position until a name is known */
 export const placeLabel = (place: Place) =>
   place.name ?? `${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}`;
+
+/** What GET /api/place-name answers: what is at a position, or null when nothing's known */
+export interface PlaceName {
+  name: string | null;
+}

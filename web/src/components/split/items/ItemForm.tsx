@@ -22,7 +22,7 @@ import {
   Trash,
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useContext, useEffect, useId, useMemo, useState } from 'react';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { MAX_ITEM_CENTS, fitsItemCents, isValidRate, toCents } from '@shared/rates';
 import type { SplitMode } from '@shared/settle';
 import { itemShares, MAX_SHARES } from '@shared/settle';
@@ -49,6 +49,7 @@ import { type Place, toPlace } from '@shared/places';
 import type { Position } from '../../../utils/here';
 import { type PhotoSource, locatePhotos } from '../../../split/photo-places';
 import { useProfile } from '../../../profile/ProfileContext';
+import { lookUpPlaceName } from '../../../split/place-names';
 import { useIsDesktop, useIsMobile } from '../../../hooks/useBreakpoints';
 import PhotoStrip from '../photos/PhotoStrip';
 import CurrencySelect from '../../ui/CurrencySelect';
@@ -117,9 +118,23 @@ const ItemForm = ({
   const [newPhotoPlaces, setNewPhotoPlaces] = useState(() => new Map<File, Position | null>());
   const [place, setPlace] = useState<Place | null>(item?.place ?? null);
   const savePlaces = useProfile().profile?.settings.savePlaces ?? true;
-  // A receipt that says where it was taken fills in an item that doesn't say yet
+  // A place set here is saved with its name, once OpenStreetMap says what's there
+  const changePlace = (next: Place | null) => {
+    setPlace(next);
+    if (next == null || next.name != null) return;
+    void lookUpPlaceName(next.lat, next.lng).then((name) => {
+      if (name == null) return;
+      setPlace((now) =>
+        now?.lat === next.lat && now.lng === next.lng && now.name == null ? { ...now, name } : now,
+      );
+    });
+  };
+  // A receipt that says where it was taken fills in an item that doesn't say yet (as it
+  // is when the photo's place is known, which can be a few seconds after picking it)
+  const placeNow = useRef(place);
+  placeNow.current = place;
   const placeFrom = (found: Position | null) => {
-    if (found) setPlace((was) => was ?? toPlace(found.lat, found.lng));
+    if (found && placeNow.current == null) changePlace(toPlace(found.lat, found.lng));
   };
   const addPhotos = (files: File[], from: PhotoSource) => {
     if (item) {
@@ -468,7 +483,7 @@ const ItemForm = ({
       />
       <PlaceField
         place={place}
-        onChange={setPlace}
+        onChange={changePlace}
       />
 
       {!isMobile && categorySelect}

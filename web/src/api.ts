@@ -1,4 +1,5 @@
 import type { Position } from './utils/here';
+import type { PlaceName } from '@shared/places';
 import {
   CLIENT_ID_HEADER,
   EXPECTED_ACCOUNT_HEADER,
@@ -164,6 +165,12 @@ export const api = {
   listSplits: () => request<SplitList>('GET', '/api/splits'),
   /** Names of items in your splits, most recent first, with the category last given */
   listItemNames: () => request<ItemNames>('GET', '/api/item-names'),
+  /** What is at a position, from OpenStreetMap */
+  placeName: (lat: number, lng: number) =>
+    request<PlaceName>(
+      'GET',
+      `/api/place-name?${new URLSearchParams({ lat: `${lat}`, lng: `${lng}` })}`,
+    ),
   /** Your own order for your splits: every id, first to last */
   reorderSplits: (ids: string[]) =>
     request<Ok>('PUT', '/api/splits/order', { ids } satisfies SplitOrderBody),

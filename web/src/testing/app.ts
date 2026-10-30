@@ -150,6 +150,8 @@ export interface FakeServer {
   sent: { splitId: string; changes: Change[] }[];
   /** Every photo the app uploaded and the server kept, in the order they arrived */
   uploads: { splitId: string; itemId: string | null; image: Blob; place: Place | null }[];
+  /** What OpenStreetMap calls a spot, by "lat,lng" to 4 places; any other has no name */
+  placeNames: Map<string, string>;
   /**
    * The next save of the profile, a split's changes or its settings, the next photo
    * upload, or the next agent disconnected, answers with this status
@@ -568,6 +570,15 @@ function answerNow(server: FakeServer) {
       return json({ id: split.id });
     }
     if (path === '/api/item-names') return json({ names: [] });
+    if (path === '/api/place-name') {
+      const [lat, lng] = [url.searchParams.get('lat'), url.searchParams.get('lng')];
+      if (lat == null || lng == null || !isPosition(+lat, +lng)) {
+        return json({ error: 'Give lat and lng as a position on the map' }, 400);
+      }
+      return json({
+        name: server.placeNames.get(`${(+lat).toFixed(4)},${(+lng).toFixed(4)}`) ?? null,
+      });
+    }
     if (path === '/api/archived' && method === 'PUT') {
       const { id, archived } = body as { id: string; archived: boolean };
       if (archived) server.archived.add(id);
@@ -761,6 +772,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     loseNext: {},
     receipts: new Map(),
     uploads: [],
+    placeNames: new Map(),
     failNext: {},
     archived: new Set(),
     agents: [],

@@ -9,6 +9,7 @@ import { clientId, fail, isCrossSiteWrite, notFound } from './http';
 import { EXPECTED_ACCOUNT_HEADER } from '../shared/api';
 import { getUserEmail } from './accounts/auth';
 import invites from './routes/invites';
+import places from './routes/places';
 import me from './routes/me';
 import rates from './routes/rates';
 import splits from './routes/splits';
@@ -73,6 +74,7 @@ api.route('/', me);
 api.route('/', splits);
 api.route('/', invites);
 api.route('/', rates);
+api.route('/', places);
 
 api.notFound(() => notFound());
 

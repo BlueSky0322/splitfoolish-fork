@@ -46,7 +46,8 @@ app hack-proof, and the limits below are real.
   account's Save locations setting is on (the default), shown to the split's members
   alone, and can be taken off an item. Photos lose what the camera wrote into them when
   they're shrunk on the device; the position goes separately and is kept to about a
-  metre.
+  metre. Its name is looked up from OpenStreetMap by the Worker, never the browser,
+  with the position rounded to about 11 m, and kept in the Worker's cache.
 - Pictures and photos are sent `private, no-cache`, so a browser asks the server again
   before each showing. The service worker keeps a copy per account and shows it only
   offline, to that account.

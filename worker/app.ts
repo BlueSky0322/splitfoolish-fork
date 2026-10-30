@@ -22,6 +22,7 @@
 //     (changes.ts, checking each against model.ts with what input.ts reads);
 //   - currency/: exchange rates, and converting a split's items into a new currency;
 //   - photos/: photos on a split, and profile, split and payment QR pictures;
+//   - places/: what OpenStreetMap calls the place an item was paid for or a photo taken;
 //   - mcp/: tools for agents at /mcp, signed in over OAuth (docs/mcp.md), which save
 //     through the same saveChanges as the API.
 // Reading requests and answering is in http.ts. Besides requests, the Worker takes
