@@ -613,6 +613,9 @@ describe('the split page', () => {
     const APW = 'https://maps.app.goo.gl/apw123';
     const OTHER = 'https://maps.app.goo.gl/unknown';
     const PIN = 'https://goo.gl/maps/pin123';
+    // Shared from Google: a place it names, and something that isn't a place
+    const SHARED = 'https://share.google/kopi168';
+    const NOT_PLACE = 'https://share.google/article';
     const server = () => {
       const s = fakeServer(
         splitDetail('trip', [
@@ -620,7 +623,7 @@ describe('the split page', () => {
             id: 'coffee',
             name: 'Coffee',
             cost: 30,
-            notes: `Met at ${APW} then ${OTHER}, parked at ${PIN}, menu at https://example.com/menu`,
+            notes: `Met at ${APW} then ${OTHER}, parked at ${PIN}, menu at https://example.com/menu, coffee at ${SHARED} ${NOT_PLACE}`,
           }),
         ]),
       );
@@ -640,6 +643,14 @@ describe('the split page', () => {
         image: null,
         site: 'goo.gl',
         position: { lat: 3.88166, lng: 100.80379 },
+      });
+      s.linkPreviews.set(SHARED, {
+        title: 'Kedai Kopi 168',
+        address: null,
+        detail: null,
+        image: null,
+        site: 'share.google',
+        position: null,
       });
       return s;
     };
@@ -667,6 +678,16 @@ describe('the split page', () => {
       expect([...pin.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
         'https://tile.openstreetmap.org/16/51118/32060.png',
       );
+      // A place shared from Google is a card with its name; anything else shared, none
+      const shared = within(where).getByRole('link', { name: 'Kedai Kopi 168, on Google Maps' });
+      expect(shared.getAttribute('href')).toBe(SHARED);
+      await waitFor(() =>
+        expect(
+          [...where.querySelectorAll('a')].filter(
+            (a) => a.getAttribute('href') === NOT_PLACE && a.getAttribute('aria-label'),
+          ),
+        ).toEqual([]),
+      );
     };
 
     renderApp(server(), '/?s=trip', { size: 'phone' });
@@ -676,7 +697,7 @@ describe('the split page', () => {
     // In the text, a Maps link reads as its place, other addresses as where they go
     const notes = sheet.querySelector('p')!;
     expect(notes.textContent).toBe(
-      'Met at A Place Where - APW then Google Maps, parked at Jalan Sungai Besar, Sabak Bernam, menu at example.com/menu',
+      'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at Jalan Sungai Besar, Sabak Bernam, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
     );
     expect(
       within(notes).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),

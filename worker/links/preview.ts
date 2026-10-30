@@ -1,7 +1,9 @@
 // What a Google Maps link in an item's notes shows as a card: the place's name, address
 // and picture, from the tags Google's page carries for link previews. Only Google Maps
 // addresses are fetched, and every redirect must stay on them, so this can't be used to
-// reach anywhere else. Read in bounded size and time, and kept a week per link.
+// reach anywhere else. A share.google link goes on through Google Search, whose page is
+// never fetched: the place's name is read from the address it redirects to. Read in
+// bounded size and time, and kept a week per link.
 
 import { type LinkPreview, isMapsLink } from '../../shared/links';
 import { coordsLabel, isPosition, roundCoord } from '../../shared/places';
@@ -92,8 +94,13 @@ async function readPreview(address: string): Promise<LinkPreview> {
       if (res.status >= 300 && res.status < 400 && next != null) {
         await res.body?.cancel();
         const to = new URL(next, url);
+        // A share.google link's way to its place, which names it
+        if (isPlaceSearch(to)) {
+          url = to;
+          break;
+        }
         // Somewhere else (a consent page, say): not followed
-        if (!isMapsLink(to.href)) break;
+        if (!isMapsLink(to.href) && !isShareHop(to)) break;
         url = to;
       } else {
         page = res;
@@ -102,7 +109,10 @@ async function readPreview(address: string): Promise<LinkPreview> {
   } catch {
     // Unreachable or too slow: what the address itself says is all there is
   }
-  const fromUrl = { ...placeFromUrl(url), position: positionFromUrl(url) };
+  // A share link that isn't a place (a search or an article, say) names nothing
+  const named =
+    isMapsLink(url.href) || isPlaceSearch(url) ? placeFromUrl(url) : { title: null, address: null };
+  const fromUrl = { ...named, position: positionFromUrl(url) };
   if (page == null || !page.ok) return { ...empty, ...fromUrl };
   const body = await readBody(page, MAX_PAGE_BYTES, FETCH_MS);
   if (typeof body === 'string') return { ...empty, ...fromUrl };
@@ -119,11 +129,35 @@ async function readPreview(address: string): Promise<LinkPreview> {
     title: name.trim(),
     address: rest.join(' · ').trim() || fromUrl.address,
     detail: description != null && !GENERIC_DESCRIPTION.test(description) ? description : null,
-    // Google's map of nowhere in particular (the whole USA, for a page it can't place)
-    // says nothing; a small map of the position shows instead
+    // Google's map of the place is drawn as a small map of its position instead
     image: image != null && /^https:\/\//.test(image) && !/staticmap/.test(image) ? image : null,
-    position: fromUrl.position,
+    position: fromUrl.position ?? positionFromMap(image),
   };
+}
+
+/** Google's redirect from a share.google link on to what was shared */
+const isShareHop = (url: URL) =>
+  url.protocol === 'https:' &&
+  url.hostname === 'www.google.com' &&
+  url.pathname === '/share.google';
+
+/** Where a shared place goes on Google: a search for it, marked as a place (sh/x/loc) */
+const isPlaceSearch = (url: URL) =>
+  url.protocol === 'https:' &&
+  /^(www\.)?google(\.com?)?(\.[a-z]{2})?$/.test(url.hostname) &&
+  url.pathname === '/search' &&
+  (url.searchParams.get('source') ?? '').startsWith('sh/x/loc');
+
+/** Google's own map of nowhere in particular, for a page it can't place: the whole USA */
+const NOWHERE = '37.0625,-95.677068';
+
+/** The position a place page's map is centred on, unless it's Google's map of nowhere */
+function positionFromMap(image: string | undefined): LinkPreview['position'] {
+  if (image == null || !/staticmap/.test(image)) return null;
+  const center = /[?&]center=(-?[\d.]+)(?:%2C|,)(-?[\d.]+)/i.exec(image);
+  if (center == null || `${center[1]},${center[2]}` === NOWHERE) return null;
+  const [lat, lng] = [Number(center[1]), Number(center[2])];
+  return isPosition(lat, lng) ? { lat: roundCoord(lat), lng: roundCoord(lng) } : null;
 }
 
 /**
