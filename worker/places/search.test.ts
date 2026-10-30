@@ -127,4 +127,27 @@ describe('a place found by name', () => {
     answer = () => new Response('not json');
     expect(await searchPlaces('Truz Tackles', null, ctx)).toBeNull();
   });
+
+  it('finds a typed plus code itself: a full one alone, a short one near its town or the person', async () => {
+    expect(await searchPlaces('6pm2vrj3+mg', null, ctx)).toEqual([
+      { lat: 3.88169, lng: 100.80381, name: '6PM2VRJ3+MG', address: 'Plus code' },
+    ]);
+    expect(asked).toHaveLength(0);
+    // The town is found by name (Truz Tackles stands in for it), then the nearest box
+    expect(await searchPlaces('87R2+36 Kuala Selangor', null, ctx)).toEqual([
+      {
+        lat: 3.34019,
+        lng: 101.25056,
+        name: '87R2+36 Kuala Selangor',
+        address: 'Plus code',
+      },
+    ]);
+    expect(asked.map((u) => u.searchParams.get('q'))).toEqual(['Kuala Selangor']);
+    expect((await searchPlaces('87R2+36', { lat: 3.3, lng: 101.3 }, ctx))?.[0]).toMatchObject({
+      lat: 3.34019,
+      name: '6PM387R2+36',
+    });
+    // A short one with nothing to go by is nowhere
+    expect(await searchPlaces('87R2+36', null, ctx)).toEqual([]);
+  });
 });

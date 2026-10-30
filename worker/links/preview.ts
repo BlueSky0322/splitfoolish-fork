@@ -5,10 +5,10 @@
 // never fetched: the place's name is read from the address it redirects to. Read in
 // bounded size and time, and kept a week per link.
 
-import { type LinkPreview, isMapsLink } from '../../shared/links';
+import { type LinkPreview, isMapsLink, positionInLink } from '../../shared/links';
 import { isPosition, plusCodeLabel, roundCoord } from '../../shared/places';
 import { readBody } from '../http';
-import { placeName } from '../places/names';
+import { placeArea } from '../places/names';
 
 /** Short links redirect once or twice before the place's page */
 const MAX_REDIRECTS = 5;
@@ -26,12 +26,12 @@ export async function linkPreview(
   address: string,
   ctx: { waitUntil: (p: Promise<unknown>) => void },
 ): Promise<LinkPreview> {
-  // v2: pins named by their plus code where OpenStreetMap knows only the area
-  const key = new Request(`https://link-preview.splitfoolish/v2/${encodeURIComponent(address)}`);
+  // v3: dropped pins named by their plus code
+  const key = new Request(`https://link-preview.splitfoolish/v3/${encodeURIComponent(address)}`);
   const cache = (caches as unknown as { default: Cache }).default;
   const kept = await cache.match(key);
   if (kept) return kept.json<LinkPreview>();
-  const preview = await fetchPreview(address, (lat, lng) => placeName(lat, lng, ctx));
+  const preview = await fetchPreview(address, (lat, lng) => placeArea(lat, lng, ctx));
   // A page that couldn't be read is tried again next time rather than kept
   if (preview.title != null) {
     ctx.waitUntil(
@@ -46,28 +46,24 @@ export async function linkPreview(
   return preview;
 }
 
-/** What OpenStreetMap calls a spot (places/names.ts), for a pin Google gives no name */
-type NameAt = (lat: number, lng: number) => Promise<string | null>;
+/** The town and state a spot is in (places/names.ts), for a pin Google gives no name */
+type AreaAt = (lat: number, lng: number) => Promise<string | null>;
 
 /**
  * Looks the link up: follows its redirects within Google Maps, then reads the page's
- * tags. A dropped pin (a shared position, which Google's page names nothing) is named by
- * `nameAt`, and shown as a pin.
+ * tags. A dropped pin (a shared position, which Google's page names nothing) is named as
+ * Google Maps names one: its plus code, short with the town `areaAt` says it's in
+ * ("VRM3+R4 Bagan Datuk, Perak"), else in full.
  */
 export async function fetchPreview(
   address: string,
-  nameAt: NameAt = () => Promise.resolve(null),
+  areaAt: AreaAt = () => Promise.resolve(null),
 ): Promise<LinkPreview> {
   const found = await readPreview(address);
   if (found.title != null || found.position == null) return found;
   const { lat, lng } = found.position;
-  const name = await nameAt(lat, lng).catch(() => null);
-  return {
-    ...found,
-    // Where OpenStreetMap knows nothing, its plus code
-    title: name ?? plusCodeLabel(lat, lng),
-    address: 'Dropped pin',
-  };
+  const area = await areaAt(lat, lng).catch(() => null);
+  return { ...found, title: plusCodeLabel(lat, lng, area), address: null };
 }
 
 async function readPreview(address: string): Promise<LinkPreview> {
@@ -162,20 +158,8 @@ function positionFromMap(image: string | undefined): LinkPreview['position'] {
   return isPosition(lat, lng) ? { lat: roundCoord(lat), lng: roundCoord(lng) } : null;
 }
 
-/**
- * Where on the map a Maps address points, when it says: a shared position
- * (?q=3.881664,100.803786), a place's pin (!3d…!4d…), or the map's centre (/@3.12,101.6,17z)
- */
-export function positionFromUrl(url: URL): LinkPreview['position'] {
-  const number = String.raw`(-?\d{1,3}(?:\.\d+)?)`;
-  const found =
-    new RegExp(`^${number}\\s*,\\s*${number}$`).exec(url.searchParams.get('q')?.trim() ?? '') ??
-    new RegExp(`!3d${number}!4d${number}`).exec(url.pathname) ??
-    new RegExp(`/@${number},${number}`).exec(url.pathname);
-  if (found == null) return null;
-  const [lat, lng] = [Number(found[1]), Number(found[2])];
-  return isPosition(lat, lng) ? { lat: roundCoord(lat), lng: roundCoord(lng) } : null;
-}
+/** Where on the map a Maps address points, when it says (shared/links.ts) */
+export const positionFromUrl = (url: URL): LinkPreview['position'] => positionInLink(url.href);
 
 /**
  * The place a Maps address names in itself: /maps/place/<name>/..., or ?q=<name, address>
@@ -192,7 +176,9 @@ export function placeFromUrl(url: URL): Pick<LinkPreview, 'title' | 'address'> {
     return { title: null, address: null };
   }
   // Just a position ("3.1297,101.6744") names no place
-  if (text === '' || /^-?[\d.]+\s*,\s*-?[\d.]+$/.test(text)) return { title: null, address: null };
+  if (text === '' || /^-?[\d.]+\s*,\s*\+?-?[\d.]+$/.test(text)) {
+    return { title: null, address: null };
+  }
   const [name, ...rest] = text.split(',');
   return { title: name.trim(), address: rest.join(',').trim() || null };
 }

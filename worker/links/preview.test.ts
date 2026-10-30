@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isMapsLink } from '../../shared/links';
+import { isMapsLink, positionInLink } from '../../shared/links';
 import { fetchPreview, placeFromUrl, positionFromUrl } from './preview';
 
 /** A place's page as Google serves it, with the tags link previews read */
@@ -62,6 +62,38 @@ describe('which links get a card', () => {
   });
 });
 
+describe('where a link says it points', () => {
+  it('reads a position from each way Google writes one, and nothing from a short link', () => {
+    const at = { lat: 3.88705, lng: 100.80439 };
+    for (const link of [
+      'https://maps.google.com/?q=3.887047,100.804389&entry=gps',
+      'https://www.google.com/maps/search/?api=1&query=3.887047%2C100.804389',
+      'https://www.google.com/maps/search/3.887047,+100.804389?entry=tts',
+      'https://www.google.com/maps/place/3.887047,100.804389',
+      'https://www.google.com/maps/place/X/data=!3d3.887047!4d100.804389',
+      'https://www.google.com/maps/@3.887047,100.804389,17z',
+    ]) {
+      expect(positionInLink(link), link).toEqual(at);
+    }
+    // A place's link says where it is too, but it's the place it names
+    expect(
+      positionInLink('https://www.google.com/maps/place/APW/@3.1297,101.6744,17z', {
+        pinOnly: true,
+      }),
+    ).toBeNull();
+    expect(
+      positionInLink('https://maps.google.com/?q=3.887047,100.804389', { pinOnly: true }),
+    ).toEqual(at);
+    for (const link of [
+      'https://maps.app.goo.gl/y8F94Y1RPVDjz7ci8',
+      'https://maps.google.com/?q=Truz+Tackles',
+      'https://maps.google.com/?q=95.1,100.8',
+    ]) {
+      expect(positionInLink(link), link).toBeNull();
+    }
+  });
+});
+
 describe('a Maps link card', () => {
   it("follows a shared link to its place and reads the place's name, address and picture", async () => {
     stubWeb({
@@ -101,7 +133,7 @@ describe('a Maps link card', () => {
     });
   });
 
-  it('names a dropped pin from OpenStreetMap, with its position for a small map', async () => {
+  it('names a dropped pin by its plus code in its town, as Google Maps does, with its position for a small map', async () => {
     // As a phone shares a dropped pin: a short link, then a position, then Google's page,
     // which names nothing and offers a map of the USA
     const pin = 'https://maps.google.com/?q=3.881664,100.803786&entry=gps&g_ep=abc';
@@ -114,26 +146,41 @@ describe('a Maps link card', () => {
       'https://goo.gl/maps/5AsHsHdzQVM3KtAY9?g_st=ac',
       (lat, lng) => {
         asked.push([lat, lng]);
-        return Promise.resolve('Jalan Sungai Besar, Sabak Bernam');
+        return Promise.resolve('Bagan Datuk, Perak');
       },
     );
     expect(asked).toEqual([[3.88166, 100.80379]]);
     expect(named).toMatchObject({
-      title: 'Jalan Sungai Besar, Sabak Bernam',
-      address: 'Dropped pin',
+      title: 'VRJ3+MG Bagan Datuk, Perak',
+      address: null,
       image: null,
       position: { lat: 3.88166, lng: 100.80379 },
       site: 'goo.gl',
     });
-    // Nothing known there: its plus code
+    // Nowhere OpenStreetMap knows: its plus code in full
     expect(await fetchPreview('https://goo.gl/maps/5AsHsHdzQVM3KtAY9?g_st=ac')).toMatchObject({
       title: '6PM2VRJ3+MG',
-      address: 'Dropped pin',
+      address: null,
+    });
+
+    // Shared from the app as a search for a position
+    const search =
+      'https://www.google.com/maps/search/3.887047,+100.804389?entry=tts&g_ep=abc&skid=x';
+    stubWeb({
+      'https://maps.app.goo.gl/y8F94Y1RPVDjz7ci8': () => redirect(search),
+      [search]: () => new Response(genericPage),
+    });
+    expect(await fetchPreview('https://maps.app.goo.gl/y8F94Y1RPVDjz7ci8')).toMatchObject({
+      title: '6PM2VRP3+RQ',
+      position: { lat: 3.88705, lng: 100.80439 },
     });
     expect(positionFromUrl(new URL(PLACE.replace('/@', '/data=!3d3.2!4d101.7/@')))).toEqual({
       lat: 3.2,
       lng: 101.7,
     });
+    expect(
+      positionFromUrl(new URL('https://www.google.com/maps/search/?api=1&query=3.1,101.6')),
+    ).toEqual({ lat: 3.1, lng: 101.6 });
   });
 
   it('names a place shared from Google (share.google) from where it leads, never reading Google Search', async () => {

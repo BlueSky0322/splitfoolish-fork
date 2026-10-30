@@ -1,5 +1,6 @@
 import { MapPin } from '@phosphor-icons/react';
-import { mapsLinksIn } from '@shared/links';
+import { mapsLinksIn, positionInLink } from '@shared/links';
+import { plusCodeLabel } from '@shared/places';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { linkPreviewQuery } from '../../split/link-previews';
@@ -35,11 +36,11 @@ export function MapsLinkCards({ text }: { text: string | null }) {
 const usePreview = (url: string) => useQuery(linkPreviewQuery(url));
 
 /** A Maps link in the notes' text: the place's name with a pin, else its address, short */
-export function MapsLinkName({ url }: { url: string }) {
-  const title = usePreview(url).data?.title;
+export function MapsLinkName({ url, className }: { url: string; className?: string }) {
+  const title = usePreview(url).data?.title ?? unnamed(url);
   return (
     <a
-      className={classes.name}
+      className={className ?? classes.name}
       href={url}
       title={url}
       target="_blank"
@@ -58,9 +59,22 @@ export function MapsLinkName({ url }: { url: string }) {
   );
 }
 
+/**
+ * A link that says where it points (a dropped pin), before it's named or offline: its
+ * position and its plus code in full
+ */
+const unnamed = (url: string) => {
+  const at = positionInLink(url, { pinOnly: true });
+  return at && plusCodeLabel(at.lat, at.lng);
+};
+
 function MapsLinkCard({ url }: { url: string }) {
   const preview = usePreview(url);
-  const place = preview.data?.title != null ? preview.data : null;
+  const at = positionInLink(url, { pinOnly: true });
+  const place =
+    preview.data?.title != null
+      ? preview.data
+      : at && { title: unnamed(url), address: null, detail: null, image: null, position: at };
   // Something shared from Google that turned out not to be a place has no card
   if (place == null && preview.isSuccess && /^https?:\/\/share\.google\//i.test(url)) return null;
   const site = preview.data?.site ?? siteOf(url);
