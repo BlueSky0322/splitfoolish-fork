@@ -139,7 +139,13 @@ readVersion }`, decided from the split, your membership and its people before th
   `original`, `place` (`{ lat, lng, name }`, where it was paid for) and `photos` are left
   out rather than sent empty; `cost` is in currency units (the split's `totalCents` and
   balances are in cents). A photo has a `place` (`{ lat, lng }`) when it was taken with
-  one. Agents read places but don't set them, and an update keeps the expense's.
+  one. An agent sets an expense's place with `location`: the place and its town as a
+  receipt says ("Truz Tackles, Kuala Selangor"), found on OpenStreetMap through Photon
+  and kept as `{ lat, lng, name }`. When nothing is found the expense is saved without
+  one and the answer says `locationFound: false` (`locationsNotFound`, counting from 1,
+  in `add_expenses`). `location: null` on `update_expense` takes it off; leaving it out
+  keeps it. A new expense without a `location` takes the place of a Google Maps link
+  in its notes, as the app does.
 - **`get_split` leaves out** share links, invitations, members' emails and payment
   details. A person shows `hasAccount` and `isYou` (this grant's account) instead, and a
   photo `addedByYou`.

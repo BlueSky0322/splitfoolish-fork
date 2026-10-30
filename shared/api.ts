@@ -39,8 +39,11 @@ export interface Settings {
   itemsGroupBy: (typeof ITEMS_GROUPS)[number];
   itemsSortKey: (typeof ITEMS_SORT_KEYS)[number];
   itemsSortDir: (typeof SORT_DIRS)[number];
-  /** Keep where photos are taken and items paid for */
-  savePlaces: boolean;
+  /**
+   * Take where the phone is for a new item, and a photo taken here that doesn't say. Places
+   * from a photo itself, a Maps link or a search are kept either way.
+   */
+  recordLocation: boolean;
 }
 
 /** Settings before anyone changes them */
@@ -56,7 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   itemsSortKey: 'date',
   // Newest items first
   itemsSortDir: 'desc',
-  savePlaces: true,
+  recordLocation: true,
 };
 
 /** The signed-in account: what others see of it, and its private settings */

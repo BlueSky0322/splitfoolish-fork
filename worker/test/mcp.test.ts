@@ -1624,6 +1624,59 @@ describe('the tools', () => {
   });
 });
 
+describe('places', () => {
+  it('an expense takes the place a receipt names, found by search; null takes it off', async () => {
+    const alice = person('alice');
+    const split = await trip(alice);
+    const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const bait = await tool(client, 'add_expense', {
+      splitId: split.id,
+      requestId: 'bait-0000001',
+      name: 'Bait',
+      cost: 42,
+      payerId: 'me',
+      participantIds: ['me', split.bob],
+      location: 'Truz Tackles, Jalan Kuala Selangor-Teluk Intan',
+    });
+    expect(bait.locationFound).toBeUndefined();
+    const truz = { lat: 3.34017, lng: 101.2505, name: 'Truz Tackles, Kuala Selangor' };
+    expect((await itemsOf(alice, split.id))[0].place).toEqual(truz);
+
+    // A place search can't find: saved without one, and the answer says so, in a batch too
+    const lost = await tool(client, 'add_expenses', {
+      splitId: split.id,
+      requestId: 'lost-0000001',
+      expenses: [
+        { name: 'Ice', cost: 5, payerId: 'me', participantIds: ['me'] },
+        { name: 'Fuel', cost: 50, payerId: 'me', participantIds: ['me'], location: 'Nowhere 9' },
+      ],
+    });
+    expect(lost.locationsNotFound).toEqual([2]);
+    const fuel = (await itemsOf(alice, split.id)).find((i) => i.name === 'Fuel')!;
+    expect(fuel.place ?? null).toBeNull();
+
+    // On an edit, the location alone moves it; null takes it off
+    const moved = await tool(client, 'update_expense', {
+      splitId: split.id,
+      requestId: 'fuel-0000001',
+      expenseId: fuel.id,
+      location: 'truz tackles',
+    });
+    expect(moved.status).toBe('saved');
+    expect((await itemsOf(alice, split.id)).find((i) => i.id === fuel.id)!.place).toEqual(truz);
+    await tool(client, 'update_expense', {
+      splitId: split.id,
+      requestId: 'bait-0000002',
+      expenseId: bait.expenseId,
+      location: null,
+    });
+    const read = await tool(client, 'get_split', { splitId: split.id });
+    const named = (name: string) => read.expenses.find((e: { name: string }) => e.name === name);
+    expect(named('Bait').place).toBeUndefined();
+    expect(named('Fuel').place).toEqual(truz);
+  });
+});
+
 describe('new splits', () => {
   it('create a split with its people, once, however often it is sent', async () => {
     const alice = person('alice');

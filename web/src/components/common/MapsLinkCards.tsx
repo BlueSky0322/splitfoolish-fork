@@ -1,14 +1,10 @@
 import { MapPin } from '@phosphor-icons/react';
-import { isMapsLink } from '@shared/links';
+import { mapsLinksIn } from '@shared/links';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { api } from '../../api';
+import { linkPreviewQuery } from '../../split/link-previews';
 import { MiniMap } from '../ui/MiniMap';
-import { findLinks } from '../../utils/text';
 import classes from './MapsLinkCards.module.css';
-
-/** Side by side, a few more fit; past that they'd bury the notes they come from */
-const MAX_CARDS = 5;
 
 /**
  * The Google Maps links in some notes as cards, as a chat app shows them: the place's
@@ -17,13 +13,7 @@ const MAX_CARDS = 5;
  * sit side by side, to swipe through.
  */
 export function MapsLinkCards({ text }: { text: string | null }) {
-  const links = useMemo(
-    () =>
-      [...new Set(findLinks(text ?? '').flatMap((p) => (p.href ? [p.href] : [])))]
-        .filter(isMapsLink)
-        .slice(0, MAX_CARDS),
-    [text],
-  );
+  const links = useMemo(() => mapsLinksIn(text ?? ''), [text]);
   if (links.length === 0) return null;
   return (
     <div
@@ -41,14 +31,7 @@ export function MapsLinkCards({ text }: { text: string | null }) {
 }
 
 /** What Google says a link is: shared by its card and its place in the notes */
-const usePreview = (url: string) =>
-  useQuery({
-    queryKey: ['link-preview', url],
-    queryFn: () => api.linkPreview(url),
-    // A place's name and address don't change while the app is open
-    staleTime: Infinity,
-    retry: 1,
-  });
+const usePreview = (url: string) => useQuery(linkPreviewQuery(url));
 
 /** A Maps link in the notes' text: the place's name with a pin, not its address */
 export function MapsLinkName({ url }: { url: string }) {

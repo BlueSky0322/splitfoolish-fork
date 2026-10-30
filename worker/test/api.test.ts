@@ -479,9 +479,9 @@ describe('changing a split', () => {
     ]);
 
     // Saving them is on until the account turns it off
-    expect((await api.call(owner, 'GET', '/api/me')).data.settings.savePlaces).toBe(true);
-    await api.call(owner, 'PATCH', '/api/me', { settings: { savePlaces: false } });
-    expect((await api.call(owner, 'GET', '/api/me')).data.settings.savePlaces).toBe(false);
+    expect((await api.call(owner, 'GET', '/api/me')).data.settings.recordLocation).toBe(true);
+    await api.call(owner, 'PATCH', '/api/me', { settings: { recordLocation: false } });
+    expect((await api.call(owner, 'GET', '/api/me')).data.settings.recordLocation).toBe(false);
   });
 });
 

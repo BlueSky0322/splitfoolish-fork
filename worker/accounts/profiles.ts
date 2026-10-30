@@ -46,7 +46,7 @@ const SETTINGS = {
   itemsGroupBy: { column: 'items_group_by', values: ITEMS_GROUPS },
   itemsSortKey: { column: 'items_sort_key', values: ITEMS_SORT_KEYS },
   itemsSortDir: { column: 'items_sort_dir', values: SORT_DIRS },
-  savePlaces: { column: 'save_places', values: [true, false] },
+  recordLocation: { column: 'save_places', values: [true, false] },
 } as const satisfies Record<keyof Settings, unknown>;
 
 type SettingKey = keyof typeof SETTINGS;
@@ -71,7 +71,7 @@ export async function getProfile(db: D1Database, email: string): Promise<Profile
            sidebar_open AS sidebarOpen,
            items_view AS itemsView, items_group_by AS itemsGroupBy,
            items_sort_key AS itemsSortKey, items_sort_dir AS itemsSortDir,
-           save_places AS savePlaces
+           save_places AS recordLocation
          FROM user_settings WHERE email = ?`,
       )
       .bind(email),
@@ -86,7 +86,10 @@ export async function getProfile(db: D1Database, email: string): Promise<Profile
       .bind(email),
   ]);
   const saved = settings.results[0] as
-    | (Omit<Settings, 'sidebarOpen' | 'savePlaces'> & { sidebarOpen: number; savePlaces: number })
+    | (Omit<Settings, 'sidebarOpen' | 'recordLocation'> & {
+        sidebarOpen: number;
+        recordLocation: number;
+      })
     | undefined;
   const all = methods.results as (PaymentMethod & { isPreferred: number })[];
   return {
@@ -104,7 +107,11 @@ export async function getProfile(db: D1Database, email: string): Promise<Profile
     })),
     preferredPaymentMethodId: all.find((m) => m.isPreferred)?.id ?? null,
     settings: saved
-      ? { ...saved, sidebarOpen: Boolean(saved.sidebarOpen), savePlaces: Boolean(saved.savePlaces) }
+      ? {
+          ...saved,
+          sidebarOpen: Boolean(saved.sidebarOpen),
+          recordLocation: Boolean(saved.recordLocation),
+        }
       : { ...DEFAULT_SETTINGS },
   };
 }

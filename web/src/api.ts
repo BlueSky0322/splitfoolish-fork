@@ -1,5 +1,5 @@
 import type { Position } from './utils/here';
-import type { PlaceName } from '@shared/places';
+import type { PlaceName, PlaceSearch } from '@shared/places';
 import {
   CLIENT_ID_HEADER,
   EXPECTED_ACCOUNT_HEADER,
@@ -171,6 +171,15 @@ export const api = {
     request<PlaceName>(
       'GET',
       `/api/place-name?${new URLSearchParams({ lat: `${lat}`, lng: `${lng}` })}`,
+    ),
+  /** Places called `text`, those near `near` first */
+  searchPlaces: (text: string, near: { lat: number; lng: number } | null) =>
+    request<PlaceSearch>(
+      'GET',
+      `/api/place-search?${new URLSearchParams({
+        q: text,
+        ...(near && { lat: `${near.lat}`, lng: `${near.lng}` }),
+      }).toString()}`,
     ),
   /** What a Google Maps link in notes shows as a card */
   linkPreview: (url: string) =>

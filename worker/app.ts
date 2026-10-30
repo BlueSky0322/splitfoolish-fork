@@ -50,6 +50,8 @@ export interface Env extends AuthEnv, RatesEnv, RoomEnv {
   REGISTER_ALL_LIMITER: RateLimit;
   /** "true": writes must say whose they are (EXPECTED_ACCOUNT_HEADER); older apps are told to update */
   REQUIRE_EXPECTED_ACCOUNT?: string;
+  /** Where places are searched for (places/search.ts); overridable so tests can stand in */
+  PHOTON_BASE?: string;
   /** Photos a split may hold, fewer than the usual; for tests */
   PHOTOS_PER_SPLIT?: string;
   /** How long a currency change may take before opening the split retries it; for tests */

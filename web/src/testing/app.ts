@@ -27,7 +27,14 @@ import {
 import { convertCents, convertParts, rateDay, toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
-import { type Place, isPosition, toPlace } from '@shared/places';
+import {
+  MAX_PLACE_SEARCH_LENGTH,
+  type Place,
+  type PlaceSearch,
+  type PlaceSuggestion,
+  isPosition,
+  toPlace,
+} from '@shared/places';
 import { type LinkPreview, isMapsLink } from '@shared/links';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
@@ -153,6 +160,14 @@ export interface FakeServer {
   uploads: { splitId: string; itemId: string | null; image: Blob; place: Place | null }[];
   /** What OpenStreetMap calls a spot, by "lat,lng" to 4 places; any other has no name */
   placeNames: Map<string, string>;
+  /**
+   * Places found by name, by what was searched (in lower case); searched for nothing else.
+   * `placeSearches` notes each search and where it was asked near; `placeSearchDown` makes
+   * the search refuse as when Photon isn't answering.
+   */
+  places: Map<string, PlaceSuggestion[]>;
+  placeSearches: { text: string; near: { lat: number; lng: number } | null }[];
+  placeSearchDown: boolean;
   /** What Google says about each Maps link; any other Maps link has nothing to show */
   linkPreviews: Map<string, Omit<LinkPreview, 'url'>>;
   /**
@@ -582,6 +597,22 @@ function answerNow(server: FakeServer) {
         name: server.placeNames.get(`${(+lat).toFixed(4)},${(+lng).toFixed(4)}`) ?? null,
       });
     }
+    if (path === '/api/place-search') {
+      const text = (url.searchParams.get('q') ?? '').trim().replace(/\s+/g, ' ');
+      if (text.length > MAX_PLACE_SEARCH_LENGTH) {
+        return json({ error: `Search for at most ${MAX_PLACE_SEARCH_LENGTH} characters` }, 400);
+      }
+      const [lat, lng] = [url.searchParams.get('lat'), url.searchParams.get('lng')];
+      const near =
+        lat != null && lng != null && isPosition(+lat, +lng) ? { lat: +lat, lng: +lng } : null;
+      server.placeSearches.push({ text, near });
+      if (server.placeSearchDown) {
+        return json({ error: "Place search isn't answering. Try again in a moment." }, 503);
+      }
+      return json({
+        places: text.length < 2 ? [] : server.places.get(text.toLowerCase()) ?? [],
+      } satisfies PlaceSearch);
+    }
     if (path === '/api/link-preview') {
       const link = url.searchParams.get('url') ?? '';
       if (!isMapsLink(link)) return json({ error: 'Only Google Maps links have a card' }, 400);
@@ -794,6 +825,9 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     receipts: new Map(),
     uploads: [],
     placeNames: new Map(),
+    places: new Map(),
+    placeSearches: [],
+    placeSearchDown: false,
     linkPreviews: new Map(),
     failNext: {},
     archived: new Set(),

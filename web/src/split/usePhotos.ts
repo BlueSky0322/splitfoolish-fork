@@ -53,9 +53,10 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
   }, [all, splitId]);
   const queuedOf = useCallback((itemId: string | null) => queued[itemId ?? ''] ?? NONE, [queued]);
 
-  // Where each was taken goes with it, unless this account has turned that off. Answers
-  // the first place found, for an item that has none yet to take.
-  const savePlaces = useProfile().profile?.settings.savePlaces ?? true;
+  // Where each was taken goes with it: what the photo says, and for one just taken here,
+  // where the phone is if the account records that. Answers the first place found, for an
+  // item that has none yet to take.
+  const recordLocation = useProfile().profile?.settings.recordLocation ?? true;
   const upload = useCallback(
     async (
       files: File[],
@@ -64,15 +65,13 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
     ) => {
       // The photos show at once; where they were taken is kept with them once known.
       // Photos picked for an item not yet added were located as they were picked.
-      const places = !savePlaces
-        ? Promise.resolve([])
-        : Array.isArray(from)
-          ? Promise.resolve(from)
-          : locatePhotos(files, from);
+      const places = Array.isArray(from)
+        ? Promise.resolve(from)
+        : locatePhotos(files, from, recordLocation);
       void addPhotos(splitId, itemId, files, places);
       return (await places).find((p) => p != null) ?? null;
     },
-    [splitId, savePlaces],
+    [splitId, recordLocation],
   );
 
   /** Removes a photo still waiting to upload; it was only ever on this device */

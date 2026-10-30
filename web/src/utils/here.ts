@@ -1,5 +1,6 @@
-// Where the phone is now, for a photo just taken or "Use my location". The browser asks
-// the person the first time; refused, unavailable or too slow, there's no position.
+// Where the phone is now, for a new item, a photo just taken or "Use my current location".
+// The browser asks the person the first time; refused, unavailable or too slow, there's no
+// position.
 
 /** How long to wait for a fix before going without */
 const WAIT_MS = 10_000;

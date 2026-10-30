@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { findLinks, shortLink } from '../../utils/text';
+import { findLinks } from '@shared/links';
+import { shortLink } from '../../utils/text';
 import classes from './LinkedText.module.css';
 
 interface LinkedTextProps {

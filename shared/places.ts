@@ -66,3 +66,21 @@ export const placeLabel = (place: Place) => place.name ?? coordsLabel(place.lat,
 export interface PlaceName {
   name: string | null;
 }
+
+/** The longest search for a place that's sent on */
+export const MAX_PLACE_SEARCH_LENGTH = 100;
+
+/** A place found by searching for it, as the location search offers it */
+export interface PlaceSuggestion {
+  lat: number;
+  lng: number;
+  /** What it's kept as: the spot and its town ("Truz Tackles, Kuala Selangor") */
+  name: string;
+  /** Where it is, in full, to tell places of the same name apart */
+  address: string | null;
+}
+
+/** What GET /api/place-search answers: the best matches first */
+export interface PlaceSearch {
+  places: PlaceSuggestion[];
+}
