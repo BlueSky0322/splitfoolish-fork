@@ -43,7 +43,10 @@ beforeEach(() => {
     }),
   );
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('a place found by name', () => {
   it('is kept as its name and town, with the rest of where it is to tell it apart', () => {
@@ -103,11 +106,24 @@ describe('a place found by name', () => {
     expect(asked[1].searchParams.has('countrycode')).toBe(false);
   });
 
-  it("says nothing for a letter, and null when Photon can't answer", async () => {
+  it("says nothing for a letter, asks once more when Photon is busy, and null when it can't answer", async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(await searchPlaces('T', null, ctx)).toEqual([]);
     expect(asked).toHaveLength(0);
+    // Busy, then answering: the places
+    const answers = [new Response('busy', { status: 503 }), Response.json({ features: [TRUZ] })];
+    answer = () => answers.shift()!;
+    expect(await searchPlaces('Truz', null, ctx)).toEqual([toSuggestion(TRUZ)]);
+    expect(asked).toHaveLength(2);
+    // Busy twice: null, and only why is logged, never what was searched for
     answer = () => new Response('busy', { status: 503 });
-    expect(await searchPlaces('Truz', null, ctx)).toBeNull();
+    expect(await searchPlaces('Kedai Kopi', null, ctx)).toBeNull();
+    expect(asked).toHaveLength(4);
+    expect(vi.mocked(console.warn).mock.calls.flat().join(' ')).not.toMatch(/Kedai|Truz/);
+    // A question refused as it is isn't asked again
+    answer = () => new Response('bad', { status: 400 });
+    expect(await searchPlaces('Kepong', null, ctx)).toBeNull();
+    expect(asked).toHaveLength(5);
     answer = () => new Response('not json');
     expect(await searchPlaces('Truz Tackles', null, ctx)).toBeNull();
   });

@@ -595,18 +595,30 @@ describe('the split page', () => {
     expect(link.getAttribute('rel')).toContain('noopener');
     expect(sheet.textContent).toContain(', booked under Ryan');
 
-    // Desktop reads notes in the form: the address is offered under them
+    // Desktop reads notes in the form: as on the item, until they're edited, then the
+    // text as typed; once left, read again
     cleanup();
-    renderApp(fakeServer(noted()), '/?s=trip');
+    const server = fakeServer(noted());
+    renderApp(server, '/?s=trip');
     await user.click(await screen.findByText('Dinner'));
-    const form = await screen.findByRole('dialog');
-    expect(within(form).getByRole('textbox', { name: 'Notes' })).toHaveProperty(
-      'value',
-      'Menu at https://example.com/menu, booked under Ryan',
-    );
-    const chip = within(form).getByRole('link', { name: 'example.com/menu' });
+    const form = within(await screen.findByRole('dialog'));
+    expect(form.queryByRole('textbox', { name: 'Notes' })).toBeNull();
+    const chip = form.getByRole('link', { name: 'example.com/menu' });
     expect(chip.getAttribute('href')).toBe('https://example.com/menu');
     expect(chip.getAttribute('target')).toBe('_blank');
+    await user.click(form.getByRole('button', { name: 'Edit notes' }));
+    const notes = form.getByRole('textbox', { name: 'Notes' });
+    expect(notes).toHaveProperty('value', 'Menu at https://example.com/menu, booked under Ryan');
+    expect(document.activeElement).toBe(notes);
+    await user.type(notes, ', table 4');
+    await user.click(form.getByRole('textbox', { name: 'What it was for' }));
+    expect(form.getByText(/booked under Ryan, table 4/)).toBeTruthy();
+    await user.click(form.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items[0].notes).toBe(
+        'Menu at https://example.com/menu, booked under Ryan, table 4',
+      ),
+    );
   });
 
   test('Google Maps links in notes show as cards with the place, on a phone and on desktop', async () => {

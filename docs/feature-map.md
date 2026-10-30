@@ -137,7 +137,9 @@ it current.
   as cards with the place's picture, name and address
   ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
   the item sheet and the form; several side by side, to swipe). In the item sheet's text
-  a Maps link reads as its place's name (`MapsLinkName`). A share.google link goes on to
+  a Maps link reads as its place's name (`MapsLinkName`); the item form shows notes with
+  links the same way until they're edited (Edit notes, or a click on them), and again
+  once left. A share.google link goes on to
   Google Search, which is never fetched: the address it redirects to names the place
   (marked `sh/x/loc`), but not where it is, so its card has no map and the form searches
   its name rather than taking it as the item's place. A place page's own map (its
@@ -537,7 +539,8 @@ method through a profile change.
   else its name is searched for.
   The search is komoot's Photon through the Worker (`GET /api/place-search`,
   [worker/places/search.ts](../worker/places/search.ts), kept a week per search and
-  area): OpenStreetMap's own search forbids searching as people type. Only places in
+  area): OpenStreetMap's own search forbids searching as people type. Photon busy, down
+  or slow is asked once more, and why it failed is logged (never what was searched for). Only places in
   one country are offered: the area's (Photon's reverse lookup, kept a month), else
   the country Cloudflare says the request came from. The item sheet and the photo
   details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx);
