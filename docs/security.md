@@ -57,9 +57,11 @@ app hack-proof, and the limits below are real.
   maps (an item's place, a dropped pin in notes) are OpenStreetMap's tiles, loaded by
   the browser: OpenStreetMap sees the viewer's address, the area shown (a few hundred
   metres across) and the app's origin as the Referer, never the split or the item.
-  Searching for a place sends what's typed, and the area (to about 10 km) of the phone
-  or the split's latest place, from the Worker to komoot's Photon; never who asked or
-  the split. An agent's `location` goes the same way.
+  Searching for a place sends what's typed, the area (to about 10 km) of the phone or
+  the split's latest place, and the country to search in (that area's, else the one
+  Cloudflare sees the request come from), from the Worker to komoot's Photon; never who
+  asked or the split. An agent's `location` goes the same way, near the account's latest
+  place.
 - Pictures and photos are sent `private, no-cache`, so a browser asks the server again
   before each showing. The service worker keeps a copy per account and shows it only
   offline, to that account.

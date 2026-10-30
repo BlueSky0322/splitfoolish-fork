@@ -31,7 +31,14 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn((input: string) => {
-      asked.push(new URL(input));
+      const url = new URL(input);
+      asked.push(url);
+      // Which country a position is in
+      if (url.pathname === '/reverse') {
+        return Promise.resolve(
+          Response.json({ features: [{ properties: { countrycode: 'MY' } }] }),
+        );
+      }
       return Promise.resolve(answer());
     }),
   );
@@ -56,23 +63,44 @@ describe('a place found by name', () => {
     expect(toSuggestion({ properties: { name: 'Nowhere' } })).toBeNull();
   });
 
-  it('asks Photon near where the person is, once per search in that area', async () => {
+  it("asks Photon near where the person is, within that place's country, once per search in that area", async () => {
     const near = { lat: 3.34, lng: 101.25 };
-    expect(await searchPlaces('  Truz   tackles ', near, ctx)).toEqual([toSuggestion(TRUZ)]);
-    expect(asked).toHaveLength(1);
+    expect(await searchPlaces('  Truz   tackles ', near, ctx, { country: 'US' })).toEqual([
+      toSuggestion(TRUZ),
+    ]);
+    expect(asked.map((u) => `${u.origin}${u.pathname}`)).toEqual([
+      'https://photon.komoot.io/reverse',
+      'https://photon.komoot.io/api/',
+    ]);
     expect(Object.fromEntries(asked[0].searchParams)).toEqual({
+      lat: '3.3',
+      lon: '101.3',
+      limit: '1',
+    });
+    // The place's country, not the one the person is asking from
+    expect(Object.fromEntries(asked[1].searchParams)).toEqual({
       q: 'Truz tackles',
       limit: '5',
       lang: 'en',
+      countrycode: 'MY',
       lat: '3.3',
       lon: '101.3',
       location_bias_scale: '0.1',
       zoom: '12',
     });
-    expect(asked[0].origin).toBe('https://photon.komoot.io');
-    // The same words nearby come from the cache
-    await searchPlaces('truz tackles', { lat: 3.31, lng: 101.26 }, ctx);
-    expect(asked).toHaveLength(1);
+    // The same words nearby come from the cache, the area's country too
+    await searchPlaces('truz tackles', { lat: 3.31, lng: 101.26 }, ctx, { country: 'US' });
+    expect(asked).toHaveLength(2);
+    await searchPlaces('kepong tackle', { lat: 3.31, lng: 101.26 }, ctx);
+    expect(asked.map((u) => u.pathname)).toEqual(['/reverse', '/api/', '/api/']);
+  });
+
+  it('without a place to go by, searches the country the person asks from, or everywhere', async () => {
+    await searchPlaces('Truz', null, ctx, { country: 'sg' });
+    expect(asked[0].searchParams.get('countrycode')).toBe('SG');
+    expect(asked[0].searchParams.has('lat')).toBe(false);
+    await searchPlaces('Truz', null, ctx);
+    expect(asked[1].searchParams.has('countrycode')).toBe(false);
   });
 
   it("says nothing for a letter, and null when Photon can't answer", async () => {

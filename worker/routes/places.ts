@@ -28,7 +28,13 @@ places.get('/place-search', async (c) => {
   const lat = Number(c.req.query('lat'));
   const lng = Number(c.req.query('lng'));
   const near = c.req.query('lat') != null && isPosition(lat, lng) ? { lat, lng } : null;
-  const found = await searchPlaces(text, near, c.executionCtx, c.env.PHOTON_BASE);
+  // Without a place to go by, the country the person is asking from, as Cloudflare sees it
+  const from = (c.req.raw as { cf?: { country?: unknown } }).cf?.country;
+  const found = await searchPlaces(text, near, c.executionCtx, {
+    base: c.env.PHOTON_BASE,
+    // XX is Cloudflare's for not knowing
+    country: typeof from === 'string' && /^[A-Z]{2}$/.test(from) && from !== 'XX' ? from : null,
+  });
   if (found == null) return fail("Place search isn't answering. Try again in a moment.", 503);
   return json<PlaceSearch>({ places: found });
 });

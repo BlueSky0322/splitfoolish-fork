@@ -878,13 +878,22 @@ function prepareExpense(
  * undefined when neither says, and `missed` when a location was named but not found.
  */
 async function placeOf(
-  { env, ctx }: Caller,
+  { env, ctx, email }: Caller,
   location: string | null | undefined,
   notes: string | null | undefined,
 ): Promise<{ place?: Place | null; missed?: true }> {
   if (location === null) return { place: null };
   if (location !== undefined) {
-    const found = (await searchPlaces(location, null, ctx, env.PHOTON_BASE))?.[0];
+    // Searched near (and in the country of) the last place this account's splits went to
+    const near = await env.DB.prepare(
+      `SELECT i.place_lat AS lat, i.place_lng AS lng
+         FROM items i JOIN split_members m ON m.split_id = i.split_id
+        WHERE m.email = ? AND i.place_lat IS NOT NULL
+        ORDER BY i.created_at DESC LIMIT 1`,
+    )
+      .bind(email)
+      .first<{ lat: number; lng: number }>();
+    const found = (await searchPlaces(location, near, ctx, { base: env.PHOTON_BASE }))?.[0];
     return found ? { place: toPlace(found.lat, found.lng, found.name) } : { missed: true };
   }
   const link = mapsLinksIn(notes ?? '')[0];

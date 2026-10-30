@@ -531,7 +531,9 @@ method through a profile change.
   key, near the phone or the split's latest place) and offers Use my current location.
   The search is komoot's Photon through the Worker (`GET /api/place-search`,
   [worker/places/search.ts](../worker/places/search.ts), kept a week per search and
-  area): OpenStreetMap's own search forbids searching as people type. The item sheet and the photo
+  area): OpenStreetMap's own search forbids searching as people type. Only places in
+  one country are offered: the area's (Photon's reverse lookup, kept a month), else
+  the country Cloudflare says the request came from. The item sheet and the photo
   details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx);
   the item sheet with a small map from OpenStreetMap's tiles,
   [MiniMap](../web/src/components/ui/MiniMap.tsx)).

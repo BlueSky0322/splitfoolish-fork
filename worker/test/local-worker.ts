@@ -188,10 +188,16 @@ async function startFakeRates(): Promise<
       if (from === PROBE_PAIR[0] && to === PROBE_PAIR[1]) probed = true;
       askedFor.set(`${from}${to}`, (askedFor.get(`${from}${to}`) ?? 0) + 1);
     };
-    // Photon's place search: Truz Tackles, by any search naming it; nothing else is found
+    // Photon's place search: Truz Tackles, by any search naming it within Malaysia (or
+    // anywhere); nothing else is found. Every position is in Malaysia.
     if (url.pathname === '/api/') {
-      const truz = /truz/i.test(url.searchParams.get('q') ?? '');
+      const truz =
+        /truz/i.test(url.searchParams.get('q') ?? '') &&
+        (url.searchParams.get('countrycode') ?? 'MY') === 'MY';
       return send(200, { features: truz ? [TRUZ_TACKLES] : [] });
+    }
+    if (url.pathname === '/reverse') {
+      return send(200, { features: [{ properties: { countrycode: 'MY' } }] });
     }
     if (url.pathname === '/v1/rates') {
       const [from, to] = [url.searchParams.get('source'), url.searchParams.get('target')];
