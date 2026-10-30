@@ -44,9 +44,23 @@ export const toPlace = (lat: number, lng: number, name: string | null = null): P
 export const mapsUrl = ({ lat, lng }: Place) =>
   `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
-/** What a place is called: its name, or its position until a name is known */
-export const placeLabel = (place: Place) =>
-  place.name ?? `${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}`;
+/** One coordinate as Google Maps writes it: 3°52'54.0"N */
+function dms(degrees: number, positive: string, negative: string) {
+  // In tenths of a second, so 59.96" carries into the next minute rather than reading 60.0"
+  const tenths = Math.round(Math.abs(degrees) * 36_000);
+  const d = Math.floor(tenths / 36_000);
+  const m = Math.floor((tenths % 36_000) / 600);
+  const s = (tenths % 600) / 10;
+  const pad = (n: number, width: number) => n.toFixed(width === 4 ? 1 : 0).padStart(width, '0');
+  return `${d}°${pad(m, 2)}'${pad(s, 4)}"${degrees < 0 ? negative : positive}`;
+}
+
+/** A position as Google Maps shows a dropped pin: 3°52'54.0"N 100°48'13.6"E */
+export const coordsLabel = (lat: number, lng: number) =>
+  `${dms(lat, 'N', 'S')} ${dms(lng, 'E', 'W')}`;
+
+/** What a place is called: its name, or where it is on the map when nothing's known */
+export const placeLabel = (place: Place) => place.name ?? coordsLabel(place.lat, place.lng);
 
 /** What GET /api/place-name answers: what is at a position, or null when nothing's known */
 export interface PlaceName {

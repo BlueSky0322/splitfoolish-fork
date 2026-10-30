@@ -128,14 +128,14 @@ describe('places', () => {
     expect(form.getByRole('button', { name: 'Use my location' })).toBeTruthy();
   });
 
-  test('Use my location sets one (where OpenStreetMap has no name, its position), Remove location takes it off, and a refusal says why', async () => {
+  test('Use my location sets one (where OpenStreetMap has no name, its position as Google Maps writes it), Remove location takes it off, and a refusal says why', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();
     await user.click(await screen.findByText('Dinner'));
     const form = within(await screen.findByRole('dialog'));
     await user.click(form.getByRole('button', { name: 'Use my location' }));
-    expect(await form.findByRole('link', { name: '3.34017, 101.25050' })).toBeTruthy();
+    expect(await form.findByRole('link', { name: `3°20'24.6"N 101°15'01.8"E` })).toBeTruthy();
     await user.click(form.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(server.splits.get('trip')!.items[0].place).toEqual(KEPT));
 

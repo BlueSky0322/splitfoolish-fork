@@ -127,7 +127,7 @@ describe('a Maps link card', () => {
     // Nothing known there: the pin and its position
     expect(await fetchPreview('https://goo.gl/maps/5AsHsHdzQVM3KtAY9?g_st=ac')).toMatchObject({
       title: 'Dropped pin',
-      address: '3.88166, 100.80379',
+      address: `3°52'54.0"N 100°48'13.6"E`,
     });
     expect(positionFromUrl(new URL(PLACE.replace('/@', '/data=!3d3.2!4d101.7/@')))).toEqual({
       lat: 3.2,

@@ -4,7 +4,7 @@
 // reach anywhere else. Read in bounded size and time, and kept a week per link.
 
 import { type LinkPreview, isMapsLink } from '../../shared/links';
-import { isPosition, roundCoord } from '../../shared/places';
+import { coordsLabel, isPosition, roundCoord } from '../../shared/places';
 import { readBody } from '../http';
 import { placeName } from '../places/names';
 
@@ -62,7 +62,7 @@ export async function fetchPreview(
   return {
     ...found,
     title: name ?? 'Dropped pin',
-    address: name ? 'Dropped pin' : `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+    address: name ? 'Dropped pin' : coordsLabel(lat, lng),
   };
 }
 

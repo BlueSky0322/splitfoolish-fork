@@ -530,8 +530,9 @@ method through a profile change.
   then its town; an unnamed country road its district and state; kept a month per spot
   of about 11 m).
   [split/place-names.ts](../web/src/split/place-names.ts) names a place set in the form,
-  so the item is saved with it, and names any other place for showing it; its position
-  shows only until then, or offline.
+  so the item is saved with it, and names any other place for showing it; until then, or
+  offline, or where OpenStreetMap has no name, its position shows as Google Maps writes
+  a dropped pin (`coordsLabel`, 3°52'54.0"N 100°48'13.6"E).
   Settings' Locations section turns saving them off for the account (`savePlaces`).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
