@@ -46,7 +46,7 @@ import { ConversionRow } from '../forms/ConversionRow';
 import { DayField } from '../forms/DayField';
 import { PlaceField } from '../forms/PlaceField';
 import { type Place, toPlace } from '@shared/places';
-import type { Position } from '../../../utils/here';
+import { type Position, currentPosition } from '../../../utils/here';
 import { type PhotoSource, locatePhotos } from '../../../split/photo-places';
 import { useProfile } from '../../../profile/ProfileContext';
 import { lookUpPlaceName } from '../../../split/place-names';
@@ -57,8 +57,9 @@ import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
-import { findLinks, plural, shortLink } from '../../../utils/text';
-import { isMapsLink } from '@shared/links';
+import { plural, shortLink } from '../../../utils/text';
+import { findLinks, isMapsLink, mapsLinksIn } from '@shared/links';
+import { linkPreviewQuery } from '../../../split/link-previews';
 import { MapsLinkCards } from '../../common/MapsLinkCards';
 import { buildItemInput, exactCents } from '../../../split/item-input';
 import { useAmountConversion } from '../../../split/useAmountConversion';
@@ -119,9 +120,17 @@ const ItemForm = ({
   const [newPhotos, setNewPhotos] = useState<File[]>([]);
   const [newPhotoPlaces, setNewPhotoPlaces] = useState(() => new Map<File, Position | null>());
   const [place, setPlace] = useState<Place | null>(item?.place ?? null);
-  const savePlaces = useProfile().profile?.settings.savePlaces ?? true;
+  // Where the place came from: as saved, chosen here (searched for, the phone's position
+  // asked for, or taken off), found in a receipt or a Maps link, or where the phone was as
+  // a new item was started
+  const placeSource = useRef<'saved' | 'chosen' | 'found' | 'here' | null>(
+    item?.place ? 'saved' : null,
+  );
+  const profile = useProfile().profile;
+  const recordLocation = profile?.settings.recordLocation ?? true;
   // A place set here is saved with its name, once OpenStreetMap says what's there
-  const changePlace = (next: Place | null) => {
+  const changePlace = (next: Place | null, source: 'chosen' | 'found' | 'here' = 'chosen') => {
+    placeSource.current = source;
     setPlace(next);
     if (next == null || next.name != null) return;
     void lookUpPlaceName(next.lat, next.lng).then((name) => {
@@ -131,13 +140,36 @@ const ItemForm = ({
       );
     });
   };
-  // A receipt that says where it was taken fills in an item that doesn't say yet (as it
-  // is when the photo's place is known, which can be a few seconds after picking it)
-  const placeNow = useRef(place);
-  placeNow.current = place;
-  const placeFrom = (found: Position | null) => {
-    if (found && placeNow.current == null) changePlace(toPlace(found.lat, found.lng));
+  // A receipt or a Maps link that says where fills in an item that doesn't say yet, or
+  // says only where the phone was; never a place saved or chosen (or taken off) here
+  const offerPlace = (found: Place | null, source: 'found' | 'here') => {
+    const now = placeSource.current;
+    if (found && (now == null || (source === 'found' && now === 'here'))) {
+      changePlace(found, source);
+    }
   };
+  const offer = useRef(offerPlace);
+  offer.current = offerPlace;
+  // A receipt's place is known a few seconds after it's picked
+  const placeFrom = (found: Position | null) =>
+    offerPlace(found && toPlace(found.lat, found.lng), 'found');
+
+  // A new item takes where the phone is as it's started, when the account records that
+  const [here, setHere] = useState<Position | null>(null);
+  const takeHere = !item && profile != null && recordLocation;
+  useEffect(() => {
+    if (!takeHere) return;
+    let open = true;
+    void currentPosition().then((found) => {
+      if (!open || found == null) return;
+      setHere(found);
+      offer.current(toPlace(found.lat, found.lng), 'here');
+    });
+    return () => {
+      open = false;
+    };
+  }, [takeHere]);
+
   const addPhotos = (files: File[], from: PhotoSource) => {
     if (item) {
       void splitPhotos.upload(files, item.id, from).then(placeFrom);
@@ -145,8 +177,7 @@ const ItemForm = ({
     }
     // A new item's photos wait for it to be added; where they were taken is found now
     setNewPhotos((p) => [...p, ...files]);
-    if (!savePlaces) return;
-    void locatePhotos(files, from).then((found) => {
+    void locatePhotos(files, from, recordLocation).then((found) => {
       setNewPhotoPlaces((was) => new Map([...was, ...files.map((f, i) => [f, found[i]] as const)]));
       placeFrom(found.find((p) => p != null) ?? null);
     });
@@ -182,6 +213,28 @@ const ItemForm = ({
   const links = useMemo(
     () => findLinks(notes).filter((p) => p.href != null && !isMapsLink(p.href)),
     [notes],
+  );
+  // A Maps link put in the notes here gives the item its place, as a receipt does: the
+  // link's position, named as its card is
+  const [linkBefore] = useState(() => mapsLinksIn(item?.notes ?? '')[0] ?? null);
+  const newLink = mapsLinksIn(notes).find((l) => l !== linkBefore) ?? null;
+  const linked = useQuery({ ...linkPreviewQuery(newLink ?? ''), enabled: newLink != null });
+  const linkedAt = newLink != null ? linked.data?.position : null;
+  const linkedName = linked.data?.title ?? null;
+  useEffect(() => {
+    if (linkedAt) offer.current(toPlace(linkedAt.lat, linkedAt.lng, linkedName), 'found');
+  }, [linkedAt, linkedName]);
+  // Searches look near where the phone is, else this split's latest place
+  const items = useSplitState().state.items;
+  const near = useMemo(
+    () =>
+      here ??
+      items.reduce<SplitItem | null>(
+        (latest, i) => (i.place && (latest == null || i.createdAt > latest.createdAt) ? i : latest),
+        null,
+      )?.place ??
+      null,
+    [here, items],
   );
   // The day it was paid: an item's own, the day whose heading it was added from, or today
   const [ownDayText] = useState(() =>
@@ -241,7 +294,8 @@ const ItemForm = ({
     notes,
     newPhotos.length,
     dayText,
-    place,
+    // Where the phone was isn't something entered
+    placeSource.current === 'here' ? null : place,
   ]);
   const [initialSnapshot] = useState(snapshot);
   const unsaved =
@@ -487,10 +541,6 @@ const ItemForm = ({
         }
         highlighted={initialDay != null}
       />
-      <PlaceField
-        place={place}
-        onChange={changePlace}
-      />
 
       {!isMobile && categorySelect}
 
@@ -628,6 +678,11 @@ const ItemForm = ({
           ))}
         </div>
       )}
+      <PlaceField
+        place={place}
+        near={near}
+        onChange={changePlace}
+      />
 
       <div className={classes.field}>
         <div className={classes.label}>

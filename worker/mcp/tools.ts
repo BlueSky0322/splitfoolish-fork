@@ -19,6 +19,10 @@ import type { SettleItem } from '../../shared/settle';
 import { SPLIT_MODES, balances, transfers } from '../../shared/settle';
 import type { Item, Payment, Role } from '../../shared/types';
 import { MAX_NAME_LENGTH, MAX_NOTES_LENGTH } from '../../shared/types';
+import { mapsLinksIn } from '../../shared/links';
+import { MAX_PLACE_SEARCH_LENGTH, type Place, toPlace } from '../../shared/places';
+import { linkPreview } from '../links/preview';
+import { searchPlaces } from '../places/search';
 import type { Env } from '../app';
 import { ID_PATTERN, getRole } from '../app';
 import {
@@ -185,6 +189,8 @@ const expenseFields = {
     .describe('Amounts by person adding up to cost, for splitMode exact'),
   category: z.string().max(32).nullable().describe('Label such as Food; null shows as Other'),
   notes: z.string().max(MAX_NOTES_LENGTH).nullable(),
+  // Found with Photon; the answer says locationFound: false when nothing was
+  location: z.string().max(MAX_PLACE_SEARCH_LENGTH).describe('Place and town, as on the receipt'),
 };
 const paidInFields = {
   currency: z.string().regex(/^[A-Z]{3}$/),
@@ -227,6 +233,7 @@ const newExpense = {
   exact: expenseFields.exact.optional(),
   category: expenseFields.category.optional(),
   notes: expenseFields.notes.optional(),
+  location: expenseFields.location.optional(),
   date: date.optional(),
 };
 type NewExpense = z.infer<z.ZodObject<typeof newExpense>>;
@@ -843,8 +850,9 @@ function prepareExpense(
   email: string,
   id: string,
   fields: NewExpense,
+  place: Place | null | undefined,
 ): { item: Record<string, unknown> } | Refusal {
-  const { paidIn: paid, date: when, ...rest } = fields;
+  const { paidIn: paid, date: when, ...rest } = omit(fields, ['location']);
   if (paid?.currency === split.currency) return sameCurrency(split.currency) as Refusal;
   const people = resolveExpensePeople(split, email, { ...rest, paidIn: paid });
   if ('refusal' in people) return people;
@@ -857,10 +865,32 @@ function prepareExpense(
     participantIds: people.participantIds ?? [],
     createdAt: when == null ? undefined : toTime(when),
     original: people.paidIn && toOriginal(people.paidIn),
+    ...(place !== undefined && { place }),
   };
   const unfit = partsProblem(split.people, item, people.shares ?? people.exact);
   if (unfit) return unfit;
   return { item };
+}
+
+/**
+ * Where an expense was paid, to keep as its place: the location named, found with Photon
+ * (null takes it off); else the first Google Maps link in its notes, where it says. Left
+ * undefined when neither says, and `missed` when a location was named but not found.
+ */
+async function placeOf(
+  { env, ctx }: Caller,
+  location: string | null | undefined,
+  notes: string | null | undefined,
+): Promise<{ place?: Place | null; missed?: true }> {
+  if (location === null) return { place: null };
+  if (location !== undefined) {
+    const found = (await searchPlaces(location, null, ctx, env.PHOTON_BASE))?.[0];
+    return found ? { place: toPlace(found.lat, found.lng, found.name) } : { missed: true };
+  }
+  const link = mapsLinksIn(notes ?? '')[0];
+  if (link == null) return {};
+  const { position, title } = await linkPreview(link, ctx);
+  return position ? { place: toPlace(position.lat, position.lng, title) } : {};
 }
 
 /** A refusal about one expense of a batch, saying which */
@@ -887,6 +917,10 @@ const expenseIdsFor = async (email: string, requestId: string, count: number) =>
 /** What a write changed, named in its answer: one expense, one person, or several expenses */
 type Named = {
   expenseId?: string | null;
+  /** A location was named but not found: the expense has no place */
+  locationFound?: false;
+  /** The same, in add_expenses: which expenses, counting from 1 */
+  locationsNotFound?: number[];
   personId?: string | null;
   paymentId?: string | null;
   expenseIds?: string[];
@@ -1188,10 +1222,15 @@ export function registerTools(mcp: McpServer, caller: Caller) {
       const { splitId: ref, requestId: key, currency: code, withBalances: more, ...fields } = input;
       const problem = expenseProblem(fields);
       if (problem) return problem;
+      const found = await placeOf(caller, fields.location, fields.notes);
       const target = { splitId: ref, requestId: key, currency: code, withBalances: more };
       const intent = { ...fields, splitMode: fields.splitMode ?? 'equal' };
-      return writeBill(caller, 'add_expense', oneExpense, target, intent, (split) => {
-        const prepared = prepareExpense(split, caller.email, newId(), fields);
+      const named = (rowId: string | null): Named => ({
+        ...oneExpense(rowId),
+        ...(found.missed && { locationFound: false }),
+      });
+      return writeBill(caller, 'add_expense', named, target, intent, (split) => {
+        const prepared = prepareExpense(split, caller.email, newId(), fields, found.place);
         if ('refusal' in prepared) return prepared;
         return {
           rowId: prepared.item.id as string,
@@ -1226,6 +1265,10 @@ export function registerTools(mcp: McpServer, caller: Caller) {
         if (problem) return inBatch(i + 1, fields.name, problem);
       }
       const ids = await expenseIdsFor(caller.email, key, expenses.length);
+      // One at a time, to ask the place search gently
+      const found: Awaited<ReturnType<typeof placeOf>>[] = [];
+      for (const e of expenses) found.push(await placeOf(caller, e.location, e.notes));
+      const missed = found.flatMap((f, i) => (f.missed ? [i + 1] : []));
       const target = { splitId: ref, requestId: key, currency: code, withBalances: more };
       const intent = {
         expenses: expenses.map((e) => ({ ...e, splitMode: e.splitMode ?? 'equal' })),
@@ -1233,13 +1276,13 @@ export function registerTools(mcp: McpServer, caller: Caller) {
       return writeBill(
         caller,
         'add_expenses',
-        () => ({ expenseIds: ids }),
+        () => ({ expenseIds: ids, ...(missed.length > 0 && { locationsNotFound: missed }) }),
         target,
         intent,
         (split) => {
           const changes: unknown[] = [];
           for (const [i, fields] of expenses.entries()) {
-            const prepared = prepareExpense(split, caller.email, ids[i], fields);
+            const prepared = prepareExpense(split, caller.email, ids[i], fields, found[i].place);
             if ('refusal' in prepared) {
               return { refusal: inBatch(i + 1, fields.name, prepared.refusal) };
             }
@@ -1276,6 +1319,10 @@ export function registerTools(mcp: McpServer, caller: Caller) {
         exact: expenseFields.exact.optional(),
         category: expenseFields.category.optional(),
         notes: expenseFields.notes.optional(),
+        location: expenseFields.location
+          .nullable()
+          .optional()
+          .describe('Place and town; null removes it'),
         date: date.optional(),
       },
       annotations: { ...addAnnotations, destructiveHint: true },
@@ -1293,9 +1340,10 @@ export function registerTools(mcp: McpServer, caller: Caller) {
       if (Object.values(fields).every((v) => v === undefined)) {
         return toolError('invalid_input', 'Send at least one field to change.');
       }
-      const { paidIn: paid, date: when, ...rest } = fields;
+      const { paidIn: paid, date: when, location, ...rest } = fields;
       const mixed = moneyMixed(paid, rest);
       if (mixed) return mixed;
+      const found = await placeOf(caller, location, rest.notes);
       const movedTo = when == null ? undefined : toTime(when);
       if (movedTo != null && !isItemDate(movedTo)) return toolError('invalid_input', BAD_DATE);
       const target = {
@@ -1305,13 +1353,23 @@ export function registerTools(mcp: McpServer, caller: Caller) {
         expenseId,
         withBalances: more,
       };
-      return writeBill(caller, 'update_expense', oneExpense, target, fields, (split) => {
+      const named = (rowId: string | null): Named => ({
+        ...oneExpense(rowId),
+        ...(found.missed && { locationFound: false }),
+      });
+      return writeBill(caller, 'update_expense', named, target, fields, (split) => {
         const current = split.items.find((i) => i.id === expenseId);
         if (current == null) return noExpense();
+        // The location named; or a Maps link newly in the notes, for one with no place yet
+        const place = location !== undefined || current.place == null ? found.place : undefined;
         // Only the date: moved, at the rate it was recorded with
         const redate =
           movedTo == null ? [] : [{ op: 'setItemDate', id: expenseId, createdAt: movedTo }];
-        if (Object.values(rest).every((v) => v === undefined) && paid == null) {
+        if (
+          Object.values(rest).every((v) => v === undefined) &&
+          paid == null &&
+          place === undefined
+        ) {
           return { rowId: expenseId, changes: redate };
         }
         if (paid?.currency === split.currency) return sameCurrency(split.currency);
@@ -1348,6 +1406,7 @@ export function registerTools(mcp: McpServer, caller: Caller) {
           category: rest.category !== undefined ? rest.category : current.category,
           notes: rest.notes !== undefined ? rest.notes : current.notes,
           original,
+          ...(place !== undefined && { place }),
         };
         const unfit = partsProblem(split.people, item, people.shares ?? people.exact);
         if (unfit) return unfit;

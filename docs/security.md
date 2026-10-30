@@ -46,15 +46,20 @@ app hack-proof, and the limits below are real.
   account and shown only to it. Signing out clears it; another account signing in
   clears what's shown but keeps the first account's unsent work, unseen, for when it's
   back.
-- Where photos were taken and items paid for is personal data. It's kept only while the
-  account's Save locations setting is on (the default), shown to the split's members
-  alone, and can be taken off an item. Photos lose what the camera wrote into them when
+- Where photos were taken and items paid for is personal data, shown to the split's
+  members alone, and can be taken off an item. The phone is asked where it is only
+  while the account's Record my location setting is on (the default): for a new item
+  and a photo taken here that doesn't say. A place a receipt photo carries, a Maps link
+  in the notes or a search gives is kept either way. Photos lose what the camera wrote into them when
   they're shrunk on the device; the position goes separately and is kept to about a
   metre. Its name is looked up from OpenStreetMap by the Worker, never the browser,
   with the position rounded to about 11 m, and kept in the Worker's cache. The small
   maps (an item's place, a dropped pin in notes) are OpenStreetMap's tiles, loaded by
   the browser: OpenStreetMap sees the viewer's address, the area shown (a few hundred
   metres across) and the app's origin as the Referer, never the split or the item.
+  Searching for a place sends what's typed, and the area (to about 10 km) of the phone
+  or the split's latest place, from the Worker to komoot's Photon; never who asked or
+  the split. An agent's `location` goes the same way.
 - Pictures and photos are sent `private, no-cache`, so a browser asks the server again
   before each showing. The service worker keeps a copy per account and shows it only
   offline, to that account.

@@ -5,9 +5,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { forgetQueuedPhotos } from '../../offline/photo-queue';
 import { fakeServer, item, renderApp, setupAppTests, splitDetail } from '../../testing/app';
 
-// Where items were paid for and photos taken: a photo taken here keeps where the phone
-// was, and a new item takes its receipt's place; Use my location and taking a place off;
-// and an account that turned locations off keeps none and isn't asked.
+// Where items were paid for and photos taken: a new item takes where the phone is, a
+// receipt's place or a Maps link's; searching for one and Use my current location; taking
+// a place off; and an account that turned recording its location off is never asked.
 
 setupAppTests();
 
@@ -20,6 +20,7 @@ vi.mock('../../utils/image', async (original) => ({
 /** Truz Tackles, Kuala Selangor */
 const HERE = { latitude: 3.340171, longitude: 101.250502 };
 const KEPT = { lat: 3.34017, lng: 101.2505, name: null };
+const TRUZ = { lat: 3.34017, lng: 101.2505, name: 'Truz Tackles, Kuala Selangor' };
 
 /** The phone's position, as the browser hands it over; or a refusal */
 let position: typeof HERE | null = HERE;
@@ -125,16 +126,18 @@ describe('places', () => {
     await waitFor(() => expect(server.uploads).toHaveLength(1));
     expect(server.uploads[0].place).toBeNull();
     expect(asked).not.toHaveBeenCalled();
-    expect(form.getByRole('button', { name: 'Use my location' })).toBeTruthy();
+    expect(form.getByRole('button', { name: 'Use my current location' })).toBeTruthy();
   });
 
-  test('Use my location sets one (where OpenStreetMap has no name, its position as Google Maps writes it), Remove location takes it off, and a refusal says why', async () => {
+  test('Use my current location sets one (where OpenStreetMap has no name, its position as Google Maps writes it), Remove location takes it off, and a refusal says why', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();
     await user.click(await screen.findByText('Dinner'));
     const form = within(await screen.findByRole('dialog'));
-    await user.click(form.getByRole('button', { name: 'Use my location' }));
+    // An item being edited isn't given where the phone is by itself
+    expect(asked).not.toHaveBeenCalled();
+    await user.click(form.getByRole('button', { name: 'Use my current location' }));
     expect(await form.findByRole('link', { name: `3°20'24.6"N 101°15'01.8"E` })).toBeTruthy();
     await user.click(form.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(server.splits.get('trip')!.items[0].place).toEqual(KEPT));
@@ -144,33 +147,111 @@ describe('places', () => {
     await user.click(again.getByRole('button', { name: 'Remove location' }));
     // Without the browser's say-so, there's no position: it says how to allow it
     position = null;
-    await user.click(again.getByRole('button', { name: 'Use my location' }));
+    await user.click(again.getByRole('button', { name: 'Use my current location' }));
     expect(await again.findByText(/Couldn't get your location/)).toBeTruthy();
     await user.click(again.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(server.splits.get('trip')!.items[0].place).toBeNull());
   });
 
-  test('with Save locations off in Settings, a photo taken here keeps no place', async () => {
+  test('a new item records where the phone is by itself; one searched for replaces it, near there first', async () => {
     const server = fakeServer(trip());
+    server.placeNames.set('3.3402,101.2505', 'Jalan Kuala Selangor-Teluk Intan, Kuala Selangor');
+    server.places.set('truz', [
+      { ...TRUZ, address: 'Jalan Kuala Selangor-Teluk Intan, Selangor, Malaysia' },
+      { lat: 40.67474, lng: -74.10932, name: 'True World Tackle, Bayonne', address: null },
+    ]);
+    renderApp(server, '/?s=trip', { size: 'phone' });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Add item' }));
+    const form = within(await screen.findByRole('dialog'));
+    expect(
+      await form.findByRole('link', { name: 'Jalan Kuala Selangor-Teluk Intan, Kuala Selangor' }),
+    ).toBeTruthy();
+    expect(asked).toHaveBeenCalledTimes(1);
+    await user.type(form.getByRole('textbox', { name: 'Amount' }), '42');
+    // Where the phone was isn't something typed in: closing doesn't ask to keep it
+    await user.click(form.getByRole('button', { name: 'Remove location' }));
+
+    // Suggestions as it's typed, asked near the phone, once the typing pauses
+    await user.type(form.getByRole('textbox', { name: 'Search for a place' }), 'Truz');
+    const places = within(form.getByRole('list', { name: 'Places' }));
+    await user.click(await places.findByRole('button', { name: /^Truz Tackles, Kuala Selangor/ }));
+    expect(server.placeSearches.map((s) => s.text)).toEqual(['Truz']);
+    expect(server.placeSearches[0].near).toEqual({ lat: 3.3, lng: 101.3 });
+    expect(form.getByRole('link', { name: 'Truz Tackles, Kuala Selangor' })).toBeTruthy();
+    await user.type(form.getByRole('textbox', { name: 'What it was for' }), 'Bait');
+    await user.click(form.getByRole('button', { name: /^(Add|Add item)$/ }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.find((i) => i.name === 'Bait')?.place).toEqual(TRUZ),
+    );
+  });
+
+  test("a search that finds nothing, or can't be asked, says so; Enter takes the best match", async () => {
+    const server = fakeServer(trip());
+    server.places.set('truz tackles', [{ ...TRUZ, address: null }]);
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Dinner'));
+    const form = within(await screen.findByRole('dialog'));
+    const search = form.getByRole('textbox', { name: 'Search for a place' });
+    // Near the split's latest place, none here: anywhere
+    await user.type(search, 'Nowhere at all');
+    expect(await form.findByText(/No places found/)).toBeTruthy();
+    expect(server.placeSearches.at(-1)).toEqual({ text: 'Nowhere at all', near: null });
+    server.placeSearchDown = true;
+    await user.clear(search);
+    await user.type(search, 'Somewhere');
+    expect(await form.findByText(/Search isn't answering right now/)).toBeTruthy();
+    server.placeSearchDown = false;
+    await user.clear(search);
+    await user.type(search, 'Truz Tackles');
+    await form.findByRole('button', { name: /^Truz Tackles, Kuala Selangor/ });
+    await user.type(search, '{Enter}');
+    // Enter took the place rather than saving the item
+    expect(form.getByRole('link', { name: 'Truz Tackles, Kuala Selangor' })).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  test('with Record my location off, the phone is never asked, but a receipt or a Maps link still gives a place', async () => {
+    const server = fakeServer(trip());
+    const PIN = 'https://goo.gl/maps/pin123';
+    server.linkPreviews.set(PIN, {
+      title: 'Bagan Datuk, Perak',
+      address: 'Dropped pin',
+      detail: null,
+      image: null,
+      site: 'goo.gl',
+      position: { lat: 3.88166, lng: 100.80379 },
+    });
     renderApp(server, '/?settings#places', { size: 'phone' });
     const user = userEvent.setup();
-    const on = await screen.findByRole('switch', { name: /Save where photos are taken/ });
+    const on = await screen.findByRole('switch', { name: /Record my location for new expenses/ });
     expect(on).toHaveProperty('checked', true);
     await user.click(on);
-    await waitFor(() => expect(server.me.settings.savePlaces).toBe(false));
+    await waitFor(() => expect(server.me.settings.recordLocation).toBe(false));
 
     cleanup();
     renderApp(server, '/?s=trip', { size: 'phone' });
-    await user.click(await screen.findByText('Dinner'));
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Edit item' }),
-    );
-    // The form, once it has taken the sheet's place
-    const form = within((await screen.findByRole('textbox', { name: 'Amount' })).closest('form')!);
+    await user.click(await screen.findByRole('button', { name: 'Add item' }));
+    const form = within(await screen.findByRole('dialog'));
+    await user.type(form.getByRole('textbox', { name: 'Amount' }), '12');
+    await user.type(form.getByRole('textbox', { name: 'What it was for' }), 'Parking');
+    // A photo taken here that doesn't say where keeps no place
     await user.click(form.getByRole('button', { name: 'Add photo' }));
     await pickPhotos(user, await screen.findByRole('button', { name: /^Take photo/ }), [
-      photo('receipt.jpg'),
+      photo('ticket.jpg'),
     ]);
+    // A Maps link in the notes gives the item its place, named as its card is
+    await user.type(form.getByRole('textbox', { name: 'Notes' }), `Parked at ${PIN} `);
+    expect(await form.findByRole('link', { name: 'Bagan Datuk, Perak' })).toBeTruthy();
+    await user.click(form.getByRole('button', { name: /^(Add|Add item)$/ }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items.find((i) => i.name === 'Parking')?.place).toEqual({
+        lat: 3.88166,
+        lng: 100.80379,
+        name: 'Bagan Datuk, Perak',
+      }),
+    );
     await waitFor(() => expect(server.uploads).toHaveLength(1));
     expect(server.uploads[0].place).toBeNull();
     expect(asked).not.toHaveBeenCalled();

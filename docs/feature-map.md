@@ -514,13 +514,24 @@ method through a profile change.
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
 - Where a photo was taken: [split/photo-places.ts](../web/src/split/photo-places.ts)
   reads the GPS position the camera wrote into it ([utils/exif.ts](../web/src/utils/exif.ts))
-  before it's shrunk (which drops it), and for one just taken here asks where the phone
-  is ([utils/here.ts](../web/src/utils/here.ts)). The pickers say which (`PhotoSource`).
+  before it's shrunk (which drops it), and for one just taken here that doesn't say,
+  asks where the phone is ([utils/here.ts](../web/src/utils/here.ts)) when the account
+  records its location. The pickers say which (`PhotoSource`).
   The position is kept with the queued photo and sent as `lat` and `lng` with it
   (`api.uploadAttachment`, and `web/public/sw.js` for the ones it sends); the Worker
-  keeps it beside the photo, never in the picture. An item that has no place takes its
-  first located receipt's, in the form ([PlaceField](../web/src/components/split/forms/PlaceField.tsx),
-  which also offers Use my location and Remove location); the item sheet and the photo
+  keeps it beside the photo, never in the picture.
+- An item's place, in the form (ItemForm, which notes where it came from): a new item
+  takes where the phone is as it's started, when the account records its location
+  (Settings' Locations, `recordLocation`); a located receipt or a Maps link put in the
+  notes (its card's position and title) replaces that or fills an empty one; one saved,
+  chosen or taken off is never replaced. Receipts and links give places whatever the
+  setting. The Location section after the notes
+  ([PlaceField](../web/src/components/split/forms/PlaceField.tsx)) shows the place with
+  Remove location, or searches as it's typed (`usePlaceSearch`, 300 ms after the last
+  key, near the phone or the split's latest place) and offers Use my current location.
+  The search is komoot's Photon through the Worker (`GET /api/place-search`,
+  [worker/places/search.ts](../worker/places/search.ts), kept a week per search and
+  area): OpenStreetMap's own search forbids searching as people type. The item sheet and the photo
   details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx);
   the item sheet with a small map from OpenStreetMap's tiles,
   [MiniMap](../web/src/components/ui/MiniMap.tsx)).
@@ -533,7 +544,6 @@ method through a profile change.
   so the item is saved with it, and names any other place for showing it; until then, or
   offline, or where OpenStreetMap has no name, its position shows as Google Maps writes
   a dropped pin (`coordsLabel`, 3°52'54.0"N 100°48'13.6"E).
-  Settings' Locations section turns saving them off for the account (`savePlaces`).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
   in the item form, with a spinner on their way up or marked as waiting.
@@ -572,8 +582,8 @@ sends them, one at a time and oldest first, after the changes kept with them.
 - The file type comes from the bytes, not what the upload says.
 - A photo's location is kept beside it, never in the picture: the photo is re-encoded
   on the device before upload, which drops what the camera wrote. Only accounts with
-  Save locations on send one, and a photo from the library without one never asks the
-  phone where it is (it could have been taken anywhere). Everyone in the split sees an
+  Record my location on ask the phone for one just taken that doesn't say, and a photo
+  from the library without one never asks (it could have been taken anywhere). Everyone in the split sees an
   item's or photo's place.
 - Pictures and photos are private, so every showing is checked by the server: they're
   sent `private, no-cache` with an ETag naming their content (a photo's id, a picture's
@@ -701,6 +711,10 @@ retry receipt saved alongside. Photos go through `addAttachment` in
   and the people with their display names (`peopleStatement`) before deciding whether
   to read the bill; the full answer's `readVersion` is hashed from the same rows of its
   own read, so the two always agree.
+- Places: an expense's `location` (as a receipt names it) is found with `searchPlaces`
+  ([places/search.ts](../worker/places/search.ts)) and kept as its place, or answered
+  `locationFound: false`; without one, a new expense takes the first Maps link in its
+  notes that says where (`linkPreview`). Both are looked up before the write (`placeOf`).
 - Receipts: [mcp/receipts.ts](../worker/mcp/receipts.ts) and the `mcp_receipts` table
   ([0019](../migrations/0019_mcp_receipts.sql)), deleted with their split
   (`splits/lifecycle.ts`).

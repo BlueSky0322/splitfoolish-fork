@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { findLinks, shortLink } from './text';
+import { findLinks } from '@shared/links';
+import { shortLink } from './text';
 
 describe('findLinks', () => {
   it('finds http, https and www addresses, leaving the words around them', () => {
