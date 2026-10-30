@@ -44,23 +44,41 @@ export const toPlace = (lat: number, lng: number, name: string | null = null): P
 export const mapsUrl = ({ lat, lng }: Place) =>
   `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
-/** One coordinate as Google Maps writes it: 3°52'54.0"N */
-function dms(degrees: number, positive: string, negative: string) {
-  // In tenths of a second, so 59.96" carries into the next minute rather than reading 60.0"
-  const tenths = Math.round(Math.abs(degrees) * 36_000);
-  const d = Math.floor(tenths / 36_000);
-  const m = Math.floor((tenths % 36_000) / 600);
-  const s = (tenths % 600) / 10;
-  const pad = (n: number, width: number) => n.toFixed(width === 4 ? 1 : 0).padStart(width, '0');
-  return `${d}°${pad(m, 2)}'${pad(s, 4)}"${degrees < 0 ? negative : positive}`;
+// Plus codes (Open Location Code, an open standard Google Maps shows for places with no
+// address): 10 characters, a box about 14 m across
+
+const PLUS_CODE_DIGITS = '23456789CFGHJMPQRVWX';
+/** The smallest box a 10-character code names: 1/8000 of a degree each way */
+const PLUS_CODE_STEPS = 8000;
+
+/** A position's plus code in full: 6PH5G444+HQ */
+export function plusCode(lat: number, lng: number) {
+  // Latitude stops just short of the pole; longitude goes round the world
+  const north = Math.min(Math.max(lat + 90, 0), 180 - 1 / PLUS_CODE_STEPS);
+  const east = (((lng + 180) % 360) + 360) % 360;
+  // Whole steps, rounded first so a position on a line isn't put a step short by how
+  // floating point adds (as Open Location Code's own implementations do)
+  let y = Math.floor(Math.round(north * PLUS_CODE_STEPS * 1e6) / 1e6);
+  let x = Math.floor(Math.round(east * PLUS_CODE_STEPS * 1e6) / 1e6);
+  const pairs: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    pairs.unshift(PLUS_CODE_DIGITS[Math.floor(y % 20)] + PLUS_CODE_DIGITS[Math.floor(x % 20)]);
+    y = Math.floor(y / 20);
+    x = Math.floor(x / 20);
+  }
+  const code = pairs.join('');
+  return `${code.slice(0, 8)}+${code.slice(8)}`;
 }
 
-/** A position as Google Maps shows a dropped pin: 3°52'54.0"N 100°48'13.6"E */
-export const coordsLabel = (lat: number, lng: number) =>
-  `${dms(lat, 'N', 'S')} ${dms(lng, 'E', 'W')}`;
+/**
+ * A position as Google Maps names a spot with no address: its plus code, short with the
+ * town it's in ("G444+HQ Sekinchan, Selangor", as the town says the rest), else in full
+ */
+export const plusCodeLabel = (lat: number, lng: number, town: string | null = null) =>
+  town ? `${plusCode(lat, lng).slice(4)} ${town}` : plusCode(lat, lng);
 
-/** What a place is called: its name, or where it is on the map when nothing's known */
-export const placeLabel = (place: Place) => place.name ?? coordsLabel(place.lat, place.lng);
+/** What a place is called: its name, or its plus code when nothing's known */
+export const placeLabel = (place: Place) => place.name ?? plusCodeLabel(place.lat, place.lng);
 
 /** What GET /api/place-name answers: what is at a position, or null when nothing's known */
 export interface PlaceName {

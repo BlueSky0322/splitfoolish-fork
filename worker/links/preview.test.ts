@@ -125,10 +125,10 @@ describe('a Maps link card', () => {
       position: { lat: 3.88166, lng: 100.80379 },
       site: 'goo.gl',
     });
-    // Nothing known there: the pin and its position
+    // Nothing known there: its plus code
     expect(await fetchPreview('https://goo.gl/maps/5AsHsHdzQVM3KtAY9?g_st=ac')).toMatchObject({
-      title: 'Dropped pin',
-      address: `3°52'54.0"N 100°48'13.6"E`,
+      title: '6PM2VRJ3+MG',
+      address: 'Dropped pin',
     });
     expect(positionFromUrl(new URL(PLACE.replace('/@', '/data=!3d3.2!4d101.7/@')))).toEqual({
       lat: 3.2,

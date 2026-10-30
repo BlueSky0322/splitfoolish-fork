@@ -4,7 +4,7 @@
 // themselves, and kept a month per spot (about 11 m), within Nominatim's usage policy:
 // cached, identified, and only as people set places.
 
-import { MAX_PLACE_NAME_LENGTH } from '../../shared/places';
+import { MAX_PLACE_NAME_LENGTH, plusCodeLabel } from '../../shared/places';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/reverse';
 const FETCH_MS = 5_000;
@@ -19,16 +19,18 @@ interface Found {
 }
 
 /**
- * "Name, Town": the spot's own name, else its road, then the town it's in. Out in the
- * country, on a road with no name, the district and state ("Bagan Datuk, Perak").
+ * "Name, Town": the spot's own name, else its road, then the town it's in. A spot known
+ * only by its area (out in the country, on a road with no name) is its plus code there,
+ * as Google Maps writes it ("G444+HQ Sekinchan, Selangor"), when `at` says where it is.
  */
-export function nameOf(found: Found): string | null {
+export function nameOf(found: Found, at?: { lat: number; lng: number }): string | null {
   const a = found.address ?? {};
   const own = found.name?.trim() || a.road || a.neighbourhood || a.suburb;
   const town = a.city ?? a.town ?? a.village ?? a.municipality ?? a.district ?? a.county;
   const parts = (own ? [own, town ?? a.state] : [town, a.state]).filter(
     (p, i, all): p is string => !!p && all.indexOf(p) === i,
   );
+  if (!own && at && parts.length > 0) return plusCodeLabel(at.lat, at.lng, parts.join(', '));
   const name = parts.join(', ');
   if (name === '') return null;
   return name.length <= MAX_PLACE_NAME_LENGTH
@@ -44,7 +46,8 @@ export async function placeName(
 ): Promise<string | null> {
   // Nearby spots share a name: a phone's fix moves by a few metres between tries
   const [la, ln] = [lat.toFixed(4), lng.toFixed(4)];
-  const key = new Request(`https://place-names.splitfoolish/${la},${ln}`);
+  // v2: spots known only by their area are named by their plus code
+  const key = new Request(`https://place-names.splitfoolish/v2/${la},${ln}`);
   const cache = (caches as unknown as { default: Cache }).default;
   const kept = await cache.match(key);
   if (kept) return (await kept.json<{ name: string | null }>()).name;
@@ -62,7 +65,7 @@ export async function placeName(
   } catch {
     return null;
   }
-  const name = nameOf(found);
+  const name = nameOf(found, { lat, lng });
   ctx.waitUntil(
     cache.put(
       key,
