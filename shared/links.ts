@@ -26,8 +26,9 @@ const MAPS_GOOGLE = /^maps\.google(\.com?)?(\.[a-z]{2})?$/;
 const HOST_AND_PATH = /^https?:\/\/([a-z0-9.-]+)(?::\d+)?(\/[^?#]*)?(?:[?#]|$)/i;
 
 /**
- * A Google Maps address, as written: a shared place link (maps.app.goo.gl), or a map or
- * place on Google's sites. Plain text parsing, as shared code has no URL to lean on.
+ * A Google Maps address, as written: a shared place link (maps.app.goo.gl, or Google's
+ * newer share.google, which may turn out to be a place), or a map or place on Google's
+ * sites. Plain text parsing, as shared code has no URL to lean on.
  */
 export function isMapsLink(address: string) {
   const match = HOST_AND_PATH.exec(address);
@@ -36,6 +37,7 @@ export function isMapsLink(address: string) {
   const path = match[2] ?? '/';
   return (
     host === 'maps.app.goo.gl' ||
+    host === 'share.google' ||
     (host === 'goo.gl' && path.startsWith('/maps')) ||
     MAPS_GOOGLE.test(host) ||
     (GOOGLE.test(host) && path.startsWith('/maps'))

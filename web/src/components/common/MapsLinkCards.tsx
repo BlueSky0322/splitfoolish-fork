@@ -3,6 +3,7 @@ import { mapsLinksIn } from '@shared/links';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { linkPreviewQuery } from '../../split/link-previews';
+import { shortLink } from '../../utils/text';
 import { MiniMap } from '../ui/MiniMap';
 import classes from './MapsLinkCards.module.css';
 
@@ -33,7 +34,7 @@ export function MapsLinkCards({ text }: { text: string | null }) {
 /** What Google says a link is: shared by its card and its place in the notes */
 const usePreview = (url: string) => useQuery(linkPreviewQuery(url));
 
-/** A Maps link in the notes' text: the place's name with a pin, not its address */
+/** A Maps link in the notes' text: the place's name with a pin, else its address, short */
 export function MapsLinkName({ url }: { url: string }) {
   const title = usePreview(url).data?.title;
   return (
@@ -45,12 +46,14 @@ export function MapsLinkName({ url }: { url: string }) {
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
     >
-      <MapPin
-        size={14}
-        weight="fill"
-        className={classes.namePin}
-      />
-      {title ?? 'Google Maps'}
+      {title != null && (
+        <MapPin
+          size={14}
+          weight="fill"
+          className={classes.namePin}
+        />
+      )}
+      {title ?? shortLink(url)}
     </a>
   );
 }
@@ -58,6 +61,8 @@ export function MapsLinkName({ url }: { url: string }) {
 function MapsLinkCard({ url }: { url: string }) {
   const preview = usePreview(url);
   const place = preview.data?.title != null ? preview.data : null;
+  // Something shared from Google that turned out not to be a place has no card
+  if (place == null && preview.isSuccess && /^https?:\/\/share\.google\//i.test(url)) return null;
   const site = preview.data?.site ?? siteOf(url);
   return (
     <a

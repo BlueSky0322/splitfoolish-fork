@@ -41,6 +41,7 @@ describe('which links get a card', () => {
   it('takes Google Maps links, and nothing else', () => {
     for (const yes of [
       'https://maps.app.goo.gl/abc123',
+      'https://share.google/P2KCOX2QH6QhNjrIb',
       'https://goo.gl/maps/xyz',
       'https://maps.google.com/?q=APW',
       'https://www.google.com/maps/place/APW',
@@ -133,6 +134,52 @@ describe('a Maps link card', () => {
       lat: 3.2,
       lng: 101.7,
     });
+  });
+
+  it('names a place shared from Google (share.google) from where it leads, never reading Google Search', async () => {
+    const SHARED = 'https://share.google/P2KCOX2QH6QhNjrIb';
+    const HOP = 'https://www.google.com/share.google?q=P2KCOX2QH6QhNjrIb';
+    const search = (source: string) =>
+      `https://www.google.com/search?kgmid=/g/11cn8sfb8r&q=Kedai+Kopi+168&source=${source}`;
+    const asked = stubWeb({
+      [SHARED]: () => redirect(HOP),
+      [HOP]: () => redirect(search('sh/x/loc/uni/m1/1')),
+    });
+    expect(await fetchPreview(SHARED)).toEqual({
+      url: SHARED,
+      title: 'Kedai Kopi 168',
+      address: null,
+      detail: null,
+      image: null,
+      site: 'share.google',
+      // Google says where only on pages this doesn't read
+      position: null,
+    });
+    expect(asked).toEqual([SHARED, HOP]);
+
+    // Something else shared (a search, an article) names no place
+    const other = stubWeb({
+      [SHARED]: () => redirect(HOP),
+      [HOP]: () => redirect(search('sh/x/srp/m1/1')),
+    });
+    expect(await fetchPreview(SHARED)).toMatchObject({ title: null, position: null });
+    expect(other).toEqual([SHARED, HOP]);
+  });
+
+  it("takes a place's position from the map Google draws of it, not its map of nowhere", async () => {
+    const page = (
+      center: string,
+    ) => `<meta content="Kedai Kopi 168 · Jalan SS 2/24, Petaling Jaya" property="og:title">
+<meta content="https://maps.google.com/maps/api/staticmap?center=${center}&amp;zoom=15&amp;markers=x" property="og:image">`;
+    const shared = 'https://maps.google.com/?q=Kedai+Kopi+168&ftid=0x1';
+    stubWeb({ [shared]: () => new Response(page('3.1187%2C101.6205')) });
+    expect(await fetchPreview(shared)).toMatchObject({
+      title: 'Kedai Kopi 168',
+      image: null,
+      position: { lat: 3.1187, lng: 101.6205 },
+    });
+    stubWeb({ [shared]: () => new Response(page('37.0625%2C-95.677068')) });
+    expect((await fetchPreview(shared)).position).toBeNull();
   });
 
   it('has nothing to show for a link that names no place and cannot be read', async () => {

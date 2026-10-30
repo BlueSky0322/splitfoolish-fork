@@ -212,6 +212,58 @@ describe('places', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
+  test('a Maps link pasted into the search is its exact place; a shared link that only names one searches for it', async () => {
+    const server = fakeServer(trip());
+    const PIN = 'https://goo.gl/maps/pin123';
+    const SHARED = 'https://share.google/P2KCOX2QH6QhNjrIb';
+    server.linkPreviews.set(PIN, {
+      title: 'Bagan Datuk, Perak',
+      address: 'Dropped pin',
+      detail: null,
+      image: null,
+      site: 'goo.gl',
+      position: { lat: 3.88166, lng: 100.80379 },
+    });
+    server.linkPreviews.set(SHARED, {
+      title: 'Kedai Kopi 168',
+      address: null,
+      detail: null,
+      image: null,
+      site: 'share.google',
+      position: null,
+    });
+    server.places.set('kedai kopi 168', [
+      { lat: 3.11872, lng: 101.62051, name: 'Kedai Kopi 168, Petaling Jaya', address: 'SS 2' },
+    ]);
+    renderApp(server, '/?s=trip');
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Dinner'));
+    const form = within(await screen.findByRole('dialog'));
+    const search = form.getByRole('textbox', { name: 'Search for a place' });
+    await user.click(search);
+    await user.paste(SHARED);
+    expect(await form.findByText(/doesn't say exactly where Kedai Kopi 168 is/)).toBeTruthy();
+    expect(
+      await form.findByRole('button', { name: /^Kedai Kopi 168, Petaling Jaya/ }),
+    ).toBeTruthy();
+    expect(server.placeSearches.map((s) => s.text)).toEqual(['Kedai Kopi 168']);
+
+    await user.clear(search);
+    await user.paste(PIN);
+    await user.click(
+      await form.findByRole('button', { name: /^Bagan Datuk, Perak\s*From the link/ }),
+    );
+    expect(form.getByRole('link', { name: 'Bagan Datuk, Perak' })).toBeTruthy();
+    await user.click(form.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(server.splits.get('trip')!.items[0].place).toEqual({
+        lat: 3.88166,
+        lng: 100.80379,
+        name: 'Bagan Datuk, Perak',
+      }),
+    );
+  });
+
   test('with Record my location off, the phone is never asked, but a receipt or a Maps link still gives a place', async () => {
     const server = fakeServer(trip());
     const PIN = 'https://goo.gl/maps/pin123';

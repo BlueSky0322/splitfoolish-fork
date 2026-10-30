@@ -137,7 +137,11 @@ it current.
   as cards with the place's picture, name and address
   ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
   the item sheet and the form; several side by side, to swipe). In the item sheet's text
-  a Maps link reads as its place's name (`MapsLinkName`). The Worker reads them from the tags Google's page has
+  a Maps link reads as its place's name (`MapsLinkName`). A share.google link goes on to
+  Google Search, which is never fetched: the address it redirects to names the place
+  (marked `sh/x/loc`), but not where it is, so its card has no map and the form searches
+  its name rather than taking it as the item's place. A place page's own map (its
+  `staticmap` picture) gives its position when the address doesn't. The Worker reads them from the tags Google's page has
   for link previews (`GET /api/link-preview`,
   [worker/links/preview.ts](../worker/links/preview.ts)), following redirects only
   within Google Maps (`isMapsLink` in [shared/links.ts](../shared/links.ts)) and keeping
@@ -529,6 +533,8 @@ method through a profile change.
   ([PlaceField](../web/src/components/split/forms/PlaceField.tsx)) shows the place with
   Remove location, or searches as it's typed (`usePlaceSearch`, 300 ms after the last
   key, near the phone or the split's latest place) and offers Use my current location.
+  A Maps link pasted into it is offered as its exact place when the link says where,
+  else its name is searched for.
   The search is komoot's Photon through the Worker (`GET /api/place-search`,
   [worker/places/search.ts](../worker/places/search.ts), kept a week per search and
   area): OpenStreetMap's own search forbids searching as people type. Only places in
