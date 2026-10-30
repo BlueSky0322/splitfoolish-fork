@@ -142,6 +142,18 @@
   white-space: nowrap;
 }
 
+/* A Maps link in them: its place, in the accent, with a pin */
+.notePlace {
+  color: var(--sf-accent);
+  font-weight: 500;
+}
+
+.notePlace svg {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 2px;
+}
+
 /* The item's name in the table opens it */
 .nameLink {
   color: inherit;

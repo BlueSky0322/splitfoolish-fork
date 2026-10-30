@@ -281,6 +281,45 @@ describe('places', () => {
     expect(sheet.getByRole('link', { name: '6PM2VRJ3+MG' }).getAttribute('href')).toBe(PIN);
   });
 
+  test('in the list, notes show a Maps link as its place with a pin, and other links short, on a phone and desktop', async () => {
+    const PIN = 'https://maps.app.goo.gl/y8F94Y1RPVDjz7ci8';
+    const server = () => {
+      const s = fakeServer(
+        splitDetail('trip', [
+          item({
+            id: 'stay',
+            name: 'Homestay',
+            cost: 187,
+            notes: `Here ${PIN}\nmenu https://example.com/menu`,
+          }),
+        ]),
+      );
+      s.linkPreviews.set(PIN, {
+        title: 'VRP3+RQ Bagan Datuk, Perak',
+        address: null,
+        detail: null,
+        image: null,
+        site: 'maps.app.goo.gl',
+        position: { lat: 3.88705, lng: 100.80439 },
+      });
+      return s;
+    };
+    for (const size of ['phone', 'desktop'] as const) {
+      cleanup();
+      renderApp(server(), '/?s=trip', { size });
+      const name = await screen.findByText('Homestay');
+      const row = name.closest('button')!;
+      await waitFor(() =>
+        expect(row.textContent).toContain(
+          'Here VRP3+RQ Bagan Datuk, Perak · menu example.com/menu',
+        ),
+      );
+      // The row opens the item: nothing in it is a link of its own
+      expect(within(row).queryAllByRole('link')).toEqual([]);
+      expect(within(row).getByText('VRP3+RQ Bagan Datuk, Perak').querySelector('svg')).toBeTruthy();
+    }
+  });
+
   test('with Record my location off, the phone is never asked, but a receipt or a Maps link still gives a place', async () => {
     const server = fakeServer(trip());
     const PIN = 'https://goo.gl/maps/pin123';

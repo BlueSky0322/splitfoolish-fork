@@ -26,7 +26,10 @@ import { ForWhom, PaidBy } from './PaidBy';
 import { onlyFor } from './only-for';
 import classes from './ItemViews.module.css';
 import { toCents } from '@shared/rates';
-import { plural } from '../../../utils/text';
+import { plural, shortLink } from '../../../utils/text';
+import { isMapsLink } from '@shared/links';
+import LinkedText from '../../ui/LinkedText';
+import { MapsLinkLabel } from '../../common/MapsLinkCards';
 
 interface ItemViewProps {
   groups: ItemGroup[];
@@ -287,9 +290,22 @@ export function ItemCards({
                       <PhotoBadge count={photoCounts.get(item.id)} />
                     </div>
                     {item.notes && (
-                      // One line of the notes, its line breaks run together
+                      // One line of the notes, its line breaks run together, a Maps
+                      // link as its place with a pin and others short (the row opens
+                      // the item, so they aren't links here)
                       <div className={classes.itemNotes}>
-                        {item.notes.replace(/\s*\n+\s*/g, ' · ')}
+                        <LinkedText
+                          text={item.notes.replace(/\s*\n+\s*/g, ' · ')}
+                          renderLink={(href) =>
+                            isMapsLink(href) ? (
+                              <span className={classes.notePlace}>
+                                <MapsLinkLabel url={href} />
+                              </span>
+                            ) : (
+                              shortLink(href)
+                            )
+                          }
+                        />
                       </div>
                     )}
                     <div className={classes.itemMeta}>
