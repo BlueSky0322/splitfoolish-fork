@@ -72,33 +72,57 @@ type Ctx = { waitUntil: (p: Promise<unknown>) => void };
 
 const cache = () => (caches as unknown as { default: Cache }).default;
 
+/** A moment before asking again, when Photon was busy or slow */
+const RETRY_AFTER_MS = 300;
+
+/**
+ * Photon's places for `path` (with its query), or null when it can't answer: asked once
+ * more when it was busy, down or too slow. Why it couldn't is logged, never what was asked.
+ */
+async function askPhoton(base: string, path: string): Promise<PhotonFeature[] | null> {
+  for (let attempt = 1; ; attempt++) {
+    let why: string;
+    try {
+      const res = await fetch(`${base}${path}`, {
+        headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(FETCH_MS),
+      });
+      if (res.ok) {
+        const body = await readBody(res, MAX_ANSWER_BYTES, FETCH_MS);
+        if (typeof body === 'string') {
+          why = `its answer couldn't be read (${body})`;
+        } else {
+          const answer = JSON.parse(new TextDecoder().decode(body)) as {
+            features?: PhotonFeature[];
+          };
+          return answer.features ?? [];
+        }
+      } else {
+        await res.body?.cancel();
+        why = `it answered ${res.status}`;
+        // A refusal of the question itself won't change if asked again
+        if (res.status < 500 && res.status !== 429) attempt = 2;
+      }
+    } catch (e) {
+      why = e instanceof Error ? e.name : 'it failed';
+    }
+    console.warn(`Place search: Photon ${path.split('?')[0]} ${why} (try ${attempt})`);
+    if (attempt >= 2) return null;
+    await new Promise((r) => setTimeout(r, RETRY_AFTER_MS));
+  }
+}
+
 /** The country an area is in ("MY"), from Photon; null when it can't say */
 async function countryAt(area: string[], ctx: Ctx, base: string): Promise<string | null> {
   const key = new Request(`https://place-country.splitfoolish/${area.join(',')}`);
   const kept = await cache().match(key);
   if (kept) return (await kept.json<{ country: string | null }>()).country;
-  let country: string | null;
-  try {
-    const query = new URLSearchParams({ lat: area[0], lon: area[1], limit: '1' });
-    const res = await fetch(`${base}/reverse?${query.toString()}`, {
-      headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(FETCH_MS),
-    });
-    if (!res.ok) {
-      await res.body?.cancel();
-      return null;
-    }
-    const body = await readBody(res, MAX_ANSWER_BYTES, FETCH_MS);
-    if (typeof body === 'string') return null;
-    const { features } = JSON.parse(new TextDecoder().decode(body)) as {
-      features?: PhotonFeature[];
-    };
-    const code = features?.[0]?.properties?.countrycode;
-    // Out at sea there's no country, and that's kept too
-    country = typeof code === 'string' && /^[A-Z]{2}$/i.test(code) ? code.toUpperCase() : null;
-  } catch {
-    return null;
-  }
+  const query = new URLSearchParams({ lat: area[0], lon: area[1], limit: '1' });
+  const features = await askPhoton(base, `/reverse?${query.toString()}`);
+  if (features == null) return null;
+  const code = features[0]?.properties?.countrycode;
+  // Out at sea there's no country, and that's kept too
+  const country = typeof code === 'string' && /^[A-Z]{2}$/i.test(code) ? code.toUpperCase() : null;
   ctx.waitUntil(
     cache().put(
       key,
@@ -145,25 +169,9 @@ export async function searchPlaces(
     query.set('location_bias_scale', '0.1');
     query.set('zoom', '12');
   }
-  let found: PlaceSuggestion[];
-  try {
-    const res = await fetch(`${base}/api/?${query.toString()}`, {
-      headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(FETCH_MS),
-    });
-    if (!res.ok) {
-      await res.body?.cancel();
-      return null;
-    }
-    const body = await readBody(res, MAX_ANSWER_BYTES, FETCH_MS);
-    if (typeof body === 'string') return null;
-    const { features } = JSON.parse(new TextDecoder().decode(body)) as {
-      features?: PhotonFeature[];
-    };
-    found = (features ?? []).flatMap((f) => toSuggestion(f) ?? []);
-  } catch {
-    return null;
-  }
+  const features = await askPhoton(base, `/api/?${query.toString()}`);
+  if (features == null) return null;
+  let found = features.flatMap((f) => toSuggestion(f) ?? []);
   // The same spot twice (a shop and its building) is offered once; a chain's branches,
   // each at its own address, all are
   found = found.filter(

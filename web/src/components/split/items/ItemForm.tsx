@@ -11,13 +11,13 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import {
-  ArrowSquareOut,
   CalendarBlank,
   Check,
   Copy,
   DotsThree,
   HandCoins,
   Minus,
+  PencilSimple,
   Plus,
   Trash,
 } from '@phosphor-icons/react';
@@ -57,10 +57,11 @@ import { DialogHeaderSlot } from '../../ui/dialog-header';
 import PersonAvatar, { PersonName } from '../PersonAvatar';
 import SplitBetween from './SplitBetween';
 import classes from './ItemForm.module.css';
-import { plural, shortLink } from '../../../utils/text';
+import { plural } from '../../../utils/text';
 import { findLinks, isMapsLink, mapsLinksIn } from '@shared/links';
 import { linkPreviewQuery } from '../../../split/link-previews';
-import { MapsLinkCards } from '../../common/MapsLinkCards';
+import { MapsLinkCards, MapsLinkName } from '../../common/MapsLinkCards';
+import LinkedText from '../../ui/LinkedText';
 import { buildItemInput, exactCents } from '../../../split/item-input';
 import { useAmountConversion } from '../../../split/useAmountConversion';
 
@@ -209,11 +210,9 @@ const ItemForm = ({
   const [category, setCategory] = useState<string>(categoryKey(item?.category ?? null));
   const [categoryPicked, setCategoryPicked] = useState(item != null);
   const [notes, setNotes] = useState(item?.notes ?? '');
-  // Maps links show as cards under the notes; the rest as plain links
-  const links = useMemo(
-    () => findLinks(notes).filter((p) => p.href != null && !isMapsLink(p.href)),
-    [notes],
-  );
+  // Notes with links show them as links until they're edited
+  const hasLinks = useMemo(() => findLinks(notes).some((p) => p.href != null), [notes]);
+  const [editingNotes, setEditingNotes] = useState(false);
   // A Maps link put in the notes here gives the item its place, as a receipt does: the
   // link's position, named as its card is
   const [linkBefore] = useState(() => mapsLinksIn(item?.notes ?? '')[0] ?? null);
@@ -642,42 +641,58 @@ const ItemForm = ({
       )}
       {isMobile && categorySelect}
 
-      <Textarea
-        label="Notes"
-        placeholder="What was ordered, who still owes, anything else"
-        value={notes}
-        onChange={(e) => setNotes(e.currentTarget.value)}
-        autosize
-        minRows={2}
-        maxRows={10}
-        maxLength={MAX_NOTES_LENGTH}
-        description={
-          notes.length > MAX_NOTES_LENGTH - 200
-            ? `${MAX_NOTES_LENGTH - notes.length} characters left`
-            : undefined
-        }
-        inputWrapperOrder={['label', 'input', 'description']}
-      />
-      <MapsLinkCards text={notes} />
-      {links.length > 0 && (
-        // The addresses in the notes, to open from here: on desktop the form is where
-        // an item's notes are read in full
-        <div className={classes.links}>
-          {links.map((l) => (
-            <a
-              key={l.href}
-              className={classes.link}
-              href={l.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={l.href}
+      {hasLinks && !editingNotes ? (
+        // Notes with links read as they do on the item: Maps links as their place, others
+        // short. A click anywhere but a link, or Edit notes, puts them back in a text box.
+        <div className={classes.field}>
+          <div className={classes.label}>Notes</div>
+          <div
+            className={classes.notesView}
+            onClick={() => setEditingNotes(true)}
+          >
+            <p className={classes.notesText}>
+              <LinkedText
+                text={notes}
+                renderLink={(href) => (isMapsLink(href) ? <MapsLinkName url={href} /> : null)}
+              />
+            </p>
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              className={classes.notesEdit}
+              leftSection={<PencilSimple size={14} />}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingNotes(true);
+              }}
             >
-              <ArrowSquareOut size={14} />
-              {shortLink(l.href!)}
-            </a>
-          ))}
+              Edit notes
+            </Button>
+          </div>
         </div>
+      ) : (
+        <Textarea
+          label="Notes"
+          placeholder="What was ordered, who still owes, anything else"
+          value={notes}
+          onChange={(e) => setNotes(e.currentTarget.value)}
+          // Typed in, they stay a text box; back to reading them once they're left
+          onFocus={() => setEditingNotes(true)}
+          onBlur={() => setEditingNotes(false)}
+          autoFocus={editingNotes}
+          autosize
+          minRows={2}
+          maxRows={10}
+          maxLength={MAX_NOTES_LENGTH}
+          description={
+            notes.length > MAX_NOTES_LENGTH - 200
+              ? `${MAX_NOTES_LENGTH - notes.length} characters left`
+              : undefined
+          }
+          inputWrapperOrder={['label', 'input', 'description']}
+        />
       )}
+      <MapsLinkCards text={notes} />
       <PlaceField
         place={place}
         near={near}
