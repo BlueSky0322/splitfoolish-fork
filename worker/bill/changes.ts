@@ -3,6 +3,7 @@
 // current contents and applied all-or-nothing, touching only the rows involved, so
 // people editing the same split don't overwrite each other.
 
+import type { Place } from '../../shared/places';
 import { type ChangesBody, MAX_CHANGES, isRowId } from '../../shared/api';
 import { convertCents, convertParts, fitsItemCents, isCurrency } from '../../shared/rates';
 import type { Actor } from '../../shared/rules';
@@ -145,6 +146,14 @@ const deleteItemsStatements = (db: D1Database, where: 'id = ?' | 'split_id = ?',
 };
 
 /** The original-currency columns for an item or payment, in the order the queries list them */
+
+/** Sets or clears where an item was paid for */
+const placeStatements = (db: D1Database, itemId: string, place: Place | null) => [
+  db
+    .prepare('UPDATE items SET place_lat = ?, place_lng = ?, place_name = ? WHERE id = ?')
+    .bind(place?.lat ?? null, place?.lng ?? null, place?.name ?? null, itemId),
+];
+
 const conversionValues = (c: ModelItem['converted']) => [
   c?.currency ?? null,
   c?.cents ?? null,
@@ -317,6 +326,7 @@ function changeStatements(
             createdAt,
             ...conversionValues(item.converted),
           ),
+        ...placeStatements(db, item.id, item.place ?? null),
         ...insertParticipantsStatements(db, item.id, item.participants),
       ];
     }
@@ -343,6 +353,8 @@ function changeStatements(
             ...conversionValues(item.converted),
             item.id,
           ),
+        // Left out by an app from before places: the item keeps its own
+        ...(item.place === undefined ? [] : placeStatements(db, item.id, item.place)),
         db.prepare('DELETE FROM item_participants WHERE item_id = ?').bind(item.id),
         ...insertParticipantsStatements(db, item.id, item.participants),
       ];

@@ -76,6 +76,7 @@ describe('the items in an export', () => {
           { name: 'Ben', cents: 3333 },
         ],
         notes: null,
+        place: null,
       },
     ]);
   });

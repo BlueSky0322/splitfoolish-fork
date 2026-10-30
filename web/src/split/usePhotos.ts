@@ -3,6 +3,9 @@ import { api } from '../api';
 import type { MetaChanges } from './state';
 import type { SplitMeta } from './state';
 import type { Attachment } from '@shared/api';
+import { useProfile } from '../profile/ProfileContext';
+import { type PhotoSource, locatePhotos } from './photo-places';
+import type { Position } from '../utils/here';
 import {
   type QueuedPhoto,
   addPhotos,
@@ -50,9 +53,26 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
   }, [all, splitId]);
   const queuedOf = useCallback((itemId: string | null) => queued[itemId ?? ''] ?? NONE, [queued]);
 
+  // Where each was taken goes with it, unless this account has turned that off. Answers
+  // the first place found, for an item that has none yet to take.
+  const savePlaces = useProfile().profile?.settings.savePlaces ?? true;
   const upload = useCallback(
-    (files: File[], itemId: string | null) => addPhotos(splitId, itemId, files),
-    [splitId],
+    async (
+      files: File[],
+      itemId: string | null,
+      from: PhotoSource | (Position | null)[] = 'library',
+    ) => {
+      // The photos show at once; where they were taken is kept with them once known.
+      // Photos picked for an item not yet added were located as they were picked.
+      const places = !savePlaces
+        ? Promise.resolve([])
+        : Array.isArray(from)
+          ? Promise.resolve(from)
+          : locatePhotos(files, from);
+      void addPhotos(splitId, itemId, files, places);
+      return (await places).find((p) => p != null) ?? null;
+    },
+    [splitId, savePlaces],
   );
 
   /** Removes a photo still waiting to upload; it was only ever on this device */

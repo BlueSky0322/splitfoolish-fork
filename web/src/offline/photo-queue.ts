@@ -1,3 +1,4 @@
+import type { Position } from '../utils/here';
 import type { Attachment } from '@shared/api';
 import { api } from '../api';
 import { newId } from '../utils/id';
@@ -40,6 +41,8 @@ interface Kept {
   createdAt: number;
   type: string;
   bytes: ArrayBuffer;
+  /** Where it was taken; missing from photos kept before places */
+  place?: Position | null;
 }
 
 /** A photo this page knows of */
@@ -48,6 +51,8 @@ interface Held extends QueuedPhoto {
   preparing: boolean;
   /** Known to be on the device; one that isn't is sent from memory */
   onDevice: boolean;
+  /** Where it was taken, read before it was shrunk; null when nobody said */
+  place: Position | null;
 }
 
 // Also used by public/sw.js, which can't import them (photo-queue.test.ts checks they match)
@@ -153,6 +158,13 @@ const readBytes = (blob: Blob) =>
     reader.readAsArrayBuffer(blob);
   });
 
+/** A position kept with a photo, as read back from storage */
+const isPosition = (value: unknown): value is Position =>
+  typeof value === 'object' &&
+  value != null &&
+  typeof (value as Position).lat === 'number' &&
+  typeof (value as Position).lng === 'number';
+
 /** Kept by whichever build: only what still has everything an upload needs */
 const isKept = (k: unknown): k is Kept =>
   typeof k === 'object' &&
@@ -197,6 +209,7 @@ async function loadKept(splitId?: string) {
         busy: false,
         preparing: false,
         onDevice: true,
+        place: isPosition(kept.place) ? kept.place : null,
       });
     }
     any = true;
@@ -253,7 +266,8 @@ async function upload(photo: Held, gen: number): Promise<boolean> {
         return true;
       }
       // With its own id: if the answer is lost and it's sent again, it isn't added twice
-      const added = await api.uploadAttachment(photo.splitId, image, photo.itemId, photo.id);
+      const place = isKept(kept) && isPosition(kept.place) ? kept.place : photo.place;
+      const added = await api.uploadAttachment(photo.splitId, image, photo.itemId, photo.id, place);
       if (gen !== generation) return true;
       await removeCacheEntry(photoKey(photo));
       open.get(photo.splitId)?.onUploaded(added);
@@ -433,8 +447,11 @@ export function openSplitPhotos(splitId: string, hooks: OpenSplit): () => void {
 
 // ---------- Adding and removing ----------
 
-/** Shrinks a picked photo and keeps it on the device; false if it can't be read */
-async function prepare(photo: Held, file: Blob, gen: number) {
+/**
+ * Shrinks a picked photo and keeps it on the device, with where it was taken once that's
+ * known; false if it can't be read
+ */
+async function prepare(photo: Held, file: Blob, gen: number, place: Promise<Position | null>) {
   const done = await takeTurn();
   try {
     let image: Blob;
@@ -447,6 +464,7 @@ async function prepare(photo: Held, file: Blob, gen: number) {
       }
       return false;
     }
+    photo.place = await place.catch(() => null);
     if (gen !== generation || held.get(photo.id) !== photo) return false;
     try {
       const { id, splitId, itemId, name, createdAt } = photo;
@@ -459,6 +477,7 @@ async function prepare(photo: Held, file: Blob, gen: number) {
         createdAt,
         type: image.type || 'image/jpeg',
         bytes,
+        place: photo.place,
       });
       // Not kept (storage full, say): the app says so
       reportKept(photo.onDevice);
@@ -480,8 +499,14 @@ async function prepare(photo: Held, file: Blob, gen: number) {
 /**
  * Adds photos to a split, or receipts to one of its items. They show at once, and are
  * shrunk and kept on the device (resolving once they are), then uploaded when they can.
+ * `places` says where each was taken, read from the original before it's shrunk.
  */
-export async function addPhotos(splitId: string, itemId: string | null, files: File[]) {
+export async function addPhotos(
+  splitId: string,
+  itemId: string | null,
+  files: File[],
+  places: Promise<(Position | null)[]> = Promise.resolve([]),
+) {
   listenForResume();
   const gen = generation;
   const picked = files.map((file): Held => {
@@ -497,13 +522,23 @@ export async function addPhotos(splitId: string, itemId: string | null, files: F
       busy: true,
       preparing: true,
       onDevice: false,
+      place: null,
     };
   });
   for (const photo of picked) held.set(photo.id, photo);
   changed();
   await Promise.all(
     picked.map(async (photo, i) => {
-      if (await prepare(photo, files[i], gen)) void sendSplit(splitId);
+      if (
+        await prepare(
+          photo,
+          files[i],
+          gen,
+          places.then((all) => all[i] ?? null),
+        )
+      ) {
+        void sendSplit(splitId);
+      }
     }),
   );
 }

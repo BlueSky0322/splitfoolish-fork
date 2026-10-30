@@ -499,6 +499,18 @@ method through a profile change.
   [AddPhotosSheet](../web/src/components/split/photos/AddPhotosSheet.tsx) to pick
   between them: for the Photos tab and an item's Add photo alike.
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
+- Where a photo was taken: [split/photo-places.ts](../web/src/split/photo-places.ts)
+  reads the GPS position the camera wrote into it ([utils/exif.ts](../web/src/utils/exif.ts))
+  before it's shrunk (which drops it), and for one just taken here asks where the phone
+  is ([utils/here.ts](../web/src/utils/here.ts)). The pickers say which (`PhotoSource`).
+  The position is kept with the queued photo and sent as `lat` and `lng` with it
+  (`api.uploadAttachment`, and `web/public/sw.js` for the ones it sends); the Worker
+  keeps it beside the photo, never in the picture. An item that has no place takes its
+  first located receipt's, in the form ([PlaceField](../web/src/components/split/forms/PlaceField.tsx),
+  which also offers Use my location and Remove location); the item sheet and the photo
+  details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx)).
+  Places are checked the same way on both sides ([shared/places.ts](../shared/places.ts)).
+  Settings' Locations section turns saving them off for the account (`savePlaces`).
 - Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
   on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
   in the item form, with a spinner on their way up or marked as waiting.
@@ -535,6 +547,11 @@ sends them, one at a time and oldest first, after the changes kept with them.
   Where the browser has Web Locks, each upload takes a lock per photo and checks it's
   still kept, so two tabs (or a tab and the service worker) don't both send it.
 - The file type comes from the bytes, not what the upload says.
+- A photo's location is kept beside it, never in the picture: the photo is re-encoded
+  on the device before upload, which drops what the camera wrote. Only accounts with
+  Save locations on send one, and a photo from the library without one never asks the
+  phone where it is (it could have been taken anywhere). Everyone in the split sees an
+  item's or photo's place.
 - Pictures and photos are private, so every showing is checked by the server: they're
   sent `private, no-cache` with an ETag naming their content (a photo's id, a picture's
   version), and a browser's copy is answered with a 304 once the viewer is checked

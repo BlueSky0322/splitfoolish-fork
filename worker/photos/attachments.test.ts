@@ -10,7 +10,8 @@ import { uploadAttachment } from './attachments';
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 const PHOTO_ID = '0123456789abcdef';
 
-const saved: Attachment & { splitId: string } = {
+/** The photo as the other request saved it, as its row reads back */
+const saved = {
   id: PHOTO_ID,
   splitId: 'trip',
   itemId: null,
@@ -18,13 +19,15 @@ const saved: Attachment & { splitId: string } = {
   contentType: 'image/jpeg',
   uploadedBy: 'ryan@example.com',
   createdAt: 1,
+  placeLat: 3.34017,
+  placeLng: 101.2505,
 };
 
 /**
  * A database where the photo isn't there when first looked for, saving it fails as
  * another request just saved `meanwhile`, and looking again finds that
  */
-function racedDatabase(meanwhile: (Attachment & { splitId: string }) | null) {
+function racedDatabase(meanwhile: typeof saved | null) {
   let batches = 0;
   const statement = { bind: () => statement, first: () => Promise.resolve(meanwhile) };
   return {
@@ -57,8 +60,15 @@ describe('a photo sent twice at the same moment', () => {
   test('answers with the photo the other request saved', async () => {
     const res = await send(racedDatabase(saved));
     expect(res.status).toBe(200);
-    const { splitId: _, ...attachment } = saved;
-    expect(await res.json()).toEqual(attachment);
+    expect(await res.json()).toEqual<Attachment>({
+      id: PHOTO_ID,
+      itemId: null,
+      size: JPEG.length,
+      contentType: 'image/jpeg',
+      uploadedBy: 'ryan@example.com',
+      createdAt: 1,
+      place: { lat: 3.34017, lng: 101.2505, name: null },
+    });
   });
 
   test("refuses when that id was someone else's photo", async () => {

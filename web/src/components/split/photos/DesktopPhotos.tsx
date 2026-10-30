@@ -474,7 +474,7 @@ const FilterLabel = ({ label, count }: { label: string; count: number }) => (
 /** The page's main button on the Photos tab: picks photos to add to the split */
 export function AddPhotosButton({ disabled, miw }: { disabled?: boolean; miw?: number }) {
   const { photos } = useSplitPage();
-  const picker = usePhotoPicker((files) => void photos.upload(files, null));
+  const picker = usePhotoPicker((files, from) => void photos.upload(files, null, from));
   return (
     <>
       {picker.inputs}

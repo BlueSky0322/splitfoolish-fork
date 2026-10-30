@@ -27,6 +27,7 @@ import {
 import { convertCents, convertParts, rateDay, toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
+import { type Place, isPosition, toPlace } from '@shared/places';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
 import { forgetOfflineWork } from '../offline/sync';
@@ -148,7 +149,7 @@ export interface FakeServer {
   /** Every batch of changes the app sent, by split */
   sent: { splitId: string; changes: Change[] }[];
   /** Every photo the app uploaded and the server kept, in the order they arrived */
-  uploads: { splitId: string; itemId: string | null; image: Blob }[];
+  uploads: { splitId: string; itemId: string | null; image: Blob; place: Place | null }[];
   /**
    * The next save of the profile, a split's changes or its settings, the next photo
    * upload, or the next agent disconnected, answers with this status
@@ -643,7 +644,13 @@ function answerNow(server: FakeServer) {
         return json({ error: 'No photo was sent' }, 400);
       }
       if (image.size > MAX_PHOTO_BYTES) return json({ error: 'That photo is too large' }, 413);
-      server.uploads.push({ splitId: split.id, itemId, image });
+      // Where it was taken: both or neither, on the map, kept to 5 places
+      const [lat, lng] = [url.searchParams.get('lat'), url.searchParams.get('lng')];
+      if ((lat != null || lng != null) && !(lat != null && lng != null && isPosition(+lat, +lng))) {
+        return json({ error: 'Where a photo was taken is a latitude and longitude' }, 400);
+      }
+      const place = lat != null && lng != null ? toPlace(+lat, +lng) : null;
+      server.uploads.push({ splitId: split.id, itemId, image, place });
       const added: Attachment = {
         id: photoId ?? `photo-${server.uploads.length}`,
         itemId,
@@ -651,6 +658,7 @@ function answerNow(server: FakeServer) {
         contentType: 'image/jpeg',
         uploadedBy: server.me.email,
         createdAt: Date.now(),
+        place,
       };
       split.attachments.push(added);
       return json(added, 201);

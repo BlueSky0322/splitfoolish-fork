@@ -25,6 +25,7 @@ import { type Dialog, useSplitPage } from '../SplitPageContext';
 import type { DeleteItems } from '../items/delete-items';
 import { canDeleteSplit, canEditSplitSettings } from '@shared/rules';
 import { atTimeNow } from '../../../utils/date-input';
+import type { Position } from '../../../utils/here';
 
 interface SplitDialogsProps {
   /** The one open, if any */
@@ -84,7 +85,12 @@ const SplitDialogs = ({ dialog, deleteItems, onShowItems }: SplitDialogsProps) =
   // The item being edited, when the item form is open for one
   const editing = dialog?.kind === 'edit' ? dialog.item : null;
 
-  const saveItem = (input: ItemInput, newPhotos: File[], day: Date | null) => {
+  const saveItem = (
+    input: ItemInput,
+    newPhotos: File[],
+    day: Date | null,
+    newPhotoPlaces: (Position | null)[],
+  ) => {
     if (dialog?.kind === 'edit') {
       const ok = actions.updateItem(dialog.item.id, input, day ? { day } : {});
       if (ok) close();
@@ -94,7 +100,7 @@ const SplitDialogs = ({ dialog, deleteItems, onShowItems }: SplitDialogsProps) =
     const ok = actions.addItem(input, day == null ? { id } : { id, createdAt: atTimeNow(day) });
     if (ok) {
       close();
-      if (newPhotos.length > 0) void photos.upload(newPhotos, id);
+      if (newPhotos.length > 0) void photos.upload(newPhotos, id, newPhotoPlaces);
     }
     return ok;
   };

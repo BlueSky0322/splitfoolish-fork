@@ -1,3 +1,4 @@
+import type { Position } from './utils/here';
 import {
   CLIENT_ID_HEADER,
   EXPECTED_ACCOUNT_HEADER,
@@ -192,9 +193,20 @@ export const api = {
    * Uploads a photo of an item's receipt, or of the whole split when itemId is null.
    * photoId is the photo's own id, so sending it again never adds it twice.
    */
-  uploadAttachment: (id: string, photo: Blob, itemId: string | null, photoId: string) => {
+  uploadAttachment: (
+    id: string,
+    photo: Blob,
+    itemId: string | null,
+    photoId: string,
+    place: Position | null = null,
+  ) => {
     const query = new URLSearchParams({ [PHOTO_ID_PARAM]: photoId });
     if (itemId) query.set('itemId', itemId);
+    // Where it was taken, read before it was shrunk; the picture itself doesn't say
+    if (place) {
+      query.set('lat', String(place.lat));
+      query.set('lng', String(place.lng));
+    }
     return upload<Attachment>('POST', `${splitPath(id)}/attachments?${query}`, photo);
   },
   /** Removes photos, as many to a request as the server takes */

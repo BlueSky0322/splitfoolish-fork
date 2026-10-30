@@ -43,3 +43,7 @@ export const toPlace = (lat: number, lng: number, name: string | null = null): P
 /** Opens the place in the phone's maps app (or Google Maps on the web) */
 export const mapsUrl = ({ lat, lng }: Place) =>
   `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+/** What a place is called: its name, or its position until a name is known */
+export const placeLabel = (place: Place) =>
+  place.name ?? `${place.lat.toFixed(5)}, ${place.lng.toFixed(5)}`;

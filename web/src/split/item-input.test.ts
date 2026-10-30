@@ -68,6 +68,7 @@ describe('buildItemInput', () => {
     exact: { a: 600 as number | '', b: 400 as number | '' },
     category: null,
     notes: '  ',
+    place: null,
   };
 
   test('shows converted amounts and sends what was typed for the server to convert', () => {

@@ -136,8 +136,10 @@ readVersion }`, decided from the split, your membership and its people before th
   name says who exactly, and reads as the person asked. `people` still carries ids,
   which any tool accepts too.
 - **An expense carries only what it has.** `shares`, `exact`, `category`, `notes`,
-  `original` and `photos` are left out rather than sent empty; `cost` is in currency
-  units (the split's `totalCents` and balances are in cents).
+  `original`, `place` (`{ lat, lng, name }`, where it was paid for) and `photos` are left
+  out rather than sent empty; `cost` is in currency units (the split's `totalCents` and
+  balances are in cents). A photo has a `place` (`{ lat, lng }`) when it was taken with
+  one. Agents read places but don't set them, and an update keeps the expense's.
 - **`get_split` leaves out** share links, invitations, members' emails and payment
   details. A person shows `hasAccount` and `isYou` (this grant's account) instead, and a
   photo `addedByYou`.

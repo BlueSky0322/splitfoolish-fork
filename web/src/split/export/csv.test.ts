@@ -89,6 +89,7 @@ describe('a split as a CSV', () => {
           cost: 30,
           payer: ann,
           notes: 'Airport, late',
+          place: { lat: 2.74558, lng: 101.70991, name: 'KLIA' },
           createdAt: Date.UTC(2026, 9, 11, 12),
         }),
         item({
@@ -111,11 +112,11 @@ describe('a split as a CSV', () => {
     );
     expect(csv).toBe(
       '\uFEFF' +
-        'Date,Item,Category,Amount (MYR),Original currency,Original amount,Rate,Rate source,Paid by,Split mode,Ryan,Ann,Notes\r\n' +
-        '2026-10-10,Dinner,Food,100.00,,,,,Ryan,Equal,50.00,50.00,\r\n' +
-        '2026-10-11,Taxi,Other,30.00,,,,,Ann,Equal,15.00,15.00,"Airport, late"\r\n' +
-        '2026-10-12,Ramen,Food,90.00,JPY,3000.00,0.03,Wise,Ryan,Equal,45.00,45.00,\r\n' +
-        '2026-10-12,Hotel,Other,60.00,,,,,Ryan,Shares,40.00,20.00,\r\n' +
+        'Date,Item,Category,Amount (MYR),Original currency,Original amount,Rate,Rate source,Paid by,Split mode,Ryan,Ann,Notes,Location\r\n' +
+        '2026-10-10,Dinner,Food,100.00,,,,,Ryan,Equal,50.00,50.00,,\r\n' +
+        '2026-10-11,Taxi,Other,30.00,,,,,Ann,Equal,15.00,15.00,"Airport, late",KLIA\r\n' +
+        '2026-10-12,Ramen,Food,90.00,JPY,3000.00,0.03,Wise,Ryan,Equal,45.00,45.00,,\r\n' +
+        '2026-10-12,Hotel,Other,60.00,,,,,Ryan,Shares,40.00,20.00,,\r\n' +
         '\r\n' +
         'Person,Paid,Share,Balance\r\n' +
         'Ryan,250.00,150.00,100.00\r\n' +
@@ -155,7 +156,7 @@ describe('a split as a CSV', () => {
   test('a split with nothing in it yet is the headers alone', () => {
     expect(csvOf([ryan, ann], [])).toBe(
       '\uFEFF' +
-        'Date,Item,Category,Amount (MYR),Original currency,Original amount,Rate,Rate source,Paid by,Split mode,Ryan,Ann,Notes\r\n' +
+        'Date,Item,Category,Amount (MYR),Original currency,Original amount,Rate,Rate source,Paid by,Split mode,Ryan,Ann,Notes,Location\r\n' +
         '\r\n' +
         'Person,Paid,Share,Balance\r\n' +
         '\r\n' +
@@ -181,11 +182,12 @@ describe('a split as a CSV', () => {
             shares: [],
             between: [],
             notes: null,
+            place: null,
           },
         ],
       }),
     );
-    expect(csv).toContain('\r\n2026-10-10,Boat,,0.01,USD,0.25,4.4,Typed in,Ryan,Exact,\r\n');
+    expect(csv).toContain('\r\n2026-10-10,Boat,,0.01,USD,0.25,4.4,Typed in,Ryan,Exact,,\r\n');
     expect(csv).toContain('\r\nRyan,1000000000.01,0.05,-0.07\r\n');
   });
 });
@@ -232,19 +234,19 @@ describe('text in a CSV cell', () => {
 
   test('in a header is guarded too: a person named like a formula', () => {
     const csv = csvOf([ryan, { id: 'x', name: '=1+1', memberEmail: null }], []);
-    expect(csv.split('\r\n')[0]).toMatch(/,Ryan,'=1\+1,Notes$/);
+    expect(csv.split('\r\n')[0]).toMatch(/,Ryan,'=1\+1,Notes,Location$/);
   });
 
   test('with commas, quotes or line breaks is quoted, and reads back as written', () => {
     const notes = 'He said "two plates",\nthen\r\nleft';
     const csv = csvOf([ryan, ann], [item({ id: 'd', name: 'Dinner, "set"', cost: 10, notes })]);
     expect(csv).toContain(
-      '2026-10-10,"Dinner, ""set""",Other,10.00,,,,,Ryan,Equal,5.00,5.00,"He said ""two plates"",\nthen\r\nleft"\r\n',
+      '2026-10-10,"Dinner, ""set""",Other,10.00,,,,,Ryan,Equal,5.00,5.00,"He said ""two plates"",\nthen\r\nleft",\r\n',
     );
     const [, dinner] = parseCsv(csv.slice(1));
     expect(dinner[1]).toBe('Dinner, "set"');
     expect(dinner[12]).toBe(notes);
-    expect(dinner).toHaveLength(13);
+    expect(dinner).toHaveLength(14);
   });
 
   test('in Japanese survives being saved as UTF-8 and read back', () => {

@@ -1,3 +1,4 @@
+import { placeLabel } from '@shared/places';
 import type { SplitMember } from '@shared/api';
 import { type RateSource, savedRateSource, toCents } from '@shared/rates';
 import type { Person, SplitMode } from '@shared/types';
@@ -46,6 +47,8 @@ export interface ExportItem {
   /** Who it's split between, with what it costs each */
   between: { name: string; cents: number }[];
   notes: string | null;
+  /** Where it was paid for: its name, or its position until it has one */
+  place: string | null;
 }
 
 export interface ExportPayment {
@@ -141,6 +144,7 @@ export function exportRows({
         shares: columns.map((p) => shares.get(p.id) ?? null),
         between: item.participants.map((p) => ({ name: p.name, cents: shares.get(p.id) ?? 0 })),
         notes: item.notes,
+        place: item.place ? placeLabel(item.place) : null,
       };
     }),
     payments: payments.map((p) => ({

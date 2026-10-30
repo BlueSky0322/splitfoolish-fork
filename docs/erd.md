@@ -115,6 +115,9 @@ erDiagram
         real rate "original to split currency, as saved"
         text rate_source "wise, frankfurter or manual"
         int rate_at
+        real place_lat "where it was paid for; null: nowhere said"
+        real place_lng
+        text place_name "what is there, once known"
     }
     item_participants {
         text item_id PK, FK
@@ -131,6 +134,8 @@ erDiagram
         int size
         text uploaded_by
         int created_at
+        real place_lat "where it was taken; never in the picture itself"
+        real place_lng
     }
     attachment_data {
         text id PK, FK
@@ -160,6 +165,7 @@ erDiagram
         text items_group_by "none, day, week, month, payer or category"
         text items_sort_key "date, name, payer or amount"
         text items_sort_dir "asc or desc"
+        int save_places "keep where photos are taken and items paid for"
         int updated_at
     }
     avatars {

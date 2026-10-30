@@ -13,6 +13,7 @@ import {
   rateDay,
   toCents,
 } from '../../shared/rates';
+import { type Place, isPlace, toPlace } from '../../shared/places';
 import type { SplitMode } from '../../shared/settle';
 import { MAX_SHARES, isSplitMode } from '../../shared/settle';
 import type { ItemOriginal } from '../../shared/types';
@@ -391,8 +392,20 @@ export function readItem(model: Model, raw: unknown, rates: FetchedRates, paid: 
     participants,
     category,
     notes: readNotes(item.notes),
+    place: readPlace(item.place),
     converted,
   };
+}
+
+/**
+ * Where an item was paid for, as sent: null clears it; left out (by an app from before
+ * places) keeps the one it has
+ */
+export function readPlace(value: unknown): Place | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (!isPlace(value)) throw new Refused('Invalid place');
+  return toPlace(value.lat, value.lng, value.name);
 }
 
 /** Notes as sent, checked: kept as typed, line breaks and all; only blank space around them goes */

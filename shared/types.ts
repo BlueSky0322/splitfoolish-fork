@@ -1,5 +1,6 @@
 // What the client and the Worker send each other about a split's bill. One copy, so
 // the two sides can't drift apart.
+import type { Place } from './places';
 import type { RateSource } from './rates';
 import type { SplitMode } from './settle';
 
@@ -43,6 +44,11 @@ export interface Item {
   createdAt: number;
   /** Set when the item was entered in a currency other than the split's */
   original: ItemOriginal | null;
+  /**
+   * Where it was paid for, if anyone said. Left out by apps from before places: an update
+   * without it keeps the place the item has.
+   */
+  place?: Place | null;
 }
 
 /**

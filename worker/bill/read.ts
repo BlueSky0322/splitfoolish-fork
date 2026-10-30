@@ -29,7 +29,8 @@ export const contentStatements = (db: D1Database, splitId: string) => [
     .prepare(
       `SELECT id, name, cost_cents AS costCents, payer_id AS payerId, split_mode AS splitMode,
          category, notes, created_at AS createdAt, original_currency AS originalCurrency,
-         original_cents AS originalCents, rate, rate_source AS rateSource, rate_at AS rateAt
+         original_cents AS originalCents, rate, rate_source AS rateSource, rate_at AS rateAt,
+         place_lat AS placeLat, place_lng AS placeLng, place_name AS placeName
        FROM items WHERE split_id = ? ORDER BY position, rowid`,
     )
     .bind(splitId),
@@ -67,6 +68,9 @@ interface ItemRow {
   rate: number | null;
   rateSource: RateSource | null;
   rateAt: number | null;
+  placeLat: number | null;
+  placeLng: number | null;
+  placeName: string | null;
 }
 
 interface ParticipantRow {
@@ -136,6 +140,10 @@ export function assembleContent([people, items, participants, payments]: D1Resul
                 rateSource: i.rateSource ?? undefined,
                 rateAt: i.rateAt ?? undefined,
               },
+        place:
+          i.placeLat == null || i.placeLng == null
+            ? null
+            : { lat: i.placeLat, lng: i.placeLng, name: i.placeName },
       };
     }),
     payments: (payments.results as PaymentRow[]).map(

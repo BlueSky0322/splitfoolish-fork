@@ -73,9 +73,9 @@ function trip() {
 
 const TRIP_CSV =
   '\uFEFF' +
-  'Date,Item,Category,Amount (MYR),Original currency,Original amount,Rate,Rate source,Paid by,Split mode,Ryan,Ann,Notes\r\n' +
-  '2026-10-10,Seafood dinner,Other,248.00,,,,,Ryan,Equal,124.00,124.00,\r\n' +
-  '2026-10-10,Taxi,Other,30.00,,,,,Ann,Equal,15.00,15.00,\r\n' +
+  'Date,Item,Category,Amount (MYR),Original currency,Original amount,Rate,Rate source,Paid by,Split mode,Ryan,Ann,Notes,Location\r\n' +
+  '2026-10-10,Seafood dinner,Other,248.00,,,,,Ryan,Equal,124.00,124.00,,\r\n' +
+  '2026-10-10,Taxi,Other,30.00,,,,,Ann,Equal,15.00,15.00,,\r\n' +
   '\r\n' +
   'Person,Paid,Share,Balance\r\n' +
   'Ryan,248.00,139.00,109.00\r\n' +
