@@ -10,6 +10,7 @@ import { EXPECTED_ACCOUNT_HEADER } from '../shared/api';
 import { getUserEmail } from './accounts/auth';
 import invites from './routes/invites';
 import places from './routes/places';
+import links from './routes/links';
 import me from './routes/me';
 import rates from './routes/rates';
 import splits from './routes/splits';
@@ -75,6 +76,7 @@ api.route('/', splits);
 api.route('/', invites);
 api.route('/', rates);
 api.route('/', places);
+api.route('/', links);
 
 api.notFound(() => notFound());
 

@@ -28,6 +28,7 @@ import { convertCents, convertParts, rateDay, toCents } from '@shared/rates';
 import { type SettleItem, balances } from '@shared/settle';
 import type { Change, Item } from '@shared/types';
 import { type Place, isPosition, toPlace } from '@shared/places';
+import { type LinkPreview, isMapsLink } from '@shared/links';
 import { Root } from '../Root';
 import { queryClient } from '../query-client';
 import { forgetOfflineWork } from '../offline/sync';
@@ -152,6 +153,8 @@ export interface FakeServer {
   uploads: { splitId: string; itemId: string | null; image: Blob; place: Place | null }[];
   /** What OpenStreetMap calls a spot, by "lat,lng" to 4 places; any other has no name */
   placeNames: Map<string, string>;
+  /** What Google says about each Maps link; any other Maps link has nothing to show */
+  linkPreviews: Map<string, Omit<LinkPreview, 'url'>>;
   /**
    * The next save of the profile, a split's changes or its settings, the next photo
    * upload, or the next agent disconnected, answers with this status
@@ -579,6 +582,16 @@ function answerNow(server: FakeServer) {
         name: server.placeNames.get(`${(+lat).toFixed(4)},${(+lng).toFixed(4)}`) ?? null,
       });
     }
+    if (path === '/api/link-preview') {
+      const link = url.searchParams.get('url') ?? '';
+      if (!isMapsLink(link)) return json({ error: 'Only Google Maps links have a card' }, 400);
+      const known = server.linkPreviews.get(link);
+      const site = new URL(link).hostname.replace(/^www\./, '');
+      const preview: LinkPreview = known
+        ? { url: link, ...known }
+        : { url: link, title: null, address: null, detail: null, image: null, site };
+      return json(preview);
+    }
     if (path === '/api/archived' && method === 'PUT') {
       const { id, archived } = body as { id: string; archived: boolean };
       if (archived) server.archived.add(id);
@@ -773,6 +786,7 @@ export function fakeServer(...splits: SplitDetail[]): FakeServer {
     receipts: new Map(),
     uploads: [],
     placeNames: new Map(),
+    linkPreviews: new Map(),
     failNext: {},
     archived: new Set(),
     agents: [],

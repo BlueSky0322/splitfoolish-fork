@@ -10,6 +10,7 @@ import type { SplitItem } from '../../../split/state';
 import { formatAmount, formatMoney } from '../../../utils/money';
 import { SOURCE_LABELS } from '../../../utils/rate-labels';
 import LinkedText from '../../ui/LinkedText';
+import { MapsLinkCards } from '../../common/MapsLinkCards';
 import PhotoViewer from '../../ui/PhotoViewer';
 import PersonAvatar from '../PersonAvatar';
 import { PaidBy } from './PaidBy';
@@ -155,6 +156,7 @@ const ItemDetail = ({
           <LinkedText text={item.notes} />
         </p>
       )}
+      <MapsLinkCards text={item.notes} />
       {receipts.length > 0 && (
         <div className={classes.receipts}>
           {receipts.map((photo, i) => (

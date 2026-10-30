@@ -1,0 +1,148 @@
+// What a Google Maps link in an item's notes shows as a card: the place's name, address
+// and picture, from the tags Google's page carries for link previews. Only Google Maps
+// addresses are fetched, and every redirect must stay on them, so this can't be used to
+// reach anywhere else. Read in bounded size and time, and kept a week per link.
+
+import { type LinkPreview, isMapsLink } from '../../shared/links';
+import { readBody } from '../http';
+
+/** Short links redirect once or twice before the place's page */
+const MAX_REDIRECTS = 5;
+const FETCH_MS = 5_000;
+/** The tags are in the page's head; a place's page is about 250 KB */
+const MAX_PAGE_BYTES = 1024 * 1024;
+const KEEP_S = 7 * 24 * 60 * 60;
+
+/** Google's own words when a page is about no place in particular */
+const GENERIC_TITLES = new Set(['Google Maps']);
+const GENERIC_DESCRIPTION = /^Find local businesses/;
+
+/** What a card for `address` shows: from the cache when it was looked up this week */
+export async function linkPreview(
+  address: string,
+  ctx: { waitUntil: (p: Promise<unknown>) => void },
+): Promise<LinkPreview> {
+  const key = new Request(`https://link-preview.splitfoolish/${encodeURIComponent(address)}`);
+  const cache = (caches as unknown as { default: Cache }).default;
+  const kept = await cache.match(key);
+  if (kept) return kept.json<LinkPreview>();
+  const preview = await fetchPreview(address);
+  // A page that couldn't be read is tried again next time rather than kept
+  if (preview.title != null) {
+    ctx.waitUntil(
+      cache.put(
+        key,
+        new Response(JSON.stringify(preview), {
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${KEEP_S}` },
+        }),
+      ),
+    );
+  }
+  return preview;
+}
+
+/** Looks the link up: follows its redirects within Google Maps, then reads the page's tags */
+export async function fetchPreview(address: string): Promise<LinkPreview> {
+  const start = new URL(address);
+  const empty: LinkPreview = {
+    url: address,
+    title: null,
+    address: null,
+    detail: null,
+    image: null,
+    site: start.hostname.replace(/^www\./, ''),
+  };
+  // The last Google Maps address on the way: where the page is fetched from, and what
+  // names the place when the page can't be read
+  let url = start;
+  let page: Response | null = null;
+  try {
+    for (let hop = 0; hop <= MAX_REDIRECTS && page == null; hop++) {
+      const res = await fetch(url, {
+        redirect: 'manual',
+        headers: { 'Accept': 'text/html', 'User-Agent': 'Splitfoolish link preview' },
+        signal: AbortSignal.timeout(FETCH_MS),
+      });
+      const next = res.headers.get('Location');
+      if (res.status >= 300 && res.status < 400 && next != null) {
+        await res.body?.cancel();
+        const to = new URL(next, url);
+        // Somewhere else (a consent page, say): not followed
+        if (!isMapsLink(to.href)) break;
+        url = to;
+      } else {
+        page = res;
+      }
+    }
+  } catch {
+    // Unreachable or too slow: what the address itself says is all there is
+  }
+  const fromUrl = placeFromUrl(url);
+  if (page == null || !page.ok) return { ...empty, ...fromUrl };
+  const body = await readBody(page, MAX_PAGE_BYTES, FETCH_MS);
+  if (typeof body === 'string') return { ...empty, ...fromUrl };
+  const tags = metaTags(new TextDecoder().decode(body));
+
+  const title = tags.get('og:title');
+  const description = tags.get('og:description');
+  const image = tags.get('og:image');
+  if (title == null || GENERIC_TITLES.has(title)) return { ...empty, ...fromUrl };
+  // "A Place Where - APW · 29, Jalan Riong, Bangsar, 59100 Kuala Lumpur"
+  const [name, ...rest] = title.split(' · ');
+  return {
+    ...empty,
+    title: name.trim(),
+    address: rest.join(' · ').trim() || fromUrl.address,
+    detail: description != null && !GENERIC_DESCRIPTION.test(description) ? description : null,
+    image: image != null && /^https:\/\//.test(image) ? image : null,
+  };
+}
+
+/**
+ * The place a Maps address names in itself: /maps/place/<name>/..., or ?q=<name, address>
+ * as phones share them
+ */
+export function placeFromUrl(url: URL): Pick<LinkPreview, 'title' | 'address'> {
+  const place = /\/maps\/place\/([^/@]+)/.exec(url.pathname)?.[1];
+  const words = place ?? url.searchParams.get('q');
+  if (words == null) return { title: null, address: null };
+  let text: string;
+  try {
+    text = decodeURIComponent(words.replace(/\+/g, ' ')).trim();
+  } catch {
+    return { title: null, address: null };
+  }
+  // Just a position ("3.1297,101.6744") names no place
+  if (text === '' || /^-?[\d.]+\s*,\s*-?[\d.]+$/.test(text)) return { title: null, address: null };
+  const [name, ...rest] = text.split(',');
+  return { title: name.trim(), address: rest.join(',').trim() || null };
+}
+
+const ENTITIES: Record<string, string> = {
+  'amp': '&',
+  'lt': '<',
+  'gt': '>',
+  'quot': '"',
+  'apos': "'",
+  '#39': "'",
+};
+
+const decodeEntities = (text: string) =>
+  text.replace(/&(#x[\da-f]+|#\d+|\w+);/gi, (whole, name: string) => {
+    if (name.startsWith('#x')) return String.fromCodePoint(parseInt(name.slice(2), 16));
+    if (name.startsWith('#')) return String.fromCodePoint(Number(name.slice(1)));
+    return ENTITIES[name.toLowerCase()] ?? whole;
+  });
+
+/** A page's <meta property="og:..." content="..."> tags, in either attribute order */
+export function metaTags(html: string): Map<string, string> {
+  const tags = new Map<string, string>();
+  for (const [tag] of html.matchAll(/<meta\s[^>]*>/gi)) {
+    const property = /\bproperty="([^"]+)"/i.exec(tag)?.[1];
+    const content = /\bcontent="([^"]*)"/i.exec(tag)?.[1];
+    if (property != null && content != null && !tags.has(property)) {
+      tags.set(property, decodeEntities(content));
+    }
+  }
+  return tags;
+}
