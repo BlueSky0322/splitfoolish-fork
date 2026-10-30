@@ -1,7 +1,6 @@
 .place {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
   max-width: 100%;
   font-size: 14px;
   color: var(--sf-text);
@@ -10,6 +9,25 @@
 
 .place:hover .label {
   text-decoration: underline;
+}
+
+/* The map across the sheet, its name underneath as a photo's details show it */
+.withMap {
+  display: flex;
+  gap: 8px;
+}
+
+.map {
+  height: 128px;
+  border-radius: 12px;
+  border: 1px solid var(--sf-divider);
+}
+
+.line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .pin {

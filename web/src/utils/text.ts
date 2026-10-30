@@ -14,6 +14,18 @@ export interface TextPart {
 const ADDRESS = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
 const TRAILING = /[.,;:!?)\]}]$/;
 
+/** Longer addresses are cut, so a link reads as where it goes rather than all of it */
+const SHORT_LINK_LENGTH = 32;
+
+/** A web address as a person reads it: "example.com/menu", without https:// or www. */
+export function shortLink(href: string) {
+  const bare = href
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/$/, '');
+  return bare.length <= SHORT_LINK_LENGTH ? bare : `${bare.slice(0, SHORT_LINK_LENGTH - 1)}…`;
+}
+
 /** Text split into its plain runs and the web addresses typed in it, in order */
 export function findLinks(text: string): TextPart[] {
   const parts: TextPart[] = [];

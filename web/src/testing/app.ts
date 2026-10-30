@@ -589,7 +589,15 @@ function answerNow(server: FakeServer) {
       const site = new URL(link).hostname.replace(/^www\./, '');
       const preview: LinkPreview = known
         ? { url: link, ...known }
-        : { url: link, title: null, address: null, detail: null, image: null, site };
+        : {
+            url: link,
+            title: null,
+            address: null,
+            detail: null,
+            image: null,
+            site,
+            position: null,
+          };
       return json(preview);
     }
     if (path === '/api/archived' && method === 'PUT') {

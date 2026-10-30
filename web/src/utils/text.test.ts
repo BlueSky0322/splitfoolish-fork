@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findLinks } from './text';
+import { findLinks, shortLink } from './text';
 
 describe('findLinks', () => {
   it('finds http, https and www addresses, leaving the words around them', () => {
@@ -27,5 +27,15 @@ describe('findLinks', () => {
   it('is one plain run when there is no address', () => {
     expect(findLinks('Paid at the counter')).toEqual([{ text: 'Paid at the counter' }]);
     expect(findLinks('')).toEqual([]);
+  });
+});
+
+describe('shortLink', () => {
+  it('reads as where it goes: no https:// or www., and cut when long', () => {
+    expect(shortLink('https://www.example.com/menu/')).toBe('example.com/menu');
+    expect(shortLink('http://a.io')).toBe('a.io');
+    const long = shortLink('https://example.com/a/very/long/path/to/somewhere?with=query');
+    expect(long).toBe('example.com/a/very/long/path/to…');
+    expect(long).toHaveLength(32);
   });
 });

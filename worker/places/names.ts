@@ -18,12 +18,17 @@ interface Found {
   address?: Record<string, string | undefined>;
 }
 
-/** "Name, Town": the spot's own name, else its road, then the town it's in */
+/**
+ * "Name, Town": the spot's own name, else its road, then the town it's in. Out in the
+ * country, on a road with no name, the district and state ("Bagan Datuk, Perak").
+ */
 export function nameOf(found: Found): string | null {
   const a = found.address ?? {};
   const own = found.name?.trim() || a.road || a.neighbourhood || a.suburb;
-  const town = a.city ?? a.town ?? a.village ?? a.municipality ?? a.county ?? a.state;
-  const parts = [own, town].filter((p, i, all): p is string => !!p && all.indexOf(p) === i);
+  const town = a.city ?? a.town ?? a.village ?? a.municipality ?? a.district ?? a.county;
+  const parts = (own ? [own, town ?? a.state] : [town, a.state]).filter(
+    (p, i, all): p is string => !!p && all.indexOf(p) === i,
+  );
   const name = parts.join(', ');
   if (name === '') return null;
   return name.length <= MAX_PLACE_NAME_LENGTH

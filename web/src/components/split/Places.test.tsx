@@ -96,12 +96,16 @@ describe('places', () => {
       }),
     );
     await waitFor(() => expect(server.uploads.map((u) => u.place)).toEqual([KEPT]));
-    // The item says where, on its sheet
+    // The item says where on its sheet, with a small map of the spot
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await user.click(await screen.findByText('Bait'));
-    expect(
-      await screen.findByRole('link', { name: 'Truz Tackles, Kuala Selangor, open in Maps' }),
-    ).toBeTruthy();
+    const where = await screen.findByRole('link', {
+      name: 'Truz Tackles, Kuala Selangor, open in Maps',
+    });
+    expect(within(where).getByText('© OpenStreetMap')).toBeTruthy();
+    expect([...where.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
+      'https://tile.openstreetmap.org/16/51200/32159.png',
+    );
   });
 
   test('a photo from the library without a place keeps none, and the phone is not asked', async () => {
@@ -124,14 +128,14 @@ describe('places', () => {
     expect(form.getByRole('button', { name: 'Use my location' })).toBeTruthy();
   });
 
-  test('Use my location sets one (where OpenStreetMap has no name, its position), Remove location takes it off, and a refusal says why', async () => {
+  test('Use my location sets one (where OpenStreetMap has no name, its position as Google Maps writes it), Remove location takes it off, and a refusal says why', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();
     await user.click(await screen.findByText('Dinner'));
     const form = within(await screen.findByRole('dialog'));
     await user.click(form.getByRole('button', { name: 'Use my location' }));
-    expect(await form.findByRole('link', { name: '3.34017, 101.25050' })).toBeTruthy();
+    expect(await form.findByRole('link', { name: `3°20'24.6"N 101°15'01.8"E` })).toBeTruthy();
     await user.click(form.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(server.splits.get('trip')!.items[0].place).toEqual(KEPT));
 

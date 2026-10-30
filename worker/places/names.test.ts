@@ -31,6 +31,16 @@ describe("a place's name", () => {
     expect(nameOf({ address: { road: 'Jalan Riong', town: 'Bangsar' } })).toBe(
       'Jalan Riong, Bangsar',
     );
+    // An unnamed road in the country: its district and state
+    expect(
+      nameOf({
+        name: '',
+        address: { district: 'Bagan Datuk', state: 'Perak', postcode: '36200' },
+      }),
+    ).toBe('Bagan Datuk, Perak');
+    expect(nameOf({ address: { road: 'Jalan Sungai Nipah', state: 'Perak' } })).toBe(
+      'Jalan Sungai Nipah, Perak',
+    );
   });
 
   it('is nothing in the middle of nowhere, and never longer than a place name may be', () => {
