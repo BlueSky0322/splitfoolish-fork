@@ -668,17 +668,14 @@ describe('the split page', () => {
       );
       const plain = within(where).getByRole('link', { name: 'Open in Google Maps' });
       expect(plain.getAttribute('href')).toBe(OTHER);
-      // The pin shows a small map of where it is, centred on its tile
+      // A dropped pin: its name and where the link goes, beside a pin
       const pin = within(where).getByRole('link', {
         name: 'VRJ3+MG Bagan Datuk, Perak, on Google Maps',
       });
       expect(pin.getAttribute('href')).toBe(PIN);
       // Its name and where the link goes, nothing between
-      expect(pin.textContent).toBe('© OpenStreetMapVRJ3+MG Bagan Datuk, Perakgoo.gl');
-      expect(within(pin).getByText('© OpenStreetMap')).toBeTruthy();
-      expect([...pin.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
-        'https://tile.openstreetmap.org/16/51118/32060.png',
-      );
+      expect(pin.textContent).toBe('VRJ3+MG Bagan Datuk, Perakgoo.gl');
+      expect(pin.querySelector('img')).toBeNull();
       // A place shared from Google is a card with its name; anything else shared, none
       const shared = within(where).getByRole('link', { name: 'Kedai Kopi 168, on Google Maps' });
       expect(shared.getAttribute('href')).toBe(SHARED);

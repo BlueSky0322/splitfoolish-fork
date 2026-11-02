@@ -97,16 +97,17 @@ describe('places', () => {
       }),
     );
     await waitFor(() => expect(server.uploads.map((u) => u.place)).toEqual([KEPT]));
-    // The item says where on its sheet, with a small map of the spot
+    // The item says where on its sheet, opening in Maps
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await user.click(await screen.findByText('Bait'));
     const where = await screen.findByRole('link', {
       name: 'Truz Tackles, Kuala Selangor, open in Maps',
     });
-    expect(within(where).getByText('© OpenStreetMap')).toBeTruthy();
-    expect([...where.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
-      'https://tile.openstreetmap.org/16/51200/32159.png',
+    expect(where.getAttribute('href')).toBe(
+      'https://www.google.com/maps/search/?api=1&query=3.34017,101.2505',
     );
+    // No map is drawn: nothing is asked of OpenStreetMap's tiles
+    expect(document.querySelector('img[src*="tile.openstreetmap.org"]')).toBeNull();
   });
 
   test('a photo from the library without a place keeps none, and the phone is not asked', async () => {
@@ -264,7 +265,7 @@ describe('places', () => {
     );
   });
 
-  test("a link that says where it points shows its map and plus code, before it's named or when it can't be", async () => {
+  test("a link that says where it points shows its plus code, before it's named or when it can't be", async () => {
     // The Worker has nothing to say about it (offline, say)
     const PIN = 'https://maps.google.com/?q=3.88166,100.80379&entry=gps';
     const server = fakeServer(
@@ -275,9 +276,7 @@ describe('places', () => {
     await user.click(await screen.findByText('Parking'));
     const sheet = within(await screen.findByRole('dialog'));
     const card = await sheet.findByRole('link', { name: '6PM2VRJ3+MG, on Google Maps' });
-    expect([...card.querySelectorAll('img')].map((i) => i.getAttribute('src'))).toContain(
-      'https://tile.openstreetmap.org/16/51118/32060.png',
-    );
+    expect(card.getAttribute('href')).toBe(PIN);
     expect(sheet.getByRole('link', { name: '6PM2VRJ3+MG' }).getAttribute('href')).toBe(PIN);
   });
 

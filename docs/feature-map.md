@@ -153,10 +153,9 @@ it current.
   each a week; a page that says nothing names the place from the link, else the card is
   a pin. A dropped pin (a shared position, which Google's page names nothing) is named
   as Google Maps names one, its plus code in its town ("VRP3+RQ Bagan Datuk, Perak",
-  the town from OpenStreetMap, `placeArea`), and the card shows a small map of it
-  ([MiniMap](../web/src/components/ui/MiniMap.tsx)). Where the link itself says the
-  position (`positionInLink` in shared/links.ts, which the Worker reads too), the app
-  shows the map and full plus code before the Worker answers, or offline.
+  the town from OpenStreetMap, `placeArea`), beside a pin. Where the link itself says
+  the position (`positionInLink` in shared/links.ts, which the Worker reads too), the
+  app shows the full plus code before the Worker answers, or offline. No map is drawn.
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
@@ -551,9 +550,8 @@ method through a profile change.
   or slow is asked once more, and why it failed is logged (never what was searched for). Only places in
   one country are offered: the area's (Photon's reverse lookup, kept a month), else
   the country Cloudflare says the request came from. The item sheet and the photo
-  details say where, opening in Maps ([PlaceLink](../web/src/components/split/PlaceLink.tsx);
-  the item sheet with a small map from OpenStreetMap's tiles,
-  [MiniMap](../web/src/components/ui/MiniMap.tsx)).
+  details say where, as a place chip opening in Maps
+  ([PlaceLink](../web/src/components/split/PlaceLink.tsx)).
   Places are checked the same way on both sides ([shared/places.ts](../shared/places.ts)).
   Names come from OpenStreetMap through the Worker (`GET /api/place-name`,
   [worker/places/names.ts](../worker/places/names.ts): the spot's name, else its road,
