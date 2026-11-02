@@ -29,7 +29,7 @@ import { toCents } from '@shared/rates';
 import { plural, shortLink } from '../../../utils/text';
 import { isMapsLink } from '@shared/links';
 import LinkedText from '../../ui/LinkedText';
-import { MapsLinkName } from '../../common/MapsLinkCards';
+import { MapsLinkName } from '../../common/MapsLinks';
 
 interface ItemViewProps {
   groups: ItemGroup[];
