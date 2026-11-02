@@ -1,12 +1,16 @@
 import { ActionIcon, Button } from '@mantine/core';
-import { Check, X } from '@phosphor-icons/react';
+import { ArrowLeft, Check, X } from '@phosphor-icons/react';
+import { goUp } from '../../hooks/useRoute';
 import { useMySplits } from '../../my-splits/useMySplits';
 import SplitAvatar from '../common/SplitAvatar';
 import { describeInvite, linkedInviteId, useAnswerInvite } from './invite-answers';
 import { InviteRowsSkeleton } from './HomeSkeletons';
 import classes from './MobileHome.module.css';
 
-/** The Invites tab on phones (10f): splits you're invited to, and people asking to join yours */
+/**
+ * Invites on phones (10f), opened from the Splits list: splits you're invited to, and
+ * people asking to join yours. Back returns to the list.
+ */
 const MobileInvites = () => {
   const { invites, error } = useMySplits();
   const { busy, respond } = useAnswerInvite();
@@ -15,7 +19,18 @@ const MobileInvites = () => {
 
   return (
     <div className={classes.page}>
-      <h1 className={classes.title}>Invites</h1>
+      <div className={classes.titleRow}>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          size={44}
+          aria-label="Back to Splits"
+          onClick={() => goUp('')}
+        >
+          <ArrowLeft size={22} />
+        </ActionIcon>
+        <h1 className={classes.title}>Invites</h1>
+      </div>
       {error && <div className="sf-negative">{error}</div>}
       {invites == null && error == null && <InviteRowsSkeleton phone />}
       {invites?.length === 0 && (

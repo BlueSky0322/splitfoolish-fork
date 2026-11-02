@@ -87,20 +87,19 @@ const cameFrom = (): string | null => {
   return typeof from === 'string' ? from : null;
 };
 
-export type Tab = 'splits' | 'invites' | 'convert' | 'you';
+export type Tab = 'splits' | 'convert' | 'you';
 
 export const TAB_ADDRESS: Record<Tab, string> = {
   splits: '',
-  invites: '?tab=invites',
   convert: '?convert',
   you: '?settings',
 };
 
-/** The bottom tab a page belongs to; a split is under Splits */
+/** The bottom tab a page belongs to; a split, and the invites, are under Splits */
 export function tabOf(route: Route): Tab | null {
   switch (route.view) {
     case 'home':
-      return route.tab === 'invites' ? 'invites' : 'splits';
+      return 'splits';
     case 'split':
       return 'splits';
     case 'convert':
