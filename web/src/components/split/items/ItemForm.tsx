@@ -16,7 +16,6 @@ import {
   Check,
   Copy,
   DotsThree,
-  HandCoins,
   Minus,
   Plus,
   Trash,
@@ -87,7 +86,6 @@ interface ItemFormProps {
   /** Adds a copy of the item being edited, keeping its date or as of today */
   onDuplicate?: (keepDate: boolean) => void;
   /** Records that someone paid their part of it back (desktop's More menu) */
-  onRecordPayment?: () => void;
   onCancel: () => void;
   /** What's been entered or changed that closing would lose, as a sentence; null when nothing */
   onDirtyChange?: (unsaved: string | null) => void;
@@ -108,7 +106,6 @@ const ItemForm = ({
   onSave,
   onDelete,
   onDuplicate,
-  onRecordPayment,
   onCancel,
   onDirtyChange,
 }: ItemFormProps) => {
@@ -386,7 +383,7 @@ const ItemForm = ({
     );
   };
 
-  const moreMenu = (onDuplicate || onDelete || onRecordPayment) && (
+  const moreMenu = (onDuplicate || onDelete) && (
     <Menu
       position={headerSlot ? 'bottom-end' : 'top-start'}
       withinPortal={false}
@@ -420,14 +417,6 @@ const ItemForm = ({
               Dated today
             </Menu.Item>
           </>
-        )}
-        {onRecordPayment && (
-          <Menu.Item
-            leftSection={<HandCoins size={16} />}
-            onClick={onRecordPayment}
-          >
-            Record payment
-          </Menu.Item>
         )}
         {onDuplicate && onDelete && <Menu.Divider />}
         {onDelete && (

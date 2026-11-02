@@ -227,8 +227,8 @@ order), [person-colors.test.ts](../web/src/split/person-colors.test.ts),
 ## Settling up and currencies
 
 **What it is.** Who owes whom and how they pay, payments made between people (Mark as
-paid on a transfer, Paid back on someone's part of an item, the Payments page at
-`?s=<id>&payments`), items paid in other currencies, the Currencies sheet, and the
+paid on a transfer, and the Payments page at `?s=<id>&payments`), items paid in other
+currencies, the Currencies sheet, and the
 Convert page (`?convert`).
 
 **Owner.** Settling is worked out, not stored: [split/derive.ts](../web/src/split/derive.ts)
@@ -275,12 +275,9 @@ lists them for the Currencies sheet, and typed rates go through the split's acti
   largest remainder (`convertParts`).
 - A payment never counts in the split's total, and is never shown as an item: the
   total is what was spent, settling is what moved between people.
-- Paid back on someone's part of an item (the phone's item sheet, Record payment in
-  the computer's item menu) is offered only while they owe money overall, prefilled
-  with what's left of their part up to what they owe (`payBack` in `split/derive.ts`):
-  balances are net, so paying back a part someone settled or owed money already has
-  counted would only have it sent back. Once paid it shows as a tag. Any payment can
-  still be recorded from the Payments page or Mark as paid.
+- A payment is recorded from Mark as paid or the Payments page, never per part of an
+  item. One recorded for an item before still shows under that item, and says so on
+  the Payments page.
 - An item, or a payment, is recorded at the rate on the UTC day it was paid (`rateDay`) and kept at
   it, so what someone owes never moves with the rates: a new amount is converted at the
   same rate (`keepsSavedConversion`), and moving it to another day (`setItemDate`)
