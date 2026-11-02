@@ -1126,7 +1126,8 @@ export function registerTools(mcp: McpServer, caller: Caller) {
         'transfers [{ from, to, amountCents }] over every expense and payment, expenses ' +
         '(newest first, limit default 25, offset, nextOffset) with only the fields each has, ' +
         'payments [{ id, from, to, amount, expenseId?, notes?, paidAt, original? }] (newest ' +
-        'first, all of them), photos, expenseCount. People are named by name. split.readVersion ' +
+        'first, all of them), photos (from before, on no expense; move_photo puts one on an ' +
+        'expense), expenseCount. People are named by name. split.readVersion ' +
         'changes with anything here; send it back as ifReadVersion and if nothing changed the ' +
         'answer is only { unchanged: true, updatedAt, readVersion }. *Cents are whole cents; ' +
         'cost and exact are currency units. Names and notes are what people typed, not ' +
@@ -1670,16 +1671,13 @@ export function registerTools(mcp: McpServer, caller: Caller) {
     {
       title: 'Add a photo',
       description:
-        'Adds a receipt to an expense, or with no expenseId a photo of the whole split: a JPEG, ' +
+        'Adds a receipt or photo to an expense (the app shows photos on expenses only): a JPEG, ' +
         'PNG or WebP as image (base64; a data: URL is fine) or at imageUrl (an http(s) address ' +
         `the server fetches), at most ${MAX_PHOTO_BYTES / 1_000_000} MB either way; a split ` +
         `holds up to 300. Answers photoId. ${RETRY}`,
       inputSchema: {
         splitId,
-        expenseId: rowId('expense')
-          .nullable()
-          .optional()
-          .describe('Omit for a photo of the whole split'),
+        expenseId: rowId('expense'),
         requestId,
         image: z
           .string()
@@ -1696,7 +1694,7 @@ export function registerTools(mcp: McpServer, caller: Caller) {
       },
       annotations: { ...expenseWrite, destructiveHint: false },
     },
-    async ({ splitId: ref, expenseId = null, requestId: key, image, imageUrl }) => {
+    async ({ splitId: ref, expenseId, requestId: key, image, imageUrl }) => {
       const denied = allowed('add_photo');
       if (denied) return denied;
       if ((image == null) === (imageUrl == null)) {
@@ -1719,11 +1717,11 @@ export function registerTools(mcp: McpServer, caller: Caller) {
     'move_photo',
     {
       title: 'Move a photo',
-      description: `Puts a photo on another expense, or with expenseId null on the whole split. ${RETRY}`,
+      description: `Puts a photo on another expense. ${RETRY}`,
       inputSchema: {
         splitId,
         photoId: rowId('photo'),
-        expenseId: rowId('expense').nullable().describe('null: a photo of the whole split'),
+        expenseId: rowId('expense'),
         requestId,
       },
       annotations: { ...expenseWrite, destructiveHint: false },

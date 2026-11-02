@@ -466,7 +466,7 @@ describe('the split page', () => {
       [100, 410],
     ]);
     expect(selectedTab()).toBe('Photos');
-    expect(await screen.findByRole('button', { name: 'Take photo' })).toBeTruthy();
+    expect(await screen.findByText('No photos yet')).toBeTruthy();
   });
 
   test('on a phone, a payment recorded for an item shows under it, and the Payments page lists it', async () => {

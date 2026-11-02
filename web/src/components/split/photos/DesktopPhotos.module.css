@@ -16,17 +16,6 @@
   flex: 1;
 }
 
-.filter {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.filterCount {
-  font-size: 11px;
-  color: var(--sf-text-muted);
-}
-
 /* Stays in view below the day's heading while scrolling */
 .selectionBar {
   position: sticky;
@@ -55,30 +44,6 @@
 .selectedCount {
   font-size: 14px;
   font-weight: 500;
-}
-
-.dropZone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 36px 16px;
-  border: 1.5px dashed var(--sf-accent);
-  border-radius: 12px;
-  background: var(--sf-accent-tint);
-  color: var(--sf-accent);
-  text-align: center;
-}
-
-.dropTitle {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--sf-text);
-}
-
-.dropHint {
-  font-size: 13px;
-  color: var(--sf-text-muted);
 }
 
 /* Each day's heading stays at the top while its photos scroll under it */
@@ -233,48 +198,14 @@
   background: var(--sf-accent);
 }
 
-.adding {
-  height: 150px;
-}
-
-/* No photos yet: a dashed area filling the tab, a place to drop or choose the first */
-.emptyArea {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 360px;
-  padding: 32px 24px;
-  border: 1.5px dashed color-mix(in srgb, var(--sf-text) 22%, transparent);
-  border-radius: 12px;
-  text-align: center;
-  cursor: pointer;
-}
-
-.emptyArea:hover {
-  background: var(--sf-hover);
-}
-
-.emptyIcon,
 .noneIcon {
   display: grid;
   place-items: center;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: var(--sf-accent-tint);
   color: var(--sf-accent);
-}
-
-.emptyIcon {
-  width: 56px;
-  height: 56px;
-  margin-bottom: 4px;
-}
-
-.noneIcon {
-  width: 48px;
-  height: 48px;
 }
 
 .emptyTitle {
@@ -288,12 +219,7 @@
   color: var(--sf-text-muted);
 }
 
-.emptyHint {
-  font-size: 12px;
-  color: var(--sf-text-muted);
-}
-
-/* Photos, but none of the kind chosen */
+/* No photos on the items yet */
 .noneShown {
   display: flex;
   flex-direction: column;

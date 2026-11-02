@@ -129,7 +129,7 @@ erDiagram
     attachments {
         text id PK
         text split_id FK
-        text item_id FK "null: a photo of the whole split"
+        text item_id FK "null: a photo of the whole split, from before"
         text content_type
         int size
         text uploaded_by

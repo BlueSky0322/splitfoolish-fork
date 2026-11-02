@@ -6,8 +6,8 @@ import type { Attachment } from '@shared/api';
 import { photoFileNames } from '../../split/photo-download';
 import { fakeServer, item, renderApp, setupAppTests, splitDetail } from '../../testing/app';
 
-// A phone's Photos tab: its menus order and filter the photos as a computer's menu
-// does; a long press starts picking, taps add more, and the picked photos download one
+// A phone's Photos tab: the photos on the split's items, in the orders a computer's menu
+// offers; a long press starts picking, taps add more, and the picked photos download one
 // by one or are removed together
 
 setupAppTests();
@@ -26,11 +26,17 @@ const photo = (id: string, createdAt: number, itemId: string | null = null): Att
 });
 
 function trip() {
-  const split = splitDetail('trip', [item({ id: 'dinner', name: 'Dinner', cost: 80 })]);
+  const split = splitDetail('trip', [
+    item({ id: 'bar', name: 'Beach bar', cost: 40, createdAt: Date.UTC(2026, 9, 11, 8) }),
+    item({ id: 'dinner', name: 'Dinner', cost: 80 }),
+    item({ id: 'hotel', name: 'Hotel', cost: 300, createdAt: Date.UTC(2026, 9, 9, 12) }),
+  ]);
   split.attachments = [
-    photo('beach', Date.UTC(2026, 9, 11, 9)),
+    photo('beach', Date.UTC(2026, 9, 11, 9), 'bar'),
     photo('receipt', Date.UTC(2026, 9, 11, 13), 'dinner'),
-    photo('sunset', Date.UTC(2026, 9, 10, 18)),
+    photo('sunset', Date.UTC(2026, 9, 10, 18), 'hotel'),
+    // A photo of the split itself, on no item, from before: never shown
+    photo('group', Date.UTC(2026, 9, 11, 15)),
   ];
   return split;
 }
@@ -52,11 +58,10 @@ async function longPress(el: HTMLElement) {
 describe('picking photos on a phone', () => {
   test('a long press picks a photo, and taps pick more or let go', async () => {
     const { user } = await openPhotos();
-    const [first] = screen.getAllByRole('button', { name: 'Photo of the split' });
-    const bar = await longPress(first);
+    const bar = await longPress(screen.getByRole('button', { name: 'Photo of Hotel' }));
     expect(within(bar).getByText('1 selected')).toBeTruthy();
-    // The bar takes the header's place, and Add photos steps aside
-    expect(screen.queryByRole('button', { name: 'Add photos' })).toBeNull();
+    // The bar takes the sort menu's place
+    expect(screen.queryByRole('button', { name: /^Sort photos/ })).toBeNull();
 
     await user.click(screen.getByRole('checkbox', { name: 'Photo of Dinner' }));
     expect(within(bar).getByText('2 selected')).toBeTruthy();
@@ -68,7 +73,7 @@ describe('picking photos on a phone', () => {
     expect(within(bar).getByText('3 selected')).toBeTruthy();
     await user.click(within(bar).getByRole('button', { name: 'Stop selecting' }));
     expect(screen.queryByRole('toolbar', { name: 'Selected photos' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Add photos' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Sort photos/ })).toBeTruthy();
   });
 
   test('picked photos download one by one, each named for when it was added', async () => {
@@ -80,11 +85,11 @@ describe('picking photos on a phone', () => {
     });
     const { user } = await openPhotos();
     const bar = await longPress(screen.getByRole('button', { name: 'Photo of Dinner' }));
-    await user.click(screen.getAllByRole('checkbox', { name: 'Photo of the split' })[1]);
+    await user.click(screen.getByRole('checkbox', { name: 'Photo of Hotel' }));
     await user.click(within(bar).getByRole('button', { name: 'Download photos' }));
 
     // Newest first, as shown: the receipt, then the sunset a day before
-    const [receipt, , sunset] = trip().attachments.sort((a, b) => b.createdAt - a.createdAt);
+    const [, receipt, sunset] = trip().attachments;
     const names = photoFileNames([receipt, sunset]);
     await waitFor(() =>
       expect(saved).toEqual([
@@ -97,13 +102,13 @@ describe('picking photos on a phone', () => {
   test('picked photos are removed together, after asking', async () => {
     const { server, user } = await openPhotos();
     const bar = await longPress(screen.getByRole('button', { name: 'Photo of Dinner' }));
-    await user.click(screen.getAllByRole('checkbox', { name: 'Photo of the split' })[0]);
+    await user.click(screen.getByRole('checkbox', { name: 'Photo of Beach bar' }));
     await user.click(within(bar).getByRole('button', { name: 'Remove photos' }));
     const question = await screen.findByRole('dialog', { name: 'Remove 2 photos?' });
-    expect(server.splits.get('trip')!.attachments).toHaveLength(3);
+    expect(server.splits.get('trip')!.attachments).toHaveLength(4);
     await user.click(within(question).getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
-      expect(server.splits.get('trip')!.attachments.map((a) => a.id)).toEqual(['sunset']),
+      expect(server.splits.get('trip')!.attachments.map((a) => a.id)).toEqual(['sunset', 'group']),
     );
     expect(screen.queryByRole('toolbar', { name: 'Selected photos' })).toBeNull();
     expect(screen.getAllByRole('button', { name: /^Photo of/ })).toHaveLength(1);
@@ -121,7 +126,7 @@ describe('picking photos on a phone', () => {
   });
 });
 
-describe('ordering and filtering photos on a phone', () => {
+describe('ordering photos on a phone', () => {
   /** The photos in the order shown, by id */
   const shownOrder = () =>
     screen
@@ -153,19 +158,19 @@ describe('ordering and filtering photos on a phone', () => {
     ]);
     await user.keyboard('{Escape}');
 
-    // By item date, the receipt goes with its dinner on the 10th; other photos keep
-    // the day they were added
+    // By item date, each photo goes with its item: the receipt with its dinner on the
+    // 10th, the sunset with the hotel on the 9th
     await choose(user, /^Sort photos/, 'Item date, newest');
     expect(sort().getAttribute('aria-label')).toBe('Sort photos: Item date, newest');
-    expect(shownOrder()).toEqual(['beach', 'sunset', 'receipt']);
-    expect(days()).toEqual(['Sun, Oct 11', 'Sat, Oct 10']);
+    expect(shownOrder()).toEqual(['beach', 'receipt', 'sunset']);
+    expect(days()).toEqual(['Sun, Oct 11', 'Sat, Oct 10', 'Fri, Oct 9']);
 
     await choose(user, /^Sort photos/, 'Oldest');
     expect(sort().getAttribute('aria-label')).toBe('Sort photos: Oldest');
     expect(shownOrder()).toEqual(['sunset', 'beach', 'receipt']);
 
     await choose(user, /^Sort photos/, 'Item date, oldest');
-    expect(shownOrder()).toEqual(['receipt', 'sunset', 'beach']);
+    expect(shownOrder()).toEqual(['sunset', 'receipt', 'beach']);
 
     await choose(user, /^Sort photos/, 'Newest');
     expect(sort().getAttribute('aria-label')).toBe('Sort photos: Newest');
@@ -181,49 +186,17 @@ describe('ordering and filtering photos on a phone', () => {
     expect(shown.getAttribute('src')).toBe('/api/splits/trip/attachments/receipt');
   });
 
-  test('the filter menu shows receipts or split photos, with how many, and All picks those', async () => {
-    const { user } = await openPhotos();
-    const show = () => screen.getByRole('button', { name: /^Show:/ });
-    expect(show().getAttribute('aria-label')).toBe('Show: All, 3');
-
-    // Each kind is listed with how many photos it holds
-    await user.click(show());
-    expect((await screen.findAllByRole('menuitem')).map((el) => el.textContent)).toEqual([
-      'All 3',
-      'Receipts 1',
-      'Split photos 2',
-    ]);
-    await user.keyboard('{Escape}');
-
-    await choose(user, /^Show:/, 'Split photos 2');
-    expect(show().getAttribute('aria-label')).toBe('Show: Split photos, 2');
-    expect(shownOrder()).toEqual(['beach', 'sunset']);
-    // Picking all picks the photos shown, not the hidden receipt
-    const bar = await longPress(screen.getAllByRole('button', { name: 'Photo of the split' })[0]);
-    await user.click(within(bar).getByRole('button', { name: 'All' }));
-    expect(within(bar).getByText('2 selected')).toBeTruthy();
-    // The buttons step aside while picking, as Add photos does
-    expect(screen.queryByRole('button', { name: /^Show:/ })).toBeNull();
-    await user.click(within(bar).getByRole('button', { name: 'Stop selecting' }));
-
-    await choose(user, /^Show:/, 'Receipts 1');
-    expect(show().getAttribute('aria-label')).toBe('Show: Receipts, 1');
-    expect(shownOrder()).toEqual(['receipt']);
-
-    await choose(user, /^Show:/, 'All 3');
-    expect(show().getAttribute('aria-label')).toBe('Show: All, 3');
-    expect(shownOrder()).toHaveLength(3);
-  });
-
-  test('a filter with nothing in it says so', async () => {
+  test('with photos only of the split itself, on no item, the tab says how to add one', async () => {
     const split = trip();
     split.attachments = split.attachments.filter((a) => a.itemId == null);
     renderApp(fakeServer(split), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     await user.click(await screen.findByRole('tab', { name: 'Photos' }));
-    await user.click(await screen.findByRole('button', { name: /^Show:/ }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Receipts 0' }));
-    expect(await screen.findByText('No receipts yet. Add one on its item.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /^Photo of/ })).toBeNull();
+    expect(await screen.findByText('No photos yet')).toBeTruthy();
+    expect(screen.getByText('Add a receipt or photo on its item, and it shows here.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Photo/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Sort photos/ })).toBeNull();
+    // Nothing on the tab adds photos to the split itself
+    expect(screen.queryByRole('button', { name: /photo/i })).toBeNull();
   });
 });

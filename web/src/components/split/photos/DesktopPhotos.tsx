@@ -1,21 +1,18 @@
-import { Button, Menu, SegmentedControl, Tooltip, UnstyledButton } from '@mantine/core';
+import { Button, Menu, Tooltip, UnstyledButton } from '@mantine/core';
 import {
   CaretDown,
   Check,
   CheckSquare,
   DownloadSimple,
-  FolderOpen,
-  Images,
   Receipt,
   SortAscending,
   SortDescending,
   Trash,
-  UploadSimple,
   X,
 } from '@phosphor-icons/react';
-import { type DragEvent, useRef, useState } from 'react';
+import { useState } from 'react';
 import { attachmentUrl } from '../../../api';
-import type { PhotoFilter, PhotoSortDir, PhotoSortKey } from '../../../split/photo-days';
+import type { PhotoSortDir, PhotoSortKey } from '../../../split/photo-days';
 import { usePhotoDownload } from '../../../split/photo-download';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
 import UserAvatar from '../../common/UserAvatar';
@@ -23,9 +20,7 @@ import { useSplitPage } from '../SplitPageContext';
 import classes from './DesktopPhotos.module.css';
 import { timeLabel, useAddedBy } from './added-by';
 import PhotoDetails from './PhotoDetails';
-import QueuedPhotoTile from './QueuedPhotoTile';
 import { usePhotoGallery } from './usePhotoGallery';
-import { usePhotoPicker } from './usePhotoPicker';
 
 /** Every row of photos is this tall; each photo is as wide as its shape makes it */
 const ROW_PX = 150;
@@ -38,14 +33,11 @@ const DIRECTION_LABELS: Record<PhotoSortDir, string> = {
   asc: 'Oldest first',
 };
 
-const imagesIn = (list: DataTransfer) =>
-  [...list.items].filter((i) => i.kind === 'file' && i.type.startsWith('image/')).length;
-
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-// The split's Photos tab on a computer: every photo, the split's own and each item's
-// receipts, by day in rows that keep each photo's shape. Choose which to show and in
-// what order, select some to download or remove, and drop files on it to add them.
+// The split's Photos tab on a computer: the photos on its items, by day in rows that keep
+// each photo's shape. Choose the order, and select some to download or remove. Photos
+// are added on their item.
 const DesktopPhotos = () => {
   const { splitId, meta, photos, openDialog } = useSplitPage();
   const addedBy = useAddedBy();
@@ -54,17 +46,12 @@ const DesktopPhotos = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Several photos are saved as one zip
   const saving = usePhotoDownload(splitId, meta?.name ?? '', { zip: true });
-  // How many photos are being dragged over the tab, while they are
-  const [dragging, setDragging] = useState(0);
-  const dragDepth = useRef(0);
   // Width over height of each photo, once it has loaded
   const [shapes, setShapes] = useState<Map<string, number>>(new Map());
 
   const gallery = usePhotoGallery(selected);
-  const { view, setView, all, days, shown, counts, itemById, queued, chosen, confirm } = gallery;
-  const picker = usePhotoPicker(gallery.add);
-  // Nothing at all yet: the whole tab is a place to add the first photos
-  const empty = all.length === 0 && queued.length === 0;
+  const { view, setView, all, days, shown, itemById, chosen, confirm } = gallery;
+  const empty = all.length === 0;
 
   const toggle = (ids: string[], on: boolean) =>
     setSelected((s) => {
@@ -101,34 +88,8 @@ const DesktopPhotos = () => {
     };
   });
 
-  const onDragEnter = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    dragDepth.current++;
-    setDragging(Math.max(1, imagesIn(e.dataTransfer)));
-  };
-  const onDragLeave = () => {
-    dragDepth.current = Math.max(0, dragDepth.current - 1);
-    if (dragDepth.current === 0) setDragging(0);
-  };
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    dragDepth.current = 0;
-    setDragging(0);
-    const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
-    if (files.length > 0) gallery.add(files);
-  };
-
   return (
-    <div
-      className={classes.tab}
-      onDragEnter={onDragEnter}
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
-      }}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
+    <div className={classes.tab}>
       {selecting ? (
         <div
           className={classes.selectionBar}
@@ -229,41 +190,6 @@ const DesktopPhotos = () => {
               ))}
             </Menu.Dropdown>
           </Menu>
-          <SegmentedControl
-            size="xs"
-            value={view.filter}
-            onChange={(filter) => setView((v) => ({ ...v, filter: filter as PhotoFilter }))}
-            aria-label="Show"
-            data={[
-              {
-                value: 'all',
-                label: (
-                  <FilterLabel
-                    label="All"
-                    count={counts.all}
-                  />
-                ),
-              },
-              {
-                value: 'receipts',
-                label: (
-                  <FilterLabel
-                    label="Receipts"
-                    count={counts.receipts}
-                  />
-                ),
-              },
-              {
-                value: 'split',
-                label: (
-                  <FilterLabel
-                    label="Split photos"
-                    count={counts.split}
-                  />
-                ),
-              },
-            ]}
-          />
           <span className={classes.spacer} />
           {shown.length > 0 && (
             <Button
@@ -278,80 +204,15 @@ const DesktopPhotos = () => {
         </div>
       )}
 
-      {dragging > 0 && (
-        <div className={classes.dropZone}>
-          <UploadSimple size={20} />
-          <div className={classes.dropTitle}>
-            {dragging > 1 ? `Drop to add ${dragging} photos` : 'Drop to add photos'}
-          </div>
-          <div className={classes.dropHint}>
-            They're added as split photos. Receipts are added on their item.
-          </div>
-        </div>
-      )}
-
-      {queued.length > 0 && (
-        <div className={classes.row}>
-          {queued.map((photo) => (
-            <QueuedPhotoTile
-              key={photo.id}
-              photo={photo}
-              className={`${classes.tile} ${classes.adding}`}
-              style={{ flex: `1 1 ${ROW_PX}px`, maxWidth: ROW_PX * MAX_STRETCH }}
-              onRemove={() => photos.removeQueued(photo)}
-            />
-          ))}
-          <span className={classes.rowEnd} />
-        </div>
-      )}
-
-      {empty && dragging === 0 && (
-        <div
-          className={classes.emptyArea}
-          onClick={picker.chooseFromLibrary}
-        >
-          {picker.inputs}
-          <span className={classes.emptyIcon}>
-            <Images size={28} />
-          </span>
-          <div className={classes.emptyTitle}>Drop photos here</div>
-          <div className={classes.emptyBody}>
-            Photos for the whole split, like the group shot or a shared bill. Receipts for one item
-            are added on that item and show here too.
-          </div>
-          <Button
-            variant="default"
-            leftSection={<FolderOpen size={16} />}
-            onClick={(e) => {
-              e.stopPropagation();
-              picker.chooseFromLibrary();
-            }}
-          >
-            Choose photos
-          </Button>
-          <div className={classes.emptyHint}>JPEG, PNG, HEIC or WebP</div>
-        </div>
-      )}
-
-      {!empty && shown.length === 0 && queued.length === 0 && dragging === 0 && (
+      {empty && (
         <div className={classes.noneShown}>
           <span className={classes.noneIcon}>
-            {view.filter === 'receipts' ? <Receipt size={22} /> : <Images size={22} />}
+            <Receipt size={22} />
           </span>
-          <div className={classes.emptyTitle}>
-            {view.filter === 'receipts' ? 'No receipts yet' : 'No split photos yet'}
-          </div>
+          <div className={classes.emptyTitle}>No photos yet</div>
           <div className={classes.emptyBody}>
-            {view.filter === 'receipts'
-              ? 'Add one on its item and it shows here.'
-              : 'Drop some here or use Add photos.'}
+            Add a receipt or photo on its item, and it shows here.
           </div>
-          <Button
-            variant="subtle"
-            onClick={() => setView((v) => ({ ...v, filter: 'all' }))}
-          >
-            Show all photos
-          </Button>
         </div>
       )}
 
@@ -396,7 +257,7 @@ const DesktopPhotos = () => {
                     <UnstyledButton
                       className={classes.open}
                       onClick={() => (selecting ? toggle([photo.id], !picked) : setOpen(index))}
-                      aria-label={item ? `Receipt for ${item.name}` : 'Photo of the split'}
+                      aria-label={item ? `Receipt for ${item.name}` : 'Photo'}
                     >
                       <img
                         src={attachmentUrl(splitId, photo.id)}
@@ -463,29 +324,3 @@ const DesktopPhotos = () => {
 };
 
 export default DesktopPhotos;
-
-const FilterLabel = ({ label, count }: { label: string; count: number }) => (
-  <span className={classes.filter}>
-    {label}
-    <span className={classes.filterCount}>{count}</span>
-  </span>
-);
-
-/** The page's main button on the Photos tab: picks photos to add to the split */
-export function AddPhotosButton({ disabled, miw }: { disabled?: boolean; miw?: number }) {
-  const { photos } = useSplitPage();
-  const picker = usePhotoPicker((files) => void photos.upload(files, null));
-  return (
-    <>
-      {picker.inputs}
-      <Button
-        miw={miw}
-        leftSection={<UploadSimple size={16} />}
-        onClick={picker.chooseFromLibrary}
-        disabled={disabled}
-      >
-        Add photos
-      </Button>
-    </>
-  );
-}

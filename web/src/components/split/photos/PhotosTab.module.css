@@ -96,8 +96,6 @@
   gap: 10px;
   min-height: 380px;
   padding: 28px 20px;
-  border: 1.5px dashed color-mix(in srgb, var(--sf-text) 22%, transparent);
-  border-radius: 14px;
   text-align: center;
 }
 
@@ -121,17 +119,4 @@
   max-width: 280px;
   font-size: 14px;
   color: var(--sf-text-muted);
-}
-
-.emptyActions {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-/* The usual button text, on 48px buttons as the share sheet's */
-.emptyActions > :global(.mantine-Button-root) {
-  height: 48px;
 }

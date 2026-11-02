@@ -105,33 +105,41 @@ const uploaded = (server: FakeServer) =>
   );
 
 describe('photos picked offline', () => {
-  test('on a phone, a photo waits through the app reopening, and goes once online', async () => {
+  test("on a phone, an item's photo waits through the app reopening, and goes once online", async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('tab', { name: 'Photos' }));
+    await user.click(await screen.findByText('Dinner'));
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Edit item' }),
+    );
+    // The form, once it has taken the sheet's place
+    const form = (await screen.findByRole('textbox', { name: 'Amount' })).closest('form')!;
 
     goOffline(server);
-    await pickPhotos(user, await screen.findByRole('button', { name: 'Choose from library' }), [
-      file('beach.jpg'),
+    await user.click(within(form).getByRole('button', { name: 'Add photo' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Add photo' });
+    await pickPhotos(user, within(sheet).getByRole('button', { name: /Choose from library/ }), [
+      file('receipt.jpg'),
     ]);
-    expect(await screen.findByText('Waiting to upload')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Remove beach.jpg' })).toBeTruthy();
+    expect(
+      await within(form).findByText('1 photo is kept on this device until it can be uploaded'),
+    ).toBeTruthy();
 
-    // Still offline when the app opens again: the photo is still there, still waiting
+    // Still offline when the app opens again: nothing has gone yet
     reopen(server, '/?s=trip', { size: 'phone' });
     await user.click(await screen.findByRole('tab', { name: 'Photos' }));
-    expect(await screen.findByText('Waiting to upload')).toBeTruthy();
+    expect(await screen.findByText('No photos yet')).toBeTruthy();
     expect(server.uploads).toEqual([]);
 
+    // What was kept on the device goes once online, and shows on the Photos tab
     goOnline(server);
-    expect(await screen.findByRole('button', { name: 'Photo of the split' })).toBeTruthy();
-    expect(screen.queryByText('Waiting to upload')).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Photo of Dinner' })).toBeTruthy();
     // Shrunk once when picked; what was kept on the device is what went
     expect(await uploaded(server)).toEqual([
-      { splitId: 'trip', itemId: null, photo: 'small beach.jpg' },
+      { splitId: 'trip', itemId: 'dinner', photo: 'small receipt.jpg' },
     ]);
-  });
+  }, 15_000);
 
   test("a receipt removed from its item's form while it waits is never uploaded", async () => {
     const server = fakeServer(trip());
@@ -204,138 +212,63 @@ describe('photos picked offline', () => {
 });
 
 describe('photos picked online', () => {
-  const openPhotos = async (server: FakeServer) => {
+  /** The form of the dinner, opened on a computer */
+  const editDinner = async (server: FakeServer) => {
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('tab', { name: /^Photos/ }));
-    return user;
+    await user.click(await screen.findByText('Dinner'));
+    return { user, form: await screen.findByRole('dialog', { name: 'Edit item' }) };
   };
 
   test('one the server refuses is explained and not kept', async () => {
     const server = fakeServer(trip());
     server.failNext.photo = 409;
-    const user = await openPhotos(server);
-    await pickPhotos(user, screen.getByRole('button', { name: 'Add photos' }), [file('beach.jpg')]);
+    const { user, form } = await editDinner(server);
+    await pickPhotos(user, within(form).getByRole('button', { name: 'Add photo' }), [
+      file('receipt.jpg'),
+    ]);
 
     expect(await screen.findByText('Refused')).toBeTruthy();
-    expect(await screen.findByText('Drop photos here')).toBeTruthy();
-    expect(screen.queryByText('Waiting to upload')).toBeNull();
+    await waitFor(() =>
+      expect(within(form).queryByRole('button', { name: 'Open receipt.jpg' })).toBeNull(),
+    );
+    expect(within(form).queryByText(/kept on this device until/)).toBeNull();
 
     // Opening the app again doesn't bring it back
     reopen(server, '/?s=trip');
     await userEvent.setup().click(await screen.findByRole('tab', { name: /^Photos/ }));
-    expect(await screen.findByText('Drop photos here')).toBeTruthy();
+    expect(await screen.findByText('No photos yet')).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(screen.queryByText('Waiting to upload')).toBeNull();
     expect(server.uploads).toEqual([]);
   });
-});
 
-describe('adding the first photos', () => {
-  test('on a computer, the empty tab is the place to choose them, with no toolbar', async () => {
+  test("on a computer, the empty Photos tab points to the items, and an item's photo shows there", async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip');
     const user = userEvent.setup();
     await user.click(await screen.findByRole('tab', { name: /^Photos/ }));
-    expect(await screen.findByText('Drop photos here')).toBeTruthy();
-    expect(screen.getByText('JPEG, PNG, HEIC or WebP')).toBeTruthy();
+    expect(await screen.findByText('No photos yet')).toBeTruthy();
+    expect(screen.getByText('Add a receipt or photo on its item, and it shows here.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Sort photos/ })).toBeNull();
-    expect(screen.queryByRole('radiogroup', { name: 'Show' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /photo/i })).toBeNull();
 
-    const chooser = await pickPhotos(user, screen.getByRole('button', { name: 'Choose photos' }), [
-      file('beach.jpg'),
-      file('pool.jpg'),
+    await user.click(screen.getByRole('tab', { name: /^Items/ }));
+    await user.click(await screen.findByText('Dinner'));
+    const form = await screen.findByRole('dialog', { name: 'Edit item' });
+    await pickPhotos(user, within(form).getByRole('button', { name: 'Add photo' }), [
+      file('receipt.jpg'),
     ]);
-    expect(chooser.multiple).toBe(true);
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(2),
-    );
-    expect(screen.queryByText('Drop photos here')).toBeNull();
-    expect(screen.getByRole('button', { name: /^Sort photos/ })).toBeTruthy();
-
-    // Then more from the page's Add photos: each goes straight up, in the order picked
-    await pickPhotos(user, screen.getByRole('button', { name: 'Add photos' }), [
-      file('sunset.jpg'),
-    ]);
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(3),
-    );
-    expect(screen.queryByText('Waiting to upload')).toBeNull();
-    expect((await uploaded(server)).map((u) => u.photo)).toEqual([
-      'small beach.jpg',
-      'small pool.jpg',
-      'small sunset.jpg',
-    ]);
-  });
-
-  test('on a computer, a filter with none says so, and Show all photos goes back', async () => {
-    const split = trip();
-    split.attachments = [
-      {
-        id: 'beach',
-        itemId: null,
-        size: 1000,
-        contentType: 'image/jpeg',
-        uploadedBy: 'ryan@example.com',
-        createdAt: Date.UTC(2026, 9, 11, 9),
-      },
-    ];
-    renderApp(fakeServer(split), '/?s=trip');
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('tab', { name: /^Photos/ }));
-    await user.click(await screen.findByText('Receipts'));
-    expect(await screen.findByText('No receipts yet')).toBeTruthy();
-    expect(screen.getByText('Add one on its item and it shows here.')).toBeTruthy();
-    expect(screen.queryByText('Drop photos here')).toBeNull();
-
-    await user.click(screen.getByRole('button', { name: 'Show all photos' }));
-    expect(await screen.findByRole('button', { name: 'Photo of the split' })).toBeTruthy();
-    expect(screen.queryByText('No receipts yet')).toBeNull();
-  });
-
-  test('on a phone, the empty tab offers the camera or the library, and no Add photos button', async () => {
-    const server = fakeServer(trip());
-    renderApp(server, '/?s=trip', { size: 'phone' });
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('tab', { name: 'Photos' }));
-    expect(
-      await screen.findByText('Photos for the whole split. Receipts for one item go on that item.'),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Add photos' })).toBeNull();
-
-    const camera = await pickPhotos(user, screen.getByRole('button', { name: 'Take photo' }), [
-      file('beach.jpg'),
-    ]);
-    expect(camera.getAttribute('capture')).toBe('environment');
-    expect(camera.multiple).toBe(false);
-    expect(await screen.findByRole('button', { name: 'Photo of the split' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Take photo' })).toBeNull();
-
-    // Once there are photos, Add photos opens a sheet with the same two choices
-    await user.click(screen.getByRole('button', { name: 'Add photos' }));
-    const sheet = await screen.findByRole('dialog', { name: 'Add photos' });
-    expect(within(sheet).getByText('Opens the camera')).toBeTruthy();
-    const library = await pickPhotos(
-      user,
-      within(sheet).getByRole('button', { name: /Choose from library/ }),
-      [file('pool.jpg'), file('sunset.jpg')],
-    );
-    expect(library.multiple).toBe(true);
-    expect(library.hasAttribute('capture')).toBe(false);
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add photos' })).toBeNull());
-    await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Photo of the split' })).toHaveLength(3),
-    );
-    expect((await uploaded(server)).map((u) => u.photo)).toEqual([
-      'small beach.jpg',
-      'small pool.jpg',
-      'small sunset.jpg',
-    ]);
+    await waitFor(() => expect(server.uploads).toHaveLength(1));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await user.click(screen.getByRole('tab', { name: /^Photos/ }));
+    expect(await screen.findByRole('button', { name: 'Receipt for Dinner' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /^Photos/ }).textContent).toBe('Photos1');
   });
 });
 
 describe("an item's photos", () => {
-  test('on a phone, Add photo offers the camera or the library, as the Photos tab does', async () => {
+  test('on a phone, Add photo offers the camera or the library', async () => {
     const server = fakeServer(trip());
     renderApp(server, '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();

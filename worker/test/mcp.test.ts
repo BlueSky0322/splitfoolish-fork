@@ -1913,12 +1913,13 @@ describe('photos', () => {
       'idempotency_conflict',
     );
 
+    // A photo goes on an expense: the app shows photos on expenses only
     const ofSplit = await tool(client, 'add_photo', {
       splitId: split.id,
       requestId: 'trip-photo-1',
       image: OTHER_PNG,
     });
-    expect(ofSplit).toMatchObject({ status: 'saved', expenseId: null });
+    expect(ofSplit.error?.code).toBe('schema');
 
     const read = await tool(client, 'get_split', { splitId: split.id });
     expect(read.expenses[0].photos.map((p: { id: string }) => p.id).sort()).toEqual(
@@ -1928,10 +1929,10 @@ describe('photos', () => {
       contentType: 'image/png',
       addedByYou: true,
     });
-    expect(read.photos.map((p: { id: string }) => p.id)).toEqual([ofSplit.photoId]);
+    expect(read.photos).toEqual([]);
     // The app shows the same photos
     const inApp = (await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments;
-    expect(inApp).toHaveLength(3);
+    expect(inApp).toHaveLength(2);
 
     const look = await client.callTool({
       name: 'get_photo',
@@ -1950,12 +1951,10 @@ describe('photos', () => {
       expenseId,
       requestId: 'cafe-remove1',
     });
-    expect((await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments).toEqual([
-      expect.objectContaining({ id: ofSplit.photoId, itemId: null }),
-    ]);
+    expect((await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments).toEqual([]);
   });
 
-  it('move a photo between expenses and the split, and remove one, by whoever added it or the owner', async () => {
+  it('move a photo between expenses, and remove one, by whoever added it or the owner', async () => {
     const alice = person('alice');
     const dave = person('dave');
     const split = await trip(alice, dave);
@@ -2003,14 +2002,18 @@ describe('photos', () => {
     expect((await tool(editor, 'move_photo', { ...move, expenseId: cafe })).error?.code).toBe(
       'idempotency_conflict',
     );
-    // Onto the split itself, by the owner, who may move anyone's
-    const ofSplit = await tool(owner, 'move_photo', {
+    // Back onto the cafe, by the owner, who may move anyone's; never off every expense
+    const back = await tool(owner, 'move_photo', {
       ...move,
-      expenseId: null,
+      expenseId: cafe,
       requestId: 'alice-move-1',
     });
-    expect(ofSplit).toMatchObject({ status: 'saved', expenseId: null });
-    expect(await photosOf(editor)).toEqual({ cafe: [], taxi: [], split: [photoId] });
+    expect(back).toMatchObject({ status: 'saved', expenseId: cafe });
+    expect(await photosOf(editor)).toEqual({ cafe: [photoId], taxi: [], split: [] });
+    expect(
+      (await tool(owner, 'move_photo', { ...move, expenseId: null, requestId: 'alice-move-4' }))
+        .error?.code,
+    ).toBe('schema');
     // Not onto an expense that is not there, and not a photo that is not there
     expect(
       (
@@ -2043,24 +2046,34 @@ describe('photos', () => {
     const removal = { splitId: split.id, photoId: alices, requestId: 'alice-remove-1' };
     const removed = await tool(owner, 'remove_photo', removal);
     expect(removed).toMatchObject({ status: 'saved', photoId: alices, replayed: false });
-    expect(await photosOf(owner)).toEqual({ cafe: [], taxi: [], split: [photoId] });
+    expect(await photosOf(owner)).toEqual({ cafe: [photoId], taxi: [], split: [] });
     expect(await tool(owner, 'remove_photo', removal)).toEqual({ ...removed, replayed: true });
     expect(
       (await tool(owner, 'remove_photo', { ...removal, requestId: 'alice-remove-2' })).error?.code,
     ).toBe('not_found');
     // The app sees the same
     const inApp = (await api.call(alice, 'GET', `/api/splits/${split.id}`)).data.attachments;
-    expect(inApp).toMatchObject([{ id: photoId, itemId: null }]);
+    expect(inApp).toMatchObject([{ id: photoId, itemId: cafe }]);
   });
 
   it('refuse what is not a photo, and an expense that is not there', async () => {
     const alice = person('alice');
     const split = await trip(alice);
     const client = await connect((await grant(alice, [READ, WRITE])).access);
+    const { expenseId } = await tool(client, 'add_expense', {
+      splitId: split.id,
+      requestId: 'text-cafe-01',
+      currency: 'MYR',
+      name: 'Cafe',
+      cost: 18,
+      payerId: split.bob,
+      participantIds: [split.bob, split.cat],
+    });
     expect(
       (
         await tool(client, 'add_photo', {
           splitId: split.id,
+          expenseId,
           requestId: 'text-photo-1',
           image: btoa('hello, not a photo'),
         })

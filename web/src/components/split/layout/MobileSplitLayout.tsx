@@ -25,7 +25,7 @@ import Fab from '../../ui/Fab';
 import { BalanceHero } from '../balances/BalancePanel';
 import { MobileSelectionBar } from '../items/ItemSelection';
 import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
-import PhotosTab, { AddPhotosFab } from '../photos/PhotosTab';
+import PhotosTab from '../photos/PhotosTab';
 import PillMenu from '../PillMenu';
 import { usePhotoSelection } from '../photos/usePhotoSelection';
 import { useSplitPage } from '../SplitPageContext';
@@ -359,7 +359,6 @@ const MobileSplitLayout = ({
           onClick={() => openDialog({ kind: 'add' })}
         />
       )}
-      {tab === 'photos' && !picking && <AddPhotosFab />}
       {parts.dialogs}
     </>
   );
