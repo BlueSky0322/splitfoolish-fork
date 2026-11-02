@@ -469,25 +469,27 @@ describe('the split page', () => {
     expect(await screen.findByRole('button', { name: 'Take photo' })).toBeTruthy();
   });
 
-  test('on a phone, the item sheet records who paid their part back, and the Payments page lists it', async () => {
-    const server = fakeServer(trip());
-    renderApp(server, '/?s=trip', { size: 'phone' });
+  test('on a phone, a payment recorded for an item shows under it, and the Payments page lists it', async () => {
+    const detail = trip();
+    detail.payments.push({
+      id: 'p1',
+      fromId: 'ann',
+      toId: 'me',
+      amount: 30,
+      itemId: 'dinner',
+      notes: null,
+      createdAt: Date.now(),
+      original: null,
+    });
+    renderApp(fakeServer(detail), '/?s=trip', { size: 'phone' });
     const user = userEvent.setup();
     await user.click(await screen.findByText('Dinner'));
-    const detail = await screen.findByRole('dialog');
-    await user.click(within(detail).getByRole('button', { name: 'Ann paid back' }));
-    // Her part of the dinner, for the dinner, to Ryan who paid: 45, but she owes only 30
-    // overall (she paid for the taxi), so 30
-    const save = await screen.findByRole('button', { name: 'Record payment' });
-    const form = save.closest('form')!;
-    expect(within(form).getByRole('textbox', { name: 'Amount' })).toHaveProperty('value', '30.00');
-    expect(within(form).getByText('For Dinner')).toBeTruthy();
-    await user.click(save);
-    await waitFor(() =>
-      expect(server.splits.get('trip')!.payments).toMatchObject([
-        { fromId: 'ann', toId: 'me', amount: 30, itemId: 'dinner' },
-      ]),
-    );
+    const sheet = within(await screen.findByRole('dialog'));
+    expect(sheet.getByText(readsAs('Ann paid Ryan'))).toBeTruthy();
+    // Payments are recorded from Settle up (Mark as paid) or the Payments page, not per part
+    expect(sheet.queryByRole('button', { name: /paid back/i })).toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     // Every payment, on a page of its own from the menu; Back returns to the split
     await user.click(screen.getByRole('button', { name: 'More' }));
@@ -499,77 +501,6 @@ describe('the split page', () => {
     await user.click(screen.getByRole('button', { name: 'Back to Trip' }));
     await waitFor(() => expect(window.location.search).toBe('?s=trip'));
     expect(await screen.findByText('Dinner')).toBeTruthy();
-  });
-
-  test('Paid back is offered only to someone who still owes money, and becomes a tag once paid', async () => {
-    // Ryan paid 90 for dinner, Ann 20 for the taxi: Ryan is owed 35 overall, Ann owes 35
-    const owed = () =>
-      splitDetail('trip', [
-        item({ id: 'dinner', name: 'Dinner', cost: 90 }),
-        item({ id: 'taxi', name: 'Taxi', cost: 20, payerId: 'ann' }),
-      ]);
-    const server = fakeServer(owed());
-    renderApp(server, '/?s=trip', { size: 'phone' });
-    const user = userEvent.setup();
-    const open = async (name: string) => {
-      await user.click(await screen.findByText(name));
-      return within(await screen.findByRole('dialog'));
-    };
-    const close = async () => {
-      await user.keyboard('{Escape}');
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    };
-
-    // Ryan's 10 of the taxi is already in what he's owed: nothing to pay back
-    const taxi = await open('Taxi');
-    expect(taxi.getByRole('list', { name: "Each person's part" }).textContent).toContain('Ryan');
-    expect(taxi.queryByRole('button', { name: /paid back$/ })).toBeNull();
-    await close();
-
-    // Ann's 45 of the dinner, up to the 35 she owes
-    await user.click((await open('Dinner')).getByRole('button', { name: 'Ann paid back' }));
-    const save = await screen.findByRole('button', { name: 'Record payment' });
-    expect(within(save.closest('form')!).getByRole('textbox', { name: 'Amount' })).toHaveProperty(
-      'value',
-      '35.00',
-    );
-    await user.click(save);
-    await waitFor(() =>
-      expect(server.splits.get('trip')!.payments).toMatchObject([{ fromId: 'ann', amount: 35 }]),
-    );
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-
-    // Settled now: her part says it was paid back, with nothing more to record
-    const parts = (await open('Dinner')).getByRole('list', { name: "Each person's part" });
-    const ann = within(parts)
-      .getAllByRole('listitem')
-      .find((li) => li.textContent?.includes('Ann'))!;
-    expect(within(ann).getByText('Paid back')).toBeTruthy();
-    expect(within(ann).queryByRole('button')).toBeNull();
-  });
-
-  test("on a computer, Record payment is in an item's menu only while someone on it owes money", async () => {
-    renderApp(
-      fakeServer(
-        splitDetail('trip', [
-          item({ id: 'dinner', name: 'Dinner', cost: 90 }),
-          item({ id: 'taxi', name: 'Taxi', cost: 20, payerId: 'ann' }),
-        ]),
-      ),
-      '/?s=trip',
-    );
-    const user = userEvent.setup();
-    const menuOf = async (name: string) => {
-      await user.click(await screen.findByText(name));
-      await user.click(within(await screen.findByRole('dialog')).getByLabelText('More actions'));
-      return (await screen.findAllByRole('menuitem')).map((m) => m.textContent);
-    };
-    // Only Ryan shares the taxi with Ann who paid, and he is owed money
-    expect(await menuOf('Taxi')).not.toContain('Record payment');
-    await user.keyboard('{Escape}');
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(await menuOf('Dinner')).toContain('Record payment');
   });
 
   test('web addresses in notes open as short links: in the item sheet on a phone, from the form on desktop', async () => {
@@ -609,7 +540,7 @@ describe('the split page', () => {
     expect(chip.getAttribute('target')).toBe('_blank');
   });
 
-  test('Google Maps links in notes show as cards with the place, on a phone and on desktop', async () => {
+  test('Google Maps links in notes read as the place they name, on a phone and on desktop', async () => {
     const APW = 'https://maps.app.goo.gl/apw123';
     const OTHER = 'https://maps.app.goo.gl/unknown';
     const PIN = 'https://goo.gl/maps/pin123';
@@ -655,65 +586,47 @@ describe('the split page', () => {
       return s;
     };
     const user = userEvent.setup();
-    const cardsIn = async (where: HTMLElement) => {
-      // The place once Google has said what it is; a link it says nothing about stays a pin
-      const card = await within(where).findByRole('link', {
-        name: 'A Place Where - APW, on Google Maps',
-      });
-      expect(card.getAttribute('href')).toBe(APW);
-      expect(card.getAttribute('target')).toBe('_blank');
-      expect(within(card).getByText('29, Jalan Riong, Bangsar, 59100 Kuala Lumpur')).toBeTruthy();
-      expect(card.querySelector('img')!.getAttribute('src')).toBe(
-        'https://lh5.googleusercontent.com/p/apw',
-      );
-      const plain = within(where).getByRole('link', { name: 'Open in Google Maps' });
-      expect(plain.getAttribute('href')).toBe(OTHER);
-      // A dropped pin: its name and where the link goes, beside a pin
-      const pin = within(where).getByRole('link', {
-        name: 'VRJ3+MG Bagan Datuk, Perak, on Google Maps',
-      });
-      expect(pin.getAttribute('href')).toBe(PIN);
-      // Its name and where the link goes, nothing between
-      expect(pin.textContent).toBe('VRJ3+MG Bagan Datuk, Perakgoo.gl');
-      expect(pin.querySelector('img')).toBeNull();
-      // A place shared from Google is a card with its name; anything else shared, none
-      const shared = within(where).getByRole('link', { name: 'Kedai Kopi 168, on Google Maps' });
-      expect(shared.getAttribute('href')).toBe(SHARED);
-      await waitFor(() =>
-        expect(
-          [...where.querySelectorAll('a')].filter(
-            (a) => a.getAttribute('href') === NOT_PLACE && a.getAttribute('aria-label'),
-          ),
-        ).toEqual([]),
-      );
-    };
+    /** The chips for the links, as their names, telling a known place from another link */
+    const chipsIn = (where: HTMLElement) =>
+      within(where)
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('target') === '_blank')
+        .map((a) => [a.textContent, a.getAttribute('href'), a.dataset.place != null]);
+    const CHIPS = [
+      ['A Place Where - APW', APW, true],
+      // Google says nothing about it: its address, as a plain link
+      ['maps.app.goo.gl/unknown', OTHER, false],
+      ['VRJ3+MG Bagan Datuk, Perak', PIN, true],
+      ['example.com/menu', 'https://example.com/menu', false],
+      ['Kedai Kopi 168', SHARED, true],
+      // Shared from Google but not a place: its address
+      ['share.google/article', NOT_PLACE, false],
+    ];
 
     renderApp(server(), '/?s=trip', { size: 'phone' });
     await user.click(await screen.findByText('Coffee'));
     const sheet = await screen.findByRole('dialog');
-    await cardsIn(sheet);
     // In the text, a Maps link reads as its place, other addresses as where they go
     const notes = sheet.querySelector('p')!;
-    expect(notes.textContent).toBe(
-      'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at VRJ3+MG Bagan Datuk, Perak, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
+    await waitFor(() =>
+      expect(notes.textContent).toBe(
+        'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at VRJ3+MG Bagan Datuk, Perak, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
+      ),
     );
-    expect(
-      within(notes).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),
-    ).toBe(APW);
-    expect(within(notes).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
+    expect(chipsIn(notes)).toEqual(CHIPS);
+    // No cards: nothing else in the sheet opens the links
+    expect(within(sheet).queryByRole('link', { name: /on Google Maps/ })).toBeNull();
+    expect(sheet.querySelector(`img[src="https://lh5.googleusercontent.com/p/apw"]`)).toBeNull();
 
-    // Desktop: the cards under the notes, and every address as a chip, a Maps link by its
-    // place's name
+    // Desktop: every address as a chip under the notes box, a Maps link by its place's name
     cleanup();
     renderApp(server(), '/?s=trip');
     await user.click(await screen.findByText('Coffee'));
     const form = await screen.findByRole('dialog');
-    await cardsIn(form);
-    expect(within(form).queryByRole('link', { name: APW })).toBeNull();
-    expect(
-      within(form).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),
-    ).toBe(APW);
-    expect(within(form).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
+    await waitFor(() =>
+      expect(within(form).getByRole('link', { name: 'Kedai Kopi 168' })).toBeTruthy(),
+    );
+    expect(chipsIn(form)).toEqual(CHIPS);
   });
 
   test('the owner links a guest to a member, taking the account off the person it joined as', async () => {

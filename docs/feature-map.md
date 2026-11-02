@@ -133,29 +133,26 @@ it current.
   (`updateItem(id, input, { day })` queues the date before the edit, so the server
   converts on the new day) ([utils/date-input.ts](../web/src/utils/date-input.ts)).
 - Notes: web addresses open as links, shown short ("example.com/menu",
-  [LinkedText](../web/src/components/ui/LinkedText.tsx)), and Google Maps links also show
-  as cards with the place's picture, name and address
-  ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
-  the item sheet and the form; several side by side, to swipe). In the item sheet's text
-  a Maps link reads as its place's name (`MapsLinkName`); the item form, where notes are
-  typed, lists their addresses as chips under them, Maps links by their place's name;
-  the list's line of notes shows them the same way, each opening its link above the row
-  that opens the item (the name's button reaches across the row). A known place is drawn
-  in the place colour, a map pin's red (`--sf-place`), apart from people's colours and
-  the accent; anything else as a link. A share.google link goes on to
-  Google Search, which is never fetched: the address it redirects to names the place
-  (marked `sh/x/loc`), but not where it is, so its card has no map and the form searches
-  its name rather than taking it as the item's place. A place page's own map (its
-  `staticmap` picture) gives its position when the address doesn't. The Worker reads them from the tags Google's page has
-  for link previews (`GET /api/link-preview`,
-  [worker/links/preview.ts](../worker/links/preview.ts)), following redirects only
-  within Google Maps (`isMapsLink` in [shared/links.ts](../shared/links.ts)) and keeping
-  each a week; a page that says nothing names the place from the link, else the card is
-  a pin. A dropped pin (a shared position, which Google's page names nothing) is named
-  as Google Maps names one, its plus code in its town ("VRP3+RQ Bagan Datuk, Perak",
-  the town from OpenStreetMap, `placeArea`), beside a pin. Where the link itself says
-  the position (`positionInLink` in shared/links.ts, which the Worker reads too), the
-  app shows the full plus code before the Worker answers, or offline. No map is drawn.
+  [LinkedText](../web/src/components/ui/LinkedText.tsx)), and a Google Maps link reads as
+  the place it names, with a pin (`MapsLinkName` and `MapsLinkLabel`,
+  [MapsLinks](../web/src/components/common/MapsLinks.tsx)): in the item sheet's text, as
+  chips under the item form's notes box (where notes are typed), and in the list's line
+  of notes, each opening its link above the row that opens the item (the name's button
+  reaches across the row). A known place is drawn in the place colour, a map pin's red
+  (`--sf-place`), apart from people's colours and the accent; anything else as a link.
+  The Worker names them from the tags Google's page has for link previews
+  (`GET /api/link-preview`, [worker/links/preview.ts](../worker/links/preview.ts)),
+  following redirects only within Google Maps (`isMapsLink` in
+  [shared/links.ts](../shared/links.ts)) and keeping each a week; a page that says
+  nothing names the place from the link. A share.google link goes on to Google Search,
+  which is never fetched: the address it redirects to names the place (marked
+  `sh/x/loc`), but not where it is, so the form searches its name rather than taking it
+  as the item's place. A place page's own map (its `staticmap` picture) gives its
+  position when the address doesn't. A dropped pin (a shared position, which Google's
+  page names nothing) is named as Google Maps names one, its plus code in its town
+  ("VRP3+RQ Bagan Datuk, Perak", the town from OpenStreetMap, `placeArea`). Where the
+  link itself says the position (`positionInLink` in shared/links.ts, which the Worker
+  reads too), the app shows the full plus code before the Worker answers, or offline.
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
@@ -227,8 +224,8 @@ order), [person-colors.test.ts](../web/src/split/person-colors.test.ts),
 ## Settling up and currencies
 
 **What it is.** Who owes whom and how they pay, payments made between people (Mark as
-paid on a transfer, Paid back on someone's part of an item, the Payments page at
-`?s=<id>&payments`), items paid in other currencies, the Currencies sheet, and the
+paid on a transfer, and the Payments page at `?s=<id>&payments`), items paid in other
+currencies, the Currencies sheet, and the
 Convert page (`?convert`).
 
 **Owner.** Settling is worked out, not stored: [split/derive.ts](../web/src/split/derive.ts)
@@ -275,12 +272,9 @@ lists them for the Currencies sheet, and typed rates go through the split's acti
   largest remainder (`convertParts`).
 - A payment never counts in the split's total, and is never shown as an item: the
   total is what was spent, settling is what moved between people.
-- Paid back on someone's part of an item (the phone's item sheet, Record payment in
-  the computer's item menu) is offered only while they owe money overall, prefilled
-  with what's left of their part up to what they owe (`payBack` in `split/derive.ts`):
-  balances are net, so paying back a part someone settled or owed money already has
-  counted would only have it sent back. Once paid it shows as a tag. Any payment can
-  still be recorded from the Payments page or Mark as paid.
+- A payment is recorded from Mark as paid or the Payments page, never per part of an
+  item. One recorded for an item before still shows under that item, and says so on
+  the Payments page.
 - An item, or a payment, is recorded at the rate on the UTC day it was paid (`rateDay`) and kept at
   it, so what someone owes never moves with the rates: a new amount is converted at the
   same rate (`keepsSavedConversion`), and moving it to another day (`setItemDate`)
