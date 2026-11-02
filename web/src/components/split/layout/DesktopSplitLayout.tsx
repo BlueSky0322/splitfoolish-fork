@@ -33,9 +33,10 @@ import { GROUP_ORDER, useItemViewPrefs } from '../items/useItemViewPrefs';
 import Skeleton from '../../ui/Skeleton';
 import { TitleSkeleton, ToolbarSkeleton } from './SplitSkeletons';
 import classes from '../Split.module.css';
+import { isReceipt } from '../../../split/photo-days';
 import { PersonNames } from '../PersonAvatar';
 import { canChangePeople } from '@shared/rules';
-import DesktopPhotos, { AddPhotosButton } from '../photos/DesktopPhotos';
+import DesktopPhotos from '../photos/DesktopPhotos';
 
 const SORT_LABELS: Record<SortKey, string> = {
   date: 'Date',
@@ -54,7 +55,7 @@ const DIRECTION_LABELS: Record<SortKey, Record<SortDir, string>> = {
 
 type DesktopTab = 'items' | 'photos';
 
-/** Add item and Add photos take the same room, so the buttons beside them stay put */
+/** Add item keeps the same room, so the buttons beside it stay put */
 const MAIN_BUTTON_WIDTH = 136;
 
 /** Whether a key was pressed in a dialog, where the page's keys rest */
@@ -77,7 +78,7 @@ const DesktopSplitLayout = ({
   const hasPeople = state.people.length > 0;
   const otherCurrencies = otherCurrencyCount(state.items);
   const [tab, setTab] = useState<DesktopTab>('items');
-  const photoCount = meta?.attachments.length ?? 0;
+  const photoCount = meta?.attachments.filter(isReceipt).length ?? 0;
   const onItems = tab === 'items';
   const canAdd = loaded && hasPeople;
   const canShare = loaded && myEmail != null;
@@ -183,25 +184,18 @@ const DesktopSplitLayout = ({
                   </ActionIcon>
                 }
               />
-              {onItems ? (
-                <Tooltip label="Add item  N">
-                  <Button
-                    miw={MAIN_BUTTON_WIDTH}
-                    leftSection={<Plus size={16} />}
-                    rightSection={<Key>N</Key>}
-                    onClick={() => openDialog({ kind: 'add' })}
-                    disabled={!canAdd}
-                    aria-keyshortcuts="N"
-                  >
-                    Add item
-                  </Button>
-                </Tooltip>
-              ) : (
-                <AddPhotosButton
-                  disabled={!loaded}
+              <Tooltip label="Add item  N">
+                <Button
                   miw={MAIN_BUTTON_WIDTH}
-                />
-              )}
+                  leftSection={<Plus size={16} />}
+                  rightSection={<Key>N</Key>}
+                  onClick={() => openDialog({ kind: 'add' })}
+                  disabled={!canAdd}
+                  aria-keyshortcuts="N"
+                >
+                  Add item
+                </Button>
+              </Tooltip>
             </div>
           </div>
 

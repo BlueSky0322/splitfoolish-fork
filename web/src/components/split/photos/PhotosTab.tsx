@@ -1,11 +1,8 @@
 import { ActionIcon, Button, Portal, UnstyledButton } from '@mantine/core';
 import {
-  Camera,
-  CameraPlus,
   Check,
   DownloadSimple,
-  FunnelSimple,
-  Images,
+  Receipt,
   SortAscending,
   SortDescending,
   Trash,
@@ -15,20 +12,16 @@ import type { Attachment } from '@shared/api';
 import { useState } from 'react';
 import { attachmentUrl } from '../../../api';
 import { useIsMobile } from '../../../hooks/useBreakpoints';
-import { PHONE_PHOTO_SORTS, PHOTO_FILTERS, type PhotoFilter } from '../../../split/photo-days';
+import { PHONE_PHOTO_SORTS } from '../../../split/photo-days';
 import { photoFileName, usePhotoDownload } from '../../../split/photo-download';
-import Fab from '../../ui/Fab';
 import PhotoViewer, { type ViewerPhoto } from '../../ui/PhotoViewer';
 import { useLongPress } from '../../../hooks/useLongPress';
 import bar from '../items/ItemSelection.module.css';
 import PillMenu from '../PillMenu';
 import { useSplitPage } from '../SplitPageContext';
 import classes from './PhotosTab.module.css';
-import QueuedPhotoTile from './QueuedPhotoTile';
 import { usePhotoGallery } from './usePhotoGallery';
 import type { PhotoSelection } from './usePhotoSelection';
-import { usePhotoPicker } from './usePhotoPicker';
-import AddPhotosSheet from './AddPhotosSheet';
 
 /** One photo: a tap opens it, or picks it while picking; a long press starts picking */
 function PhotoTile({
@@ -60,7 +53,7 @@ function PhotoTile({
       }}
       role={picking ? 'checkbox' : undefined}
       aria-checked={picking ? picked : undefined}
-      aria-label={label ? `Photo of ${label}` : 'Photo of the split'}
+      aria-label={label ? `Photo of ${label}` : 'Photo'}
     >
       <img
         src={attachmentUrl(splitId, photo.id)}
@@ -74,10 +67,9 @@ function PhotoTile({
   );
 }
 
-// The split's Photos tab on a phone: every photo, the split's own and each item's
-// receipts, by day, with the item it belongs to. Its menus offer the orders and kinds a
-// computer's Photos tab does. A long press picks photos, to download or remove
-// them together.
+// The split's Photos tab on a phone: the photos on its items, by day, each with the item
+// it belongs to. Photos are added on their item. Its menu offers the orders a computer's
+// Photos tab does. A long press picks photos, to download or remove them together.
 const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
   const { splitId, meta, photos } = useSplitPage();
   // Phones save each photo as usual; a tablet gets one zip, as a computer does
@@ -85,12 +77,10 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
   const [open, setOpen] = useState<number | null>(null);
   const gallery = usePhotoGallery(pick.selected);
   // shown: the photos in order, what the viewer steps through and All picks
-  const { view, setView, all, days, shown, counts, itemById, queued, chosen, confirm } = gallery;
-  const picker = usePhotoPicker(gallery.add);
+  const { view, setView, all, days, shown, itemById, chosen, confirm } = gallery;
   const sort =
     PHONE_PHOTO_SORTS.find((o) => o.sortKey === view.sortKey && o.sortDir === view.sortDir) ??
     PHONE_PHOTO_SORTS[0];
-  const filter = PHOTO_FILTERS.find((f) => f.filter === view.filter) ?? PHOTO_FILTERS[0];
   const viewer: ViewerPhoto[] = shown.map((photo) => ({
     key: photo.id,
     src: attachmentUrl(splitId, photo.id),
@@ -173,65 +163,18 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
               setView((v) => ({ ...v, sortKey: o.sortKey, sortDir: o.sortDir }));
             }}
           />
-          <PillMenu
-            title="Show"
-            label={`Show: ${filter.label}, ${counts[filter.filter]}`}
-            icon={<FunnelSimple size={14} />}
-            options={PHOTO_FILTERS.map((f) => ({
-              key: f.filter,
-              label: f.label,
-              count: counts[f.filter],
-            }))}
-            value={view.filter}
-            onChange={(key) => setView((v) => ({ ...v, filter: key as PhotoFilter }))}
-          />
         </div>
       )}
-      {queued.length > 0 && (
-        <div className={classes.grid}>
-          {queued.map((photo) => (
-            <QueuedPhotoTile
-              key={photo.id}
-              photo={photo}
-              className={classes.tile}
-              onRemove={() => photos.removeQueued(photo)}
-            />
-          ))}
-        </div>
-      )}
-      {all.length === 0 && queued.length === 0 && (
+      {all.length === 0 && (
         <div className={classes.empty}>
-          {picker.inputs}
           <span className={classes.emptyIcon}>
-            <CameraPlus size={30} />
+            <Receipt size={30} />
           </span>
-          <div className={classes.emptyTitle}>Add photos</div>
+          <div className={classes.emptyTitle}>No photos yet</div>
           <div className={classes.emptyBody}>
-            Photos for the whole split. Receipts for one item go on that item.
-          </div>
-          <div className={classes.emptyActions}>
-            <Button
-              leftSection={<Camera size={18} />}
-              onClick={picker.takePhoto}
-            >
-              Take photo
-            </Button>
-            <Button
-              variant="default"
-              leftSection={<Images size={18} />}
-              onClick={picker.chooseFromLibrary}
-            >
-              Choose from library
-            </Button>
+            Add a receipt or photo on its item, and it shows here.
           </div>
         </div>
-      )}
-      {all.length > 0 && shown.length === 0 && queued.length === 0 && (
-        <p className="sf-muted text-sm text-center py-10">
-          {view.filter === 'receipts'
-            ? 'No receipts yet. Add one on its item.'
-            : 'No photos of the split yet. Add some here.'}
-        </p>
       )}
       {days.map((day) => (
         <section key={day.key}>
@@ -262,31 +205,3 @@ const PhotosTab = ({ pick }: { pick: PhotoSelection }) => {
 };
 
 export default PhotosTab;
-
-/**
- * The Photos tab's Add photos button, once the split has photos (before, the tab offers
- * the same choices itself). It opens a sheet: take a photo, or choose from the library.
- * Kept outside the tab itself, which slides as tabs change: a fixed button inside it
- * would slide too, then jump to its corner.
- */
-export function AddPhotosFab() {
-  const { meta, photos } = useSplitPage();
-  const picker = usePhotoPicker((files) => void photos.upload(files, null));
-  const [open, setOpen] = useState(false);
-  if ((meta?.attachments.length ?? 0) === 0 && photos.queuedOf(null).length === 0) return null;
-  return (
-    <>
-      {picker.inputs}
-      <Fab
-        label="Add photos"
-        onClick={() => setOpen(true)}
-      />
-      <AddPhotosSheet
-        opened={open}
-        onClose={() => setOpen(false)}
-        onTakePhoto={picker.takePhoto}
-        onChooseFromLibrary={picker.chooseFromLibrary}
-      />
-    </>
-  );
-}

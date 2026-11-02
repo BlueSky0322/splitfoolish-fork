@@ -486,10 +486,11 @@ together, keepalive, coming back to the app, signed-out retries), and [pending-c
 
 ## Pictures, photos and payment QR codes
 
-**What it is.** Profile pictures, split pictures, photos of a split and receipts on its
-items (the Photos tab), and QR codes on payment methods.
+**What it is.** Profile pictures, split pictures, receipts and photos on a split's items
+(the Photos tab shows them all, and adds none: a photo is added on its item), and QR codes
+on payment methods.
 
-**Owner.** Split photos and receipts: [split/usePhotos.ts](../web/src/split/usePhotos.ts)
+**Owner.** Receipts and photos on items: [split/usePhotos.ts](../web/src/split/usePhotos.ts)
 (add, remove, remove several, and the photos still to upload) keeping the split's
 details in step (`addAttachment` once one is uploaded, and `changeMeta` for removals).
 Adding goes through [offline/photo-queue.ts](../web/src/offline/photo-queue.ts), which
@@ -507,16 +508,17 @@ method through a profile change.
   [ProfileSection](../web/src/components/settings/ProfileSection.tsx) and
   [PaymentMethods](../web/src/components/settings/PaymentMethods.tsx) in settings.
 - Ordering and downloads: [split/photo-days.ts](../web/src/split/photo-days.ts) (the
-  orders and kinds shown, the same on phones and computers) and
+  orders, the same on phones and computers, and `isReceipt`: only photos on an item are
+  shown or counted) and
   [split/photo-download.ts](../web/src/split/photo-download.ts).
 - What both Photos tabs show:
   [usePhotoGallery](../web/src/components/split/photos/usePhotoGallery.ts) (the days in
-  order, each photo's place for the viewer, counts, queued and picked photos, removing
-  with a question first). Each tab keeps its own layout and way of picking.
+  order, each photo's place for the viewer, picked photos, removing with a question
+  first). Each tab keeps its own layout and way of picking.
 - Choosing photos to add: [usePhotoPicker](../web/src/components/split/photos/usePhotoPicker.tsx)
   (the camera or the library) and, on phones and tablets,
   [AddPhotosSheet](../web/src/components/split/photos/AddPhotosSheet.tsx) to pick
-  between them: for the Photos tab and an item's Add photo alike.
+  between them, for an item's Add photo.
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
 - Where a photo was taken: [split/photo-places.ts](../web/src/split/photo-places.ts)
   reads the GPS position the camera wrote into it ([utils/exif.ts](../web/src/utils/exif.ts))
@@ -543,8 +545,7 @@ method through a profile change.
   [split/place-names.ts](../web/src/split/place-names.ts) names a place set in the form,
   so the item is saved with it, and names any other place for showing it; until then, or
   offline, or where OpenStreetMap has nothing, its full plus code shows ("6PM2VRJ3+MG").
-- Photos still to upload: [QueuedPhotoTile](../web/src/components/split/photos/QueuedPhotoTile.tsx)
-  on the Photos tab and [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
+- Photos still to upload: [PhotoStrip](../web/src/components/split/photos/PhotoStrip.tsx)
   in the item form, with a spinner on their way up or marked as waiting.
 - API: [worker/photos/](../worker/photos/) stores images in D1 and serves them only to
   members: photos on a split in `attachments.ts` (`addAttachment` checks and saves one,
@@ -672,7 +673,7 @@ cases (`{ size: 'phone' }`) in
 **What it is.** An agent signs in over OAuth as one account and uses tools at `/mcp`
 to read splits and their photos, create splits, add (one or many at once), edit, date
 and remove expenses (in the split's currency or another), record and remove payments
-between two people, add receipts and split photos, add, rename and remove people, and
+between two people, add receipts and photos to expenses, add, rename and remove people, and
 route payments. Splits and people can be named by id, name or enough of a
 name, and answers name people by name; a miss lists what there is. A write can answer
 with the balances after it, and reads membership, the retry receipt and the bill in one

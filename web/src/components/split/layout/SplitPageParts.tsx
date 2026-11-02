@@ -22,6 +22,7 @@ import Skeleton from '../../ui/Skeleton';
 import PersonAvatar from '../PersonAvatar';
 import { useSplitPage } from '../SplitPageContext';
 import classes from '../Split.module.css';
+import { isReceipt } from '../../../split/photo-days';
 
 // What the split page's desktop and phone layouts share: the pieces SplitScreen builds
 // once, and the small parts both show
@@ -139,7 +140,7 @@ export function SaveStatus({ quietRefresh = false }: { quietRefresh?: boolean })
 export function SplitMoreMenu({ target, onPhotos }: { target: ReactNode; onPhotos: () => void }) {
   const { splitId, meta, openDialog } = useSplitPage();
   const { state } = useSplitState();
-  const photoCount = meta?.attachments.length ?? 0;
+  const photoCount = meta?.attachments.filter(isReceipt).length ?? 0;
   const otherCurrencies = otherCurrencyCount(state.items);
   return (
     <Menu
