@@ -275,9 +275,9 @@ describe('places', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByText('Parking'));
     const sheet = within(await screen.findByRole('dialog'));
-    const card = await sheet.findByRole('link', { name: '6PM2VRJ3+MG, on Google Maps' });
-    expect(card.getAttribute('href')).toBe(PIN);
-    expect(sheet.getByRole('link', { name: '6PM2VRJ3+MG' }).getAttribute('href')).toBe(PIN);
+    const chip = await sheet.findByRole('link', { name: '6PM2VRJ3+MG' });
+    expect(chip.getAttribute('href')).toBe(PIN);
+    expect(chip.dataset.place).toBeDefined();
   });
 
   test('in the list, notes show a Maps link as its place with a pin and other links short, each opening, on a phone and desktop', async () => {

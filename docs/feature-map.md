@@ -133,29 +133,26 @@ it current.
   (`updateItem(id, input, { day })` queues the date before the edit, so the server
   converts on the new day) ([utils/date-input.ts](../web/src/utils/date-input.ts)).
 - Notes: web addresses open as links, shown short ("example.com/menu",
-  [LinkedText](../web/src/components/ui/LinkedText.tsx)), and Google Maps links also show
-  as cards with the place's picture, name and address
-  ([MapsLinkCards](../web/src/components/common/MapsLinkCards.tsx), under the notes in
-  the item sheet and the form; several side by side, to swipe). In the item sheet's text
-  a Maps link reads as its place's name (`MapsLinkName`); the item form, where notes are
-  typed, lists their addresses as chips under them, Maps links by their place's name;
-  the list's line of notes shows them the same way, each opening its link above the row
-  that opens the item (the name's button reaches across the row). A known place is drawn
-  in the place colour, a map pin's red (`--sf-place`), apart from people's colours and
-  the accent; anything else as a link. A share.google link goes on to
-  Google Search, which is never fetched: the address it redirects to names the place
-  (marked `sh/x/loc`), but not where it is, so its card has no map and the form searches
-  its name rather than taking it as the item's place. A place page's own map (its
-  `staticmap` picture) gives its position when the address doesn't. The Worker reads them from the tags Google's page has
-  for link previews (`GET /api/link-preview`,
-  [worker/links/preview.ts](../worker/links/preview.ts)), following redirects only
-  within Google Maps (`isMapsLink` in [shared/links.ts](../shared/links.ts)) and keeping
-  each a week; a page that says nothing names the place from the link, else the card is
-  a pin. A dropped pin (a shared position, which Google's page names nothing) is named
-  as Google Maps names one, its plus code in its town ("VRP3+RQ Bagan Datuk, Perak",
-  the town from OpenStreetMap, `placeArea`), beside a pin. Where the link itself says
-  the position (`positionInLink` in shared/links.ts, which the Worker reads too), the
-  app shows the full plus code before the Worker answers, or offline. No map is drawn.
+  [LinkedText](../web/src/components/ui/LinkedText.tsx)), and a Google Maps link reads as
+  the place it names, with a pin (`MapsLinkName` and `MapsLinkLabel`,
+  [MapsLinks](../web/src/components/common/MapsLinks.tsx)): in the item sheet's text, as
+  chips under the item form's notes box (where notes are typed), and in the list's line
+  of notes, each opening its link above the row that opens the item (the name's button
+  reaches across the row). A known place is drawn in the place colour, a map pin's red
+  (`--sf-place`), apart from people's colours and the accent; anything else as a link.
+  The Worker names them from the tags Google's page has for link previews
+  (`GET /api/link-preview`, [worker/links/preview.ts](../worker/links/preview.ts)),
+  following redirects only within Google Maps (`isMapsLink` in
+  [shared/links.ts](../shared/links.ts)) and keeping each a week; a page that says
+  nothing names the place from the link. A share.google link goes on to Google Search,
+  which is never fetched: the address it redirects to names the place (marked
+  `sh/x/loc`), but not where it is, so the form searches its name rather than taking it
+  as the item's place. A place page's own map (its `staticmap` picture) gives its
+  position when the address doesn't. A dropped pin (a shared position, which Google's
+  page names nothing) is named as Google Maps names one, its plus code in its town
+  ("VRP3+RQ Bagan Datuk, Perak", the town from OpenStreetMap, `placeArea`). Where the
+  link itself says the position (`positionInLink` in shared/links.ts, which the Worker
+  reads too), the app shows the full plus code before the Worker answers, or offline.
 - People's colours: [split/person-colors.ts](../web/src/split/person-colors.ts) gives
   each person one (`personColors`), SplitScreen provides them through
   [person-colors-context.ts](../web/src/components/split/person-colors-context.ts), and
@@ -534,7 +531,7 @@ method through a profile change.
 - An item's place, in the form (ItemForm, which notes where it came from): a new item
   takes where the phone is as it's started, when the account records its location
   (Settings' Locations, `recordLocation`); a located receipt or a Maps link put in the
-  notes (its card's position and title) replaces that or fills an empty one; one saved,
+  notes (its position and name, from the Worker) replaces that or fills an empty one; one saved,
   chosen or taken off is never replaced. Receipts and links give places whatever the
   setting. The Location section after the notes
   ([PlaceField](../web/src/components/split/forms/PlaceField.tsx)) shows the place with

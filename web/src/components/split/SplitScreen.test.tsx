@@ -609,7 +609,7 @@ describe('the split page', () => {
     expect(chip.getAttribute('target')).toBe('_blank');
   });
 
-  test('Google Maps links in notes show as cards with the place, on a phone and on desktop', async () => {
+  test('Google Maps links in notes read as the place they name, on a phone and on desktop', async () => {
     const APW = 'https://maps.app.goo.gl/apw123';
     const OTHER = 'https://maps.app.goo.gl/unknown';
     const PIN = 'https://goo.gl/maps/pin123';
@@ -655,65 +655,47 @@ describe('the split page', () => {
       return s;
     };
     const user = userEvent.setup();
-    const cardsIn = async (where: HTMLElement) => {
-      // The place once Google has said what it is; a link it says nothing about stays a pin
-      const card = await within(where).findByRole('link', {
-        name: 'A Place Where - APW, on Google Maps',
-      });
-      expect(card.getAttribute('href')).toBe(APW);
-      expect(card.getAttribute('target')).toBe('_blank');
-      expect(within(card).getByText('29, Jalan Riong, Bangsar, 59100 Kuala Lumpur')).toBeTruthy();
-      expect(card.querySelector('img')!.getAttribute('src')).toBe(
-        'https://lh5.googleusercontent.com/p/apw',
-      );
-      const plain = within(where).getByRole('link', { name: 'Open in Google Maps' });
-      expect(plain.getAttribute('href')).toBe(OTHER);
-      // A dropped pin: its name and where the link goes, beside a pin
-      const pin = within(where).getByRole('link', {
-        name: 'VRJ3+MG Bagan Datuk, Perak, on Google Maps',
-      });
-      expect(pin.getAttribute('href')).toBe(PIN);
-      // Its name and where the link goes, nothing between
-      expect(pin.textContent).toBe('VRJ3+MG Bagan Datuk, Perakgoo.gl');
-      expect(pin.querySelector('img')).toBeNull();
-      // A place shared from Google is a card with its name; anything else shared, none
-      const shared = within(where).getByRole('link', { name: 'Kedai Kopi 168, on Google Maps' });
-      expect(shared.getAttribute('href')).toBe(SHARED);
-      await waitFor(() =>
-        expect(
-          [...where.querySelectorAll('a')].filter(
-            (a) => a.getAttribute('href') === NOT_PLACE && a.getAttribute('aria-label'),
-          ),
-        ).toEqual([]),
-      );
-    };
+    /** The chips for the links, as their names, telling a known place from another link */
+    const chipsIn = (where: HTMLElement) =>
+      within(where)
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('target') === '_blank')
+        .map((a) => [a.textContent, a.getAttribute('href'), a.dataset.place != null]);
+    const CHIPS = [
+      ['A Place Where - APW', APW, true],
+      // Google says nothing about it: its address, as a plain link
+      ['maps.app.goo.gl/unknown', OTHER, false],
+      ['VRJ3+MG Bagan Datuk, Perak', PIN, true],
+      ['example.com/menu', 'https://example.com/menu', false],
+      ['Kedai Kopi 168', SHARED, true],
+      // Shared from Google but not a place: its address
+      ['share.google/article', NOT_PLACE, false],
+    ];
 
     renderApp(server(), '/?s=trip', { size: 'phone' });
     await user.click(await screen.findByText('Coffee'));
     const sheet = await screen.findByRole('dialog');
-    await cardsIn(sheet);
     // In the text, a Maps link reads as its place, other addresses as where they go
     const notes = sheet.querySelector('p')!;
-    expect(notes.textContent).toBe(
-      'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at VRJ3+MG Bagan Datuk, Perak, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
+    await waitFor(() =>
+      expect(notes.textContent).toBe(
+        'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at VRJ3+MG Bagan Datuk, Perak, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
+      ),
     );
-    expect(
-      within(notes).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),
-    ).toBe(APW);
-    expect(within(notes).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
+    expect(chipsIn(notes)).toEqual(CHIPS);
+    // No cards: nothing else in the sheet opens the links
+    expect(within(sheet).queryByRole('link', { name: /on Google Maps/ })).toBeNull();
+    expect(sheet.querySelector(`img[src="https://lh5.googleusercontent.com/p/apw"]`)).toBeNull();
 
-    // Desktop: the cards under the notes, and every address as a chip, a Maps link by its
-    // place's name
+    // Desktop: every address as a chip under the notes box, a Maps link by its place's name
     cleanup();
     renderApp(server(), '/?s=trip');
     await user.click(await screen.findByText('Coffee'));
     const form = await screen.findByRole('dialog');
-    await cardsIn(form);
-    expect(within(form).queryByRole('link', { name: APW })).toBeNull();
-    expect(
-      within(form).getByRole('link', { name: 'A Place Where - APW' }).getAttribute('href'),
-    ).toBe(APW);
-    expect(within(form).getByRole('link', { name: 'example.com/menu' })).toBeTruthy();
+    await waitFor(() =>
+      expect(within(form).getByRole('link', { name: 'Kedai Kopi 168' })).toBeTruthy(),
+    );
+    expect(chipsIn(form)).toEqual(CHIPS);
   });
 
   test('the owner links a guest to a member, taking the account off the person it joined as', async () => {

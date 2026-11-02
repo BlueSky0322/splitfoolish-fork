@@ -60,7 +60,7 @@ import classes from './ItemForm.module.css';
 import { plural, shortLink } from '../../../utils/text';
 import { findLinks, isMapsLink, mapsLinksIn } from '@shared/links';
 import { linkPreviewQuery } from '../../../split/link-previews';
-import { MapsLinkCards, MapsLinkName } from '../../common/MapsLinkCards';
+import { MapsLinkName } from '../../common/MapsLinks';
 import { buildItemInput, exactCents } from '../../../split/item-input';
 import { useAmountConversion } from '../../../split/useAmountConversion';
 
@@ -685,7 +685,6 @@ const ItemForm = ({
           )}
         </div>
       )}
-      <MapsLinkCards text={notes} />
       <PlaceField
         place={place}
         near={near}
