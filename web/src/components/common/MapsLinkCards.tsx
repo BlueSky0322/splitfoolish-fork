@@ -5,14 +5,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { linkPreviewQuery } from '../../split/link-previews';
 import { shortLink } from '../../utils/text';
-import { MiniMap } from '../ui/MiniMap';
 import classes from './MapsLinkCards.module.css';
 
 /**
  * The Google Maps links in some notes as cards, as a chat app shows them: the place's
- * picture (or a small map of where it is), name and address, opening the link. Until the
- * place is known (or without a connection) the card is the link with a pin. Several
- * sit side by side, to swipe through.
+ * picture (or a pin), name and address, opening the link. Until the place is known (or
+ * without a connection) the card is the link with a pin. Several sit side by side, to
+ * swipe through.
  */
 export function MapsLinkCards({ text }: { text: string | null }) {
   const links = useMemo(() => mapsLinksIn(text ?? ''), [text]);
@@ -73,7 +72,7 @@ export function MapsLinkLabel({ url }: { url: string }) {
 
 /**
  * A link that says where it points (a dropped pin), before it's named or offline: its
- * position and its plus code in full
+ * plus code in full
  */
 const unnamed = (url: string) => {
   const at = positionInLink(url, { pinOnly: true });
@@ -107,14 +106,6 @@ function MapsLinkCard({ url }: { url: string }) {
           alt=""
           loading="lazy"
           referrerPolicy="no-referrer"
-        />
-      ) : place?.position ? (
-        <MiniMap
-          className={classes.image}
-          lat={place.position.lat}
-          lng={place.position.lng}
-          width={112}
-          height={120}
         />
       ) : (
         <span className={classes.pin}>

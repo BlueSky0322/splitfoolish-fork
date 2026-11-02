@@ -53,10 +53,8 @@ app hack-proof, and the limits below are real.
   in the notes or a search gives is kept either way. Photos lose what the camera wrote into them when
   they're shrunk on the device; the position goes separately and is kept to about a
   metre. Its name is looked up from OpenStreetMap by the Worker, never the browser,
-  with the position rounded to about 11 m, and kept in the Worker's cache. The small
-  maps (an item's place, a dropped pin in notes) are OpenStreetMap's tiles, loaded by
-  the browser: OpenStreetMap sees the viewer's address, the area shown (a few hundred
-  metres across) and the app's origin as the Referer, never the split or the item.
+  with the position rounded to about 11 m, and kept in the Worker's cache. No map is
+  drawn, so no map tiles are loaded.
   Searching for a place sends what's typed, the area (to about 10 km) of the phone or
   the split's latest place, and the country to search in (that area's, else the one
   Cloudflare sees the request come from), from the Worker to komoot's Photon; never who

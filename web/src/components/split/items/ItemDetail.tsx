@@ -112,12 +112,7 @@ const ItemDetail = ({
           <PaidBy item={item} />
         </span>
       </div>
-      {item.place && (
-        <PlaceLink
-          place={item.place}
-          map
-        />
-      )}
+      {item.place && <PlaceLink place={item.place} />}
       <ul
         className={classes.parts}
         aria-label="Each person's part"
