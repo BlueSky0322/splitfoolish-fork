@@ -26,12 +26,6 @@
   color: var(--sf-place);
 }
 
-/* Where the phone is: not a place yet */
-.here {
-  flex: none;
-  color: var(--sf-accent);
-}
-
 .name {
   min-width: 0;
   overflow: hidden;
@@ -49,54 +43,4 @@
 .hint {
   font-size: 13px;
   color: var(--sf-text-muted);
-}
-
-/* The search and what it found, as wide as the form */
-.search {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-self: stretch;
-}
-
-.options {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 44px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: var(--sf-text);
-}
-
-.option:hover {
-  background: var(--sf-tint);
-}
-
-.optionText {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.optionName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.address {
-  font-size: 12px;
-  color: var(--sf-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

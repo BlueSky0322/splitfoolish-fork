@@ -8,7 +8,6 @@ import {
 } from '../../../split/photo-days';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { useSplitPage } from '../SplitPageContext';
-import type { PhotoSource } from '../../../split/photo-places';
 import { useConfirmRemovePhotos } from './useConfirmRemovePhotos';
 
 /**
@@ -54,6 +53,6 @@ export function usePhotoGallery(selected: ReadonlySet<string>) {
     confirm,
     confirmDialog,
     /** Adds photos to the split itself, not an item */
-    add: (files: File[], from?: PhotoSource) => void photos.upload(files, null, from),
+    add: (files: File[]) => void photos.upload(files, null),
   };
 }

@@ -47,19 +47,16 @@ app hack-proof, and the limits below are real.
   clears what's shown but keeps the first account's unsent work, unseen, for when it's
   back.
 - Where photos were taken and items paid for is personal data, shown to the split's
-  members alone, and can be taken off an item. The phone is asked where it is only
-  while the account's Record my location setting is on (the default): for a new item
-  and a photo taken here that doesn't say. A place a receipt photo carries, a Maps link
-  in the notes or a search gives is kept either way. Photos lose what the camera wrote into them when
+  members alone, and can be taken off an item. The phone is asked where it is only when
+  someone taps Use my current location; otherwise a place comes from what a receipt
+  photo carries or a Maps link in the notes. Photos lose what the camera wrote into them when
   they're shrunk on the device; the position goes separately and is kept to about a
   metre. Its name is looked up from OpenStreetMap by the Worker, never the browser,
   with the position rounded to about 11 m, and kept in the Worker's cache. No map is
   drawn, so no map tiles are loaded.
-  Searching for a place sends what's typed, the area (to about 10 km) of the phone or
-  the split's latest place, and the country to search in (that area's, else the one
-  Cloudflare sees the request come from), from the Worker to komoot's Photon; never who
-  asked or the split. An agent's `location` goes the same way, near the account's latest
-  place.
+  An agent's `location` (a receipt's place, as it names it) is searched for by the
+  Worker at komoot's Photon, with the area (to about 10 km) and country of the account's
+  latest place; never who asked or the split.
 - Pictures and photos are sent `private, no-cache`, so a browser asks the server again
   before each showing. The service worker keeps a copy per account and shows it only
   offline, to that account.

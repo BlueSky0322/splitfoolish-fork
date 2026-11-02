@@ -136,7 +136,7 @@ export interface PlaceName {
 /** The longest search for a place that's sent on */
 export const MAX_PLACE_SEARCH_LENGTH = 100;
 
-/** A place found by searching for it, as the location search offers it */
+/** A place found by searching for it (an agent's location, worker/places/search.ts) */
 export interface PlaceSuggestion {
   lat: number;
   lng: number;
@@ -144,9 +144,4 @@ export interface PlaceSuggestion {
   name: string;
   /** Where it is, in full, to tell places of the same name apart */
   address: string | null;
-}
-
-/** What GET /api/place-search answers: the best matches first */
-export interface PlaceSearch {
-  places: PlaceSuggestion[];
 }

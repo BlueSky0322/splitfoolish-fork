@@ -525,31 +525,18 @@ method through a profile change.
 - Shrinking before upload: [utils/image.ts](../web/src/utils/image.ts).
 - Where a photo was taken: [split/photo-places.ts](../web/src/split/photo-places.ts)
   reads the GPS position the camera wrote into it ([utils/exif.ts](../web/src/utils/exif.ts))
-  before it's shrunk (which drops it), and for one just taken here that doesn't say,
-  asks where the phone is ([utils/here.ts](../web/src/utils/here.ts)) when the account
-  records its location. The pickers say which (`PhotoSource`).
+  before it's shrunk (which drops it); one that doesn't say has none, and the phone
+  isn't asked.
   The position is kept with the queued photo and sent as `lat` and `lng` with it
   (`api.uploadAttachment`, and `web/public/sw.js` for the ones it sends); the Worker
   keeps it beside the photo, never in the picture.
-- An item's place, in the form (ItemForm, which notes where it came from): a new item
-  takes where the phone is as it's started, when the account records its location
-  (Settings' Locations, `recordLocation`); a located receipt or a Maps link put in the
-  notes (its card's position and title) replaces that or fills an empty one; one saved,
-  chosen or taken off is never replaced. Receipts and links give places whatever the
-  setting. The Location section after the notes
+- An item's place, in the form (ItemForm, which notes where it came from): a located
+  receipt or a Maps link put in the notes (its position and name, from the Worker) fills
+  an empty one; one saved, chosen or taken off is never replaced. The phone is asked
+  where it is only by Use my current location ([utils/here.ts](../web/src/utils/here.ts)).
+  The Location section after the notes
   ([PlaceField](../web/src/components/split/forms/PlaceField.tsx)) shows the place with
-  Remove location, or searches as it's typed (`usePlaceSearch`, 300 ms after the last
-  key, near the phone or the split's latest place) and offers Use my current location.
-  A Maps link pasted into it is offered as its exact place when the link says where,
-  else its name is searched for. A plus code typed into it is found by the Worker, not
-  Photon (which doesn't know them): a full one alone, a short one near the town typed
-  after it, else near the person (`readPlusCode`, `plusCodePosition`).
-  The search is komoot's Photon through the Worker (`GET /api/place-search`,
-  [worker/places/search.ts](../worker/places/search.ts), kept a week per search and
-  area): OpenStreetMap's own search forbids searching as people type. Photon busy, down
-  or slow is asked once more, and why it failed is logged (never what was searched for). Only places in
-  one country are offered: the area's (Photon's reverse lookup, kept a month), else
-  the country Cloudflare says the request came from. The item sheet and the photo
+  Remove location, or offers Use my current location. The item sheet and the photo
   details say where, as a place chip opening in Maps
   ([PlaceLink](../web/src/components/split/PlaceLink.tsx)).
   Places are checked the same way on both sides ([shared/places.ts](../shared/places.ts)).
@@ -598,9 +585,8 @@ sends them, one at a time and oldest first, after the changes kept with them.
   still kept, so two tabs (or a tab and the service worker) don't both send it.
 - The file type comes from the bytes, not what the upload says.
 - A photo's location is kept beside it, never in the picture: the photo is re-encoded
-  on the device before upload, which drops what the camera wrote. Only accounts with
-  Record my location on ask the phone for one just taken that doesn't say, and a photo
-  from the library without one never asks (it could have been taken anywhere). Everyone in the split sees an
+  on the device before upload, which drops what the camera wrote. A photo that doesn't
+  say where it was taken has no place: the phone isn't asked. Everyone in the split sees an
   item's or photo's place.
 - Pictures and photos are private, so every showing is checked by the server: they're
   sent `private, no-cache` with an ETag naming their content (a photo's id, a picture's
@@ -729,7 +715,11 @@ retry receipt saved alongside. Photos go through `addAttachment` in
   to read the bill; the full answer's `readVersion` is hashed from the same rows of its
   own read, so the two always agree.
 - Places: an expense's `location` (as a receipt names it) is found with `searchPlaces`
-  ([places/search.ts](../worker/places/search.ts)) and kept as its place, or answered
+  ([places/search.ts](../worker/places/search.ts): komoot's Photon over OpenStreetMap,
+  near the account's latest place and in its country, kept a week per search; a plus
+  code is found without it, `readPlusCode` and `plusCodePosition`; Photon busy, down or
+  slow is asked once more, and why it failed is logged, never what was searched for)
+  and kept as its place, or answered
   `locationFound: false`; without one, a new expense takes the first Maps link in its
   notes that says where (`linkPreview`). Both are looked up before the write (`placeOf`).
 - Receipts: [mcp/receipts.ts](../worker/mcp/receipts.ts) and the `mcp_receipts` table

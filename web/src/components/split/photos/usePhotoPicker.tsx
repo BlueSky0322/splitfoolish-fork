@@ -1,19 +1,17 @@
 import { useRef } from 'react';
-import type { PhotoSource } from '../../../split/photo-places';
 
 /**
  * Hidden file inputs for adding photos: one opens the camera, the other picks one or
- * several from the device's library, and `onAdd` gets what was picked, and from which
- * (a photo just taken was taken here). Render `inputs` once, then call `takePhoto` or
- * `chooseFromLibrary`.
+ * several from the device's library, and `onAdd` gets what was picked. Render `inputs`
+ * once, then call `takePhoto` or `chooseFromLibrary`.
  */
-export function usePhotoPicker(onAdd: (files: File[], from: PhotoSource) => void) {
+export function usePhotoPicker(onAdd: (files: File[]) => void) {
   const camera = useRef<HTMLInputElement>(null);
   const library = useRef<HTMLInputElement>(null);
-  const add = (input: HTMLInputElement, from: PhotoSource) => {
+  const add = (input: HTMLInputElement) => {
     const files = [...(input.files ?? [])];
     input.value = '';
-    if (files.length > 0) onAdd(files, from);
+    if (files.length > 0) onAdd(files);
   };
   const inputs = (
     <>
@@ -23,7 +21,7 @@ export function usePhotoPicker(onAdd: (files: File[], from: PhotoSource) => void
         accept="image/*"
         capture="environment"
         hidden
-        onChange={(e) => add(e.target, 'camera')}
+        onChange={(e) => add(e.target)}
       />
       <input
         ref={library}
@@ -31,7 +29,7 @@ export function usePhotoPicker(onAdd: (files: File[], from: PhotoSource) => void
         accept="image/*"
         multiple
         hidden
-        onChange={(e) => add(e.target, 'library')}
+        onChange={(e) => add(e.target)}
       />
     </>
   );
