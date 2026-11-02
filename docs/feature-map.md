@@ -341,8 +341,9 @@ cases in [sw.test.ts](../web/src/offline/sw.test.ts).
 ## Sharing, invites and live updates
 
 **What it is.** Share links, requests to join and their approval, invites on the home
-page (`?tab=invites` on phones), removing members, and seeing other people's changes
-as they happen.
+page (on phones a page of their own, `?tab=invites`, opened from a banner on the Splits
+list, with those waiting for an answer counted on the Splits tab), removing members, and
+seeing other people's changes as they happen.
 
 **Owner.** Membership is the server's: the app shows it from the split's details
 (`useSplit.ts`) and from My splits (pending invites). Answering an invite goes through
@@ -629,7 +630,8 @@ what Back does.
 
 **Parts.**
 
-- [components/shell/](../web/src/components/shell/AppLayout.tsx): sidebar, bottom tabs,
+- [components/shell/](../web/src/components/shell/AppLayout.tsx): sidebar, bottom tabs
+  on phones (You, Convert, Splits),
   notices, and the keyboard shortcuts on computers: `[` and `?` (the list,
   [ShortcutsDialog](../web/src/components/shell/ShortcutsDialog.tsx)) in AppLayout, the
   split's own keys in DesktopSplitLayout, and Esc and Del while picking items in

@@ -2,12 +2,15 @@ import { ActionIcon, Radio, UnstyledButton } from '@mantine/core';
 import {
   Archive,
   ArrowCounterClockwise,
+  CaretRight,
+  EnvelopeSimple,
   MagnifyingGlass,
   SignOut,
   SortAscending,
   Trash,
 } from '@phosphor-icons/react';
-import type { SplitSummary } from '@shared/api';
+import type { MyInvite, SplitSummary } from '@shared/api';
+import { countActionableInvites } from '../../api';
 import { canDeleteSplit } from '@shared/rules';
 import { type TouchEvent, useRef, useState } from 'react';
 import { navigate } from '../../hooks/useRoute';
@@ -74,6 +77,29 @@ const showsIn = (split: SplitSummary, show: Show) =>
   (show === 'archived'
     ? split.archived
     : !split.archived && (show === 'settled') === split.settled);
+
+/**
+ * Invites, at the top of the list while there are any: how many wait for an answer (or
+ * were sent and wait for one), opening them on a page of their own
+ */
+function InvitesBanner({ invites }: { invites: MyInvite[] | null }) {
+  if (invites == null || invites.length === 0) return null;
+  const waiting = countActionableInvites(invites);
+  return (
+    <UnstyledButton
+      className={classes.invitesBanner}
+      onClick={() => navigate('?tab=invites')}
+    >
+      <EnvelopeSimple size={20} />
+      <span className={classes.invitesText}>
+        {waiting > 0
+          ? `${plural(waiting, 'invite')} to answer`
+          : `${plural(invites.length, 'invite')} you sent`}
+      </span>
+      <CaretRight size={16} />
+    </UnstyledButton>
+  );
+}
 
 /** Width of the two actions a row shows when swiped left */
 const ACTIONS_PX = 168;
@@ -223,7 +249,7 @@ function SplitRow({
 
 /** Splits on phones (10a): your splits as rows, with sorting, filters and search */
 const MobileHome = () => {
-  const { splits, error } = useMySplits();
+  const { splits, invites, error } = useMySplits();
   const { profile } = useProfile();
   const openNewSplit = useOpenNewSplit();
   const [prefs, setPrefs] = useState(readPrefs);
@@ -298,6 +324,7 @@ const MobileHome = () => {
         ))}
       </div>
 
+      <InvitesBanner invites={invites} />
       <InstallCard />
       {error && <div className="sf-negative">{error}</div>}
       {shown == null && error == null && <MobileSplitRowsSkeleton />}

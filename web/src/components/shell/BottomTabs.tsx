@@ -1,5 +1,5 @@
 import { UnstyledButton } from '@mantine/core';
-import { ArrowsLeftRight, EnvelopeSimple, Receipt } from '@phosphor-icons/react';
+import { ArrowsLeftRight, Receipt } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { countActionableInvites } from '../../api';
 import { type Route, type Tab, goToTab, tabOf } from '../../hooks/useRoute';
@@ -9,8 +9,9 @@ import UserAvatar from '../common/UserAvatar';
 import classes from './BottomTabs.module.css';
 import { useTabsHidden } from './tabs-visibility';
 
-// The phone's way around: You, Invites, Convert and Splits, on every top-level page and
-// inside a split. Hidden while picking items (tabs-visibility.ts).
+// The phone's way around: You, Convert and Splits, on every top-level page and inside a
+// split. Invites waiting for an answer are counted on Splits, whose list leads to them.
+// Hidden while picking items (tabs-visibility.ts).
 
 const TabButton = ({
   tab,
@@ -66,13 +67,6 @@ const BottomTabs = ({ route }: { route: Route }) => {
         current={current}
       />
       <TabButton
-        tab="invites"
-        label="Invites"
-        icon={<EnvelopeSimple size={22} />}
-        current={current}
-        badge={countActionableInvites(invites)}
-      />
-      <TabButton
         tab="convert"
         label="Convert"
         icon={<ArrowsLeftRight size={22} />}
@@ -83,6 +77,7 @@ const BottomTabs = ({ route }: { route: Route }) => {
         label="Splits"
         icon={<Receipt size={22} />}
         current={current}
+        badge={countActionableInvites(invites)}
       />
     </nav>
   );

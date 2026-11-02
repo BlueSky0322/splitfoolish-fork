@@ -28,14 +28,15 @@ describe('the app', () => {
     const names = within(tabs)
       .getAllByRole('button')
       .map((b) => b.textContent);
-    expect(names).toHaveLength(4);
+    expect(names).toHaveLength(3);
     expect(names[0]).toMatch(/You$/);
-    expect(names[3]).toBe('Splits');
+    expect(names[1]).toBe('Convert');
+    expect(names[2]).toBe('Splits');
 
+    await user.click(within(tabs).getByRole('button', { name: /You$/ }));
+    expect(window.location.search).toBe('?settings');
     await user.click(within(tabs).getByRole('button', { name: 'Convert' }));
     expect(window.location.search).toBe('?convert');
-    await user.click(within(tabs).getByRole('button', { name: /Invites/ }));
-    expect(window.location.search).toBe('?tab=invites');
     // Tabs replace each other
     expect(window.history.length).toBe(depth);
 

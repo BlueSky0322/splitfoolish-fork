@@ -180,17 +180,33 @@ describe('My splits', () => {
     expect(screen.queryByRole('textbox', { name: 'Search' })).toBeNull();
   });
 
-  test('on a phone, Invites is a tab of its own, where an invite can be declined', async () => {
+  test('on a phone, invites open from a banner on the list, counted on the Splits tab, and one can be declined', async () => {
     const server = fakeServer();
     server.invites = [invite('penang', 'Penang')];
-    renderApp(server, '/?tab=invites', { size: 'phone' });
+    renderApp(server, '/', { size: 'phone' });
     const user = userEvent.setup();
+    const tabs = await screen.findByRole('navigation', { name: 'Sections' });
+    expect(within(tabs).queryByRole('button', { name: /Invites/ })).toBeNull();
+    await waitFor(() =>
+      expect(within(tabs).getByRole('button', { name: /Splits/ }).textContent).toBe('1Splits'),
+    );
+    await user.click(await screen.findByRole('button', { name: /^1 invite to answer/ }));
+    expect(window.location.search).toBe('?tab=invites');
+    expect(
+      within(tabs)
+        .getByRole('button', { name: /Splits/ })
+        .getAttribute('aria-current'),
+    ).toBe('page');
     expect(await screen.findByText('Penang', {}, { timeout: 3000 })).toBeTruthy();
     expect(screen.getByText(/^From Mei, /)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Decline Penang' }));
     await waitFor(() => expect(server.invites).toEqual([]));
     expect(await screen.findByText(/No invites right now/)).toBeTruthy();
     expect(server.splits.has('penang')).toBe(false);
+    // Back returns to the list, where the banner has gone
+    await user.click(screen.getByRole('button', { name: 'Back to Splits' }));
+    await waitFor(() => expect(window.location.search).toBe(''));
+    expect(screen.queryByRole('button', { name: /invite to answer/ })).toBeNull();
   });
 
   test('on a phone, accepting an invite joins that split and opens it, leaving the others', async () => {
