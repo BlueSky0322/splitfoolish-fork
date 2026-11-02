@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Select, Textarea, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Button, Select, Textarea } from '@mantine/core';
 import { X } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { fitsItemCents, isValidRate, toCents } from '@shared/rates';
@@ -25,7 +25,8 @@ import classes from './Payments.module.css';
 /**
  * Recording that one person paid another, or editing such a payment: who, how much (in
  * the split's currency or another, converted like an item), when, what it was for and
- * any notes. Opened prefilled from a transfer in Settle up or a person's part of an item.
+ * any notes. Opened prefilled from a transfer in Settle up; one recorded for an item
+ * before says so.
  */
 const PaymentForm = ({
   payment,
@@ -78,17 +79,6 @@ const PaymentForm = ({
   });
   const { expression, setExpression, entryCurrency, setEntryCurrency, foreign } = conversion;
   const { ownRateChosen, ownRate, enteredCents, costCents: amountCents } = conversion;
-
-  // Paying back a yen dinner in yen: the part in that currency, at the item's own rate,
-  // so what it comes to in the split's currency is the part exactly
-  const itemCurrency = item?.original?.rate != null ? item.original : null;
-  const inItemCurrency = () => {
-    if (itemCurrency == null || enteredCents == null) return;
-    setEntryCurrency(itemCurrency.currency);
-    conversion.setOwnRateChosen(true);
-    conversion.setOwnRate(itemCurrency.rate!);
-    setExpression((enteredCents / itemCurrency.rate! / 100).toFixed(2));
-  };
 
   const problems = {
     amount:
@@ -167,7 +157,7 @@ const PaymentForm = ({
         <CurrencySelect
           aria-label="Currency"
           className={classes.currency}
-          first={[currency, ...(itemCurrency ? [itemCurrency.currency] : [])]}
+          first={[currency]}
           value={entryCurrency}
           onChange={setEntryCurrency}
           variant="unstyled"
@@ -191,14 +181,6 @@ const PaymentForm = ({
           rateError={tried ? problems.rate : null}
           compact={isMobile}
         />
-      )}
-      {!foreign && itemCurrency && enteredCents != null && (
-        <UnstyledButton
-          className="sf-link text-[13px]"
-          onClick={inItemCurrency}
-        >
-          In {itemCurrency.currency}, at the rate {item?.name} was paid at
-        </UnstyledButton>
       )}
       {item && (
         <div className={classes.forItem}>

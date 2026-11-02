@@ -16,7 +16,6 @@ import { useIsMobile } from '../../../hooks/useBreakpoints';
 import type { ItemInput, PaymentInput } from '../../../api';
 import type { SplitItem } from '../../../split/state';
 import { toApiItem } from '../../../split/state';
-import { payBack } from '../../../split/derive';
 import { useSplitState } from '../../../split/SplitStateContext';
 import { useSplitActions } from '../../../split/useSplit';
 import { newId } from '../../../utils/id';
@@ -56,7 +55,6 @@ const SplitDialogs = ({ dialog, deleteItems, onShowItems }: SplitDialogsProps) =
     refreshMeta,
     totals,
     currency,
-    me,
     pictureVersion,
     photos,
     openDialog: setDialog,
@@ -114,27 +112,6 @@ const SplitDialogs = ({ dialog, deleteItems, onShowItems }: SplitDialogsProps) =
     return ok;
   };
 
-  // Someone's part of the item being edited, paid back: you, if you still owe for it,
-  // else the first who does; the form lets that be changed. Not offered when nobody on
-  // it still owes money (see payBack).
-  const recordPaymentFor = (item: SplitItem) => {
-    const owing = item.participants
-      .map((p) => ({ person: p, ...payBack(item, p.id, totals, state.payments) }))
-      .filter((o) => o.dueCents > 0);
-    if (owing.length === 0) return undefined;
-    const from = owing.find((o) => o.person.id === me?.id) ?? owing[0];
-    return () =>
-      setDialog({
-        kind: 'payment',
-        prefill: {
-          fromId: from.person.id,
-          toId: item.payer.id,
-          amountCents: from.dueCents,
-          itemId: item.id,
-        },
-      });
-  };
-
   // A copy of a saved item (not edits still in the form), as of its date or today.
   // Receipts stay with the original.
   const duplicateItem = (item: SplitItem, keepDate: boolean) => {
@@ -171,7 +148,6 @@ const SplitDialogs = ({ dialog, deleteItems, onShowItems }: SplitDialogsProps) =
               deleteItems([editing], { confirmed: true });
             }}
             onDuplicate={(keepDate) => duplicateItem(editing, keepDate)}
-            onRecordPayment={recordPaymentFor(editing)}
             onCancel={close}
             onDirtyChange={(u) => {
               unsaved.current = u;
