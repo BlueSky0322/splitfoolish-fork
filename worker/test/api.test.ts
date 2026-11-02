@@ -477,11 +477,6 @@ describe('changing a split', () => {
       { lat: 3.34017, lng: 101.2505, name: null },
       null,
     ]);
-
-    // Saving them is on until the account turns it off
-    expect((await api.call(owner, 'GET', '/api/me')).data.settings.recordLocation).toBe(true);
-    await api.call(owner, 'PATCH', '/api/me', { settings: { recordLocation: false } });
-    expect((await api.call(owner, 'GET', '/api/me')).data.settings.recordLocation).toBe(false);
   });
 });
 

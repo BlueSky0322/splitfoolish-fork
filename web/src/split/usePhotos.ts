@@ -3,8 +3,7 @@ import { api } from '../api';
 import type { MetaChanges } from './state';
 import type { SplitMeta } from './state';
 import type { Attachment } from '@shared/api';
-import { useProfile } from '../profile/ProfileContext';
-import { type PhotoSource, locatePhotos } from './photo-places';
+import { locatePhotos } from './photo-places';
 import type { Position } from '../utils/here';
 import {
   type QueuedPhoto,
@@ -53,25 +52,17 @@ export function usePhotos({ splitId, meta, metaChanges, whenSaved }: UsePhotosOp
   }, [all, splitId]);
   const queuedOf = useCallback((itemId: string | null) => queued[itemId ?? ''] ?? NONE, [queued]);
 
-  // Where each was taken goes with it: what the photo says, and for one just taken here,
-  // where the phone is if the account records that. Answers the first place found, for an
-  // item that has none yet to take.
-  const recordLocation = useProfile().profile?.settings.recordLocation ?? true;
+  // Where each was taken goes with it, as the photo says. Answers the first place found,
+  // for an item that has none yet to take.
   const upload = useCallback(
-    async (
-      files: File[],
-      itemId: string | null,
-      from: PhotoSource | (Position | null)[] = 'library',
-    ) => {
+    async (files: File[], itemId: string | null, located?: (Position | null)[]) => {
       // The photos show at once; where they were taken is kept with them once known.
       // Photos picked for an item not yet added were located as they were picked.
-      const places = Array.isArray(from)
-        ? Promise.resolve(from)
-        : locatePhotos(files, from, recordLocation);
+      const places = located ? Promise.resolve(located) : locatePhotos(files);
       void addPhotos(splitId, itemId, files, places);
       return (await places).find((p) => p != null) ?? null;
     },
-    [splitId, recordLocation],
+    [splitId],
   );
 
   /** Removes a photo still waiting to upload; it was only ever on this device */

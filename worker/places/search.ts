@@ -1,9 +1,7 @@
-// Finding a place by what it's called, for the item form's location search (as people
-// type) and for receipts an agent reads ("Truz Tackles, Kuala Selangor"). Asked of Photon,
-// komoot's search over OpenStreetMap that is made for searching as people type, by the
-// Worker, so browsers never ask it themselves. Only places in the country searched from
-// are offered, nearby ones first. Kept a week per search and area, and asked of nowhere
-// else: OpenStreetMap's own search forbids searching as people type.
+// Finding a place by what it's called, for receipts an agent reads ("Truz Tackles, Kuala
+// Selangor"; mcp/tools.ts). Asked of Photon, komoot's search over OpenStreetMap, by the
+// Worker. Only places in the country searched from are offered, nearby ones first. Kept
+// a week per search and area.
 
 import {
   MAX_PLACE_NAME_LENGTH,

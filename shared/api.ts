@@ -39,11 +39,6 @@ export interface Settings {
   itemsGroupBy: (typeof ITEMS_GROUPS)[number];
   itemsSortKey: (typeof ITEMS_SORT_KEYS)[number];
   itemsSortDir: (typeof SORT_DIRS)[number];
-  /**
-   * Take where the phone is for a new item, and a photo taken here that doesn't say. Places
-   * from a photo itself, a Maps link or a search are kept either way.
-   */
-  recordLocation: boolean;
 }
 
 /** Settings before anyone changes them */
@@ -59,7 +54,6 @@ export const DEFAULT_SETTINGS: Settings = {
   itemsSortKey: 'date',
   // Newest items first
   itemsSortDir: 'desc',
-  recordLocation: true,
 };
 
 /** The signed-in account: what others see of it, and its private settings */

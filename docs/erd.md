@@ -165,7 +165,7 @@ erDiagram
         text items_group_by "none, day, week, month, payer or category"
         text items_sort_key "date, name, payer or amount"
         text items_sort_dir "asc or desc"
-        int save_places "keep where photos are taken and items paid for"
+        int save_places "no longer read: the app never records the location by itself"
         int updated_at
     }
     avatars {

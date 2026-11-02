@@ -6,7 +6,6 @@ import {
   CurrencyCircleDollar,
   DownloadSimple,
   HandCoins,
-  MapPin,
   Palette,
   Robot,
   SignOut,
@@ -24,7 +23,6 @@ import AgentsSection from './AgentsSection';
 import AppearanceSection from './AppearanceSection';
 import CurrencySection from './CurrencySection';
 import PaymentsSection from './PaymentsSection';
-import PlacesSection from './PlacesSection';
 import ProfileSection from './ProfileSection';
 import SettingsCard from './SettingsCard';
 import type { Track } from './useSaveIndicator';
@@ -87,13 +85,6 @@ const GROUPS: { label: string; sections: Section[] }[] = [
         icon: CurrencyCircleDollar,
         blurb: "What new splits use, where rates come from, and today's rates.",
         render: (track) => <CurrencySection track={track} />,
-      },
-      {
-        id: 'places',
-        label: 'Locations',
-        icon: MapPin,
-        blurb: 'Where photos are taken and items paid for.',
-        render: (track) => <PlacesSection track={track} />,
       },
       {
         id: 'appearance',
