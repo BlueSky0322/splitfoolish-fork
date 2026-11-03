@@ -27,9 +27,9 @@ import { onlyFor } from './only-for';
 import classes from './ItemViews.module.css';
 import { toCents } from '@shared/rates';
 import { plural, shortLink } from '../../../utils/text';
-import { isMapsLink } from '@shared/links';
+import { isMapsLink, withoutMapsLinks } from '@shared/links';
 import LinkedText from '../../ui/LinkedText';
-import { MapsLinkName } from '../../common/MapsLinks';
+import { MapsLinkName, MapsLinkNames } from '../../common/MapsLinks';
 
 interface ItemViewProps {
   groups: ItemGroup[];
@@ -258,6 +258,9 @@ export function ItemCards({
             {group.items.map((item) => {
               const share = myShare(item);
               const Icon = categoryIcon(item.category);
+              // Its Maps links show as places under the notes, so those ending a line go
+              // from them
+              const notes = item.notes ? withoutMapsLinks(item.notes) : '';
               return (
                 <div
                   key={item.id}
@@ -296,17 +299,18 @@ export function ItemCards({
                         <PhotoBadge count={photoCounts.get(item.id)} />
                       </div>
                     </ItemButton>
-                    {item.notes && (
-                      // One line of the notes, its line breaks run together: a Maps
-                      // link as its place with a pin, others short, each opening
+                    {notes && (
+                      // One line of the notes, its line breaks run together, each link
+                      // short and opening; a Maps link left in a sentence by its name
                       <div className={classes.itemNotes}>
                         <LinkedText
-                          text={item.notes.replace(/\s*\n+\s*/g, ' · ')}
+                          text={notes.replace(/\s*\n+\s*/g, ' · ')}
                           renderLink={(href) =>
                             isMapsLink(href) ? (
                               <MapsLinkName
                                 url={href}
-                                className={classes.notePlace}
+                                className={classes.noteLink}
+                                plain
                               />
                             ) : (
                               <a
@@ -323,6 +327,13 @@ export function ItemCards({
                         />
                       </div>
                     )}
+                    {/* The places its notes link to, on a line of their own */}
+                    <MapsLinkNames
+                      notes={item.notes ?? ''}
+                      shown={notes}
+                      className={classes.itemPlaces}
+                      linkClassName={classes.notePlace}
+                    />
                     <div className={classes.itemMeta}>
                       <PaidBy item={item} />
                       {mobile

@@ -606,14 +606,24 @@ describe('the split page', () => {
     renderApp(server(), '/?s=trip', { size: 'phone' });
     await user.click(await screen.findByText('Coffee'));
     const sheet = await screen.findByRole('dialog');
-    // In the text, a Maps link reads as its place, other addresses as where they go
+    // In the text, a Maps link in a sentence reads as its place's name, other addresses as
+    // where they go; the links that end it are left for the places under it
     const notes = sheet.querySelector('p')!;
     await waitFor(() =>
       expect(notes.textContent).toBe(
-        'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at VRJ3+MG Bagan Datuk, Perak, menu at example.com/menu, coffee at Kedai Kopi 168 share.google/article',
+        'Met at A Place Where - APW then maps.app.goo.gl/unknown, parked at VRJ3+MG Bagan Datuk, Perak, menu at example.com/menu, coffee at',
       ),
     );
-    expect(chipsIn(notes)).toEqual(CHIPS);
+    expect(chipsIn(notes)).toEqual(CHIPS.slice(0, 4).map(([name, href]) => [name, href, false]));
+    // Under the notes, on a line of their own: the places, as chips with a pin, and the
+    // links taken from the end of the text, so nothing goes missing
+    const places = notes.nextElementSibling as HTMLElement;
+    await waitFor(() =>
+      expect(chipsIn(places)).toEqual(
+        CHIPS.filter(([, href]) => href !== OTHER && href !== 'https://example.com/menu'),
+      ),
+    );
+    expect(places.querySelectorAll('[data-place] svg')).toHaveLength(3);
     // No cards: nothing else in the sheet opens the links
     expect(within(sheet).queryByRole('link', { name: /on Google Maps/ })).toBeNull();
     expect(sheet.querySelector(`img[src="https://lh5.googleusercontent.com/p/apw"]`)).toBeNull();

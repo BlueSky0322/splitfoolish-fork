@@ -176,7 +176,7 @@ describe('places', () => {
     expect(chip.dataset.place).toBeDefined();
   });
 
-  test('in the list, notes show a Maps link as its place with a pin and other links short, each opening, on a phone and desktop', async () => {
+  test('in the list, a Maps link shows as its place with a pin on its own line, and other links short, each opening, on a phone and desktop', async () => {
     const PIN = 'https://maps.app.goo.gl/y8F94Y1RPVDjz7ci8';
     const server = () => {
       const s = fakeServer(
@@ -204,19 +204,17 @@ describe('places', () => {
       renderApp(server(), '/?s=trip', { size });
       const name = await screen.findByText('Homestay');
       const row = name.closest<HTMLElement>('[role="listitem"]')!;
-      await waitFor(() =>
-        expect(row.textContent).toContain(
-          'Here VRP3+RQ Bagan Datuk, Perak · menu example.com/menu',
-        ),
-      );
+      // The notes without the link that ended a line, and the place under them
+      const menu = within(row).getByRole('link', { name: 'example.com/menu' });
+      expect(menu.parentElement!.parentElement!.textContent).toBe('Here · menu example.com/menu');
+      const place = await within(row).findByRole('link', { name: 'VRP3+RQ Bagan Datuk, Perak' });
+      expect(place.parentElement!.textContent).toBe('VRP3+RQ Bagan Datuk, Perak');
       // Each opens where it goes, over the row that opens the item
-      const place = within(row).getByRole('link', { name: 'VRP3+RQ Bagan Datuk, Perak' });
       expect(place.getAttribute('href')).toBe(PIN);
       expect(place.getAttribute('target')).toBe('_blank');
+      expect(place.dataset.place).toBe('true');
       expect(place.querySelector('svg')).toBeTruthy();
-      expect(within(row).getByRole('link', { name: 'example.com/menu' }).getAttribute('href')).toBe(
-        'https://example.com/menu',
-      );
+      expect(menu.getAttribute('href')).toBe('https://example.com/menu');
       // and the row itself still opens it: its name's button reaches across it
       expect(within(row).getByRole('button', { name: 'Homestay' })).toBeTruthy();
     }

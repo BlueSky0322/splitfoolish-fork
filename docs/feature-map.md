@@ -135,9 +135,13 @@ it current.
 - Notes: web addresses open as links, shown short ("example.com/menu",
   [LinkedText](../web/src/components/ui/LinkedText.tsx)), and a Google Maps link reads as
   the place it names, with a pin (`MapsLinkName` and `MapsLinkLabel`,
-  [MapsLinks](../web/src/components/common/MapsLinks.tsx)): in the item sheet's text, as
-  chips under the item form's notes box (where notes are typed), and in the list's line
-  of notes, each opening its link above the row that opens the item (the name's button
+  [MapsLinks](../web/src/components/common/MapsLinks.tsx)): in the item sheet and the
+  list, always as chips on a line of their own under the notes (`MapsLinkNames`), as
+  chips under the item form's notes box (where notes are typed). The notes shown leave
+  out the Maps links that end a line (`withoutMapsLinks` in
+  [shared/links.ts](../shared/links.ts)); one in the middle of a sentence stays there by
+  its place's name, in plain text, and gets a chip only once it is known to be a place.
+  In the list each opens its link above the row that opens the item (the name's button
   reaches across the row). A known place is drawn in the place colour, a map pin's red
   (`--sf-place`), apart from people's colours and the accent; anything else as a link.
   The Worker names them from the tags Google's page has for link previews
