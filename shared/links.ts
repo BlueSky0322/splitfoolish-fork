@@ -89,6 +89,44 @@ export const mapsLinksIn = (text: string) =>
     ),
   ].slice(0, MAX_MAPS_LINKS);
 
+/** What may sit between links at the end of a line, or after the last: spaces and stops */
+const BETWEEN = /^[\s.,;:!?\u00b7\u2013-]*$/;
+
+/**
+ * Notes as typed, without the Maps links that end a line, which are shown apart as
+ * places: what they leave at the end (spaces, a colon or dash) goes too, and the line
+ * goes if nothing else is on it. A link in the middle of a sentence stays, so it still
+ * reads; other lines stay as typed.
+ */
+export function withoutMapsLinks(text: string) {
+  const lines: string[] = [];
+  for (const line of text.split('\n')) {
+    const parts = findLinks(line);
+    let end = parts.length;
+    let removed = false;
+    while (end > 0) {
+      const { href, text: run } = parts[end - 1];
+      const link = href != null && isMapsLink(href);
+      const gap = href == null && BETWEEN.test(run) && end > 1;
+      if (!link && !gap) break;
+      if (gap && !(parts[end - 2].href != null && isMapsLink(parts[end - 2].href!))) break;
+      removed ||= link;
+      end--;
+    }
+    if (!removed) {
+      lines.push(line);
+      continue;
+    }
+    const rest = parts
+      .slice(0, end)
+      .map((p) => p.text)
+      .join('')
+      .replace(/[\s:,\u2013-]+$/, '');
+    if (rest.trim() !== '') lines.push(rest);
+  }
+  return lines.join('\n').trim();
+}
+
 /** A decimal coordinate in an address: 3.881664, -95.6, 101 */
 const COORD = String.raw`(-?\d{1,3}(?:\.\d+)?)`;
 /** Two of them as a shared position writes them: "3.88,100.80", "3.88,+100.80", "3.88, 100.80" */

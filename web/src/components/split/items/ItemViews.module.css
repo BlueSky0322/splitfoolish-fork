@@ -142,6 +142,16 @@
   white-space: nowrap;
 }
 
+/* The places its notes link to, a line under them; as many as fit */
+.itemPlaces {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* A link in them, above the row so a tap opens it: a Maps link as its place with a pin,
    others by where they go */
 .notePlace,

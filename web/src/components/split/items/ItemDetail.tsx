@@ -2,14 +2,14 @@ import { ActionIcon, Menu, UnstyledButton } from '@mantine/core';
 import { CalendarBlank, Copy, PencilSimple, Trash } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { toCents } from '@shared/rates';
-import { isMapsLink } from '@shared/links';
+import { isMapsLink, withoutMapsLinks } from '@shared/links';
 import { attachmentUrl } from '../../../api';
 import { categoryIcon, categoryLabel } from '../../../split/categories';
 import type { SplitItem } from '../../../split/state';
 import { formatAmount, formatMoney } from '../../../utils/money';
 import { SOURCE_LABELS } from '../../../utils/rate-labels';
 import LinkedText from '../../ui/LinkedText';
-import { MapsLinkName } from '../../common/MapsLinks';
+import { MapsLinkName, MapsLinkNames } from '../../common/MapsLinks';
 import PhotoViewer from '../../ui/PhotoViewer';
 import PersonAvatar from '../PersonAvatar';
 import { PaidBy } from './PaidBy';
@@ -49,6 +49,8 @@ const ItemDetail = ({
   const parts = totals.sharesByItem.get(item.id);
   const settledBy = payments.filter((p) => p.itemId === item.id);
   const receipts = photos.photosOf(item.id);
+  // Its Maps links show as places under the notes, so those ending a line go from them
+  const notes = item.notes ? withoutMapsLinks(item.notes) : '';
   const { original } = item;
   const Icon = categoryIcon(item.category);
 
@@ -111,14 +113,26 @@ const ItemDetail = ({
           ))}
         </div>
       )}
-      {item.notes && (
+      {notes && (
         <p className={classes.notes}>
           <LinkedText
-            text={item.notes}
-            renderLink={(href) => (isMapsLink(href) ? <MapsLinkName url={href} /> : null)}
+            text={notes}
+            renderLink={(href) =>
+              isMapsLink(href) ? (
+                <MapsLinkName
+                  url={href}
+                  plain
+                />
+              ) : null
+            }
           />
         </p>
       )}
+      {/* The places its notes link to, on a line of their own */}
+      <MapsLinkNames
+        notes={item.notes ?? ''}
+        shown={notes}
+      />
       {receipts.length > 0 && (
         <div className={classes.receipts}>
           {receipts.map((photo, i) => (
