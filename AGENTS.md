@@ -153,5 +153,5 @@ Not checked by lint, so kept by review: `shared/` uses no browser or Worker glob
 - A change to a boundary or invariant, or a new dependency or abstraction, says why
   and what checked it in its pull request.
 - Never commit `.dev.vars`, tokens or other secrets.
-- For notable changes, update CHANGELOG.md under Unreleased before finishing.
-  Read and follow the authoring instructions in that file.
+- For notable changes, add a line to CHANGELOG.md under today's date before finishing.
+  Follow the short format at the top of that file.
